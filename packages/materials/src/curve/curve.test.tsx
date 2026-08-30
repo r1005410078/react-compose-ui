@@ -241,6 +241,29 @@ describe('curve 物料的弧与多段线渲染', () => {
       .toBe('polygon')
   })
 
+  it('OpenSpec: basic-materials / 圆角多段线走 path，缺席时一个字节不变', () => {
+    const vertices = [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 60 }, { x: 0, y: 60 }]
+    const sharp = withCurve({ kind: 'polyline', vertices, closed: true })
+    const { unmount } = render(
+      <ComposeRegistryEntityRenderer entity={sharp.entity} mode="editor" registry={sharp.materials.registry} />,
+    )
+    expect(screen.getByTestId('compose-material-curve-stroke').tagName.toLowerCase())
+      .toBe('polygon')
+    unmount()
+
+    const rounded = withCurve({ kind: 'polyline', vertices, closed: true, cornerRadius: 12 })
+    render(
+      <ComposeRegistryEntityRenderer entity={rounded.entity} mode="editor" registry={rounded.materials.registry} />,
+    )
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    expect(stroke.tagName.toLowerCase()).toBe('path')
+    // 四条直段加四段角弧，闭合再补一个 Z；角弧恒不超过 180°，因此 large-arc 全是 0。
+    const d = stroke.getAttribute('d')!
+    expect(d.match(/A /g)).toHaveLength(4)
+    expect(d.match(/L /g)).toHaveLength(4)
+    expect(d.endsWith('Z')).toBe(true)
+  })
+
   it('命中元素与可见元素同形，且仍是透明加宽 stroke', () => {
     const { entity, materials } = withCurve({
       kind: 'arc',

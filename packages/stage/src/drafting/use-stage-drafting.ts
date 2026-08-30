@@ -46,7 +46,6 @@ import { resolveStageDynamicInput } from './dynamic-input'
 import type { ComposeStageDispatch } from '../types'
 import {
   anchorKey,
-  createStageDraftingBoxCommand,
   createStageDraftingCurveCommand,
   wireBindingsFor,
 } from './drafting-entity'
@@ -443,28 +442,13 @@ export function useStageDrafting(options: StageDraftingOptions) {
         wire: wireBindingsFor(portAnchors.current, curve),
         ...(effect.wire ? { wiring: true } : {}),
         ...(effect.arrow ? { arrow: true } : {}),
+        ...(effect.rectangle ? { rectangle: true } : {}),
       })
       if (!created) continue
       recordCreated(created.command)
       current.dispatch(created.command)
       // 跨父级的绑定被丢掉了就必须说出来：静默丢弃与「绑上了」在屏幕上无法区分。
       if (created.droppedWireEnds.length > 0) notice = current.messages.wireParentMismatch
-    }
-
-    // 盒走另一个 Preset：`RECTANGLE` 产出的是带完整 Appearance 的矩形物料，不是曲线。
-    for (const box of effect.boxes ?? []) {
-      const command = createStageDraftingBoxCommand({
-        document: current.document,
-        layoutSnapshot: current.layoutSnapshot,
-        index: current.index,
-        registry: current.registry,
-        idFactory: current.idFactory,
-        activeFrameId: current.activeFrameId,
-      }, box)
-      if (command) {
-        recordCreated(command)
-        current.dispatch(command)
-      }
     }
 
     // 平移、复制、删除与夹点几何只认识文档，因此由引擎规划成命令；宿主只负责派发。
@@ -1147,19 +1131,6 @@ export function useStageDrafting(options: StageDraftingOptions) {
     const effect = enabled && session?.preview && candidatePoint
       ? session.preview(candidatePoint)
       : null
-    // 盒与曲线是两种意图，但呈现只有一种：一串首尾相接的点。盒的四个角闭合回起点，
-    // 否则右边与下边这两条会缺席。
-    const box = effect?.boxes?.[0]
-    if (box) {
-      setPreviewOutline([
-        { x: box.x, y: box.y },
-        { x: box.x + box.width, y: box.y },
-        { x: box.x + box.width, y: box.y + box.height },
-        { x: box.x, y: box.y + box.height },
-        { x: box.x, y: box.y },
-      ])
-      return
-    }
     const segments = effect?.curves?.[0] ? composeCurveSegments(effect.curves[0]!) : []
     setPreviewOutline(
       segments.length === 0

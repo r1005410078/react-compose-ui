@@ -197,14 +197,17 @@ test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  // 用**容器**而不是矩形：渐变与图片背景由共享 Paint 层绘制，而那一层不为曲线画背景
+  // （盒是矩形而形状不是）。容器有全套 Appearance，这也是矩形与 Panel 合并之后渐变底板
+  // 该走的那条路。
+  await editor.getByRole('button', { name: '添加 Container' }).click()
 
-  const rectangle = stage.locator('.compose-stage__node.is-renderer').first()
+  const rectangle = stage.locator('.compose-stage__node.is-container').first()
   await rectangle.click()
   // History 作为下方工具标签按需挂载；在打开 Paint 编辑器前激活它，
   // 避免 Dockview 的焦点切换关闭 Popover。
   await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
-  const rectangleInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  const rectangleInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await expandInspectorSection(rectangleInspector, '外观')
   await rectangleInspector.getByRole('button', { name: '背景填充', exact: true }).click()
   const picker = page.getByRole('dialog', { name: '背景填充', exact: true })

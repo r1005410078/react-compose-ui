@@ -6,6 +6,7 @@ import {
   emptyWorkspaceRect,
   enableAutoLayout,
   expandInspectorSection,
+  selectChildInSceneTree,
   selectContainer,
 } from './support/test-helpers'
 
@@ -205,10 +206,19 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
 
   // 2) 拖到容器中心：拖动过程中出现容器高亮。
   const rectBox = await rectangle.boundingBox()
-  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+  /*
+   * 抓**下边线**：矩形默认空心，盒内部不命中，可拖的只有那一圈描边；取下边而不是上边，
+   * 是因为它以落点为中心放在场景顶部，上边线落在场景之外。终点也按同一个偏移落——落点
+   * 父级按对象落在哪里判定。
+   */
+  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height - 1)
   await page.mouse.down()
   // 容器右半部分在可视区之外，取一个既深入容器又仍可见的点。
-  await page.mouse.move(outputBox!.x + 300, outputBox!.y + 250, { steps: 8 })
+  await page.mouse.move(
+    outputBox!.x + 300,
+    outputBox!.y + 250 + rectBox!.height / 2 - 1,
+    { steps: 8 },
+  )
   await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
   await page.mouse.up()
 
@@ -283,12 +293,19 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   const secondBox = await children.nth(1).boundingBox()
   expect(firstBox!.x).toBeLessThan(secondBox!.x)
 
-  // 2) 把第一个拖到第二个右侧：过程中出现落点线。
-  await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + firstBox!.height / 2)
+  /*
+   * 2) 把第一个拖到第二个右侧：过程中出现落点线。
+   *
+   * 抓的是**上边线**——矩形默认空心，盒内部不命中；先在场景树里把这个子项选中，否则容器
+   * 自己的缩放命中带正压在填满交叉轴的子项那条边上（选中子项之后，让位的是它自己那条带，
+   * 边线因此归移动）。终点按同一个偏移落。
+   */
+  await selectChildInSceneTree(editor, frame, children.nth(0))
+  await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + 1)
   await page.mouse.down()
   await page.mouse.move(
     secondBox!.x + secondBox!.width - 4,
-    secondBox!.y + secondBox!.height / 2,
+    secondBox!.y + secondBox!.height / 2 - firstBox!.height / 2 + 1,
     { steps: 8 },
   )
   // 垂直线的包围盒宽度为 0，Playwright 会判定为 hidden，因此断言存在而不是可见。
@@ -334,8 +351,15 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
   const firstBox = await children.nth(0).boundingBox()
-  // 把第一个 Flow 子级拖到容器上方的空白画板并松手：v7 的画板本身就是合法落点。
-  await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + firstBox!.height / 2)
+  /*
+   * 把第一个 Flow 子级拖到容器上方的空白画板并松手：v7 的画板本身就是合法落点。抓上边线
+   * 并先在场景树里选中它，理由同上一条用例。
+   *
+   * 这里**不按抓点偏移补偿终点**：子项被 stretch 成整个容器高，补偿会把指针抬到场景之外，
+   * 而这条用例只关心它脱离了容器、成为画板的子项。
+   */
+  await selectChildInSceneTree(editor, frame, children.nth(0))
+  await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + 1)
   await page.mouse.down()
   await page.mouse.move(outputBox!.x + 200, outputBox!.y + 20, { steps: 8 })
   await expect(stage.getByTestId('stage-drop-container')).toHaveCount(1)
@@ -363,13 +387,19 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Alt 强制吸入贴
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
 
-  // 贴到容器左边缘内 4px：默认不吸入，按下 Alt 后强制成为落点。
-  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+  // 贴到容器左边缘内 4px：默认不吸入，按下 Alt 后强制成为落点。抓**下边线**——矩形默认
+  // 空心，而它的上边线落在场景之外；终点按同一个偏移落。
+  const grabOffset = rectBox!.height / 2 - 1
+  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height - 1)
   await page.mouse.down()
-  await page.mouse.move(frameBox!.x + 4, frameBox!.y + frameBox!.height / 2, { steps: 8 })
+  await page.mouse.move(
+    frameBox!.x + 4,
+    frameBox!.y + frameBox!.height / 2 + grabOffset,
+    { steps: 8 },
+  )
   await expect(stage.getByTestId('stage-drop-container')).toHaveCount(0)
   await page.keyboard.down('Alt')
-  await page.mouse.move(frameBox!.x + 5, frameBox!.y + frameBox!.height / 2)
+  await page.mouse.move(frameBox!.x + 5, frameBox!.y + frameBox!.height / 2 + grabOffset)
   await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
   await page.mouse.up()
   await page.keyboard.up('Alt')
@@ -396,10 +426,15 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Space 锁定原父�
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
 
-  // 深入容器内部本会吸入；手势中按住 Space 锁定原父级，高亮原地消失。
-  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+  // 深入容器内部本会吸入；手势中按住 Space 锁定原父级，高亮原地消失。抓**下边线**——矩形
+  // 默认空心，而它的上边线落在场景之外；终点按同一个偏移落。
+  await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height - 1)
   await page.mouse.down()
-  await page.mouse.move(outputBox!.x + 300, outputBox!.y + 250, { steps: 8 })
+  await page.mouse.move(
+    outputBox!.x + 300,
+    outputBox!.y + 250 + rectBox!.height / 2 - 1,
+    { steps: 8 },
+  )
   await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
   await page.keyboard.down('Space')
   await expect(stage.getByTestId('stage-drop-container')).toHaveCount(0)
@@ -433,7 +468,8 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
   const secondBefore = await children.nth(1).boundingBox()
-  await children.nth(0).click()
+  // 从场景树选中：矩形默认空心，而它填满容器交叉轴，四条边里三条压在容器的缩放命中带下面。
+  await selectChildInSceneTree(editor, frame, children.nth(0))
   // 边中点没有可见角柄，用 E 边的加宽命中区拖拽。
   const handle = stage.getByTestId('stage-resize-edge-e')
   const handleBox = await handle.boundingBox()
@@ -553,7 +589,7 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
   const firstBox = await children.nth(0).boundingBox()
 
-  // 向已启用 Auto Layout 的容器拖入新 Rectangle：应作为 Flow 子级排在兄弟旁边，
+  // 向已启用 Auto Layout 的容器拖入新 Panel：应作为 Flow 子级排在兄弟旁边，
   // 而不是以 Absolute 落在指针位置。
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 400, y: outputBox!.y + 300 })
   await expect(children).toHaveCount(2)
@@ -561,8 +597,9 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
   expect(Math.round(secondBox!.y)).toBe(Math.round(firstBox!.y))
   expect(Math.round(secondBox!.x)).toBe(Math.round(firstBox!.x + firstBox!.width))
 
-  // Inspector 呈现 Flow 形态：有自身对齐、无位置 X，「忽略自动布局」未勾选。
-  await children.nth(1).click()
+  // Inspector 呈现 Flow 形态：有自身对齐、无位置 X，「忽略自动布局」未勾选。从场景树选中，
+  // 理由同上：矩形默认空心，而它填满了容器的交叉轴。
+  await selectChildInSceneTree(editor, frame, children.nth(1))
   const childInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
   await expect(childInspector.getByRole('combobox', { name: '自身对齐' })).toBeVisible()
   await expect(childInspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(0)
@@ -590,7 +627,7 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器�
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
   await expandInspectorSection(containerInspector, '布局')
-  // Rectangle 默认 240 宽：648 宽的容器放不下三个，开启换行后自然形成 2+1 两行。
+  // Panel 默认 240 宽：648 宽的容器放不下三个，开启换行后自然形成 2+1 两行。
   await containerInspector.getByRole('radiogroup', { name: '换行' })
     .getByRole('radio', { name: '换行', exact: true }).click()
 
@@ -598,16 +635,18 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器�
   const secondRowBox = await children.nth(2).boundingBox()
   expect(secondRowBox!.y).toBeGreaterThan(firstRowFirst!.y + 50)
 
-  // 把第二行的子级拖到第一行两个兄弟之间：出现行内插入线，松手后进入第一行。
+  // 把第二行的子级拖到第一行两个兄弟之间：出现行内插入线，松手后进入第一行。抓上边线并先
+  // 取消选中（矩形默认空心，容器的缩放命中带压在子项边上）；终点按同一个偏移落。
+  await stage.press('Escape')
   await page.mouse.move(
     secondRowBox!.x + secondRowBox!.width / 2,
-    secondRowBox!.y + secondRowBox!.height / 2,
+    secondRowBox!.y + 1,
   )
   await page.mouse.down()
   const firstRowSecond = await children.nth(1).boundingBox()
   await page.mouse.move(
     firstRowSecond!.x + 2,
-    firstRowSecond!.y + firstRowSecond!.height / 2,
+    firstRowSecond!.y + firstRowSecond!.height / 2 - secondRowBox!.height / 2 + 1,
     { steps: 8 },
   )
   await expect(stage.getByTestId('stage-drop-line')).toHaveCount(1)
@@ -737,11 +776,13 @@ test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落�
 
   // 拖进第二块场景。
   const rectBox = (await inScene1.boundingBox())!
-  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height / 2)
+  // 抓**上边线**：矩形默认空心，盒内部不命中。终点按同一个偏移落——落点父级按对象落在
+  // 哪里判定。
+  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + 1)
   await page.mouse.down()
   await page.mouse.move(
     sceneTwoBox.x + sceneTwoBox.width / 2,
-    sceneTwoBox.y + sceneTwoBox.height / 2,
+    sceneTwoBox.y + sceneTwoBox.height / 2 - rectBox.height / 2 + 1,
     { steps: 8 },
   )
   await page.mouse.up()
@@ -754,9 +795,9 @@ test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落�
   const sceneOneBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   const copyBox = (await inScene2.last().boundingBox())!
   const drop = { x: sceneOneBox.x + 300, y: sceneOneBox.y + 300 }
-  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + copyBox.height / 2)
+  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + 1)
   await page.mouse.down()
-  await page.mouse.move(drop.x, drop.y, { steps: 8 })
+  await page.mouse.move(drop.x, drop.y - copyBox.height / 2 + 1, { steps: 8 })
   await page.mouse.up()
 
   await expect(inScene1).toHaveCount(1)

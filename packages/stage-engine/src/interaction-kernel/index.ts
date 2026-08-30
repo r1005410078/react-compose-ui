@@ -92,6 +92,14 @@ export {
   STAGE_PAN_PLUGIN_ID,
 } from './pan-plugin'
 export {
+  createStageCurveCornerPlugin,
+  STAGE_CURVE_CORNER_PLUGIN_ID,
+} from './curve-corner-plugin'
+export {
+  createStageGeometryEditFallbackPlugin,
+  STAGE_GEOMETRY_EDIT_FALLBACK_PLUGIN_ID,
+} from './geometry-edit-fallback-plugin'
+export {
   createStagePathPlugin,
   STAGE_PATH_PLUGIN_ID,
 } from './path-plugin'

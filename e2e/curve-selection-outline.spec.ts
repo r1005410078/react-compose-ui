@@ -131,7 +131,8 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 非曲线与�
    * 多选：整体框回答的是「这一堆的范围」，不宣称任何单个对象的轮廓。用**两条曲线**而不是
    * 曲线加矩形——后者要先知道新矩形落在哪，而它可能压在线身上，Shift 点过去就点到了它自己。
    */
-  const strokes = stage.getByTestId('compose-material-curve-stroke')
+  // 只数**两点直线**：矩形现在也是曲线（`<polygon>`），拿总数会把它一起算进来。
+  const strokes = stage.locator('line[data-testid="compose-material-curve-stroke"]')
   await expect(strokes).toHaveCount(2)
   const first = (await strokes.first().boundingBox())!
   const second = (await strokes.nth(1).boundingBox())!

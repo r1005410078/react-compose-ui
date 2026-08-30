@@ -34,6 +34,7 @@ import type {
   ComposeStageEditablePathChange,
   ComposeStageTool,
 } from '../../types'
+import type { StageCurveCornerChange } from '../../geometry-editing/use-stage-curve-corners'
 import type { getStageMessages } from '../../stage-i18n'
 import {
   boundsCenter,
@@ -67,6 +68,7 @@ export interface StageEffectDispatchParams {
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   readonly onPaintSamplingComplete?: () => void
   readonly onEditablePathChange?: (change: ComposeStageEditablePathChange) => void
+  readonly onCurveCornerChange?: (change: StageCurveCornerChange) => void
   /** 请求进入曲线几何编辑会话；会话住在 Stage 自己这里，宿主不参与。 */
   readonly onEnterGeometryEditing?: (entityId: string, worldPoint?: StagePoint) => void
   readonly onEditablePathVertexToggle?: (vertexId: string) => void
@@ -377,6 +379,15 @@ export function useStageEffectDispatch(
             worldPoint: effect.worldPoint,
             modifiers: effect.modifiers,
             ...(effect.clickCount === undefined ? {} : { clickCount: effect.clickCount }),
+          })
+          return
+        }
+        if (effect.type === 'curve-corner.change') {
+          current.onCurveCornerChange?.({
+            entityId: effect.entityId,
+            cornerIndex: effect.cornerIndex,
+            phase: effect.phase,
+            worldPoint: effect.worldPoint,
           })
           return
         }

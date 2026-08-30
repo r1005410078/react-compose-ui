@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { clickCurveStroke, curveStrokeGrip } from './support/test-helpers'
 
 /**
  * Rive 式变换指示器。
@@ -17,7 +18,8 @@ async function setup(page: Page) {
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__node.is-renderer').first()
-  await node.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(node)
   return { editor, stage, node, inspector: editor.locator('[data-workspace-panel="inspector"]') }
 }
 
@@ -213,7 +215,11 @@ test('OpenSpec: stage / Rive 式变换指示器 / 拖动时指示器跟着对象
    */
   const before = await centerOf(stage)
   const box = await boxOf(node)
-  const grab = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  // 抓的是**上边线**：矩形默认空心，盒内部不命中，可拖的只有那一圈描边。横向偏移避开
+  // setup 里那一下点击——同一个位置的第二次按下会被浏览器判成双击，而双击一个矩形进的是
+  // 几何编辑（它是曲线），这一次拖拽就不再是移动。
+  // 取上边线**靠右**那一段：正中间压在指示器的 y 轴箭头上，那一下会被约束成只沿 y 平移。
+  const grab = await curveStrokeGrip(node, box.width - 40)
   await page.mouse.move(grab.x, grab.y)
   await page.mouse.down()
   await page.mouse.move(grab.x + 160, grab.y + 96, { steps: 8 })

@@ -41,11 +41,14 @@ test('OpenSpec: editor-workspace-layout / 绘图命令组 / 点按钮启动的�
   await page.mouse.click(at(220, 180).x, at(220, 180).y)
   await page.mouse.click(at(360, 280).x, at(360, 280).y)
 
-  // 启动的是**那条**命令：`RECTANGLE` 产出的是矩形物料，因此场景树里出现的是 Rectangle
-  // 而不是 Curve。
+  // 启动的是**那条**命令：`RECTANGLE` 产出闭合四顶点多段线，渲染成一个 `<polygon>`；
+  // `LINE` 那条会话在同样两下点击之后给出的是一段 `<line>`。落地走 `rect` Preset，与物料
+  // 面板里那一个同源，因此场景树里叫 Rectangle 而不是 Curve。
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   await expect(sceneTree.getByRole('row').filter({ hasText: 'Rectangle' })).toHaveCount(1)
-  await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(0)
+  const stroke = stage.locator('polygon[data-testid="compose-material-curve-stroke"]')
+  await expect(stroke).toHaveCount(1)
+  expect((await stroke.getAttribute('points'))!.trim().split(/\s+/)).toHaveLength(4)
 })
 
 test('OpenSpec: editor-workspace-layout / 绘图命令组 / 会话进行中按钮按下，Escape 之后不按下', async ({ page }) => {

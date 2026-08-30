@@ -1,3 +1,4 @@
+import { COMPOSE_CURVE_PICK_TOLERANCE } from '@compose-ui/core'
 import type { StagePoint } from '@compose-ui/stage-engine'
 
 /** 端点方块边长（屏幕 px）。 */
@@ -24,6 +25,31 @@ export const LINE_ENDPOINT_HIT_RADIUS = 8
 export const GRIP_PICK_RADIUS = LINE_ENDPOINT_HIT_RADIUS / Math.SQRT2
 /** 四角缩放手柄边长（屏幕 px）；边方向只靠透明 hit，不渲染中点方块。 */
 export const CORNER_HANDLE_SIZE = 7
+
+/**
+ * 边缘缩放命中带的厚度（屏幕 px）。
+ *
+ * @remarks
+ * 命中带整条落在包围盒**外侧**，而且要再让开一个 {@link COMPOSE_CURVE_PICK_TOLERANCE}：
+ * 边线本身连同它的拾取容差都归**移动**。理由在空心图形上才显出来——矩形的描边是它在画布上
+ * 唯一可拖的那几个像素（盒里绝大部分是空的，空心图形不以包围盒拦截指针），命中带若压在边线
+ * 上，选中之后同一个位置的含义就从「移动」变成了「缩放」，于是一个被选中的空心矩形在画布上
+ * 根本拖不动。
+ *
+ * 只挪到「紧贴边线的外侧」不够：SVG 矩形的命中区**含它自己的边界**，而用户瞄的正是那条线，
+ * 于是落在边线上的那一下仍然被缩放接走。让开的量取描边自己的拾取容差，因为那正是「多近算在
+ * 这条线上」的事实来源。填充对象让出去的只是边线附近这几个像素，它们的内部本来就可拖。
+ */
+export const EDGE_HIT_THICKNESS = 8
+
+/**
+ * 边缘缩放命中带与包围盒之间让开的距离（屏幕 px）。
+ *
+ * @remarks
+ * 就是描边的拾取容差：命中带从「不再算在这条线上」的地方开始，两个数写成一个，下一个改容差
+ * 的人不会漏掉这条带。
+ */
+export const EDGE_HIT_OFFSET = COMPOSE_CURVE_PICK_TOLERANCE
 
 /**
  * 路径顶点标记的边长（屏幕 px）。

@@ -16,6 +16,63 @@ export async function pointerDrop(page: Page, source: Locator, target: { x: numb
   await page.mouse.up()
 }
 
+/**
+ * 点一个空心曲线的描边把它选中。
+ *
+ * @remarks
+ * 矩形默认空心，盒内部不命中——它在画布上可点、可拖的只有那一圈描边。默认点**上边线**：
+ * 选中之后边缘的缩放命中带整条让到盒外，因此同一条边线在选中前后都归「选中/移动」，用例
+ * 不必因为对象已经被选中而换一个位置。
+ */
+export async function clickCurveStroke(
+  node: Locator,
+  options: {
+    /** 落点距盒左上角的横向偏移；默认取上边线上一个远离角手柄的位置。 */
+    readonly offsetX?: number
+    /** 改点下边线；上边线落在场景之外、或被场景标题标签压住时用它。 */
+    readonly edge?: 'top' | 'bottom'
+    readonly modifiers?: readonly ('Alt' | 'Control' | 'Meta' | 'Shift')[]
+  } = {},
+) {
+  const { offsetX = 40, edge = 'top', modifiers } = options
+  const height = edge === 'bottom'
+    ? (await node.boundingBox())!.height
+    : 0
+  await node.click({
+    position: { x: offsetX, y: edge === 'bottom' ? height - 1 : 1 },
+    ...(modifiers ? { modifiers: [...modifiers] } : {}),
+  })
+}
+
+/**
+ * 空心曲线的可抓点：盒上边线上的一个页面坐标。
+ *
+ * @remarks
+ * 与 {@link clickCurveStroke} 同一条理由，给需要 `page.mouse` 逐步拖动的用例用。
+ */
+export async function curveStrokeGrip(node: Locator, offsetX = 40) {
+  await expect.poll(() => node.boundingBox()).not.toBeNull()
+  const box = (await node.boundingBox())!
+  return { x: box.x + offsetX, y: box.y + 1 }
+}
+
+/**
+ * 从场景树里选中一个容器的子项。
+ *
+ * @remarks
+ * 画布上选不中它时用这条路：空心矩形只有描边可点，而填满容器交叉轴的子项，四条边里三条压在
+ * 容器自己的缩放命中带下面。选择集是编辑器级的，因此树里选中与画布上点中是同一件事。
+ */
+export async function selectChildInSceneTree(editor: Locator, parent: Locator, child: Locator) {
+  const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
+  const parentId = await parent.getAttribute('data-entity-id')
+  const childId = await child.getAttribute('data-entity-id')
+  const parentRow = sceneTree.locator(`[data-tree-item-id="${parentId}"]`)
+  const expand = parentRow.getByRole('button', { name: '展开节点' })
+  if (await expand.count() > 0) await expand.click()
+  await sceneTree.locator(`[data-tree-item-id="${childId}"]`).click()
+}
+
 /** 通过新的画布工具流创建一个可供后续断言操作的 Container。 */
 export async function drawContainer(page: Page, editor: Locator) {
   const stage = editor.getByRole('application', { name: 'Stage' })

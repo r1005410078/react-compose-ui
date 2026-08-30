@@ -51,6 +51,31 @@ export const DEFAULT_CURVE_PROPS: JsonObject = Object.freeze({
 })
 
 /**
+ * 矩形的默认几何：四顶点的闭合多段线。
+ *
+ * @remarks
+ * 与 `RECTANGLE` 命令画出来的**是同一种东西**：矩形不另立 kind，四个角是直角这件事在用户
+ * 拖动某个顶点之后就不再成立。因此从物料面板点出来的矩形与敲 `R` 画出来的逐字段相同——
+ * 同一个词在这个产品里只指一件东西。
+ *
+ * @internal
+ */
+export function composeRectangleGeometry(
+  size: { readonly width: number; readonly height: number },
+): ComposeCurve {
+  return {
+    kind: 'polyline',
+    vertices: [
+      { x: 0, y: 0 },
+      { x: size.width, y: 0 },
+      { x: size.width, y: size.height },
+      { x: 0, y: size.height },
+    ],
+    closed: true,
+  }
+}
+
+/**
  * 圆的默认几何：扫掠 360 的弧。
  *
  * @remarks

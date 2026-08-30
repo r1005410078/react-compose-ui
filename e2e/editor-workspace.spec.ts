@@ -26,7 +26,8 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
   await expect(componentLibrary).toBeVisible()
   // Palette 只保留没有专用创建入口的 Preset：Text/Line/Arrow/Circle 走工具栏绘制工具，
-  // Page Slot 走资源面板的页面拖入；Widget Switcher 与 Curve 物料加入后计数为 5。
+  // Page Slot 走资源面板的页面拖入；Widget Switcher 与 Curve 物料加入后计数为 5。矩形是
+  // 一处有意偏离——面板是新手唯一的发现面，它与 `RECTANGLE` 命令落地同一个 Preset，计数 6。
   await expect(componentLibrary.getByRole('heading', { name: '基础组件 (5)' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Widget Switcher' })).toBeVisible()
@@ -529,14 +530,19 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  /*
+   * 用宿主注册的**图表**物料而不是矩形：这条用例最后要给这个 Entity 加「容器」能力，而矩形
+   * 现在是曲线，「`Curve` 不能与 Hierarchy 组合」——一条曲线不是容器。图表同样是叶子
+   * Renderer，「一个 Entity 既是 Renderer 又是 Container」这件要验的事一个字不变。
+   */
+  await editor.getByRole('button', { name: '添加 ECharts Chart' }).click()
 
   const rectangle = stage.locator('.compose-stage__node.is-renderer').first()
   await rectangle.click()
   const entityId = await rectangle.getAttribute('data-entity-id')
   expect(entityId).not.toBeNull()
-  const inspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
-  const propertyRoot = inspector.getByRole('region', { name: 'Rectangle 属性字段' })
+  const inspector = editor.getByRole('region', { name: 'ECharts Chart 属性', exact: true })
+  const propertyRoot = inspector.getByRole('region', { name: 'ECharts Chart 属性字段' })
   const capability = inspector.getByRole('combobox', { name: '添加能力' })
   await expect(propertyRoot.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
 
@@ -576,7 +582,7 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await capability.selectOption('container')
   const composed = stage.locator(`[data-entity-id="${entityId}"]`)
   await expect(composed).toHaveClass(/is-container/)
-  await expect(composed.getByTestId('compose-material-rectangle')).toBeVisible()
+  await expect(composed.locator('.stage-demo__chart')).toBeVisible()
   await expect(propertyRoot.getByRole('button', { name: '容器' })).toBeVisible()
   await expandInspectorSection(inspector, '容器')
   await expect(propertyRoot.getByRole('spinbutton', { name: '子项数量' })).toHaveValue('0')
@@ -1056,7 +1062,7 @@ test('OpenSpec: command-panel / 命令动作检索与执行 / 从命令面板执
   // 关键契约：缩放没有派发命令，撤销栈不被污染。
   await expect(events).toHaveCount(0)
 
-  // 新建 Rectangle 会自动选中它；这一步本身派发一条命令。
+  // 新建 Panel 会自动选中它；这一步本身派发一条命令。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
@@ -1111,7 +1117,7 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
     return stable
   }).toBe(true)
 
-  // 键盘路径：新建的 Rectangle 仍处于选中状态，直接按适配选择键位。
+  // 键盘路径：新建的 Panel 仍处于选中状态，直接按适配选择键位。
   await stage.press('Shift+Digit2')
   const afterKeyboard = await viewportSignature()
 

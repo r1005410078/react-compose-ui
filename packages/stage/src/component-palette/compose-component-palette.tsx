@@ -40,6 +40,18 @@ function PalettePresetIcon({ presetId }: { readonly presetId: string }) {
       </svg>
     )
   }
+  /*
+   * 矩形（曲线）与面板（盒）并排，图标必须能分开：这一个画顶点，说的是「它的形状可以改」。
+   * 两个长得一样的图标会让用户按标签去猜，而标签在缩略尺寸下正是最先读不清的那一层。
+   */
+  if (normalizedId === 'rect') {
+    return (
+      <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">
+        <rect height="12" width="18" x="3" y="6" />
+        <path d="M3 6h.01M21 6h.01M21 18h.01M3 18h.01" />
+      </svg>
+    )
+  }
   if (normalizedId === 'text') {
     return (
       <svg className="component-palette__tile-icon-svg" viewBox="0 0 24 24">

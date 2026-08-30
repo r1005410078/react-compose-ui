@@ -139,7 +139,7 @@ export function planStageDraftingEdits(query: StageDraftingEditQuery): readonly 
   if (effect.curveGrip) {
     const { entityId, gripId, point } = effect.curveGrip
     const entity = document.entities[entityId]
-    const geometry = stageCurveBoxGeometry(document, index, entityId)
+    const geometry = stageCurveBoxGeometry(index, entityId)
     const local = stageCurveLocalPoint(index, entityId, point)
     const next = geometry && local ? applyStageCurveGrip(geometry, gripId, local) : null
     if (entity && next && !getComposeLock(entity).locked) {

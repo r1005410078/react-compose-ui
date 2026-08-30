@@ -30,7 +30,7 @@ export interface ComposeBasicContainerOptions {
  * 曲线三个起点的覆盖项。
  *
  * @remarks
- * Curve、Arrow 与 Circle 是同一个物料的三个默认值，不是三种物料。
+ * Curve、Arrow、Circle、Rect 与 Wire 是同一个物料的五组默认值，不是五种物料。
  *
  * @public
  */
@@ -38,6 +38,7 @@ export interface ComposeCurveMaterialOptions {
   readonly curve?: ComposeBasicMaterialOptions
   readonly arrow?: ComposeBasicMaterialOptions
   readonly circle?: ComposeBasicMaterialOptions
+  readonly rect?: ComposeBasicMaterialOptions
   readonly wire?: ComposeBasicMaterialOptions
 }
 
@@ -50,7 +51,7 @@ export interface ComposeCreateBasicMaterialsOptions {
   readonly text?: ComposeBasicMaterialOptions
   readonly image?: ComposeBasicMaterialOptions
   readonly svg?: ComposeBasicMaterialOptions
-  /** 曲线物料四个起点的默认值覆盖。 */
+  /** 曲线物料五个起点的默认值覆盖。 */
   readonly curve?: ComposeCurveMaterialOptions
   /** 按分类追加的宿主 Registry 定义。 */
   readonly extensions?: {

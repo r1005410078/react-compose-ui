@@ -54,6 +54,31 @@ export function ComposeRectangleMaterialIcon() {
   )
 }
 
+/**
+ * Rect：空心矩形轮廓。
+ *
+ * @remarks
+ * 与 Panel 的实心图标刻意不同——两者在物料面板上并排，一个是可改形状的几何轮廓、一个是有
+ * 背景与边框的面积，长得一样会让用户按标签去猜。
+ */
+export function ComposeRectMaterialIcon() {
+  return (
+    <svg {...svgProps} data-testid="material-icon-rect">
+      <rect
+        x="4.5"
+        y="6.5"
+        width="15"
+        height="11"
+        fill="none"
+        stroke="#d8e2f1"
+        strokeWidth="1.4"
+      />
+      <rect x="3" y="5" width="3" height="3" fill="#d8e2f1" />
+      <rect x="18" y="16" width="3" height="3" fill="#d8e2f1" />
+    </svg>
+  )
+}
+
 /** Group：两层叠框，青绿。 */
 export function ComposeGroupMaterialIcon() {
   return (

@@ -2,11 +2,13 @@ import {
   COMPOSE_CURVE_PICK_TOLERANCE,
   composeArcEndpoints,
   composeCurveViewBox,
+  composePolylineOutline,
   getComposeCurve,
   getComposeCurveFill,
   isComposeFullCircle,
   type ComposeArcCurve,
   type ComposeCurve,
+  type ComposeOutlinePiece,
   type ComposePolylineCurve,
 } from '@compose-ui/core'
 import type { ComposeRendererProps } from '@compose-ui/component-registry'
@@ -85,6 +87,31 @@ function polylinePoints(curve: ComposePolylineCurve): string {
 }
 
 /**
+ * 圆角多段线的 `d`。
+ *
+ * @remarks
+ * 走 core 求出来的那**一列**轮廓片段——命中与框选读的是同一列，各自按 `cornerRadius` 再算
+ * 一遍会让「看得见的形状」与「点得中的形状」慢慢分家。这里只做一件事：把片段翻成 SVG 命令。
+ *
+ * 角弧的 `large-arc` 恒为 0：内切圆角按定义不超过 180°。
+ */
+function roundedPolylinePathData(pieces: readonly ComposeOutlinePiece[], closed: boolean): string {
+  const first = pieces[0]
+  if (!first) return ''
+  const origin = first.kind === 'segment'
+    ? first.segment.start
+    : composeArcEndpoints(first.arc)[0]
+  const commands = pieces.map((piece) => {
+    if (piece.kind === 'segment') {
+      return `L ${piece.segment.end.x} ${piece.segment.end.y}`
+    }
+    const [, end] = composeArcEndpoints(piece.arc)
+    return `A ${piece.arc.radius} ${piece.arc.radius} 0 0 ${piece.arc.sweep >= 0 ? 1 : 0} ${end.x} ${end.y}`
+  })
+  return `M ${origin.x} ${origin.y} ${commands.join(' ')}${closed ? ' Z' : ''}`
+}
+
+/**
  * 按 `kind` 产出几何元素。
  *
  * @remarks
@@ -104,6 +131,10 @@ function geometryElement(
       return <circle {...shared} cx={curve.center.x} cy={curve.center.y} r={curve.radius} />
     }
     return <path {...shared} d={arcPathData(curve)} />
+  }
+  // 没有圆角时仍然是 `<polyline>` / `<polygon>`：那一档一个字节不变，圆角只是多一条支路。
+  if (curve.cornerRadius) {
+    return <path {...shared} d={roundedPolylinePathData(composePolylineOutline(curve), curve.closed)} />
   }
   const points = polylinePoints(curve)
   return curve.closed

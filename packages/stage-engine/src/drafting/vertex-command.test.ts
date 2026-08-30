@@ -115,7 +115,7 @@ describe('夹点几何规划', () => {
 
   it('与拖动共用同一条几何求解', () => {
     // 拖动那条路径自己算一遍预览；两条对同一个落点必须算出逐字相同的几何，否则松手会跳。
-    const geometry = stageCurveBoxGeometry(value, index, 'curve-a')!
+    const geometry = stageCurveBoxGeometry(index, 'curve-a')!
     const local = stageCurveLocalPoint(index, 'curve-a', point)!
     const dragged = applyStageCurveGrip(geometry, 'end', local)
 

@@ -4,6 +4,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
   createComposeGroupEntitySeed,
+  getComposeCurve,
   getComposeHierarchy,
   getComposeLayoutItem,
   getComposeLock,
@@ -268,9 +269,18 @@ export function createComponentExtractionPlan(input: {
     height: Math.max(1, bounds.height),
   }
   const outputWorld = translationMatrix(safeBounds.x, safeBounds.y)
-  // 单选时直接复用被选中的节点作为组件根：追加包装层会在场景树里多出一级同名节点，
-  // 且组件根不再要求是 Group，任意 Entity 都可以承担。只有多选才需要 Group 归拢。
-  const reuseRoot = roots.length === 1
+  /*
+   * 单选时直接复用被选中的节点作为组件根：追加包装层会在场景树里多出一级同名节点，
+   * 且组件根不再要求是 Group，任意 Entity 都可以承担。只有多选才需要 Group 归拢。
+   *
+   * **带 `Curve` 的 Entity 例外**：组件根必须是 Frame，而 Frame 蕴含 Hierarchy，
+   * 「`Curve` 不能与 Hierarchy 组合」——一条曲线不是容器。复用它会造出一份非法文档，
+   * 症状是「创建组件」按下去没反应、对话框里留一句读不懂的校验错误。因此退回 Group 包装，
+   * 与多选走同一条路。
+   */
+  const curveRoot = roots.length === 1
+    && getComposeCurve(input.document.entities[roots[0]!]) !== undefined
+  const reuseRoot = roots.length === 1 && !curveRoot
   if (!reuseRoot && input.document.entities[input.groupId]) {
     return { status: 'unavailable', reason: 'group-id-conflict' }
   }

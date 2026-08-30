@@ -11,9 +11,11 @@ import {
   ComposeArrowMaterialIcon,
   ComposeCircleMaterialIcon,
   ComposeLineMaterialIcon,
+  ComposeRectMaterialIcon,
 } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
+  composeRectangleGeometry,
   DEFAULT_ARROW_PROPS,
   DEFAULT_CIRCLE_GEOMETRY,
   DEFAULT_CURVE_APPEARANCE,
@@ -54,7 +56,7 @@ function valueContract(
  * 同时存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
  */
 function curvePreset(
-  id: 'curve' | 'arrow' | 'circle' | 'wire',
+  id: 'curve' | 'arrow' | 'circle' | 'rect' | 'wire',
   fallbackLabel: string,
   fallbackProps: JsonObject,
   geometry: (size: { readonly width: number; readonly height: number }) => ComposeCurve,
@@ -100,6 +102,7 @@ export function createCurveMaterial(
 ): {
   renderer: ComposeRendererDefinition
   presets: readonly [
+    ComposeEntityPreset,
     ComposeEntityPreset,
     ComposeEntityPreset,
     ComposeEntityPreset,
@@ -160,6 +163,25 @@ export function createCurveMaterial(
         true,
         options.circle,
       ),
+      /*
+       * 矩形**不 paletteHidden**，这是对上面那条「工具栏已提供入口就不上面板」的一处有意
+       * 偏离：物料面板是新手唯一的发现面，而矩形是最先被找的那一个。`R` 与它落地的是同一个
+       * Preset，因此两条入口产出的东西逐字段相同——「同一个词指两件东西」正是这次要修的。
+       *
+       * 它与其他曲线一样**默认空心**：接线图上矩形绝大多数是设备外框与分区框，套在符号
+       * 外面，默认填色会把里面的符号整片盖住。空心的代价是盒内部不命中，由两处承担——
+       * 选中之后边缘的缩放命中带整条让到盒外（描边连同它的容差归移动），以及盒内双击进
+       * 几何编辑。
+       */
+      curvePreset(
+        'rect',
+        'Rectangle',
+        DEFAULT_CURVE_PROPS,
+        composeRectangleGeometry,
+        <ComposeRectMaterialIcon />,
+        false,
+        options.rect,
+      ),
       curvePreset(
         'wire',
         'Wire',
@@ -182,5 +204,7 @@ export const DEFAULT_COMPOSE_CURVE_PRESET = curve.presets[0]
 export const DEFAULT_COMPOSE_ARROW_PRESET = curve.presets[1]
 /** 默认 Circle Entity Preset。 @public */
 export const DEFAULT_COMPOSE_CIRCLE_PRESET = curve.presets[2]
+/** 默认 Rect Entity Preset。 @public */
+export const DEFAULT_COMPOSE_RECT_PRESET = curve.presets[3]
 /** 默认 Wire Entity Preset。 @public */
-export const DEFAULT_COMPOSE_WIRE_PRESET = curve.presets[3]
+export const DEFAULT_COMPOSE_WIRE_PRESET = curve.presets[4]

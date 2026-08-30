@@ -123,7 +123,20 @@ export function useStageRootHandlers({
       // 否则任何按实体查询 DOM 的地方都会同时命中标签。
       const target = (event.target as Element)
         .closest<HTMLElement>('[data-entity-id],[data-label-entity-id]')
-      const entityId = target?.dataset.entityId ?? target?.dataset.labelEntityId ?? null
+      /*
+       * 落在选中 chrome 上的右键说的就是**当前选中的那个对象**。
+       *
+       * 空心矩形把这件事从「顺手」变成「必须」：它选中之后八个手柄与四条边缘命中带正好盖住
+       * 它的整圈描边，而盒内部按设计不拦截指针——不认这一档的话，一个选中的空心矩形根本没有
+       * 任何地方能右键出它自己的菜单。
+       *
+       * 手柄不带 `data-entity-id`：那个属性必须唯一指向 Scene 里的节点，任何按实体查询 DOM
+       * 的地方都会被多出来的那一个搅乱。
+       */
+      const chrome = (event.target as Element).closest('[data-stage-selection-chrome]')
+      const entityId = target?.dataset.entityId
+        ?? target?.dataset.labelEntityId
+        ?? (chrome && normalizedSelection.length === 1 ? normalizedSelection[0]! : null)
       if (entityId && !normalizedSelection.includes(entityId)) {
         onSelectedIdsChange([entityId])
       }

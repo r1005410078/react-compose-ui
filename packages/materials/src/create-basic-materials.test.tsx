@@ -73,7 +73,16 @@ describe('Basic ECS materials', () => {
       .map(({ id }) => id)
     // 工具栏已有 text/line/arrow/circle 绘制工具，因此它们默认不进 Palette；曲线相反——
     // 它的创建路径就是「点击添加」，绘制手势属于后续的绘图模式。
-    expect(paletteVisible).toEqual(['container', 'widget-switcher', 'rectangle', 'curve'])
+    //
+    // `rect` 是这条规则的一处**有意偏离**：物料面板是新手唯一的发现面，而矩形是最先被找的
+    // 那一个。它与 `RECTANGLE` 命令落地的是同一个 Preset，因此两条入口产出的东西逐字段相同。
+    //
+    // 盒物料 `rectangle`（Panel）**不在其中**：它已经退役，新建入口归 `rect`——两个长得
+    // 一样的条目是用户自己发现不了、只能靠试出来的一类缺陷。Renderer 与 Preset 都还在，
+    // 既有文档照旧渲染。
+    expect(paletteVisible)
+      .toEqual(['container', 'widget-switcher', 'curve', 'rect'])
+    expect(materials.registry.getPreset('rectangle')).toMatchObject({ paletteHidden: true })
     // 隐藏只影响 Palette 呈现，Registry 仍然注册全部 Preset。
     expect(materials.registry.getPreset('text')).toBeDefined()
     expect(materials.registry.getPreset('circle')).toBeDefined()
@@ -127,6 +136,7 @@ describe('Basic ECS materials', () => {
       'curve',
       'arrow',
       'circle',
+      'rect',
       'wire',
     ])
     const container = seedEntity(materials, 'container')

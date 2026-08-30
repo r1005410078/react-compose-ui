@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, selectContainer, expandInspectorSection } from './support/test-helpers'
+import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, selectChildInSceneTree, selectContainer, expandInspectorSection } from './support/test-helpers'
 
 test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并可撤销重做', async ({ page }) => {
   await page.goto('/')
@@ -278,7 +278,9 @@ test('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 显式脱流保持
   expect(secondFlowBox!.x).toBeCloseTo(firstFlowBox!.x + firstFlowBox!.width, 0)
   expect(secondFlowBox!.y).toBeCloseTo(firstFlowBox!.y, 0)
 
-  await children.nth(0).click()
+  // 从**场景树**选中这个子项：矩形默认空心，盒内部不命中，而它此刻填满了容器的交叉轴——
+  // 四条边里三条压在容器自己的缩放命中带下面，剩下那条又与相邻子项共用。
+  await selectChildInSceneTree(editor, container, children.nth(0))
   const childInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
   const basicSection = childInspector.getByRole('button', { name: '基础', exact: true })
     .locator('..')
@@ -485,7 +487,8 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   expect(stretched).toBeGreaterThan(beforeHeight)
   expect((await children.nth(1).boundingBox())!.height).toBe(stretched)
 
-  await children.nth(0).click()
+  // 从**场景树**选中这个子项，理由同上一条用例：矩形默认空心，而它填满了容器的交叉轴。
+  await selectChildInSceneTree(editor, frame, children.nth(0))
   const rectInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
   await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('Fill')
   await expect(rectInspector.getByRole('combobox', { name: '尺寸宽度' })).not.toHaveValue('Fill')

@@ -5,6 +5,7 @@ import {
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_CURVE_PICK_TOLERANCE,
   createTransactionRuntime,
   getComposeComposition,
   getComposeLayoutItem,
@@ -158,6 +159,26 @@ const curvePreset: ComposeEntityPreset = {
 }
 
 /**
+ * 矩形与 `RECTANGLE` 命令落地同一个 Preset。
+ *
+ * @remarks
+ * 物料面板里的「矩形」与敲 `R` 画出来的是同一件东西，测试 Registry 必须把它给出来，
+ * 否则绘图落地会拿不到 seed 而静默什么都不建。
+ */
+const rectPreset: ComposeEntityPreset = {
+  id: 'rect',
+  label: '矩形',
+  createComponents: () => ({
+    ...curvePreset.createComponents(),
+    Curve: {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }, { x: 0, y: 50 }],
+      closed: true,
+    },
+  }),
+}
+
+/**
  * 导线走自己的 Preset。
  *
  * @remarks
@@ -190,7 +211,7 @@ const registry = createComposeEntityRegistry({
     label: '曲线',
     renderer: () => null,
   }],
-  presets: [preset, curvePreset, wirePreset, arrowPreset],
+  presets: [preset, curvePreset, rectPreset, wirePreset, arrowPreset],
 })
 
 function curveEntity(id = 'curve-a'): ComposeEntity {
@@ -201,6 +222,24 @@ function curveEntity(id = 'curve-a'): ComposeEntity {
       ...base.components,
       Renderer: { type: 'curve', props: { stroke: '#d8e2f1', strokeWidth: 1 } },
       Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 50 } },
+    },
+  }
+}
+
+/** 没有填充的闭合矩形曲线：盒里绝大部分是空的，只有一圈描边可拖。 */
+function hollowRectangleEntity(id = 'rect-a'): ComposeEntity {
+  const base = curveEntity(id)
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      // 夹具的默认外观带一块实心蓝；空心的判据读的正是这个字段（渲染与命中共用的填充入口）。
+      Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' } },
+      Curve: {
+        kind: 'polyline',
+        vertices: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
+        closed: true,
+      },
     },
   }
 }
@@ -468,6 +507,37 @@ describe('ComposeStage ECS', () => {
       expect(screen.queryByTestId(`stage-resize-${handle}`)).not.toBeInTheDocument()
       expect(screen.getByTestId(`stage-resize-edge-${handle}`)).toBeInTheDocument()
     }
+  })
+
+  /** 命中带的下缘与选区上缘；两者的大小关系就是「让没让开描边」。 */
+  function northEdgeGeometry() {
+    const attr = (testId: string, name: string) => Number(
+      screen.getByTestId(testId).getAttribute(name),
+    )
+    return {
+      top: attr('stage-selection-bounds', 'y'),
+      north: attr('stage-resize-edge-n', 'y') + attr('stage-resize-edge-n', 'height'),
+    }
+  }
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 空心选区的边缘命中带让开描边', () => {
+    renderStage(document([hollowRectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+
+    // 边线连同它的拾取容差归**移动**：命中带曾经以边线为中心（±4），于是一个被选中的空心
+    // 矩形在画布上根本拖不动——它的描边是唯一可拖的那几个像素，而那几个像素被缩放占着。
+    // 断的是「让开了容差」而不只是「在外面」：紧贴边线时 SVG 矩形的命中区仍含它自己的边界，
+    // 而用户瞄的正是那条线。
+    const { north, top } = northEdgeGeometry()
+    expect(north).toBeLessThan(top - COMPOSE_CURVE_PICK_TOLERANCE + 0.001)
+  })
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 填充对象的命中带仍骑在边线上', () => {
+    renderStage(document(), { selectedIds: ['a'], tool: 'select' })
+
+    // 让位吃掉的是盒**外**那一圈，而场景标题标签就坐在顶边外侧，容器让出去还会压住紧挨着
+    // 的邻居。填充对象的内部本来就可拖，不需要这条补偿。
+    const { north, top } = northEdgeGeometry()
+    expect(north).toBeGreaterThan(top)
   })
 
   it('OpenSpec: 曲线几何编辑会话 / 双击曲线显形夹点并让位盒手柄', () => {
@@ -2750,7 +2820,225 @@ describe('绘图模式', () => {
     })
   })
 
-  describe('OpenSpec: stage / 绘图命令的盒效果落地成物料 Entity', () => {
+  describe('OpenSpec: stage / 多段线的圆角手柄', () => {
+    /** 200 × 100 的闭合矩形；四个角都是直角，因此四个手柄。 */
+    function rectangleEntity(cornerRadius?: number): ComposeEntity {
+      const base = curveEntity('rect-a')
+      return {
+        ...base,
+        components: {
+          ...base.components,
+          Curve: {
+            kind: 'polyline',
+            vertices: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
+            closed: true,
+            ...(cornerRadius === undefined ? {} : { cornerRadius }),
+          },
+          LayoutItem: {
+            ...(base.components.LayoutItem as Record<string, unknown>),
+            width: { mode: 'fixed', value: 200, min: 1, max: null },
+            height: { mode: 'fixed', value: 100, min: 1, max: null },
+          },
+        },
+      }
+    }
+
+    it('选中画的是普通包围盒与八个手柄，不是几何轮廓', () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+
+      // 矩形的盒**就是**它的轮廓，因此走与矩形物料、图片、容器完全相同的一套。
+      expect(screen.queryByTestId('stage-selection-outline')).toBeNull()
+      expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+      expect(screen.getByTestId('stage-resize-nw')).toBeInTheDocument()
+    })
+
+    it('对角线仍然画几何轮廓', () => {
+      renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
+
+      // 同一条判据的另一个答案：一条对角线的包围盒里绝大部分是空的。
+      expect(screen.getByTestId('stage-selection-outline')).toBeInTheDocument()
+      expect(screen.queryByTestId('stage-selection-bounds')).toBeNull()
+    })
+
+    it('在选中矩形的盒内部双击进入几何编辑', () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+      expect(screen.queryByTestId('stage-editable-path')).toBeNull()
+
+      // 空心图形不以包围盒拦截指针，因此盒中间没有任何东西可命中——而它已经被选中，用户
+      // 已经用一次点击说明了在操作谁。落点取盒中心：矩形是 200 × 100，offset 是 (20, 30)。
+      const surface = screen.getByTestId('stage-surface')
+      fireEvent.pointerDown(surface, { ...surfacePoint(120, 80), detail: 2 })
+
+      expect(screen.getByTestId('stage-editable-path')).toBeInTheDocument()
+    })
+
+    it('未选中时双击盒内部会先选中它再进去', () => {
+      const { selection } = renderStage(document([rectangleEntity()]), {
+        selectedIds: [],
+        tool: 'select',
+      })
+      const surface = screen.getByTestId('stage-surface')
+      fireEvent.pointerDown(surface, { ...surfacePoint(120, 80), detail: 2 })
+
+      // 一次双击里的第一下会落到框选兜底、松手时清空选区，等第二下到达时选区已经空了。
+      expect(selection).toHaveBeenCalledWith(['rect-a'])
+    })
+
+    it('盒内部的单击照旧不被抢走', () => {
+      const { selection } = renderStage(document([rectangleEntity()]), {
+        selectedIds: [],
+        tool: 'select',
+      })
+      const surface = screen.getByTestId('stage-surface')
+      fireEvent.pointerDown(surface, surfacePoint(120, 80))
+
+      // 空心外框套在符号外面时，盒里绝大部分是空的——单击照旧起框，框内的符号照旧选得中。
+      expect(selection).not.toHaveBeenCalledWith(['rect-a'])
+    })
+
+    it('拖动整条曲线时圆角手柄跟着走', async () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+      const cornerX = () => Number(
+        screen.getByTestId('stage-curve-corner-0').getAttribute('cx'),
+      )
+      const boundsX = () => Number(
+        screen.getByTestId('stage-selection-bounds').getAttribute('x'),
+      )
+      const before = { corner: cornerX(), bounds: boundsX() }
+
+      fireEvent.pointerDown(screen.getByTestId('stage-entity-rect-a'), surfacePoint(120, 80))
+      fireEvent.pointerMove(window, { ...surfacePoint(220, 80), buttons: 1 })
+
+      // 画在对象身上的每一件 chrome 都读**预览**几何：读已提交文档时盒跟着手势走而手柄留在
+      // 原地，用户看到的是「矩形搬走了，四个圆角手柄还留在原来的位置」。断的是两者位移相等，
+      // 而不是某个绝对坐标——移动本身会吸附，那不是本条要钉的东西。
+      await waitFor(() => {
+        expect(boundsX()).not.toBe(before.bounds)
+      })
+      expect(cornerX() - before.corner).toBeCloseTo(boundsX() - before.bounds)
+    })
+
+    it('拖动整条曲线时几何轮廓跟着走', async () => {
+      renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
+      const outline = () => screen.getByTestId('stage-selection-outline').getAttribute('points')
+      const before = outline()
+
+      fireEvent.pointerDown(screen.getByTestId('stage-entity-curve-a'), surfacePoint(40, 40))
+      fireEvent.pointerMove(window, { ...surfacePoint(140, 90), buttons: 1 })
+
+      // 对角线的轮廓**取代**了选区盒，因此它是这次拖动唯一的反馈——停在原处时用户看到的是
+      // 「线走了，选中的那条框还留在原地」。
+      await waitFor(() => {
+        expect(outline()).not.toBe(before)
+      })
+    })
+
+    it('选中即出四个圆角手柄', () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+
+      // 选中就出，不必先进任何模式：改圆角是最常做的调整之一。
+      expect(screen.getAllByTestId(/^stage-curve-corner-\d+$/)).toHaveLength(4)
+    })
+
+    it('没有选中时不画', () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: [], tool: 'select' })
+
+      expect(screen.queryByTestId(/^stage-curve-corner-\d+$/)).toBeNull()
+    })
+
+    it('直线没有角，因此没有手柄', () => {
+      renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'select' })
+
+      expect(screen.queryByTestId(/^stage-curve-corner-\d+$/)).toBeNull()
+    })
+
+    it('拖一个手柄写的是四个角共用的那个值', () => {
+      const { dispatch } = renderStage(document([rectangleEntity()]), {
+        selectedIds: ['rect-a'],
+        tool: 'select',
+      })
+      const handle = screen.getByTestId('stage-curve-corner-hit-0')
+      // 左上角在世界 (20,30)；沿角平分线往里拖到 (50,60)，投影乘半角正弦即半径 30。
+      fireEvent.pointerDown(handle, surfacePoint(20, 30))
+      fireEvent.pointerMove(window, surfacePoint(50, 60))
+      fireEvent.pointerUp(window, surfacePoint(50, 60))
+
+      const calls = dispatch.mock.calls
+      const call = calls[calls.length - 1]?.[0] as {
+        payload?: { curve?: { cornerRadius?: number; vertices?: readonly { x: number }[] } }
+      }
+      expect(call?.payload?.curve?.cornerRadius).toBeGreaterThan(0)
+      // 载荷是 **parent 局部坐标**：交盒局部几何出去会让那条唯一漏斗把盒的 offset 归一成
+      // (0,0)，症状是松手那一刻矩形整个跳回原点。夹具的 offset 是 (20, 30)。
+      expect(call?.payload?.curve?.vertices?.[0]).toEqual({ x: 20, y: 30 })
+    })
+
+    it('拖动中画出圆角之后的轮廓，包围盒与手柄不让位', async () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+      // 矩形选中画的是普通包围盒，而盒不会跟着圆——不画这一条，用户在松手之前看不见结果。
+      expect(screen.queryByTestId('stage-curve-corner-preview')).toBeNull()
+
+      const handle = screen.getByTestId('stage-curve-corner-hit-0')
+      fireEvent.pointerDown(handle, surfacePoint(20, 30))
+      // buttons 必须非 0，否则 Stage 会把这一下当作按键已松开而直接结束手势。
+      fireEvent.pointerMove(window, { ...surfacePoint(50, 60), buttons: 1 })
+
+      // pointermove 经过 rAF 合帧，因此要等下一帧才读得到。
+      await waitFor(() => {
+        const preview = screen.getByTestId('stage-curve-corner-preview').getAttribute('points')!
+        // 四个尖角变成四段拍扁的弧，点数远多于四个顶点。
+        expect(preview.trim().split(/\s+/).length).toBeGreaterThan(5)
+      })
+      // 这一条是叠加而不是取代：盒操作的入口不该因为拖了一下圆角就消失。
+      expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+      expect(screen.getByTestId('stage-resize-nw')).toBeInTheDocument()
+    })
+
+    it('半径到顶时仍留得住可拖的手柄', () => {
+      // 200 × 100 的矩形，四个角的上限都是 50：四个圆心两两重合成两个点。
+      renderStage(document([rectangleEntity(50)]), { selectedIds: ['rect-a'], tool: 'select' })
+
+      // 抽稀而不是整片隐藏——拥挤的那一档恰恰是用户想把圆角调回来的那一档，而画布上没有
+      // 别的入口。四个手柄写的是同一个 `cornerRadius`，留下哪一个都给出相同的结果。
+      const handles = screen.getAllByTestId(/^stage-curve-corner-\d+$/)
+      expect(handles.length).toBeGreaterThan(0)
+      expect(handles.length).toBeLessThan(4)
+    })
+
+    it('拖过上限时预览与手柄都还在', async () => {
+      renderStage(document([rectangleEntity()]), { selectedIds: ['rect-a'], tool: 'select' })
+      const handle = screen.getByTestId('stage-curve-corner-hit-0')
+      fireEvent.pointerDown(handle, surfacePoint(20, 30))
+      // 拖到远远超过上限的地方：形状停在最大圆角上，而反馈不该跟着一起停。
+      fireEvent.pointerMove(window, { ...surfacePoint(400, 400), buttons: 1 })
+
+      // 等到半径吃满上限、四个圆心两两重合：此刻抽稀开始起作用，手柄少于四个。
+      await waitFor(() => {
+        expect(screen.getAllByTestId(/^stage-curve-corner-\d+$/).length).toBeLessThan(4)
+      })
+      // 预览是**这次手势**的反馈，不该因为手柄拥挤而一起消失——那正是用户在看结果的时候。
+      expect(screen.getByTestId('stage-curve-corner-preview')).toBeInTheDocument()
+    })
+
+    it('半径拖回零时删掉这个字段而不是写 0', () => {
+      const { dispatch } = renderStage(document([rectangleEntity(20)]), {
+        selectedIds: ['rect-a'],
+        tool: 'select',
+      })
+      const handle = screen.getByTestId('stage-curve-corner-hit-0')
+      // 往角外侧拖：投影为负，反解钳到 0。缺席与 0 是同一件事，只留一种表示。
+      fireEvent.pointerDown(handle, surfacePoint(40, 50))
+      fireEvent.pointerMove(window, surfacePoint(-100, -100))
+      fireEvent.pointerUp(window, surfacePoint(-100, -100))
+
+      const calls = dispatch.mock.calls
+      const call = calls[calls.length - 1]?.[0] as { payload?: { curve?: Record<string, unknown> } }
+      expect(call?.payload?.curve).toBeDefined()
+      expect(call?.payload?.curve && 'cornerRadius' in call.payload.curve).toBe(false)
+    })
+  })
+
+  describe('OpenSpec: stage / 矩形命令落地成可几何编辑的闭合曲线', () => {
     /** 启动 RECTANGLE 并取两个对角点；返回文档里新出现的那个 Entity。 */
     function drawRectangle(runtime: ReturnType<typeof createTransactionRuntime>) {
       const before = new Set(Object.keys(runtime.document.entities))
@@ -2766,16 +3054,27 @@ describe('绘图模式', () => {
       return Object.values(runtime.document.entities).find(({ id }) => !before.has(id))
     }
 
-    it('R 画出的是矩形物料而不是曲线', () => {
+    it('R 画出的是闭合四顶点曲线', () => {
       const { runtime } = renderStage(document())
       const created = drawRectangle(runtime)
 
-      // 画完矩形外框，下一步九成是填色、调圆角——这些 `Curve` 全都做不到。
-      expect(created?.components.Curve).toBeUndefined()
-      expect(created?.components.Appearance).toBeDefined()
+      // 用户画完之后想做的是改形状：把某个角对到导线端点上、把某条边整体挪一格。
+      expect(created?.components.Curve).toMatchObject({ kind: 'polyline', closed: true })
+      const curve = created?.components.Curve as { vertices: readonly unknown[] }
+      expect(curve.vertices).toHaveLength(4)
       const layoutItem = created?.components.LayoutItem as Record<string, { value: number }>
       expect(layoutItem.width.value).toBe(160)
       expect(layoutItem.height.value).toBe(96)
+    })
+
+    it('外观原样取自 Preset，落地处不覆写', () => {
+      const { runtime } = renderStage(document())
+      const created = drawRectangle(runtime)
+
+      // 「默认不填充」是 `curve` Preset 的取值（`DEFAULT_CURVE_APPEARANCE` 是 transparent），
+      // 不是落地处覆写出来的；本层能断的是后半句——它与 `PLINE` 画出来的线一模一样。
+      expect(created?.components.Appearance)
+        .toEqual(rectPreset.createComponents().Appearance)
     })
 
     it('落在场景空白处的矩形成为激活场景的子级', () => {
@@ -2783,7 +3082,7 @@ describe('绘图模式', () => {
       const { runtime } = renderStage(value)
       const created = drawRectangle(runtime)
 
-      // Rectangle Preset 没有 `Hierarchy`，因此不按「根层落点按类型分流」升格成新场景。
+      // 曲线不是容器，因此不按「根层落点按类型分流」升格成新场景。
       expect(runtime.document.rootIds).toEqual(value.rootIds)
       expect(created?.id).toBeDefined()
       expect(runtime.document.entities[ROOT_FRAME_ID]?.components.Hierarchy)

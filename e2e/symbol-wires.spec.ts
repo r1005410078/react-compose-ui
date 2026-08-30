@@ -48,7 +48,8 @@ test('OpenSpec: compose-document / 符号导线 / 绑定端跟着符号走，符
   await page.mouse.click(beforeRect.x + 220, beforeRect.y + 160)
   await commandInput.press('Enter')
 
-  const stroke = stage.getByTestId('compose-material-curve-stroke')
+  // 只认**两点直线**那一个描边：矩形现在也是曲线（画成 `<polygon>`），拿总数会把它算进来。
+  const stroke = stage.locator('line[data-testid="compose-material-curve-stroke"]')
   await expect(stroke).toHaveCount(1)
   // `LINE` 连续取点，回车之后会话还在等下一条的第一个点；不退出的话，下面那一下按在符号上
   // 的指针会被取点插件吃掉（它此刻要的是一个**点**，不是一次选择）。
@@ -56,13 +57,23 @@ test('OpenSpec: compose-document / 符号导线 / 绑定端跟着符号走，符
   await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('命令：')
   const beforeWire = (await stroke.boundingBox())!
 
-  // 3) 把符号拖走：绑定端跟着走，自由端不动。抓左下角一带——导线从左上角斜向右下，
-  // 抓中心会命中导线本身。
-  const grip = { x: beforeRect.x + 8, y: beforeRect.y + beforeRect.height - 8 }
+  /*
+   * 3) 把符号拖走：绑定端跟着走，自由端不动。抓的是**下边线的左段**——矩形默认空心，盒
+   * 内部不命中，可点可拖的只有那一圈描边；而导线从左上角斜向右下，在这条边约 80% 宽处
+   * 才穿过它，左段不会误抓到它。落点按**量到的盒**取比例：这条用例跑在非 100% 缩放下，
+   * 写死像素会跑到盒外面去。
+   */
+  const grip = {
+    x: beforeRect.x + beforeRect.width * 0.2,
+    y: beforeRect.y + beforeRect.height - 1,
+  }
   await page.mouse.click(grip.x, grip.y)
-  await page.mouse.move(grip.x, grip.y)
+  // 按下点**避开刚才那一下点击**：同一个位置的第二次按下会被浏览器判成双击，而双击一个
+  // 矩形进的是几何编辑（它是曲线），这一次拖拽就不再是移动。
+  const dragFrom = { x: beforeRect.x + beforeRect.width * 0.5, y: grip.y }
+  await page.mouse.move(dragFrom.x, dragFrom.y)
   await page.mouse.down()
-  await page.mouse.move(grip.x - 80, grip.y - 60, { steps: 8 })
+  await page.mouse.move(dragFrom.x - 80, dragFrom.y - 60, { steps: 8 })
   await page.mouse.up()
 
   const afterRect = (await rectangle.boundingBox())!

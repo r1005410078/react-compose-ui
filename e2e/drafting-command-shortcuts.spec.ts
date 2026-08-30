@@ -31,6 +31,9 @@ test('OpenSpec: stage / 绘图命令的单键快捷键 / 按 R 画出一个矩�
   await expect(prompt).toContainText('命令：')
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   await expect(sceneTree.getByRole('row').filter({ hasText: 'Rectangle' })).toHaveCount(1)
+  // 闭合四顶点多段线渲染成一个 `<polygon>`，与 `LINE` 的一段 `<line>` 可分。
+  await expect(stage.locator('polygon[data-testid="compose-material-curve-stroke"]'))
+    .toHaveCount(1)
 })
 
 test('OpenSpec: stage / 绘图命令的单键快捷键 / 焦点在命令行时字母是文本', async ({ page }) => {

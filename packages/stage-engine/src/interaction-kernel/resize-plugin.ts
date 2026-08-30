@@ -160,7 +160,18 @@ export function createStageResizePlugin(): StageInteractionPlugin {
         }])
         return 'consumed'
       }
-      return claimStageResize(event, ctx, context.selectedIds, event.hit.handle) ?? 'consumed'
+      // 四条边是**透明命中带**，它不画在被拖的那条边上（空心图形的带整条让到盒外，为的是把
+      // 描边留给移动），因此按位移解算：按绝对落点解算会在第一帧把那条边挪到光标下——用户只
+      // 拖了一像素，对象却猛地长到命中带那么宽。四角手柄画在角上，本来就没有偏移，不置位以
+      // 保持既有行为逐像素不变。
+      const offsetFromEdge = event.hit.handle.length === 1
+      return claimStageResize(
+        event,
+        ctx,
+        context.selectedIds,
+        event.hit.handle,
+        { offsetFromEdge },
+      ) ?? 'consumed'
     },
   }
 }

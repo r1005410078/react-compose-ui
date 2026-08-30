@@ -1,16 +1,51 @@
 import {
+  clampComposeCornerRadius,
   composeArcEndpoints,
   composeArcMidpoint,
+  composeCornerArcCenter,
+  composeCornerRadiusAt,
+  composePolylineCornerFrames,
+  composePolylineOutline,
   flattenComposeArc,
+  flattenComposeOutline,
   getComposeCurve,
   isComposeFullCircle,
   projectComposeCurveToBox,
   translateComposeCurve,
 } from '@compose-ui/core'
-import type { ComposeArcCurve, ComposeCurve, ComposeDocument, ComposePosition } from '@compose-ui/core'
+import type {
+  ComposeArcCurve,
+  ComposeCurve,
+  ComposeDocument,
+  ComposeLayoutSnapshot,
+  ComposePolylineCurve,
+  ComposePosition,
+} from '@compose-ui/core'
 import { applyMatrix, invertMatrix } from '../geometry'
-import type { StagePoint } from '../geometry'
-import type { StageSceneIndex } from '../hit-testing'
+import type { StageMatrix, StagePoint } from '../geometry'
+
+/**
+ * 派生曲线几何所需的最小场景来源。
+ *
+ * @remarks
+ * 刻意**不要求整个 `StageSceneIndex`**（它结构上满足本接口）：手势预览期间选区 chrome 必须
+ * 跟着对象一起走，而场景索引读的是已提交文档；为每一帧预览重建一份全场景索引是一次整棵树的
+ * 遍历，而这里只需要目标那一个 Entity 的盒与世界矩阵。与 `StageTransformGizmoSource` 是同一
+ * 条判断，也是同一个理由。
+ *
+ * 文档与索引**合成一个参数**而不是并列两个：并列时「一处传预览、另一处传已提交」是写得出来
+ * 的，而那正是曾经的缺陷本身——选区盒跟着手势走，曲线的轮廓与圆角手柄还留在原来的位置。
+ *
+ * @public
+ */
+export interface StageCurveGeometrySource {
+  /** 读 `Curve` Component 的文档；手势期传预览文档。 */
+  readonly document: ComposeDocument
+  /** 与 {@link StageCurveGeometrySource.document} 对应的布局快照。 */
+  readonly layoutSnapshot: ComposeLayoutSnapshot
+  /** 查询 Entity 完整世界矩阵；缺失 Entity 返回 null。 */
+  getWorldMatrix(entityId: string): StageMatrix | null
+}
 
 /**
  * 一个可拖的夹点。
@@ -169,6 +204,13 @@ function polylineSegments(
 function localOutline(curve: ComposeCurve): readonly StagePoint[] {
   if (curve.kind === 'line') return [curve.start, curve.end]
   if (curve.kind === 'polyline') {
+    // 有圆角时轮廓必须跟着圆——它与渲染读的是同一列片段，各画各的会让选区框在角上露出
+    // 一个尖，而形状本身是圆的。
+    if (curve.cornerRadius) {
+      const segments = flattenComposeOutline(composePolylineOutline(curve))
+      const first = segments[0]
+      if (first) return [first.start, ...segments.map(({ end }) => end)]
+    }
     return curve.closed && curve.vertices.length > 0
       ? [...curve.vertices, curve.vertices[0]!]
       : curve.vertices
@@ -190,13 +232,12 @@ function localOutline(curve: ComposeCurve): readonly StagePoint[] {
  * @public
  */
 export function stageCurveBoxGeometry(
-  document: ComposeDocument,
-  index: StageSceneIndex,
+  source: StageCurveGeometrySource,
   entityId: string,
 ): ComposeCurve | null {
-  const entity = document.entities[entityId]
+  const entity = source.document.entities[entityId]
   const curve = entity ? getComposeCurve(entity) : null
-  const box = index.layoutSnapshot.boxes[entityId]
+  const box = source.layoutSnapshot.boxes[entityId]
   return curve && box ? projectComposeCurveToBox(curve, box) : null
 }
 
@@ -208,13 +249,12 @@ export function stageCurveBoxGeometry(
  * @public
  */
 export function stageCurveGrips(
-  document: ComposeDocument,
-  index: StageSceneIndex,
+  source: StageCurveGeometrySource,
   entityId: string,
   override?: ComposeCurve | null,
 ): readonly StageCurveGrip[] {
-  const curve = override ?? stageCurveBoxGeometry(document, index, entityId)
-  const matrix = index.getWorldMatrix(entityId)
+  const curve = override ?? stageCurveBoxGeometry(source, entityId)
+  const matrix = source.getWorldMatrix(entityId)
   if (!curve || !matrix) return []
   return localGrips(curve).map((grip) => ({ ...grip, point: applyMatrix(matrix, grip.point) }))
 }
@@ -229,13 +269,12 @@ export function stageCurveGrips(
  * @public
  */
 export function stageCurveOutline(
-  document: ComposeDocument,
-  index: StageSceneIndex,
+  source: StageCurveGeometrySource,
   entityId: string,
   override?: ComposeCurve | null,
 ): readonly StagePoint[] {
-  const curve = override ?? stageCurveBoxGeometry(document, index, entityId)
-  const matrix = index.getWorldMatrix(entityId)
+  const curve = override ?? stageCurveBoxGeometry(source, entityId)
+  const matrix = source.getWorldMatrix(entityId)
   if (!curve || !matrix) return []
   return localOutline(curve).map((point) => applyMatrix(matrix, point))
 }
@@ -342,10 +381,114 @@ function applyArcGrip(
  * @public
  */
 export function stageCurveLocalPoint(
-  index: StageSceneIndex,
+  source: StageCurveGeometrySource,
   entityId: string,
   world: StagePoint,
 ): StagePoint | null {
-  const matrix = index.getWorldMatrix(entityId)
+  const matrix = source.getWorldMatrix(entityId)
   return matrix ? applyMatrix(invertMatrix(matrix), world) : null
+}
+
+/**
+ * 一个圆角手柄。
+ *
+ * @remarks
+ * 手柄画在**角弧的圆心**上——沿两条边各进一个切线长，Figma 的圆角手柄就在那里。半径为 0 时
+ * 圆心与顶点重合，那时由呈现层沿 {@link StageCurveCorner.inward} 让开一个固定的屏幕距离，
+ * 否则尖角状态下手柄压在顶点上，谁也抓不住。
+ *
+ * @public
+ */
+export interface StageCurveCorner {
+  /** 手柄属于哪个 Entity；覆盖层据此派发命中，省掉一层「这是谁的手柄」的旁路状态。 */
+  readonly entityId: string
+  /** 顶点下标；拖动时按它找回标架。 */
+  readonly index: number
+  /** 手柄落点，世界坐标。 */
+  readonly point: StagePoint
+  /** 角顶点，世界坐标；半径标注从圆心量到弧上，而弧的圆心就是 `point`。 */
+  readonly vertex: StagePoint
+  /** 角平分线方向上的一个世界点（离顶点一个单位），呈现层据此求屏幕方向。 */
+  readonly inward: StagePoint
+  /** 此刻画出来的半径，已按相邻边长钳制。 */
+  readonly radius: number
+}
+
+/**
+ * 派生一个 Entity 的圆角手柄。
+ *
+ * @remarks
+ * 只有多段线有角。半径到顶时同一条边上的两个手柄会落在同一点——**那时全部不画**，交给呈现层
+ * 按屏幕距离判断，因为「叠在一起」是一个屏幕问题而不是几何问题。
+ *
+ * @param override - 盒局部几何的替代品；拖动期间传入预览几何，手柄因此跟手而文档不动。
+ * @public
+ */
+export function stageCurveCorners(
+  source: StageCurveGeometrySource,
+  entityId: string,
+  override?: ComposeCurve | null,
+): readonly StageCurveCorner[] {
+  /*
+   * 判据取**作者写下的那条曲线**而不是投影之后的：非等比缩放会把弧拍扁成多段线（见
+   * `projectComposeCurveToBox`），照投影结果判断就会给一段圆弧发出一整串圆角手柄——而弧
+   * 根本没有角。投影是给命中与渲染用的近似，不是这条曲线是什么的答案。
+   *
+   * `override` 是拖动期的预览几何，它本来就与作者的那条同 kind，因此直接问它。
+   */
+  const entity = source.document.entities[entityId]
+  const authoredCurve = override ?? (entity ? getComposeCurve(entity) : null)
+  if (authoredCurve?.kind !== 'polyline') return []
+  const curve = override ?? stageCurveBoxGeometry(source, entityId)
+  const matrix = source.getWorldMatrix(entityId)
+  if (!curve || curve.kind !== 'polyline' || !matrix) return []
+  const authored = curve.cornerRadius ?? 0
+  return composePolylineCornerFrames(curve.vertices, curve.closed).map((frame) => {
+    // 圆心按**钳制之后**的半径求：手柄要坐在真正画出来的那段弧的圆心上。用作者写下的那个
+    // 数会让手柄在半径超过相邻边一半之后继续往外飘，而形状早就停在最大圆角上——屏幕上就是
+    // 「手柄跟弧脱节了，再拖也不见形状变」。钳制不回写这条不变：写进文档的仍是作者的意图。
+    const radius = clampComposeCornerRadius(frame, authored)
+    return {
+      entityId,
+      index: frame.index,
+      point: applyMatrix(matrix, composeCornerArcCenter(frame, radius)),
+      vertex: applyMatrix(matrix, frame.vertex),
+      inward: applyMatrix(matrix, {
+        x: frame.vertex.x + frame.bisector.x,
+        y: frame.vertex.y + frame.bisector.y,
+      }),
+      radius,
+    }
+  })
+}
+
+/**
+ * 把一个盒局部落点解释成圆角半径，写回整条曲线。
+ *
+ * @remarks
+ * **四个角联动一个值**：落在哪个角上只决定用哪个标架反解，写回去的是同一个 `cornerRadius`。
+ *
+ * 半径为 0 时**删掉这个字段**而不是写 0：协议里缺席与 0 是同一件事，留两种表示会让「有没有
+ * 圆角」在两处读出不同答案，而校验只接受在场时是正数的那一种。
+ *
+ * @returns 不是多段线或那个下标上没有角时返回 `null`，调用方据此放弃这次写入。
+ * @public
+ */
+export function applyStageCurveCorner(
+  curve: ComposeCurve,
+  cornerIndex: number,
+  point: StagePoint,
+): ComposeCurve | null {
+  if (curve.kind !== 'polyline') return null
+  const frame = composePolylineCornerFrames(curve.vertices, curve.closed)
+    .find(({ index }) => index === cornerIndex)
+  if (!frame) return null
+  const radius = composeCornerRadiusAt(frame, point)
+  const next: ComposePolylineCurve = { ...curve, cornerRadius: radius }
+  if (!(radius > 0)) {
+    const { cornerRadius, ...sharp } = next
+    void cornerRadius
+    return sharp as ComposePolylineCurve
+  }
+  return next
 }

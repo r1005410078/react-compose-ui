@@ -1,5 +1,7 @@
 import { createStageDraftingPointPlugin } from '../drafting/drafting-point-plugin'
+import { createStageCurveCornerPlugin } from './curve-corner-plugin'
 import { createStageDrawPlugin } from './draw-plugin'
+import { createStageGeometryEditFallbackPlugin } from './geometry-edit-fallback-plugin'
 import { createStageGizmoPlugin } from './gizmo-plugin'
 import { createStageMarqueeFallbackPlugin } from './fallback-plugins'
 import {
@@ -42,8 +44,10 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStagePaintSamplePlugin,
   createStagePathPlugin,
   createStagePaintPlugin,
+  createStageCurveCornerPlugin,
   createStageGizmoPlugin,
   createStageDrawPlugin,
+  createStageGeometryEditFallbackPlugin,
   createStageMarqueeConvergePlugin,
   createStageEntitySelectMovePlugin,
   createStageResizePlugin,

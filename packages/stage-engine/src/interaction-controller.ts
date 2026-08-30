@@ -163,6 +163,18 @@ export type StageInteractionHit =
       readonly handle: StagePathHandleKind
       readonly vertexId: string
     }
+  | {
+      /**
+       * 曲线的圆角手柄。
+       *
+       * @remarks
+       * `cornerIndex` 是顶点下标，对引擎是不透明的——半径怎么从落点反解出来只有宿主知道，
+       * 它读的是文档里的几何。四个角联动同一个值，因此这个下标只决定用哪个角的标架反解。
+       */
+      readonly kind: 'curve-corner'
+      readonly entityId: string
+      readonly cornerIndex: number
+    }
 
 /** 渐变画布控制柄的稳定语义。 @public */
 export type StagePaintHandleKind =
@@ -435,6 +447,21 @@ export type StageInteractionEffect =
        * 哪，而浏览器不提供查询接口。缺席的含义是「先不画」，不是「画在别处」。
        */
       readonly worldPoint?: StagePoint
+    }
+  | {
+      /**
+       * 圆角手柄手势的阶段性世界坐标结果。
+       *
+       * @remarks
+       * 与 `path.change` 是同一种分工：引擎只回传世界落点，半径怎么反解、写成什么命令由
+       * 宿主决定。它**不复用** `path.change`——那条通道上的 `vertexId` 是路径顶点的不透明
+       * 标识，而圆角改的根本不是顶点；混用会让宿主那一侧多一个「这个 id 到底是谁」的分支。
+       */
+      readonly type: 'curve-corner.change'
+      readonly entityId: string
+      readonly cornerIndex: number
+      readonly phase: 'start' | 'move' | 'end' | 'cancel'
+      readonly worldPoint: StagePoint
     }
   | {
       /**

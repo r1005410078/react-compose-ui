@@ -387,3 +387,260 @@ export function isDegenerateComposePolyline(vertices: readonly ComposePlanarPoin
   const first = vertices[0]!
   return vertices.every(({ x, y }) => x === first.x && y === first.y)
 }
+
+/**
+ * 圆角多段线的一段轮廓。
+ *
+ * @remarks
+ * 有序的**一列**片段（直段与角弧交替）是圆角几何的唯一表示：命中、框选、内部判定与渲染
+ * 全都读它。各自按 `cornerRadius` 再算一遍的话，下一个改圆角数学的人只会改到其中一处，
+ * 而漏掉的那处的症状是「看得见的形状与点得中的形状不是同一个」。
+ *
+ * @public
+ */
+export type ComposeOutlinePiece =
+  | { readonly kind: 'segment'; readonly segment: ComposeSegmentShape }
+  | { readonly kind: 'arc'; readonly arc: ComposeArcShape }
+
+/** 一个角上求解出来的圆角。 @public */
+export interface ComposePolylineCornerRounding {
+  /** 被圆掉的那个顶点的下标。 */
+  readonly index: number
+  /** 角弧本身。 */
+  readonly arc: ComposeArcShape
+  /** 前一条边上的切点。 */
+  readonly from: ComposePlanarPoint
+  /** 后一条边上的切点。 */
+  readonly to: ComposePlanarPoint
+}
+
+/**
+ * 一个角的局部标架：圆角的求解与反解都从它出发。
+ *
+ * @remarks
+ * 与 {@link ComposePolylineCornerRounding} 分开是因为**半径为 0 时也要有它**——手柄在尖角
+ * 状态下同样要画出来、同样要能被拖，而那时根本没有弧。
+ *
+ * @public
+ */
+export interface ComposePolylineCornerFrame {
+  /** 顶点下标。 */
+  readonly index: number
+  /** 角顶点。 */
+  readonly vertex: ComposePlanarPoint
+  /** 角平分线的单位向量，指向形状内部；圆心与手柄都落在它上面。 */
+  readonly bisector: ComposePlanarPoint
+  /**
+   * 半角的正弦。
+   *
+   * @remarks
+   * 圆心离顶点 `r / halfSine`，因此**反解**（拖动手柄求半径）就是把落点到顶点的位移投影到
+   * 角平分线上再乘它。直角下它是 `√2/2`，圆心因此落在沿两条边各进 `r` 的那个点上。
+   */
+  readonly halfSine: number
+  /** 这个角画得出来的最大半径：相邻两段各让出自己长度的一半。 */
+  readonly maxRadius: number
+  /** 指向前一个顶点的单位向量；前一条边上的切点落在它上面。 */
+  readonly toPrevious: ComposePlanarPoint
+  /** 指向后一个顶点的单位向量；后一条边上的切点落在它上面。 */
+  readonly toNext: ComposePlanarPoint
+  /** 半角的正切；切点离顶点 `r / halfTangent`。 */
+  readonly halfTangent: number
+}
+
+/** 角平分线方向上小于这个值就当成共线：叉积已经归一化，因此这是一个角度量。 */
+const MIN_CORNER_SINE = 1e-6
+
+/** 归一化到单位长度；零向量返回 null。 */
+function unit(from: ComposePlanarPoint, to: ComposePlanarPoint) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.hypot(dx, dy)
+  return length === 0 ? null : { x: dx / length, y: dy / length, length }
+}
+
+/**
+ * 逐角求出局部标架。
+ *
+ * @remarks
+ * 开放折线的**首尾顶点没有标架**：它们只有一条相邻边，没有角可言。共线与折回两种退化同样
+ * 没有——前者的圆心在无穷远，后者根本没有角。
+ *
+ * @public
+ */
+export function composePolylineCornerFrames(
+  vertices: readonly ComposePlanarPoint[],
+  closed: boolean,
+): readonly ComposePolylineCornerFrame[] {
+  const count = vertices.length
+  if (count < 3) return []
+  const frames: ComposePolylineCornerFrame[] = []
+  for (let index = 0; index < count; index += 1) {
+    if (!closed && (index === 0 || index === count - 1)) continue
+    const corner = vertices[index]!
+    const toPrevious = unit(corner, vertices[(index - 1 + count) % count]!)
+    const toNext = unit(corner, vertices[(index + 1) % count]!)
+    if (!toPrevious || !toNext) continue
+
+    const cross = toPrevious.x * toNext.y - toPrevious.y * toNext.x
+    const dot = toPrevious.x * toNext.x + toPrevious.y * toNext.y
+    const half = Math.atan2(Math.abs(cross), dot) / 2
+    const halfSine = Math.sin(half)
+    if (!(halfSine > MIN_CORNER_SINE) || !(Math.abs(cross) > MIN_CORNER_SINE)) continue
+
+    const bisector = unit(
+      { x: 0, y: 0 },
+      { x: toPrevious.x + toNext.x, y: toPrevious.y + toNext.y },
+    )
+    if (!bisector) continue
+    const halfTangent = Math.tan(half)
+    frames.push({
+      index,
+      vertex: corner,
+      bisector: { x: bisector.x, y: bisector.y },
+      halfSine,
+      // 切线长按相邻两段各自长度的一半钳制，同一条边上的两个角因此永远不会互相吃掉那一段。
+      maxRadius: (Math.min(toPrevious.length, toNext.length) / 2) * halfTangent,
+      toPrevious: { x: toPrevious.x, y: toPrevious.y },
+      toNext: { x: toNext.x, y: toNext.y },
+      halfTangent,
+    })
+  }
+  return frames
+}
+
+/** 一个角此刻画得出来的半径：作者的意图按当前几何钳一次。 @public */
+export function clampComposeCornerRadius(
+  frame: ComposePolylineCornerFrame,
+  radius: number,
+): number {
+  return Math.max(0, Math.min(radius, frame.maxRadius))
+}
+
+/** 一个角的圆心：圆角手柄就画在这里。 @public */
+export function composeCornerArcCenter(
+  frame: ComposePolylineCornerFrame,
+  radius: number,
+): ComposePlanarPoint {
+  const distance = clampComposeCornerRadius(frame, radius) / frame.halfSine
+  return {
+    x: frame.vertex.x + frame.bisector.x * distance,
+    y: frame.vertex.y + frame.bisector.y * distance,
+  }
+}
+
+/**
+ * 反解：一个落点落在这个角上意味着多大的半径。
+ *
+ * @remarks
+ * 把落点到顶点的位移投影到角平分线上再乘半角正弦。**投影而不是取距离**：手柄沿角平分线
+ * 进出，离开那条线的那一半位移不携带半径信息，用距离会让手往旁边一偏半径就往上跳。
+ *
+ * @public
+ */
+export function composeCornerRadiusAt(
+  frame: ComposePolylineCornerFrame,
+  point: ComposePlanarPoint,
+): number {
+  const along = (point.x - frame.vertex.x) * frame.bisector.x
+    + (point.y - frame.vertex.y) * frame.bisector.y
+  return clampComposeCornerRadius(frame, Math.max(0, along) * frame.halfSine)
+}
+
+/**
+ * 按标架求这个角的圆角。
+ *
+ * @remarks
+ * 圆心落在角平分线上、离顶点 `r / sin(θ/2)`，两个切点各自离顶点 `r / tan(θ/2)`——这是内切圆
+ * 的标准解。角弧恒不超过 180°，因此取两个方向里短的那一条就是对的。
+ */
+function roundCorner(
+  frame: ComposePolylineCornerFrame,
+  radius: number,
+): ComposePolylineCornerRounding | null {
+  const effective = clampComposeCornerRadius(frame, radius)
+  if (!(effective > 0)) return null
+  const center = composeCornerArcCenter(frame, effective)
+  const tangent = effective / frame.halfTangent
+  const from = {
+    x: frame.vertex.x + frame.toPrevious.x * tangent,
+    y: frame.vertex.y + frame.toPrevious.y * tangent,
+  }
+  const to = {
+    x: frame.vertex.x + frame.toNext.x * tangent,
+    y: frame.vertex.y + frame.toNext.y * tangent,
+  }
+  const startAngle = Math.atan2(from.y - center.y, from.x - center.x) / TO_RADIANS
+  const endAngle = Math.atan2(to.y - center.y, to.x - center.x) / TO_RADIANS
+  let sweep = normalizeDegrees(endAngle - startAngle)
+  if (sweep > 180) sweep -= 360
+  return { index: frame.index, arc: { center, radius: effective, startAngle, sweep }, from, to }
+}
+
+/**
+ * 逐角求解一条多段线的圆角。
+ *
+ * @remarks
+ * 哪些顶点算角由 {@link composePolylineCornerFrames} 说了算——闭合折线每个顶点都是角，收尾
+ * 那一段与其余的段没有任何区别。
+ *
+ * @public
+ */
+export function composePolylineCornerRoundings(
+  vertices: readonly ComposePlanarPoint[],
+  closed: boolean,
+  radius: number,
+): readonly ComposePolylineCornerRounding[] {
+  if (!(radius > 0)) return []
+  return composePolylineCornerFrames(vertices, closed)
+    .flatMap((frame) => {
+      const rounding = roundCorner(frame, radius)
+      return rounding ? [rounding] : []
+    })
+}
+
+/**
+ * 一条多段线的有序轮廓：缩短的直段与角弧交替。
+ *
+ * @remarks
+ * 没有圆角时退化成 {@link composePolylineSegments} 的逐段包装，因此调用方不需要为「有没有
+ * 圆角」分两条路。半径吃掉整条边时那一段长度为零，此处**丢弃**它：零长度直段对命中没有
+ * 贡献，画进 `<path>` 里也只是一条多余的 `L`。
+ *
+ * @public
+ */
+export function composeRoundedPolylineOutline(
+  vertices: readonly ComposePlanarPoint[],
+  closed: boolean,
+  radius = 0,
+): readonly ComposeOutlinePiece[] {
+  const roundings = composePolylineCornerRoundings(vertices, closed, radius)
+  const byIndex = new Map(roundings.map((rounding) => [rounding.index, rounding]))
+  const count = vertices.length
+  const edges: (readonly [number, number])[] = []
+  for (let i = 0; i + 1 < count; i += 1) edges.push([i, i + 1])
+  if (closed && count > 2) edges.push([count - 1, 0])
+
+  const pieces: ComposeOutlinePiece[] = []
+  edges.forEach(([from, to]) => {
+    const start = byIndex.get(from)?.to ?? vertices[from]!
+    const end = byIndex.get(to)?.from ?? vertices[to]!
+    if (start.x !== end.x || start.y !== end.y) {
+      pieces.push({ kind: 'segment', segment: { start, end } })
+    }
+    const rounding = byIndex.get(to)
+    if (rounding) pieces.push({ kind: 'arc', arc: rounding.arc })
+  })
+  // 闭合折线的第一个顶点是最后一条边的终点，它的角弧已经在上面那轮里加进去了；开放折线的
+  // 首顶点不圆。因此这里不需要补任何东西。
+  return pieces
+}
+
+/** 把一列轮廓片段拍成线段：角弧走 {@link flattenComposeArc}。 @public */
+export function flattenComposeOutline(
+  pieces: readonly ComposeOutlinePiece[],
+): readonly ComposeSegmentShape[] {
+  return pieces.flatMap((piece) => (
+    piece.kind === 'segment' ? [piece.segment] : flattenComposeArc(piece.arc)
+  ))
+}

@@ -12,7 +12,6 @@ import {
   isDegenerateComposePolyline,
 } from '@compose-ui/core'
 import type { ComposeCurve } from '@compose-ui/core'
-import type { StageRect } from '../geometry'
 import type {
   StageDraftingContext,
   StageDraftingEffect,
@@ -68,20 +67,29 @@ function arcCurve(
 }
 
 /**
- * 两个对角点确定的盒；提交与预览共用。
+ * 两个对角点确定的闭合四顶点多段线；提交与预览共用。
  *
  * @remarks
- * 归一化成「左上角 + 正宽高」：两个角点谁在左上由用户往哪个方向拖决定，而盒的表示只有一种。
+ * 顶点从左上角起顺时针。两个角点谁在左上由用户往哪个方向拖决定，而矩形的表示只有一种——
+ * 归一化成同一个绕向之后，往哪个方向拖出来的矩形，顶点顺序都一样。
  */
-function rectangleBox(
+function rectangleCurve(
   corner: ComposeCommandPoint,
   opposite: ComposeCommandPoint,
-): StageRect {
+): ComposeCurve {
+  const left = Math.min(corner.x, opposite.x)
+  const right = Math.max(corner.x, opposite.x)
+  const top = Math.min(corner.y, opposite.y)
+  const bottom = Math.max(corner.y, opposite.y)
   return {
-    x: Math.min(corner.x, opposite.x),
-    y: Math.min(corner.y, opposite.y),
-    width: Math.abs(opposite.x - corner.x),
-    height: Math.abs(opposite.y - corner.y),
+    kind: 'polyline',
+    vertices: [
+      { x: left, y: top },
+      { x: right, y: top },
+      { x: right, y: bottom },
+      { x: left, y: bottom },
+    ],
+    closed: true,
   }
 }
 
@@ -246,6 +254,11 @@ export function createStageCircleSession(
  * 产出四顶点的**闭合多段线**——矩形不另立类型，它唯一多出来的「四角是直角」在用户拖动某个
  * 顶点之后就不再成立。
  *
+ * 它曾经产出**矩形物料**（一个带完整 `Appearance` 的盒），判据是「用户画完之后想对它做什么」
+ * ——答案取的是填色、调圆角、往里塞东西。那个答案对大屏底板成立，对接线图不成立：这里画的是
+ * 设备外框与分区框，画完之后想做的是**改形状**（把某个角对到导线端点上、把某条边整体挪一格），
+ * 而这三件事只有 `Curve` 做得到。代价还不对称——盒填了色，盖在符号上就把它遮住了。
+ *
  * @public
  */
 export function createStageRectangleSession(
@@ -261,7 +274,9 @@ export function createStageRectangleSession(
     },
     preview(point) {
       // 退化成一条线或一个点的那一帧照画：用户正拖着找对角点，此刻不画会让矩形一闪一闪。
-      return corner === null ? null : { boxes: [rectangleBox(corner, point)] }
+      return corner === null
+        ? null
+        : { curves: [rectangleCurve(corner, point)], rectangle: true }
     },
     advance(input): ComposeCommandStep<StageDraftingEffect> {
       if (input.kind === 'cancel' || input.kind === 'accept') return { status: 'cancelled' }
@@ -277,7 +292,10 @@ export function createStageRectangleSession(
         // 退化成一条线或一个点：矩形的两个对角点必须在两个轴上都分开。
         return { status: 'rejected', message: messages.degenerateShape }
       }
-      return { status: 'commit', effect: { boxes: [rectangleBox(corner, input.point)] } }
+      return {
+        status: 'commit',
+        effect: { curves: [rectangleCurve(corner, input.point)], rectangle: true },
+      }
     },
   }
 }

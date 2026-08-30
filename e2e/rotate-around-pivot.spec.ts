@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickCurveStroke } from './support/test-helpers'
 
 /**
  * 画布旋转手势绕 Entity 自己的旋转基点。
@@ -20,7 +21,8 @@ test('OpenSpec: stage-engine / 旋转工具插件 / 非中心基点下只刻角�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const first = stage.locator('.compose-stage__node.is-renderer').first()
-  await first.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(first)
   const entityId = await first.getAttribute('data-entity-id')
   expect(entityId).not.toBeNull()
   const node = stage.locator(`[data-entity-id="${entityId}"]`)

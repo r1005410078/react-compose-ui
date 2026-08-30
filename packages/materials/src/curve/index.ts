@@ -6,6 +6,7 @@ export {
   DEFAULT_CURVE_PROPS,
   DEFAULT_CURVE_SIZE,
   DEFAULT_WIRE_PROPS,
+  composeRectangleGeometry,
 } from './defaults'
 export {
   createCurveMaterial,
@@ -13,5 +14,6 @@ export {
   DEFAULT_COMPOSE_CIRCLE_PRESET,
   DEFAULT_COMPOSE_CURVE_PRESET,
   DEFAULT_COMPOSE_CURVE_RENDERER,
+  DEFAULT_COMPOSE_RECT_PRESET,
   DEFAULT_COMPOSE_WIRE_PRESET,
 } from './definition'

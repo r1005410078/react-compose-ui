@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, openPageInspector } from './support/test-helpers'
+import { clickCurveStroke, pointerDrop, drawContainer, openPageInspector } from './support/test-helpers'
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
   await page.goto('/')
@@ -8,12 +8,13 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  // 放一个 Rectangle 并选中它。
+  // 放一个 Panel 并选中它。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
-  await node.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(node)
 
   // 工具栏模式切换器切到「动画」= 进入动画模式；空态引导创建第一条动画（生成文件资产并绑定页面）。
   await editor.getByRole('radio', { name: '动画' }).click()
@@ -35,15 +36,16 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   const originalBox = await node.boundingBox()
   expect(originalBox).not.toBeNull()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  // 抓取点取 1/4 处而不是中心：运动路径顶点位于物体中心，中心按下会抓到顶点。
+  // 抓取点取**上边线**的 1/4 处：矩形默认空心，盒内部不命中；取 1/4 而不是正中，还因为
+  // 运动路径顶点位于物体中心。
   await page.mouse.move(
     originalBox!.x + originalBox!.width / 4,
-    originalBox!.y + originalBox!.height / 4,
+    originalBox!.y + 1,
   )
   await page.mouse.down()
   await page.mouse.move(
     originalBox!.x + originalBox!.width / 4 + 96,
-    originalBox!.y + originalBox!.height / 4,
+    originalBox!.y + 1,
     { steps: 5 },
   )
   await page.mouse.up()
@@ -192,11 +194,12 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  // 准备：放 Rectangle → 创建动画 → 0 ms 打点 → 播放头 200 ms 拖出第二个关键帧。
+  // 准备：放 Panel → 创建动画 → 0 ms 打点 → 播放头 200 ms 拖出第二个关键帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
-  await node.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(node)
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -205,9 +208,9 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const startBox = (await node.boundingBox())!
   // 1/4 处抓取：避开物体中心的运动路径顶点。
-  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + startBox.height / 4)
+  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + 1)
   await page.mouse.down()
-  await page.mouse.move(startBox.x + startBox.width / 4 + 120, startBox.y + startBox.height / 4, { steps: 4 })
+  await page.mouse.move(startBox.x + startBox.width / 4 + 120, startBox.y + 1, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -271,7 +274,8 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
-  await node.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(node)
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -280,9 +284,9 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const box = (await node.boundingBox())!
   // 1/4 处抓取：避开物体中心的运动路径顶点。
-  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 4)
+  await page.mouse.move(box.x + box.width / 4, box.y + 1)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 4 + 120, box.y + box.height / 4, { steps: 4 })
+  await page.mouse.move(box.x + box.width / 4 + 120, box.y + 1, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -349,7 +353,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(1)
-  await nodes.first().click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(nodes.first())
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -357,10 +362,15 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   const originalBox = (await nodes.first().boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
-  // 1/4 处抓取：避开物体中心的运动路径顶点。
-  await page.mouse.move(originalBox.x + originalBox.width / 4, originalBox.y + originalBox.height / 4)
+  /*
+   * 抓**上边线**：矩形默认空心，盒内部不命中。横向取 35% 而不是 1/4——动画模式默认打开变换
+   * 指示器，它的旋转环占着离中心 70~90px 的一圈，而这个盒在当前缩放下的 1/4 处正落在环上，
+   * 那一下会变成旋转。
+   */
+  const grabA = { x: originalBox.x + originalBox.width * 0.35, y: originalBox.y + 1 }
+  await page.mouse.move(grabA.x, grabA.y)
   await page.mouse.down()
-  await page.mouse.move(originalBox.x + originalBox.width / 4 + 96, originalBox.y + originalBox.height / 4, { steps: 4 })
+  await page.mouse.move(grabA.x + 96, grabA.y, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(1)
 
@@ -374,14 +384,15 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   // 节点 B：直接在画布拖动，自动记录为它新建位置轨道（200 ms 一帧）。
   const bBox = (await nodes.nth(1).boundingBox())!
   /*
-   * 从中心偏一点抓取并向上拖：中心有运动路径顶点，底部有时间线面板，而**离中心 80px 那一圈
-   * 是变换指示器的旋转环**——环是固定半径的一条命中带，动画模式下指示器默认打开，落在带上的
-   * 拖动是旋转而不是移动。这是环屏幕恒定的既定代价，不是这条用例在迁就缺陷。偏移上限
-   * 40/24（距离 47）稳稳落在带的内沿（70）以内，同时不超过 1/4 处，小对象上也仍在盒内。
+   * 抓**上边线**并向上拖：矩形默认空心，盒内部不命中，可拖的只有那一圈描边。横向从中心偏
+   * 开，是因为中心有运动路径顶点，而**离中心 70~90px 那一圈是变换指示器的旋转环**——环是
+   * 固定半径的一条命中带，动画模式下指示器默认打开，落在带上的拖动是旋转而不是移动。这是
+   * 环屏幕恒定的既定代价，不是这条用例在迁就缺陷。上边线到中心的距离是半个盒高，加上 40
+   * 的横向偏移仍落在带的内沿（70）以内。
    */
   const grab = {
     x: bBox.x + bBox.width / 2 - Math.min(bBox.width / 4, 40),
-    y: bBox.y + bBox.height / 2 - Math.min(bBox.height / 4, 24),
+    y: bBox.y + 1,
   }
   await page.mouse.move(grab.x, grab.y)
   await page.mouse.down()
@@ -425,16 +436,22 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
   })
   const topLevel = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = (await topLevel.first().boundingBox())!
-  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height / 2)
+  // 抓**下边线**：矩形默认空心，盒内部不命中；它以落点为中心放在场景顶部，上边线落在场景
+  // 之外。终点按同一个偏移落——落点父级按对象落在哪里判定。
+  await page.mouse.move(rectBox.x + rectBox.width / 2, rectBox.y + rectBox.height - 1)
   await page.mouse.down()
-  await page.mouse.move(outputBox.x + 300, outputBox.y + 250, { steps: 8 })
+  await page.mouse.move(
+    outputBox.x + 300,
+    outputBox.y + 250 + rectBox.height / 2 - 1,
+    { steps: 8 },
+  )
   await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
   await page.mouse.up()
   const nested = stage.getByTestId('stage-container').locator(':scope > .compose-stage__node.is-renderer')
   await expect(nested).toHaveCount(1)
 
-  // 嵌套子级打点：0 ms 菱形 + 200 ms 画布拖动自动记录。
-  await nested.click()
+  // 嵌套子级打点：0 ms 菱形 + 200 ms 画布拖动自动记录。矩形默认空心，选中它要点那一圈描边。
+  await clickCurveStroke(nested)
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -444,9 +461,9 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
   const startBox = (await nested.boundingBox())!
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   // 1/4 处抓取：避开物体中心的运动路径顶点。
-  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + startBox.height / 4)
+  await page.mouse.move(startBox.x + startBox.width / 4, startBox.y + 1)
   await page.mouse.down()
-  await page.mouse.move(startBox.x + startBox.width / 4 + 80, startBox.y + startBox.height / 4 + 40, { steps: 4 })
+  await page.mouse.move(startBox.x + startBox.width / 4 + 80, startBox.y + 1 + 40, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
   // 动画拖动只写关键帧，不把子级拖出容器。
@@ -546,7 +563,8 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
-  await node.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(node)
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -555,9 +573,9 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const box = (await node.boundingBox())!
   // 1/4 处抓取：避开物体中心的运动路径顶点。
-  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 4)
+  await page.mouse.move(box.x + box.width / 4, box.y + 1)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 4 + 96, box.y + box.height / 4, { steps: 4 })
+  await page.mouse.move(box.x + box.width / 4 + 96, box.y + 1, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
@@ -603,7 +621,8 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
-  await node.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(node)
 
   await editor.getByRole('radio', { name: '动画' }).click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
@@ -618,12 +637,12 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   // 抓取点取 1/4 处：物体中心是运动路径顶点。
   await page.mouse.move(
     originalBox.x + originalBox.width / 4,
-    originalBox.y + originalBox.height / 4,
+    originalBox.y + 1,
   )
   await page.mouse.down()
   await page.mouse.move(
     originalBox.x + originalBox.width / 4 + 120,
-    originalBox.y + originalBox.height / 4,
+    originalBox.y + 1,
     { steps: 5 },
   )
   await page.mouse.up()

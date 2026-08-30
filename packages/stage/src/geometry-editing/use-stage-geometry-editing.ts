@@ -7,12 +7,12 @@ import {
   stageCurveLocalPoint,
   stageCurveOutline,
 } from '@compose-ui/stage-engine'
-import type { ComposeCurve, ComposeDocument } from '@compose-ui/core'
+import type { ComposeCurve } from '@compose-ui/core'
 import type {
+  StageCurveGeometrySource,
   StageEditablePath,
   StageGripTarget,
   StagePoint,
-  StageSceneIndex,
 } from '@compose-ui/stage-engine'
 import type { ComposeStageEditablePathChange, ComposeStageTool } from '../types'
 
@@ -21,19 +21,18 @@ import type { ComposeStageEditablePathChange, ComposeStageTool } from '../types'
  *
  * @remarks
  * 拖动期与点亮期共用它：两处各写一遍的话，下一个改夹点数学的人只会改到其中一处，而漏掉的
- * 那处症状是「拖出来的和点出来的形状不一样」。写成模块级纯函数，因为两个调用点拿 `document`
- * 与 `index` 的方式不同——渲染期直接读，事件回调走 ref。
+ * 那处症状是「拖出来的和点出来的形状不一样」。写成模块级纯函数，因为两个调用点拿几何来源的
+ * 方式不同——渲染期直接读，事件回调走 ref。
  */
 function applyGripAt(
-  document: ComposeDocument,
-  index: StageSceneIndex,
+  source: StageCurveGeometrySource,
   entityId: string,
   gripId: string,
   world: StagePoint,
 ): ComposeCurve | null {
-  const geometry = stageCurveBoxGeometry(document, index, entityId)
+  const geometry = stageCurveBoxGeometry(source, entityId)
   if (!geometry) return null
-  const local = stageCurveLocalPoint(index, entityId, world)
+  const local = stageCurveLocalPoint(source, entityId, world)
   return local ? applyStageCurveGrip(geometry, gripId, local) : null
 }
 
@@ -56,8 +55,15 @@ export interface StageGeometryCommandSession {
 
 /** {@link useStageGeometryEditing} 的输入。 @internal */
 export interface StageGeometryEditingOptions {
-  readonly document: ComposeDocument
-  readonly index: StageSceneIndex
+  /**
+   * 曲线几何的来源。
+   *
+   * @remarks
+   * 宿主传的是**预览**文档：夹点与轮廓画在对象身上，拖动整条曲线时它们必须跟着一起走。
+   * 夹点自己的拖动不受影响——那一档没有预览覆盖（路径插件不产出 `previewTransforms`），
+   * 预览来源与已提交的那份逐字相同。
+   */
+  readonly geometry: StageCurveGeometrySource
   /** 夹点取点的命令会话；见 {@link StageGeometryCommandSession}。 */
   readonly session: StageGeometryCommandSession
   /**
@@ -125,7 +131,7 @@ export function useStageGeometryEditing(
   options: StageGeometryEditingOptions,
 ): StageGeometryEditing {
   const {
-    document, index, session, armedGripId, resolvedPointer,
+    geometry, session, armedGripId, resolvedPointer,
     selectedIds, tool, hostPathActive, resolvePoint,
   } = options
   const [target, setTarget] = useState<string | null>(null)
@@ -154,9 +160,9 @@ export function useStageGeometryEditing(
   } | null>(null)
 
   const isGeometryEditable = useCallback((candidate: string) => {
-    const entity = document.entities[candidate]
+    const entity = geometry.document.entities[candidate]
     return Boolean(entity && getComposeCurve(entity) && !getComposeLock(entity).locked)
-  }, [document])
+  }, [geometry])
 
   const exit = useCallback(() => {
     setTarget(null)
@@ -197,16 +203,14 @@ export function useStageGeometryEditing(
    * 只画预览。提交那一步走会话与引擎规划，与点亮后取点、点亮后键入坐标同一条路——三条各自
    * 算一遍的话，下一个改夹点数学的人只会改到其中一处。
    */
-  const latest = useRef({ document, index, resolvePoint, session })
+  const latest = useRef({ geometry, resolvePoint, session })
   useLayoutEffect(() => {
-    latest.current = { document, index, resolvePoint, session }
+    latest.current = { geometry, resolvePoint, session }
   })
   /** 拖动期：裸落点先过点输入管线，再应用。点亮期不走这里——那边的落点已经解算过了。 */
   const solve = useCallback((target: string, gripId: string, world: StagePoint) => {
     const current = latest.current
-    return applyGripAt(
-      current.document, current.index, target, gripId, current.resolvePoint(world).point,
-    )
+    return applyGripAt(current.geometry, target, gripId, current.resolvePoint(world).point)
   }, [])
 
   /**
@@ -221,20 +225,20 @@ export function useStageGeometryEditing(
    */
   const armedPreview = useMemo(() => {
     if (entityId === null || armedGripId === null || dragging || !resolvedPointer) return null
-    // 读渲染期的 `document` / `index` 而不是那条 ref：预览是渲染的产物，而 ref 要到布局
-    // effect 才更新——读它等于让预览慢一帧，React 也不允许在渲染期访问 ref。
-    return applyGripAt(document, index, entityId, armedGripId, resolvedPointer)
-  }, [armedGripId, document, dragging, entityId, index, resolvedPointer])
+    // 读渲染期的 `geometry` 而不是那条 ref：预览是渲染的产物，而 ref 要到布局 effect 才
+    // 更新——读它等于让预览慢一帧，React 也不允许在渲染期访问 ref。
+    return applyGripAt(geometry, entityId, armedGripId, resolvedPointer)
+  }, [armedGripId, dragging, entityId, geometry, resolvedPointer])
   /** 两者互斥：拖动时只有 `preview`，点亮时只有 `armedPreview`。 */
   const activePreview = preview ?? armedPreview
 
   const editablePath = useMemo((): StageEditablePath | null => {
     if (entityId === null || hostPathActive) return null
-    const grips = stageCurveGrips(document, index, entityId, activePreview)
+    const grips = stageCurveGrips(geometry, entityId, activePreview)
     if (grips.length === 0) return null
     return {
       entityId,
-      polyline: stageCurveOutline(document, index, entityId, activePreview),
+      polyline: stageCurveOutline(geometry, entityId, activePreview),
       // 等时采样点表达速度快慢，那是运动路径的语义；几何没有时间。
       dots: [],
       vertices: grips.map((grip) => ({
@@ -249,7 +253,7 @@ export function useStageGeometryEditing(
         ...(grip.angle === undefined ? {} : { angle: grip.angle }),
       })),
     }
-  }, [activePreview, document, entityId, hostPathActive, index])
+  }, [activePreview, entityId, geometry, hostPathActive])
 
   const handlePathChange = useCallback((change: ComposeStageEditablePathChange) => {
     if (entityId === null || hostPathActive) return false
@@ -264,7 +268,7 @@ export function useStageGeometryEditing(
     if (change.phase === 'start') {
       // 会话在 `pointerdown` 就开：提示要在用户按住的**那一刻**出现，等他动或不动才给已经迟了。
       // `origin` 取**文档**里的位置——它同时是橡皮筋起点与被排除出捕捉的那一个点。
-      const grip = stageCurveGrips(current.document, current.index, entityId)
+      const grip = stageCurveGrips(current.geometry, entityId)
         .find(({ id }) => id === change.vertexId)
       if (!grip) return true
       gestureRef.current = {

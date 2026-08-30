@@ -1,6 +1,5 @@
 import type { ComposeCommandPoint } from '@compose-ui/commands'
 import type { ComposeCurve } from '@compose-ui/core'
-import type { StageRect } from '../geometry'
 
 /**
  * 一次夹点取点。
@@ -68,21 +67,6 @@ export interface StageDraftingEffect {
    */
   readonly curves?: readonly ComposeCurve[]
   /**
-   * 本步要创建的**盒**，世界坐标。
-   *
-   * @remarks
-   * 与 `curves` 是两种意图而不是两种表示：折线表达「一段几何」，盒表达「一块有背景、边框与
-   * 圆角的面积」。`RECTANGLE` 走这一条——画一个矩形外框，下一步九成是给它填色、调圆角、往里
-   * 塞东西，而这些 `Curve` 全都做不到。
-   *
-   * **按 kind 反推是错的**：`PLINE` 画四个点按 `C` 同样得到闭合四顶点折线，而那时用户要的
-   * 确实是折线。意图必须由命令显式说出。
-   *
-   * 引擎不认识 Preset id，只说出「这一步产出一个这么大的盒」，挑哪个物料由持有 Registry 的
-   * 宿主决定——与 `wire` / `arrow` 是同一条边界。
-   */
-  readonly boxes?: readonly StageRect[]
-  /**
    * 本步产出的曲线是**导线**。
    *
    * @remarks
@@ -90,6 +74,17 @@ export interface StageDraftingEffect {
    * **取点时记下的来源**决定——它才是那个知道「这一下点在端口上」的地方。
    */
   readonly wire?: boolean
+  /**
+   * 本步产出的曲线是一个**矩形**。
+   *
+   * @remarks
+   * 与 `arrow` / `wire` 是同一条边界：引擎不认识 Preset id，只说出意图，挑哪个 Preset 由
+   * 持有 Registry 的宿主决定。
+   *
+   * **按 kind 反推是错的**：`PLINE` 画四个点按 `C` 同样得到闭合四顶点折线，而那时用户要的
+   * 确实是折线——它该叫 Curve 而不是 Rectangle。意图必须由命令自己说。
+   */
+  readonly rectangle?: boolean
   /**
    * 本步产出的曲线带**终点箭头**。
    *

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { openPageInspector, pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
+import { clickCurveStroke, openPageInspector, pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
 
 
 /**
@@ -135,11 +135,12 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
 
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   /*
-   * 重叠取样点取渲染节点的中心：`RECTANGLE` 产出的是矩形**物料**，是一块实心的面积，
-   * 内部就是它自己的墨。用渲染出来的盒而不是鼠标原始坐标——角点经过了吸附。
+   * 重叠取样点取**上边四分之一处**：`RECTANGLE` 产出的是空心的闭合多段线，命中按点到几何的
+   * 距离判定，盒中心是空白；而上边的**中点**正好压在上中缩放手柄上，选中之后那一下会被手柄
+   * 吃掉，选区停在原处。用渲染出来的盒而不是鼠标原始坐标——角点经过了吸附。
    */
   const nodeBox = (await nodes.first().boundingBox())!
-  const overlap = { x: nodeBox.x + nodeBox.width / 2, y: nodeBox.y + nodeBox.height / 2 }
+  const overlap = { x: nodeBox.x + nodeBox.width / 4, y: nodeBox.y }
 
   await expect(nodes).toHaveCount(2)
   const originalBackId = await nodes.nth(0).getAttribute('data-entity-id')
@@ -153,6 +154,16 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
     rows.map((row) => row.getAttribute('data-scene-node-id')))
   // 场景树的第一行是根画板，两个渲染节点是它的子级。
   await expect.poll(treeOrder).toEqual(['frame-root', originalBackId, originalFrontId])
+
+  /*
+   * 每次按重叠点取顶层之前先点一下空白取消选择：矩形选中之后八个手柄与四条边缘命中带正好
+   * 盖住它的整圈描边，此时再点同一处开始的是缩放而不是换选中——那与矩形物料的行为一致，
+   * 而本条考的是层级操作，不是那件事。
+   */
+  const pickTopmost = async () => {
+    await page.mouse.click(outputBox!.x + 24, outputBox!.y + 24)
+    await page.mouse.click(overlap.x, overlap.y)
+  }
 
   await page.mouse.click(overlap.x, overlap.y)
   await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
@@ -172,20 +183,20 @@ test('OpenSpec: stage / Stage 节点层级操作 / 菜单、快捷键、命中�
   await expect.poll(treeOrder).toEqual(['frame-root', originalFrontId, originalBackId])
   await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
     .toHaveAttribute('aria-selected', 'true')
-  await page.mouse.click(overlap.x, overlap.y)
+  await pickTopmost()
   await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
     .toHaveAttribute('aria-selected', 'true')
 
   await stage.press('Control+[')
   // 场景树的第一行是根画板，两个渲染节点是它的子级。
   await expect.poll(treeOrder).toEqual(['frame-root', originalBackId, originalFrontId])
-  await page.mouse.click(overlap.x, overlap.y)
+  await pickTopmost()
   await expect(tree.locator(`[data-scene-node-id="${originalFrontId}"]`))
     .toHaveAttribute('aria-selected', 'true')
 
   await stage.press('Control+z')
   await expect.poll(treeOrder).toEqual(['frame-root', originalFrontId, originalBackId])
-  await page.mouse.click(overlap.x, overlap.y)
+  await pickTopmost()
   await expect(tree.locator(`[data-scene-node-id="${originalBackId}"]`))
     .toHaveAttribute('aria-selected', 'true')
 })
@@ -400,7 +411,8 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
-  await rectangle.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(rectangle)
   await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
 
   const historyEntries = editor.locator('[data-compose-ui="history"] li')
@@ -470,21 +482,25 @@ test('OpenSpec: stage / Pointer 手势原子性与取消 / move 与 resize 各�
     x: frameBox!.x + frameBox!.width * 0.35,
     y: frameBox!.y + frameBox!.height * 0.4,
   })
-  const rectangle = stage.locator('.compose-stage__node.is-renderer').filter({
-    hasText: 'Rectangle',
-  })
-  await rectangle.click()
+  // 矩形现在是曲线，节点里没有任何文字——`hasText` 匹配不到，改用它的描边元素。
+  const rectangle = stage.locator(
+    '.compose-stage__node.is-renderer:has([data-testid="compose-material-curve-stroke"])',
+  )
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(rectangle)
   const rectangleId = await rectangle.getAttribute('data-entity-id')
   expect(rectangleId).not.toBeNull()
-  const stableRectangle = editor.locator(`[data-entity-id="${rectangleId}"]`)
+  const stablePanel = editor.locator(`[data-entity-id="${rectangleId}"]`)
   await editor.locator('[data-workspace-tab="compose-history-panel"]').click()
 
   let expectedHistoryCount = await historyEntries.count()
-  const beforeMove = await stableRectangle.boundingBox()
+  const beforeMove = await stablePanel.boundingBox()
   expect(beforeMove).not.toBeNull()
+  // 起点**避开刚才那一下点击**：同一个位置的第二次按下会被浏览器判成双击，而双击一个矩形
+  // 进的是几何编辑（它是曲线），这一次拖拽就再也不是移动了。
   const moveStart = {
-    x: beforeMove!.x + beforeMove!.width / 2,
-    y: beforeMove!.y + beforeMove!.height / 2,
+    x: beforeMove!.x + beforeMove!.width * 0.25,
+    y: beforeMove!.y + beforeMove!.height * 0.25,
   }
   await page.keyboard.down('Control')
   await page.mouse.move(moveStart.x, moveStart.y)
@@ -494,12 +510,12 @@ test('OpenSpec: stage / Pointer 手势原子性与取消 / move 与 resize 各�
   await page.keyboard.up('Control')
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
-  const afterMove = await stableRectangle.boundingBox()
+  const afterMove = await stablePanel.boundingBox()
   expect(afterMove).not.toBeNull()
   expect(afterMove!.x).not.toBeCloseTo(beforeMove!.x, 1)
   const committedMoveX = afterMove!.x
   await page.waitForTimeout(100)
-  await expect.poll(async () => (await stableRectangle.boundingBox())?.x)
+  await expect.poll(async () => (await stablePanel.boundingBox())?.x)
     .toBeCloseTo(committedMoveX, 1)
 
   await selectContainer(editor)
@@ -554,8 +570,9 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   const secondEntityId = await components.nth(1).getAttribute('data-entity-id')
   expect(firstEntityId).not.toBeNull()
   expect(secondEntityId).not.toBeNull()
-  await components.nth(0).click()
-  await components.nth(1).click({ modifiers: ['Shift'] })
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(components.nth(0))
+  await clickCurveStroke(components.nth(1), { modifiers: ['Shift'] })
   await stage.press('Control+g')
   const group = frame.locator(':scope > .compose-stage__node.is-container')
   await expect(group).toHaveCount(1)
@@ -604,9 +621,10 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   const child = editor.locator(`[data-entity-id="${firstEntityId}"]`)
   const childBefore = await child.boundingBox()
   expect(childBefore).not.toBeNull()
+  // 取**上边线**而不是盒中心：这个子项是矩形，默认空心，盒内部不命中。
   const childPoint = {
     x: childBefore!.x + childBefore!.width / 2,
-    y: childBefore!.y + childBefore!.height / 2,
+    y: childBefore!.y + 1,
   }
   expect(await nodeAt(childPoint)).toBe(await child.getAttribute('data-entity-id'))
   await page.keyboard.down('Control')
@@ -651,23 +669,27 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     x: frameBox!.x + frameBox!.width * 0.3,
     y: frameBox!.y + frameBox!.height * 0.35,
   })
-  const rectangle = stage.locator('.compose-stage__node.is-renderer').filter({
-    hasText: 'Rectangle',
-  })
-  await rectangle.click()
+  // 矩形现在是曲线，节点里没有任何文字——`hasText` 匹配不到，改用它的描边元素。
+  const rectangle = stage.locator(
+    '.compose-stage__node.is-renderer:has([data-testid="compose-material-curve-stroke"])',
+  )
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(rectangle)
 
   const beforeMove = await rectangle.boundingBox()
   expect(beforeMove).not.toBeNull()
-  await page.mouse.move(
-    beforeMove!.x + beforeMove!.width / 2,
-    beforeMove!.y + beforeMove!.height / 2,
-  )
+  /*
+   * 起点在**上边线**上：矩形默认空心，盒内部不命中，可拖的只有那一圈描边。横向偏移避开
+   * 刚才那一下点击——同一个位置的第二次按下会被浏览器判成双击，而双击一个矩形进的是几何
+   * 编辑（它是曲线）。
+   */
+  const dragFrom = {
+    x: beforeMove!.x + beforeMove!.width * 0.6,
+    y: beforeMove!.y + 1,
+  }
+  await page.mouse.move(dragFrom.x, dragFrom.y)
   await page.mouse.down()
-  await page.mouse.move(
-    beforeMove!.x + beforeMove!.width / 2 + 27,
-    beforeMove!.y + beforeMove!.height / 2 + 19,
-    { steps: 5 },
-  )
+  await page.mouse.move(dragFrom.x + 27, dragFrom.y + 19, { steps: 5 })
   await page.mouse.up()
   const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
   // Yoga absolute inset 以父容器 border 内沿为原点；默认 Container border 为 1px。
@@ -803,7 +825,8 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   })
   const frame = stage.getByTestId('stage-container')
   const frameComponents = frame.locator(':scope > .compose-stage__node.is-renderer')
-  await frameComponents.nth(0).click()
+  // 第一个是矩形：默认空心，盒内部不命中，选中它要点那一圈描边。
+  await clickCurveStroke(frameComponents.nth(0))
   await frameComponents.nth(1).click({
     modifiers: ['Shift'],
   })
@@ -829,9 +852,9 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
     .getByRole('button', { name: '展开节点' })
     .click()
   await editor.getByRole('row', { name: /Rectangle/ }).last().click()
-  const rectangle = frame.locator(':scope > .compose-stage__node.is-renderer').filter({
-    hasText: 'Rectangle',
-  })
+  const rectangle = frame.locator(
+    ':scope > .compose-stage__node.is-renderer:has([data-testid="compose-material-curve-stroke"])',
+  )
   const rectangleBox = await rectangle.boundingBox()
   expect(rectangleBox).not.toBeNull()
   await expect(editor.getByRole('region', { name: 'Rectangle 属性', exact: true })).toBeVisible()
@@ -880,7 +903,8 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await stage.locator('.compose-stage__node.is-renderer').first().click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(stage.locator('.compose-stage__node.is-renderer').first())
 
   const horizontal = stage.getByTestId('stage-ruler-x')
   const vertical = stage.getByTestId('stage-ruler-y')

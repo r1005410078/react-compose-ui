@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { COMPOSE_BUILTIN_COMPONENT_KEYS } from '@compose-ui/core'
 import { createStageSceneIndex } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
-import { applyStageCurveGrip, stageCurveGrips } from './curve-grips'
+import { applyStageCurveGrip, stageCurveCorners, stageCurveGrips } from './curve-grips'
 import type { ComposeArcCurve, ComposeCurve, ComposeEntity } from '@compose-ui/core'
 
 /** 几何是 100×50 的斜线，盒可以另给——夹点必须跟着**画出来的**那条线走。 */
@@ -27,7 +27,7 @@ describe('stageCurveGrips', () => {
     const value = document([curveEntity(200, 50)])
     const index = createStageSceneIndex(value, layoutSnapshot(value))
 
-    const grips = stageCurveGrips(value, index, 'curve-a')
+    const grips = stageCurveGrips(index, 'curve-a')
 
     // 盒宽翻倍而高不变：终点的 x 跟着翻倍，y 不动——与命中、捕捉读的是同一个投影。
     expect(grips.map(({ id }) => id)).toEqual(['start', 'move', 'end'])
@@ -57,7 +57,7 @@ describe('stageCurveGrips', () => {
 
     // 段中点表示「在这里插入一个顶点」——这兑现的正是当初把它留白时写下的用途。
     const polylineGrips = stageCurveGrips(
-      polyline, createStageSceneIndex(polyline, layoutSnapshot(polyline)), 'curve-a',
+      createStageSceneIndex(polyline, layoutSnapshot(polyline)), 'curve-a',
     )
     expect(polylineGrips.map(({ id }) => id)).toEqual(['v0', 'v1', 'v2', 'm0', 'm1'])
     expect(polylineGrips.map(({ role }) => role))
@@ -65,7 +65,7 @@ describe('stageCurveGrips', () => {
     // 条形按段的方向摆；第一段是 45 度下坡。
     expect(polylineGrips[3]).toMatchObject({ point: { x: 25, y: 25 }, angle: 45 })
     expect(
-      stageCurveGrips(arcDoc, createStageSceneIndex(arcDoc, layoutSnapshot(arcDoc)), 'curve-a')
+      stageCurveGrips(createStageSceneIndex(arcDoc, layoutSnapshot(arcDoc)), 'curve-a')
         .map(({ id }) => id),
     ).toEqual(['center', 'start', 'end', 'mid'])
   })
@@ -87,7 +87,7 @@ describe('stageCurveGrips', () => {
     // 收尾那一段在屏幕上与其他段没有任何区别，漏掉它会让一条闭合折线上恰好少一个可抓的
     // 位置，而用户看不出为什么。
     expect(
-      stageCurveGrips(closed, createStageSceneIndex(closed, layoutSnapshot(closed)), 'curve-a')
+      stageCurveGrips(createStageSceneIndex(closed, layoutSnapshot(closed)), 'curve-a')
         .map(({ id }) => id),
     ).toEqual(['v0', 'v1', 'v2', 'v3', 'm0', 'm1', 'm2', 'm3'])
   })
@@ -96,7 +96,7 @@ describe('stageCurveGrips', () => {
     const value = document([entity('a')])
     const index = createStageSceneIndex(value, layoutSnapshot(value))
 
-    expect(stageCurveGrips(value, index, 'a')).toEqual([])
+    expect(stageCurveGrips(index, 'a')).toEqual([])
   })
 })
 
@@ -225,5 +225,71 @@ describe('OpenSpec: stage-engine / 多段线夹点 / 拖段中点平移那一段
     expect(applyStageCurveGrip(line, 'm0', { x: 5, y: 5 })).toBeNull()
     expect(applyStageCurveGrip(line, 'move', { x: 5, y: 5 }))
       .toEqual({ kind: 'line', start: { x: 0, y: 5 }, end: { x: 10, y: 5 } })
+  })
+})
+
+describe('stageCurveCorners', () => {
+  /** 200×100 的闭合矩形；相邻边一半是 50，因此四个角的最大半径都是 50。 */
+  function rectangleEntity(cornerRadius: number): ComposeEntity {
+    const base = entity('curve-a', { width: 200, height: 100 })
+    return {
+      ...base,
+      components: {
+        ...base.components,
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]: { type: 'curve', props: {} },
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.curve]: {
+          kind: 'polyline',
+          vertices: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
+          closed: true,
+          cornerRadius,
+        },
+      },
+    }
+  }
+
+  it('半径超额时手柄停在钳制之后的圆心上', () => {
+    const value = document([rectangleEntity(500)])
+    const index = createStageSceneIndex(value, layoutSnapshot(value))
+
+    // 手柄要坐在**真正画出来的**那段弧的圆心上：用作者写下的 500 去求，手柄会飘到盒外，
+    // 而形状早就停在 50 的最大圆角上——屏幕上就是「手柄跟弧脱节了，再拖也不见形状变」。
+    // 半角三角函数留下的浮点残渣是真实的：几何量化只发生在几何写回文档那条漏斗上。
+    const corners = stageCurveCorners(index, 'curve-a')
+    corners.forEach(({ radius }) => { expect(radius).toBeCloseTo(50) })
+    expect(corners[0]?.point.x).toBeCloseTo(50)
+    expect(corners[0]?.point.y).toBeCloseTo(50)
+    expect(corners[2]?.point.x).toBeCloseTo(150)
+    expect(corners[2]?.point.y).toBeCloseTo(50)
+  })
+
+  it('弧没有角，非等比盒把它拍扁也不出手柄', () => {
+    // 几何是 100×50 的半圆弧，盒给成 200×50：非等比缩放会把弧拍成多段线（命中与渲染需要
+    // 那个近似），照投影结果判断就会给一段圆弧发出一整串圆角手柄。
+    const arc = entity('curve-a', { width: 200, height: 50 })
+    const value = document([{
+      ...arc,
+      components: {
+        ...arc.components,
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]: { type: 'curve', props: {} },
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.curve]: {
+          kind: 'arc',
+          center: { x: 50, y: 50 },
+          radius: 50,
+          startAngle: 180,
+          sweep: 180,
+        },
+      },
+    }])
+    const index = createStageSceneIndex(value, layoutSnapshot(value))
+
+    expect(stageCurveCorners(index, 'curve-a')).toEqual([])
+  })
+
+  it('半径没到顶时原样读出', () => {
+    const value = document([rectangleEntity(20)])
+    const index = createStageSceneIndex(value, layoutSnapshot(value))
+
+    stageCurveCorners(index, 'curve-a')
+      .forEach(({ radius }) => { expect(radius).toBeCloseTo(20) })
   })
 })

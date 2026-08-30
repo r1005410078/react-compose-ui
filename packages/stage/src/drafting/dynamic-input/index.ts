@@ -22,6 +22,7 @@ export type {
   StageDynamicInputField,
   StageDynamicInputRequest,
 } from './dynamic-input-geometry'
+export { stageCornerRadiusReadout } from './corner-radius-readout'
 export { stageResizeReadout } from './resize-readout'
 export { stageRotationReadout } from './rotation-readout'
 export type { StageRotationReadoutInput } from './rotation-readout'

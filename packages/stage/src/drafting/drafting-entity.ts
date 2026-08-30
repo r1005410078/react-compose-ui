@@ -14,15 +14,12 @@ import {
 } from '@compose-ui/core'
 import type { ComposePosition, ComposeWire, ComposeWireBinding } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
-import { entityFromDrawingSeed } from '../stage-surface/entity-creation/drawing-entity'
-import { boundsInParentSpace } from '../stage-surface/entity-creation/root-landing'
 import {
   applyMatrix,
   getEntityParentId,
   getEntityWorldMatrix,
   invertMatrix,
   type StagePoint,
-  type StageRect,
   type StageSceneIndex,
 } from '@compose-ui/stage-engine'
 
@@ -194,6 +191,14 @@ export interface StageDraftingCurveOptions {
    */
   readonly wiring?: boolean
   /**
+   * 这条曲线是一个矩形。
+   *
+   * @remarks
+   * 走 `rect` Preset——**与物料面板里那一个是同一个**，因此两条入口产出的东西逐字段相同，
+   * 场景树里也都叫 Rectangle。同一个词在这个产品里只指一件东西。
+   */
+  readonly rectangle?: boolean
+  /**
    * 这条曲线带终点箭头。
    *
    * @remarks
@@ -229,7 +234,7 @@ export function createStageDraftingCurveCommand(
   curve: ComposeCurve,
   options: StageDraftingCurveOptions = {},
 ): StageDraftingCurveCommand | null {
-  const { arrow, wire, wiring } = options
+  const { arrow, rectangle, wire, wiring } = options
   /*
    * 导线走 `wire` Preset（一次回路的红色粗实线），判据是**这条线真的绑上了端口**而不是
    * 走了哪条命令——`WIRE` 合并进 `LINE` 之后没有第二种线可分，绑定跟着取点来源走，因此
@@ -270,7 +275,7 @@ export function createStageDraftingCurveCommand(
    * 而它是主回路、还带着屏幕上看不见的绑定。
    */
   const seed = context.registry.createSeed(
-    wiring || bindings.wire ? 'wire' : arrow ? 'arrow' : 'curve',
+    wiring || bindings.wire ? 'wire' : arrow ? 'arrow' : rectangle ? 'rect' : 'curve',
   )
   if (!seed.ok) return null
 
@@ -305,52 +310,5 @@ export function createStageDraftingCurveCommand(
       meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
     },
     droppedWireEnds: bindings.dropped,
-  }
-}
-
-/**
- * 把一个世界坐标的盒变成一条创建**矩形物料**的命令。
- *
- * @remarks
- * 与 `createStageDraftingCurveCommand` 是两种意图：折线是「一段几何」，盒是「一块有背景、
- * 边框与圆角的面积」。`RECTANGLE` 走这一条——画完矩形外框，下一步九成是填色、调圆角、往里
- * 塞东西，而这些 `Curve` 全都做不到。
- *
- * 落地复用 `entityFromDrawingSeed` 与 `boundsInParentSpace`：它们已经是「一个盒 + 一个
- * Preset → 一个 Entity」的唯一实现（拖拽绘制容器与文字走的就是它）。另写一份的症状是
- * 「命令画的矩形与拖出来的容器在 `positioning`、最小尺寸或 Hug 处理上差一点」，而这种差别
- * 要等到有人对比两者时才会发现。
- *
- * 落点父级与曲线一致：盒中心所在的容器，不在任何容器里时落进激活场景。Rectangle Preset
- * 没有 `Hierarchy`，因此按「根层落点按类型分流」它不升格成新场景。
- *
- * @returns 可派发的命令；Preset 缺失时返回 null。
- * @internal
- */
-export function createStageDraftingBoxCommand(
-  context: StageDraftingCommitContext,
-  box: StageRect,
-): EditorCommand | null {
-  const seed = context.registry.createSeed('rectangle')
-  if (!seed.ok) return null
-
-  const anchor: StagePoint = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  const parent = usableParent(context.document, context.index.containerAtPoint(anchor))
-    ?? usableParent(context.document, context.activeFrameId ?? null)
-  const inverse = parent
-    ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parent.id))
-    : null
-
-  const entityId = context.idFactory()
-  const entity = entityFromDrawingSeed(seed.seed, entityId, boundsInParentSpace(box, inverse))
-
-  return {
-    id: context.idFactory(),
-    type: BUILTIN_COMMAND_TYPES.createEntity,
-    payload: {
-      entity: entity as unknown as JsonValue,
-      parentId: parent ? parent.id : null,
-    },
-    meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
   }
 }

@@ -1,5 +1,5 @@
 /**
- * 提供 Container、Rectangle、Text、Image、SVG 与绘图 Shape 的 ECS Entity Presets。
+ * 提供 Container、Panel、Text、Image、SVG 与曲线（含矩形）的 ECS Entity Presets。
  *
  * @packageDocumentation
  */
@@ -55,6 +55,7 @@ export {
   createCurveMaterial,
   DEFAULT_COMPOSE_ARROW_PRESET,
   DEFAULT_COMPOSE_CIRCLE_PRESET,
+  DEFAULT_COMPOSE_RECT_PRESET,
   DEFAULT_COMPOSE_CURVE_PRESET,
   DEFAULT_COMPOSE_CURVE_RENDERER,
   DEFAULT_COMPOSE_WIRE_PRESET,

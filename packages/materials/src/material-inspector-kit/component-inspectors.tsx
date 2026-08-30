@@ -840,6 +840,15 @@ export function createCurveInspector(
           v.title(zh ? '顶点' : 'Vertices'),
         ),
         closed: v.pipe(v.boolean(), v.title(zh ? '闭合' : 'Closed')),
+        // 面板上 0 就是「没有圆角」，写回时那个字段被删掉——协议里缺席与 0 是同一件事。
+        cornerRadius: v.pipe(
+          v.number(),
+          v.minValue(0, zh ? '圆角不能为负' : 'Corner radius cannot be negative'),
+          v.title(zh ? '圆角' : 'Corner radius'),
+          v.description(zh
+            ? '四个角联动；每个角实际画多大按相邻边长钳制，不改这个值。'
+            : 'Shared by every corner; each is clamped to its adjacent edges without changing this value.'),
+        ),
       })
     }, [kind, zh])
 
@@ -857,7 +866,11 @@ export function createCurveInspector(
             startAngle: curve.startAngle,
             sweep: curve.sweep,
           }
-        : { vertices: curve.vertices.map(toParent), closed: curve.closed }
+        : {
+            vertices: curve.vertices.map(toParent),
+            closed: curve.closed,
+            cornerRadius: curve.cornerRadius ?? 0,
+          }
 
     return (
       <ComposePropertyPanel
@@ -867,11 +880,17 @@ export function createCurveInspector(
         value={viewValue}
         onValueChange={(next) => {
           if (readOnly) return
+          const merged: Record<string, unknown> = { ...curve, ...next }
+          // 缺席与 0 是同一件事：留两种表示会让「有没有圆角」在两处读出不同答案，而校验
+          // 只接受在场时是正数的那一种。
+          if (!(typeof merged.cornerRadius === 'number' && merged.cornerRadius > 0)) {
+            delete merged.cornerRadius
+          }
           dispatch(command(
             idFactory,
             entity,
             BUILTIN_COMMAND_TYPES.setCurve,
-            { entityId: entity.id, curve: { ...curve, ...next } as unknown as JsonValue },
+            { entityId: entity.id, curve: merged as unknown as JsonValue },
             zh ? `编辑 ${entity.name} 的几何` : `Edit ${entity.name} geometry`,
           ))
         }}

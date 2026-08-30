@@ -3,6 +3,8 @@ import {
   COMPOSE_CURVE_MIN_EXTENT,
   composeCurveBounds,
   composeCurveBoxScale,
+  composeCurveSegments,
+  composePolylineOutline,
   composeCurveViewBox,
   createComposeLineCurve,
   distanceToComposeCurve,
@@ -13,6 +15,7 @@ import {
   projectComposeCurveToBox,
   translateComposeCurve,
   type ComposeCurve,
+  type ComposePolylineCurve,
 } from './curve'
 import { validateComposeDocument } from './document'
 import { BUILTIN_COMMAND_TYPES } from './builtin-commands'
@@ -423,6 +426,42 @@ describe('OpenSpec: compose-document / 盒与几何之间只有一个换算入�
     expect(projected).toMatchObject({ kind: 'arc', radius: 20, center: { x: 20, y: 20 } })
   })
 
+  it('写进文档的弧仍判成等比：盒尺寸被量化，两轴比例天生对不齐', () => {
+    // 用户画完一条弧之后文档里就是这个样子：几何不量化，而盒尺寸被舍到两位小数。
+    const drawn: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 312.4, y: 205.7 },
+      radius: 143.6,
+      startAngle: 200,
+      sweep: 140,
+    }
+    const normalized = normalizeComposeCurveGeometry(drawn)
+
+    const projected = projectComposeCurveToBox(normalized.curve, normalized.size)
+
+    // 两轴比例差 4e-5，全部来自那次舍入——把它判成非等比会让**每一条**画出来的弧在命中、
+    // 捕捉与几何编辑里退化成二十来个顶点的多段线，而渲染仍按 `viewBox` 画着真正的弧。
+    expect(projected.kind).toBe('arc')
+  })
+
+  it('容差不吞掉真实的拉伸：同一条弧横向拉宽 1% 就拍扁', () => {
+    const drawn: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 312.4, y: 205.7 },
+      radius: 143.6,
+      startAngle: 200,
+      sweep: 140,
+    }
+    const normalized = normalizeComposeCurveGeometry(drawn)
+
+    const projected = projectComposeCurveToBox(normalized.curve, {
+      width: normalized.size.width * 1.01,
+      height: normalized.size.height,
+    })
+
+    expect(projected.kind).toBe('polyline')
+  })
+
   it('非等比缩放的弧拍扁成多段线，整圆仍闭合', () => {
     const circle: ComposeCurve = {
       kind: 'arc',
@@ -509,5 +548,75 @@ describe('isPointInsideComposeCurve', () => {
     const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 100 } }
 
     expect(isPointInsideComposeCurve(line, { x: 50, y: 50 })).toBe(false)
+  })
+})
+
+describe('OpenSpec: compose-document / 多段线的四角联动圆角', () => {
+  /** 200 × 100 的闭合矩形，左上角在原点。 */
+  const rectangle = (cornerRadius?: number): ComposeCurve => ({
+    kind: 'polyline',
+    vertices: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
+    closed: true,
+    ...(cornerRadius === undefined ? {} : { cornerRadius }),
+  })
+
+  it('缺席时与今天逐段相同', () => {
+    // 缺席即尖角这条回退让既有文档逐像素不变，因此本字段不需要迁移。
+    expect(composeCurveSegments(rectangle())).toEqual([
+      { start: { x: 0, y: 0 }, end: { x: 200, y: 0 } },
+      { start: { x: 200, y: 0 }, end: { x: 200, y: 100 } },
+      { start: { x: 200, y: 100 }, end: { x: 0, y: 100 } },
+      { start: { x: 0, y: 100 }, end: { x: 0, y: 0 } },
+    ])
+  })
+
+  it('四个角各出一段弧，直段按切点缩短', () => {
+    const pieces = composePolylineOutline(rectangle(20) as ComposePolylineCurve)
+    expect(pieces.filter(({ kind }) => kind === 'arc')).toHaveLength(4)
+    // 上边从 (20,0) 走到 (180,0)：两端各让出一个切线长。三角函数的往返留下末位残渣，
+    // 而轮廓不进文档——量化只作用在写回文档的那个漏斗上。
+    const top = pieces.find(({ kind }) => kind === 'segment')
+    if (top?.kind !== 'segment') throw new Error('上边应当是一条直段')
+    expect(top.segment.start.x).toBeCloseTo(20)
+    expect(top.segment.start.y).toBe(0)
+    expect(top.segment.end.x).toBeCloseTo(180)
+  })
+
+  it('半径超过相邻边的一半时按边长钳制，且不回写文档', () => {
+    const curve = rectangle(999) as ComposePolylineCurve
+    const arcs = composePolylineOutline(curve)
+      .flatMap((piece) => (piece.kind === 'arc' ? [piece.arc] : []))
+    // 短边 100，切线长钳到 50，直角下 `tan(45°) = 1` 因此半径就是 50。
+    expect(arcs).toHaveLength(4)
+    arcs.forEach(({ radius }) => expect(radius).toBeCloseTo(50))
+    // 钳的是**呈现**：作者写进去的意图原样留在文档里，盒拉回去圆角就回来。
+    expect(curve.cornerRadius).toBe(999)
+  })
+
+  it('圆角削掉的那一块不再算作内部', () => {
+    // 判别点取左上角内侧：尖角时它在内部，半径 40 之后它落在弧外。
+    const probe = { x: 4, y: 4 }
+    expect(isPointInsideComposeCurve(rectangle(), probe)).toBe(true)
+    expect(isPointInsideComposeCurve(rectangle(40), probe)).toBe(false)
+  })
+
+  it('共线的角不圆，开放折线的两端也不圆', () => {
+    const straight: ComposeCurve = {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 60 }],
+      closed: false,
+      cornerRadius: 10,
+    }
+    // 三个顶点里只有 (100,0) 是真的角：(0,0) 与 (100,60) 是端点，(50,0) 共线。
+    expect(composePolylineOutline(straight as ComposePolylineCurve)
+      .filter(({ kind }) => kind === 'arc')).toHaveLength(1)
+  })
+
+  it('cornerRadius 在场时必须是有限正数', () => {
+    // 0 与缺席是同一件事：留两种表示会让「有没有圆角」在两处读出不同答案。
+    expect(isValidComposeCurve(rectangle(0))).toBe(false)
+    expect(isValidComposeCurve(rectangle(-1))).toBe(false)
+    expect(isValidComposeCurve(rectangle(12))).toBe(true)
+    expect(isValidComposeCurve(rectangle())).toBe(true)
   })
 })

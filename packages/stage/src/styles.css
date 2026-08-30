@@ -651,6 +651,43 @@
   pointer-events: none;
 }
 
+/*
+ * 圆角手柄：空心圆加一圈画布色垫底描边。
+ *
+ * 垫底那一圈不是装饰——半径到顶时手柄压在选区轮廓那条 3px 的线上，没有垫底就整个融进去了。
+ * 与「变换指示器基点圆点加描边，压在轴交点上仍读得出」是同一条判断。
+ *
+ * 空心而不是填充：顶点是方块、段中点是条形、圆角是圆，这块画布的规则是形状先分开、颜色
+ * 再分开，填充会让它在缩略尺寸下与顶点方块糊成同一团。
+ */
+.compose-stage__curve-corner {
+  fill: none;
+  stroke: var(--compose-accent, #3b82f6);
+  stroke-width: 1.25;
+  pointer-events: none;
+}
+
+/*
+ * 垫底那一圈是**另一个元素**：SVG 单个形状画不出双色描边，而 `paint-order` 只能在填充与
+ * 描边之间排序，排不出两条描边。
+ */
+.compose-stage__curve-corner-halo {
+  fill: none;
+  stroke: var(--compose-surface-sunken, #25282d);
+  stroke-width: 2.8;
+  pointer-events: none;
+}
+
+.compose-stage__curve-corner-hit {
+  fill: transparent;
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.compose-stage__curve-corner-hit:hover + .compose-stage__curve-corner {
+  stroke-width: 2;
+}
+
 /* 命中区独立于可见尺寸放大；透明但可命中。 */
 .compose-stage__editable-path-hit {
   fill: transparent;

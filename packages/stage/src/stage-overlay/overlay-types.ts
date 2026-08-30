@@ -1,5 +1,6 @@
 import type {
   ResizeHandle,
+  StageCurveCorner,
   StageEditablePath,
   StageGuide,
   StageWireEnd,
@@ -49,6 +50,35 @@ export interface StageOverlayProps {
    * 屏幕并画出来。
    */
   readonly selectionOutline?: readonly StagePoint[] | null
+  /**
+   * 单选一条多段线时的圆角手柄，世界坐标；其余情形为 `null`。
+   *
+   * @remarks
+   * 与 {@link StageOverlayProps.selectionOutline} 同源——覆盖层不认识文档，判定与派生都在
+   * 宿主，这里只负责换算到屏幕并画出来。
+   */
+  readonly curveCorners?: readonly StageCurveCorner[] | null
+  /**
+   * 拖圆角手柄时那条圆角之后的世界坐标轮廓；没有手势在跑时为 `null`。
+   *
+   * @remarks
+   * 与 {@link StageOverlayProps.selectionOutline} 是两件事：那个**取代**选区框（盒不是那个
+   * 对象的轮廓），这个**叠加**在选区框之上（矩形的盒就是轮廓，但盒不会跟着圆）。
+   */
+  readonly curveCornerPreview?: readonly StagePoint[] | null
+  /**
+   * 选区在图面上只有一圈描边可拖。
+   *
+   * @remarks
+   * 空心图形不以包围盒拦截指针，因此那一圈描边是它**唯一**可拖的几个像素；边缘缩放命中带
+   * 因此整条让到盒外并再让开一个拾取容差，否则同一个位置的含义在选中前后从「移动」变成
+   * 「缩放」，一个被选中的空心矩形在画布上根本拖不动。
+   *
+   * **只对空心选区这么让**：让位会吃掉盒外那一圈，而场景标题标签就坐在顶边外侧，容器的
+   * 命中带让出去还会压住紧挨着的邻居。填充对象的内部本来就可拖，不需要这条补偿。
+   * 覆盖层不认识文档，判定在宿主。
+   */
+  readonly hollowSelection?: boolean
   readonly handlePoints: Readonly<
     Record<ResizeHandle, readonly [number, number]>
   > | null

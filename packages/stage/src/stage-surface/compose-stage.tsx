@@ -30,11 +30,14 @@ import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_CURVE_PICK_TOLERANCE,
   getComposeCurve,
+  getComposeCurveFill,
+  isComposeRectangleCurve,
   type ComposeLayoutSnapshot,
   type ComposeSize,
 } from '@compose-ui/core'
 import {
   createStageInteractionController,
+  stageCurveCorners,
   stageCurveOutline,
   collectStageWireEnds,
   createStageSceneIndex,
@@ -87,6 +90,7 @@ import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
 import {
   StageDraftingOverlay,
+  stageCornerRadiusReadout,
   stageResizeReadout,
   stageRotationReadout,
   useStageDrafting,
@@ -95,7 +99,7 @@ import {
   resolveTransformGizmoTarget,
   transformGizmoGeometry,
 } from '@compose-ui/stage-engine'
-import { useStageGeometryEditing } from '../geometry-editing'
+import { useStageCurveCorners, useStageGeometryEditing } from '../geometry-editing'
 import type { StageGeometryEditing } from '../geometry-editing'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
 import { useStageTextEditing } from './use-stage-text-editing'
@@ -509,30 +513,42 @@ function ComposeStageReady({
   )
 
   /**
+   * 选区 chrome 的几何来源：**预览**文档与它的布局快照。
+   *
+   * @remarks
+   * **读预览而不是已提交的文档**：拖动期间画在对象身上的每一件 chrome——变换指示器、曲线的
+   * 轮廓、圆角手柄——都必须跟着对象一起走，停在原处会让用户以为自己没有抓住它。曾经只有指示器
+   * 读它，而曲线那两样读的是已提交文档与场景索引，症状是「矩形拖走了，四个圆角手柄还留在
+   * 原来的位置」。旋转不受影响——基点是那次旋转的不动点，绕它转不改变它的世界位置。
+   *
+   * 这里刻意**不建预览场景索引**：那是一次整棵树的遍历，而每一个预览帧都会换一份新文档。
+   * 消费者都只需要目标那一条祖先链，因此按需算它的世界矩阵。
+   *
+   * 缺 Entity 或缺盒时给 `null` 而不是让 `getEntityWorldMatrix` 抛出：曲线那几个派生的契约
+   * 就是「读不到几何就什么都不画」，而选区可以短暂领先于布局快照一帧。
+   */
+  const previewGeometry = useMemo(() => ({
+    document: previewDocument,
+    layoutSnapshot: previewLayoutSnapshot,
+    getWorldMatrix: (entityId: string) => (
+      previewDocument.entities[entityId] && previewLayoutSnapshot.boxes[entityId]
+        ? getEntityWorldMatrix(previewDocument, previewLayoutSnapshot, entityId)
+        : null
+    ),
+  }), [previewDocument, previewLayoutSnapshot])
+  /**
    * 变换指示器的屏幕几何。
    *
    * @remarks
    * 中心与轴向由 `resolveTransformGizmoTarget` 回答（单选取该 Entity 的旋转基点与它的朝向，
    * 多选取包围盒中心与轴对齐）；这里只负责换算成屏幕几何交给覆盖层——覆盖层不认识文档，
    * 也不知道中心该取基点还是包围盒。
-   *
-   * **读预览文档而不是已提交的文档**：拖动期间指示器必须跟着对象一起走，停在原处会让用户
-   * 以为自己没有抓住它。旋转不受影响——基点是那次旋转的不动点，绕它转不改变它的世界位置。
-   *
-   * 这里刻意**不建预览场景索引**：那是一次整棵树的遍历，而每一个预览帧都会换一份新文档。
-   * `resolveTransformGizmoTarget` 只需要目标那一条祖先链，因此按需算它的世界矩阵。
    */
-  const gizmoSource = useMemo(() => ({
-    document: previewDocument,
-    layoutSnapshot: previewLayoutSnapshot,
-    getWorldMatrix: (entityId: string) =>
-      getEntityWorldMatrix(previewDocument, previewLayoutSnapshot, entityId),
-  }), [previewDocument, previewLayoutSnapshot])
   const gizmo = useMemo(() => {
     if (!transformGizmo || normalizedSelection.length === 0 || !bounds) return null
-    const target = resolveTransformGizmoTarget(gizmoSource, normalizedSelection, bounds)
+    const target = resolveTransformGizmoTarget(previewGeometry, normalizedSelection, bounds)
     return transformGizmoGeometry({ center: target.center, degrees: target.degrees, viewport })
-  }, [bounds, gizmoSource, normalizedSelection, transformGizmo, viewport])
+  }, [bounds, previewGeometry, normalizedSelection, transformGizmo, viewport])
 
   /*
    * 绘图 Hook 排在几何编辑**之前**：点亮期的预览要读它解算后的落点，而读得晚一拍就等于让
@@ -627,8 +643,8 @@ function ComposeStageReady({
   }, [activeCommandId])
 
   const geometryEditing = useStageGeometryEditing({
-    document,
-    index: sceneIndex,
+    // 夹点与轮廓也是画在对象身上的 chrome：拖动整条曲线时它们必须跟着走。
+    geometry: previewGeometry,
     session: geometrySession,
     armedGripId: draftingSession.gripTarget?.gripId ?? null,
     // 点亮期的预览钉在**解算后**的落点上，与十字线、橡皮筋终点和捕捉标记同一个值。
@@ -640,6 +656,15 @@ function ComposeStageReady({
     resolvePoint: resolveDraftingPoint,
   })
   const geometryEditingActive = geometryEditing.entityId !== null
+
+  // 圆角手柄是**选中就出**的一层 chrome，因此它的会话与几何编辑无关，各自独立。
+  const curveCornerSession = useStageCurveCorners({
+    document,
+    index: sceneIndex,
+    idFactory,
+    dispatch,
+    label: messages.editGeometry,
+  })
 
   // 命令等着取点或等着选对象时才跟踪指针；两档合成一个标记，跟踪、挂载与推导读同一个。
   // 几何编辑期间也跟踪：这个模式的全部动作都是在取点，十字光标需要一个中心。
@@ -670,7 +695,6 @@ function ComposeStageReady({
       : null),
     [interaction.rotationPreview, viewport],
   )
-  const dynamicInput = draftingSession.dynamicInput ?? resizeReadout ?? rotationReadout
 
   /**
    * 十字光标的形态。
@@ -744,6 +768,7 @@ function ComposeStageReady({
       if (geometryRef.current?.handlePathChange(change) === true) return
       onEditablePathChange?.(change)
     },
+    onCurveCornerChange: curveCornerSession.handleChange,
     onEditablePathVertexToggle,
     onPaintSamplingComplete,
     onSelectedIdsChange,
@@ -853,11 +878,100 @@ function ComposeStageReady({
   const selectionOutline = useMemo(() => {
     if (tool !== 'select' || transformGizmo || normalizedSelection.length !== 1) return null
     const entityId = normalizedSelection[0]!
-    const entity = document.entities[entityId]
-    if (!entity || !getComposeCurve(entity)) return null
-    const outline = stageCurveOutline(document, sceneIndex, entityId)
+    const entity = previewGeometry.document.entities[entityId]
+    const curve = entity ? getComposeCurve(entity) : null
+    if (!curve) return null
+    // **矩形的盒就是它的轮廓**，因此走普通选区框与八个手柄，与矩形物料、图片、容器一致。
+    // 这不是给矩形开特例，是同一条判据的第三个答案：一条对角线的包围盒里绝大部分是空的，
+    // 而矩形占满自己的盒。圆角不改变答案——角弧与四条边相切，盒仍是它占据的面积。
+    if (isComposeRectangleCurve(curve)) return null
+    // 拖圆角手柄时读预览几何：文档要到松手那一刻才变，轮廓让用户看见**松手会变成什么样**。
+    // 与夹点拖动是同一种分工，因此这里也走同一个 `override` 参数。
+    const preview = curveCornerSession.preview
+    const outline = stageCurveOutline(
+      previewGeometry,
+      entityId,
+      preview?.entityId === entityId ? preview.curve : null,
+    )
     return outline.length > 1 ? outline : null
-  }, [document, normalizedSelection, sceneIndex, tool, transformGizmo])
+  }, [
+    curveCornerSession.preview,
+    normalizedSelection,
+    previewGeometry,
+    tool,
+    transformGizmo,
+  ])
+
+  /**
+   * 单选一条多段线时的圆角手柄。
+   *
+   * @remarks
+   * **刻意不挂在 {@link selectionOutline} 上**：矩形的盒就是它的轮廓、因此没有轮廓可画，
+   * 而它恰恰是最需要圆角手柄的那一个。几何编辑期间不出：那一档的角上已经有顶点方块，两个
+   * 手柄压在同一个像素上谁也点不准。
+   *
+   * 拖动期间读预览几何，手柄因此跟手而文档不动。
+   */
+  const curveCorners = useMemo(() => {
+    if (tool !== 'select' || geometryEditingActive || normalizedSelection.length !== 1) return null
+    const entityId = normalizedSelection[0]!
+    const preview = curveCornerSession.preview
+    const corners = stageCurveCorners(
+      previewGeometry,
+      entityId,
+      preview?.entityId === entityId ? preview.curve : null,
+    )
+    return corners.length > 0 ? corners : null
+  }, [
+    curveCornerSession.preview,
+    geometryEditingActive,
+    normalizedSelection,
+    previewGeometry,
+    tool,
+  ])
+
+  /**
+   * 选区在图面上只有一圈描边可拖。
+   *
+   * @remarks
+   * 空心图形不以包围盒拦截指针，那一圈描边因此是它唯一可拖的几个像素——边缘缩放命中带据此
+   * 让开它（见 `StageOverlayProps.hollowSelection`）。判定读的是**渲染与命中共用的那个
+   * 填充入口**（`getComposeCurveFill`，全透明等于没填充），不另判一次「算不算填了色」。
+   */
+  const hollowSelection = useMemo(() => {
+    if (normalizedSelection.length !== 1) return false
+    const entity = previewGeometry.document.entities[normalizedSelection[0]!]
+    return Boolean(entity && getComposeCurve(entity) && !getComposeCurveFill(entity))
+  }, [normalizedSelection, previewGeometry])
+
+  /**
+   * 拖圆角手柄时那条圆角之后的轮廓。
+   *
+   * @remarks
+   * 只在手势进行中派生：矩形选中时画的是普通包围盒，而盒不会跟着圆——不画这一条，用户在
+   * 松手之前看不见自己拖出了什么。
+   */
+  const curveCornerPreview = useMemo(() => {
+    const preview = curveCornerSession.preview
+    if (!preview) return null
+    const outline = stageCurveOutline(previewGeometry, preview.entityId, preview.curve)
+    return outline.length > 1 ? outline : null
+  }, [curveCornerSession.preview, previewGeometry])
+
+  /*
+   * 拖圆角手柄时的半径读数；与上面两个读数同样互斥——一次指针手势只可能是其中一种。
+   */
+  const cornerRadiusReadout = useMemo(() => {
+    const index = curveCornerSession.activeIndex
+    const corner = index === null
+      ? undefined
+      : curveCorners?.find((candidate) => candidate.index === index)
+    return corner ? stageCornerRadiusReadout(corner, viewport) : null
+  }, [curveCornerSession.activeIndex, curveCorners, viewport])
+  const dynamicInput = draftingSession.dynamicInput
+    ?? resizeReadout
+    ?? rotationReadout
+    ?? cornerRadiusReadout
 
   /**
    * 要画出来的导线端点记号。
@@ -1222,6 +1336,9 @@ function ComposeStageReady({
           rotationPreview={interaction.rotationPreview}
           instanceSelectionBounds={instanceSelectionBounds}
           screenBounds={screenBounds}
+          curveCornerPreview={curveCornerPreview}
+          hollowSelection={hollowSelection}
+          curveCorners={curveCorners}
           selectionOutline={selectionOutline}
           snapGuides={snapGuides}
           wireEnds={wireEnds}

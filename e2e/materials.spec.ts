@@ -305,15 +305,18 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
   // 根可缩放，实例继承该能力并显示手柄。
   await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(1)
 
-  // 嵌套矩形 Appearance 驱动填色；默认无圆角，Material 不得盖默认蓝底。
-  const material = stage.getByTestId('compose-material-rectangle')
+  // 嵌套矩形画在它自己的 SVG 上——矩形现在是曲线，默认空心，看得见的墨只有描边。
+  const material = stage.getByTestId('compose-material-curve-stroke')
   await expect(material).toBeVisible()
-  await expect(material).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(material).toHaveAttribute('fill', 'none')
+  await expect(material).toHaveAttribute('stroke', '#d8e2f1')
   const nestedRect = material.locator(
     'xpath=ancestor::*[@data-component-instance-entity-id][1]',
   )
-  await expect(nestedRect).toHaveCSS('overflow', 'hidden')
-  await expect(nestedRect).toHaveCSS('border-radius', '0px')
+  // 宿主盒**不画**曲线的背景（盒是矩形而形状不是），也不裁它（描边以几何为中心画，
+  // 必然向外超出半个线宽）。两条都是嵌套渲染路径与 Stage 共用的那一份判断。
+  await expect(nestedRect).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(nestedRect).toHaveCSS('overflow', 'visible')
 })
 
 
@@ -352,9 +355,15 @@ test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时�
   const children = switcher.locator(':scope > .compose-stage__node.is-renderer')
   for (const index of [0, 1]) {
     const rectBox = await rootRenderers.first().boundingBox()
-    await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height / 2)
+    /*
+     * 抓**下边线**：矩形默认空心，盒内部不命中，可拖的只有那一圈描边；取下边而不是上边，
+     * 是因为这两个矩形以落点为中心放置，上边线落在场景之外。
+     */
+    await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height - 1)
     await page.mouse.down()
-    await page.mouse.move(dropPoint.x, dropPoint.y, { steps: 8 })
+    // 抓点在下边线而不是盒中心，因此终点也要按同一个偏移落——挂载按对象落在哪里判定，
+    // 直接把下边线拖到 switcher 中心会让盒中心落到它上面去。
+    await page.mouse.move(dropPoint.x, dropPoint.y + rectBox!.height / 2 - 1, { steps: 8 })
     await page.mouse.up()
     await expect(rootRenderers).toHaveCount(1 - index)
     // 第二个子项落进去时不渲染：活动索引仍指向第一个。

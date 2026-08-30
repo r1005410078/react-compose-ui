@@ -20,15 +20,17 @@ import {
 } from './document-types'
 import {
   composeArcBoundsPoints,
-  composePolylineSegments,
+  composeRoundedPolylineOutline,
   flattenComposeArc,
+  flattenComposeOutline,
   isComposeFullCircle,
   pointToComposeArcDistance,
   pointToComposeSegmentDistance,
+  type ComposeOutlinePiece,
   type ComposeSegmentShape,
 } from './curve-geometry'
 import { resolveComposeAppearance } from './appearance'
-import { roundComposeGeometry } from './geometry-precision'
+import { COMPOSE_GEOMETRY_PRECISION, roundComposeGeometry } from './geometry-precision'
 
 /**
  * 曲线的几何种类。
@@ -78,12 +80,31 @@ export interface ComposeArcCurve extends JsonObject {
  * `closed` 是布尔而不是「首尾顶点重复」：重复表示法里 `[A,B,C,A]` 是闭合三角形还是回到起点
  * 的开放折线无法区分，而两者在框选与捕捉上给出不同候选——重复的那个顶点会产生两个端点候选。
  *
+ * 用 `JsonObject &` 交叉而不是 `extends`：索引签名的 `JsonValue` 不接受 `undefined`，而
+ * `cornerRadius` 是可选的；`ComposeWire` 与 `ComposeAppearance` 出于同样原因采用这种写法。
+ *
  * @public
  */
-export interface ComposePolylineCurve extends JsonObject {
+export type ComposePolylineCurve = JsonObject & {
   readonly kind: 'polyline'
   readonly vertices: readonly ComposePosition[]
   readonly closed: boolean
+  /**
+   * 四角联动的圆角半径，几何空间；**缺席即尖角**。
+   *
+   * @remarks
+   * 缺席即尖角这条回退让既有文档逐像素不变，因此本字段**不需要迁移**、协议版本不变。
+   * 它同时是唯一的表示：半径拖回 0 时写入方 MUST 删掉这个字段而不是写 0——缺席与 0 是同一
+   * 件事，留两种表示会让「有没有圆角」在两处读出不同答案。
+   *
+   * **一个值管所有角**而不是每个顶点一个。这让顶点类型保持 `{x, y}`，归一化、平移、DXF
+   * 导入与已经画好的每一条折线都一个字节不改。每角独立是本字段向后兼容的一次扩展。
+   *
+   * 每个角实际画多大**在读取时钳制**（切线长不超过相邻两段各自长度的一半），钳制结果
+   * **不回写**：这个数是作者的意图，此刻画多大是当前几何说了算。盒被拉窄时圆角自动收，
+   * 拉回去原样回来。
+   */
+  readonly cornerRadius?: number
 }
 
 /**
@@ -134,7 +155,7 @@ export interface ComposeCurveValidationIssue {
 
 const LINE_FIELDS = ['kind', 'start', 'end'] as const
 const ARC_FIELDS = ['kind', 'center', 'radius', 'startAngle', 'sweep'] as const
-const POLYLINE_FIELDS = ['kind', 'vertices', 'closed'] as const
+const POLYLINE_FIELDS = ['kind', 'vertices', 'closed', 'cornerRadius'] as const
 const POINT_FIELDS = ['x', 'y'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -222,6 +243,14 @@ export function collectComposeCurveValidationIssues(
   value.vertices.forEach((vertex, index) => {
     collectPointIssues(vertex, ['vertices', index], issues)
   })
+  // 在场就必须是有限正数：0 与缺席是同一件事，允许写 0 会让同一个状态有两种表示。
+  if (value.cornerRadius !== undefined && (
+    typeof value.cornerRadius !== 'number'
+    || !Number.isFinite(value.cornerRadius)
+    || value.cornerRadius <= 0
+  )) {
+    issues.push({ path: ['cornerRadius'], message: 'cornerRadius 在场时必须是有限正数' })
+  }
   return issues
 }
 
@@ -268,6 +297,29 @@ export function composeCurvePoints(curve: ComposeCurve): readonly ComposePositio
   // 弧不能只用两个端点：90° 到 270° 的弧鼓出来的那一侧在端点之外，盒会把弧裁掉一块，
   // 而这只在跨象限的弧上出现。落在扫掠内的象限点必须一并纳入。
   return composeArcBoundsPoints(curve).map(({ x, y }) => ({ x, y }))
+}
+
+/**
+ * 这条曲线是不是一个**轴对齐矩形**——四个顶点恰好就是它紧包围盒的四个角。
+ *
+ * @remarks
+ * 它回答的是既有那条判据在这个形状上的答案：**盒是不是这个对象的轮廓**。一条对角线的包围盒
+ * 里绝大部分是空的，所以那时画轮廓不画盒；而矩形的盒**就是**它的轮廓，因此选中时画的是普通
+ * 包围盒与八个手柄，与矩形物料、图片、容器一致。这不是给矩形开特例，是同一句话的第三个答案。
+ *
+ * **圆角不改变答案**：角弧仍与四条边相切，盒仍是那个形状占据的面积。
+ *
+ * 旋转过的矩形同样为真——`Transform.rotation` 不在几何里，盒局部顶点仍是轴对齐的。
+ *
+ * @public
+ */
+export function isComposeRectangleCurve(curve: ComposeCurve): boolean {
+  if (curve.kind !== 'polyline' || !curve.closed || curve.vertices.length !== 4) return false
+  const xs = new Set(curve.vertices.map(({ x }) => x))
+  const ys = new Set(curve.vertices.map(({ y }) => y))
+  // 恰好两个不同的 x 与两个不同的 y，且四个顶点互不相同——退化成线段的「矩形」不算。
+  if (xs.size !== 2 || ys.size !== 2) return false
+  return new Set(curve.vertices.map(({ x, y }) => `${x},${y}`)).size === 4
 }
 
 /** 曲线的紧包围盒；**不**做退化轴钳制。 @public */
@@ -397,8 +449,26 @@ export function composeCurveBoxScale(
   return { x: size.width / view.width, y: size.height / view.height }
 }
 
-/** 等比判定的容差；两个比例差到这个量级以内就当作等比。 */
-const UNIFORM_SCALE_EPSILON = 1e-6
+/** 几何数值的量化步长；盒尺寸写进文档时被舍到这个格子上。 */
+const GEOMETRY_QUANTUM = 10 ** -COMPOSE_GEOMETRY_PRECISION
+
+/**
+ * 两个轴向比例是否可以当作等比。
+ *
+ * @remarks
+ * 容差**由盒尺寸的量化步长推出**，不是一个凭手感取的小数：盒尺寸写进文档时经
+ * `roundComposeGeometry` 舍到 {@link COMPOSE_GEOMETRY_PRECISION} 位，而几何本身不舍，因此
+ * 每个轴的比例天生就只知道到 `±步长/2 ÷ 取景框边长` 这么准。取一个绝对小量（曾经是 1e-6）
+ * 等于要求比例比它自己的存储精度还精确——症状是**每一条画出来的弧都被判成非等比**：一段
+ * 270×95 的弧两轴比例差 4e-5，于是它在命中、捕捉与几何编辑里全都退化成二十来个顶点的
+ * 多段线，而渲染仍按 `viewBox` 画着真正的弧。用户看见的是一条光滑的弧上排着一串方顶点。
+ *
+ * 真正的非等比拉伸比这个量级大好几个数量级，因此这条容差不会把它放过去。
+ */
+function isUniformBoxScale(view: ComposeCurveViewBox, scaleX: number, scaleY: number) {
+  const slack = GEOMETRY_QUANTUM / 2
+  return Math.abs(scaleX - scaleY) <= slack / view.width + slack / view.height
+}
 
 /**
  * 把几何映射进盒坐标系。
@@ -433,7 +503,7 @@ export function projectComposeCurveToBox(
   })
   if (curve.kind === 'line') return { ...curve, start: map(curve.start), end: map(curve.end) }
   if (curve.kind === 'polyline') return { ...curve, vertices: curve.vertices.map(map) }
-  if (Math.abs(scaleX - scaleY) <= UNIFORM_SCALE_EPSILON) {
+  if (isUniformBoxScale(view, scaleX, scaleY)) {
     return { ...curve, center: map(curve.center), radius: curve.radius * scaleX }
   }
   const segments = flattenComposeArc(curve)
@@ -466,14 +536,18 @@ export function distanceToComposeCurve(
   if (curve.kind === 'line') return pointToComposeSegmentDistance(curve, point)
   // 弧有闭式解，比线段还便宜：方位角落在扫掠内时距离就是 `|到圆心距离 − 半径|`。
   if (curve.kind === 'arc') return pointToComposeArcDistance(curve, point)
-  const segments = composePolylineSegments(curve.vertices, curve.closed)
+  const pieces = composePolylineOutline(curve)
   // 单顶点多段线（校验会拒，但命中不该因此抛错）退化成到那个点的距离。
-  if (segments.length === 0) {
+  if (pieces.length === 0) {
     const first = curve.vertices[0]
     return first ? Math.hypot(point.x - first.x, point.y - first.y) : Number.POSITIVE_INFINITY
   }
-  return segments.reduce(
-    (nearest, segment) => Math.min(nearest, pointToComposeSegmentDistance(segment, point)),
+  // 角弧走闭式解而不是拍扁：拍扁的弦高误差在命中上是**可见**的（贴着圆角外沿点不中），
+  // 而框选那一头产出的只是一个布尔，两者能接受的误差不是一回事。
+  return pieces.reduce(
+    (nearest, piece) => Math.min(nearest, piece.kind === 'segment'
+      ? pointToComposeSegmentDistance(piece.segment, point)
+      : pointToComposeArcDistance(piece.arc, point)),
     Number.POSITIVE_INFINITY,
   )
 }
@@ -496,14 +570,30 @@ export function distanceToComposeCurve(
 export function composeCurveSegments(curve: ComposeCurve): readonly ComposeSegmentShape[] {
   if (curve.kind === 'line') return [{ start: curve.start, end: curve.end }]
   if (curve.kind === 'arc') return flattenComposeArc(curve)
-  const segments = composePolylineSegments(curve.vertices, curve.closed)
+  const pieces = composePolylineOutline(curve)
   // 单顶点多段线（校验会拒，但判定不该因此认为它不存在）退化成一条零长度线段：
   // 下游的裁剪判定对它天然退化成「点是否落在框内」。
-  if (segments.length === 0) {
+  if (pieces.length === 0) {
     const only = curve.vertices[0]
     return only ? [{ start: only, end: only }] : []
   }
-  return segments
+  return flattenComposeOutline(pieces)
+}
+
+/**
+ * 一条多段线的有序轮廓片段。
+ *
+ * @remarks
+ * 命中、框选、内部判定与渲染读的是**同一列**片段——各自按 `cornerRadius` 再算一遍的话，
+ * 下一个改圆角数学的人只会改到其中一处，而漏掉的那处的症状是「看得见的形状与点得中的
+ * 形状不是同一个」。
+ *
+ * @public
+ */
+export function composePolylineOutline(
+  curve: ComposePolylineCurve,
+): readonly ComposeOutlinePiece[] {
+  return composeRoundedPolylineOutline(curve.vertices, curve.closed, curve.cornerRadius ?? 0)
 }
 
 /**
@@ -530,7 +620,7 @@ export function isPointInsideComposeCurve(
   const vertices = curve.kind === 'line'
     ? []
     : curve.kind === 'polyline'
-      ? curve.vertices
+      ? outlineVertices(curve)
       : arcOutline(curve)
   if (vertices.length < 3) return false
   // 奇偶规则射线法：向 +x 射一条线，数它穿过多少条边。半开区间 `[y0, y1)` 让顶点恰好落在
@@ -544,6 +634,24 @@ export function isPointInsideComposeCurve(
     if (point.x < crossX) inside = !inside
   }
   return inside
+}
+
+/**
+ * 多段线的填充轮廓：没有圆角时就是顶点本身。
+ *
+ * @remarks
+ * 有圆角时按轮廓片段拍扁——用尖角顶点判会把每个角上被削掉的那一小块也算成内部，而那块正是
+ * 用户看得见的空白。
+ */
+function outlineVertices(curve: ComposePolylineCurve): readonly ComposePosition[] {
+  if (!(curve.cornerRadius ?? 0)) return curve.vertices
+  const segments = flattenComposeOutline(composePolylineOutline(curve))
+  const first = segments[0]
+  if (!first) return curve.vertices
+  return [
+    { x: first.start.x, y: first.start.y },
+    ...segments.map(({ end }) => ({ x: end.x, y: end.y })),
+  ]
 }
 
 /** 弧的填充轮廓：拍扁成顶点序列，整圆因此自然闭合。 */

@@ -93,12 +93,14 @@ test('OpenSpec: stage / 导线两端的接线状态画在图面上 / 失效不�
   await stage.press('Escape')
 
   // 选中那条导线：两端各一个记号，一端已绑定、一端自由。
-  await stage.getByTestId('compose-material-curve-stroke').click({ force: true })
+  // 只认导线那一条（两点走成 `<line>`）：符号本身现在也是曲线，画成 `<polygon>`。
+  await stage.locator('line[data-testid="compose-material-curve-stroke"]').click({ force: true })
   await expect(stage.getByTestId('stage-wire-end-bound')).toHaveCount(1)
   await expect(stage.getByTestId('stage-wire-end-free')).toHaveCount(1)
 
-  // 删掉符号，并把选择挪走——失效记号必须在**未选中**状态下仍然出现。
-  await page.mouse.click(box.x + 8, box.y + box.height - 8)
+  // 删掉符号，并把选择挪走——失效记号必须在**未选中**状态下仍然出现。点的是**下边线**：
+  // 矩形默认空心，盒内部不命中，可点的只有那一圈描边。
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height - 1)
   await page.keyboard.press('Delete')
   await expect(rectangle).toHaveCount(0)
   await expect(stage.getByTestId('stage-wire-end-dangling')).toHaveCount(1)
@@ -142,7 +144,8 @@ test('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 直角导线的拐�
   await page.mouse.click(box.x + 180, box.y + 160)
   await stage.press('Enter')
 
-  const strokes = stage.getByTestId('compose-material-curve-stroke')
+  // 只认这条直角导线（三个点走成 `<polyline>`）：符号本身现在也是曲线，画成 `<polygon>`。
+  const strokes = stage.locator('polyline[data-testid="compose-material-curve-stroke"]')
   await expect(strokes).toHaveCount(1)
 
   /*
@@ -164,11 +167,16 @@ test('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 直角导线的拐�
 
   // 把符号拖走：首顶点跟着走，拐点与末顶点一个都不动。
   await stage.press('Escape')
-  const grip = { x: box.x + 8, y: box.y + box.height - 8 }
+  // 抓**下边线**：矩形默认空心，盒内部不命中，可点可拖的只有那一圈描边。落点按量到的盒
+  // 取比例——写死像素在非 100% 缩放下会跑到盒外面去。
+  const grip = { x: box.x + box.width * 0.2, y: box.y + box.height - 1 }
   await page.mouse.click(grip.x, grip.y)
-  await page.mouse.move(grip.x, grip.y)
+  // 按下点**避开刚才那一下点击**：同一个位置的第二次按下会被浏览器判成双击，而双击一个
+  // 矩形进的是几何编辑（它是曲线），这一次拖拽就不再是移动。
+  const dragFrom = { x: box.x + box.width * 0.5, y: grip.y }
+  await page.mouse.move(dragFrom.x, dragFrom.y)
   await page.mouse.down()
-  await page.mouse.move(grip.x - 70, grip.y - 50, { steps: 8 })
+  await page.mouse.move(dragFrom.x - 70, dragFrom.y - 50, { steps: 8 })
   await page.mouse.up()
 
   await expect.poll(async () => (await screenPoints())[0]).not.toEqual(before[0])

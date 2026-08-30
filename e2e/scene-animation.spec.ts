@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { emptyWorkspaceRect, openPageInspector } from './support/test-helpers'
+import { clickCurveStroke, emptyWorkspaceRect, openPageInspector } from './support/test-helpers'
 
 /** 在所有场景之外画一个容器，得到第二块场景并返回它的 Entity id。 */
 async function createSecondScene(page: Page, editor: Locator) {
@@ -49,7 +49,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const sceneOneRect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
-  await sceneOneRect.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(sceneOneRect)
   await createAnimationWithKeyframe(editor)
 
   // 第二块场景还没有动画：选中它就应当看到空态，而不是场景 1 的时间线。
@@ -60,7 +61,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景�
 
   // 选回场景 1 的对象，时间线切回场景 1 的动画。
   await editor.getByRole('radio', { name: '设计' }).click()
-  await sceneOneRect.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(sceneOneRect)
   await editor.getByRole('radio', { name: '动画' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 })
@@ -76,7 +78,8 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const sceneOneRect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
-  await sceneOneRect.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(sceneOneRect)
   await createAnimationWithKeyframe(editor)
 
   // 第二块场景里也放一个矩形并建自己的动画。
@@ -86,14 +89,17 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const sceneTwoRect = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(sceneTwoRect).toHaveCount(1)
-  await sceneTwoRect.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。取**下边线**——第二块场景很小，
+  // 它的标题标签正压在矩形上边线那一带。
+  await clickCurveStroke(sceneTwoRect, { edge: 'bottom' })
   await createAnimationWithKeyframe(editor)
 
   // 两块场景各有一条动画，互不覆盖：来回切换都看得到自己的关键帧。
   await editor.getByRole('radio', { name: '动画' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
   await editor.getByRole('radio', { name: '设计' }).click()
-  await sceneOneRect.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(sceneOneRect)
   await editor.getByRole('radio', { name: '动画' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
 
@@ -129,7 +135,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到�
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer').click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer'))
   await createAnimationWithKeyframe(editor)
 
   // 建第二块场景并选中它——作用域跟着走，看到空态。
@@ -162,20 +169,28 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
   const inScene1 = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
   const inScene2 = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(inScene2).toHaveCount(1)
-  await inScene2.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。取**下边线**——第二块场景很小，
+  // 它的标题标签正压在矩形上边线那一带。
+  await clickCurveStroke(inScene2, { edge: 'bottom' })
   await stage.press('Control+d')
   await expect(inScene2).toHaveCount(2)
   const sceneOneBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   const copyBox = (await inScene2.last().boundingBox())!
-  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + copyBox.height / 2)
+  // 抓**上边线**：矩形默认空心，盒内部不命中；副本被复制偏移推离了场景标题标签那一带。
+  // 终点按同一个偏移落——挂载按对象落在哪里判定。
+  await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + 1)
   await page.mouse.down()
-  await page.mouse.move(sceneOneBox.x + 300, sceneOneBox.y + 300, { steps: 8 })
+  await page.mouse.move(
+    sceneOneBox.x + 300,
+    sceneOneBox.y + 300 - copyBox.height / 2 + 1,
+    { steps: 8 },
+  )
   await page.mouse.up()
   await expect(inScene1).toHaveCount(1)
   await expect(inScene2).toHaveCount(1)
 
-  // 场景 1 的副本刻一条动画。
-  await inScene1.click()
+  // 场景 1 的副本刻一条动画。矩形默认空心，选中它要点那一圈描边。
+  await clickCurveStroke(inScene1)
   await editor.getByRole('radio', { name: '动画' }).click()
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
@@ -183,16 +198,23 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 
   // 保持动画模式直接选中场景 2 的原件并创建它自己的动画。
-  await inScene2.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。取**下边线**——第二块场景很小，
+  // 它的标题标签正压在矩形上边线那一带。
+  await clickCurveStroke(inScene2, { edge: 'bottom' })
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
 
   // 把播放头拖到 200 ms 后在画布上拖动对象：拖拽是姿态编辑，不得跨场景挂载。
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
   const dragBox = (await inScene2.first().boundingBox())!
-  await page.mouse.move(dragBox.x + dragBox.width / 4, dragBox.y + dragBox.height / 4)
+  /*
+   * 抓**下边线**的 1/4 处：矩形默认空心，盒内部不命中，而上边线那一带压着场景标题标签；
+   * 取 1/4 而不是正中，是为了同时避开物体中心的运动路径顶点与变换指示器的旋转环。
+   */
+  const dragFrom = { x: dragBox.x + dragBox.width / 4, y: dragBox.y + dragBox.height - 1 }
+  await page.mouse.move(dragFrom.x, dragFrom.y)
   await page.mouse.down()
-  await page.mouse.move(dragBox.x + dragBox.width / 4 + 80, dragBox.y + dragBox.height / 4, { steps: 4 })
+  await page.mouse.move(dragFrom.x + 80, dragFrom.y, { steps: 4 })
   await page.mouse.up()
 
   // 对象仍属场景 2，且这次拖动在播放头处写入了场景 2 动画的关键帧。
@@ -202,7 +224,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
 
   // 场景 1 的动画不受影响：仍只有副本自己的一条对象轨道与 0 ms 关键帧。
   await editor.getByRole('radio', { name: '设计' }).click()
-  await inScene1.click()
+  await clickCurveStroke(inScene1)
   await editor.getByRole('radio', { name: '动画' }).click()
   await expect(animationPanel.getByRole('button', { name: /^选择对象轨道/ })).toHaveCount(1)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
@@ -223,7 +245,8 @@ test('OpenSpec: editor-workspace-layout / 运动路径以物体中心为锚 / �
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const rect = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(rect).toHaveCount(1)
-  await rect.click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(rect)
   await editor.getByRole('radio', { name: '动画' }).click()
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
@@ -267,8 +290,10 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚�
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(1)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
-    .first().click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(
+    stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`).first(),
+  )
   await createAnimationWithKeyframe(editor)
 
   await editor.getByRole('radio', { name: '动画' }).click()
@@ -287,7 +312,8 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 创�
   // 正常建一次动画，确认只落一份文件；绑定行候选 = 解除项 + 同目录文件 + 新建项。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
-  await stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer').click()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer'))
   await createAnimationWithKeyframe(editor)
 
   await openPageInspector(page, editor)

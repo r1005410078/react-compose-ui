@@ -1,4 +1,5 @@
 import { CanvasGuidesLayer } from './layers/canvas-guides-layer'
+import { CurveCornersLayer } from './layers/curve-corners-layer'
 import { DrawingLayer } from './layers/drawing-layer'
 import { DropIndicatorLayer } from './layers/drop-indicator-layer'
 import { EditablePathContribution } from './layers/editable-path-layer'
@@ -37,6 +38,11 @@ const CONTRIBUTIONS: readonly StageOverlayContribution[] = [
   { id: 'transform-gizmo-ring', order: 850, Layer: TransformGizmoRingLayer },
   { id: 'resize-handles', order: 800, Layer: ResizeHandlesLayer },
   { id: 'transform-gizmo', order: 750, Layer: TransformGizmoLayer },
+  /*
+   * 圆角手柄排在缩放手柄与指示器**之上**、路径顶点之下：它画在角内侧，而角正是缩放手柄与
+   * 指示器轴方块所在的地方；路径顶点属于另一条编辑会话，不该被它偷走。
+   */
+  { id: 'curve-corners', order: 720, Layer: CurveCornersLayer },
   { id: 'editable-path', order: 700, Layer: EditablePathContribution },
   { id: 'paint-handles', order: 400, Layer: PaintHandlesLayer },
   { id: 'paint-sample', order: 350, Layer: PaintSampleLayer },

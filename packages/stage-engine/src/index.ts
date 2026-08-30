@@ -234,10 +234,17 @@ export type {
   StageWireEnd,
 } from './hit-testing'
 export {
+  applyStageCurveCorner,
   applyStageCurveGrip,
   stageCurveBoxGeometry,
+  stageCurveCorners,
   stageCurveGrips,
   stageCurveLocalPoint,
   stageCurveOutline,
 } from './geometry-editing'
-export type { StageCurveGrip, StageCurveGripRole } from './geometry-editing'
+export type {
+  StageCurveCorner,
+  StageCurveGeometrySource,
+  StageCurveGrip,
+  StageCurveGripRole,
+} from './geometry-editing'

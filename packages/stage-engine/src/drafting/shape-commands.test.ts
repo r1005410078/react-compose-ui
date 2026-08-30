@@ -231,25 +231,33 @@ describe('CIRCLE 命令', () => {
   })
 })
 
+/** 左上起顺时针的四个角；两个断言各写一遍会让「往哪边拖」那条用例失去判别力。 */
+const RECTANGLE_VERTICES = [
+  { x: 10, y: 20 }, { x: 110, y: 20 }, { x: 110, y: 70 }, { x: 10, y: 70 },
+]
+
 describe('RECTANGLE 命令', () => {
-  it('OpenSpec: stage-engine / 绘图命令 / 矩形产出盒而不是曲线', () => {
+  it('OpenSpec: stage-engine / 绘图命令 / 矩形产出闭合多段线', () => {
     const session = createStageRectangleSession(context)
     session.advance({ kind: 'point', point: { x: 10, y: 20 } })
     const step = session.advance({ kind: 'point', point: { x: 110, y: 70 } })
 
     if (step.status !== 'commit') throw new Error('对角点之后应当提交')
-    // 意图由命令显式说出：按 kind 反推是错的——`PLINE` 画四点按 `C` 同样得到闭合四顶点折线。
-    expect(step.effect.curves).toBeUndefined()
-    expect(step.effect.boxes).toEqual([{ x: 10, y: 20, width: 100, height: 50 }])
+    expect(step.effect.curves).toEqual([{
+      kind: 'polyline',
+      vertices: RECTANGLE_VERTICES,
+      closed: true,
+    }])
   })
 
-  it('往左上拖也归一成左上角加正宽高', () => {
+  it('往左上拖也归一成同一个绕向', () => {
     const session = createStageRectangleSession(context)
     session.advance({ kind: 'point', point: { x: 110, y: 70 } })
     const step = session.advance({ kind: 'point', point: { x: 10, y: 20 } })
 
     if (step.status !== 'commit') throw new Error('对角点之后应当提交')
-    expect(step.effect.boxes).toEqual([{ x: 10, y: 20, width: 100, height: 50 }])
+    // 谁在左上由用户往哪个方向拖决定，而矩形的表示只有一种。
+    expect(step.effect.curves?.[0]).toMatchObject({ vertices: RECTANGLE_VERTICES })
   })
 
   it('两角共轴时退化，被拒绝', () => {
@@ -356,14 +364,20 @@ describe('OpenSpec: stage-engine / 预览几何 / 会话回答「落在这里会
     ])
   })
 
-  it('矩形预览是一个盒而不是对角线', () => {
+  it('矩形预览是闭合四顶点而不是对角线', () => {
     const session = createStageRectangleSession(context)
     session.advance({ kind: 'point', point: { x: 0, y: 0 } })
 
-    // 形状只有命令知道：两个对角点怎么变一个盒，宿主算不出来。预览与提交是同一种表示，
-    // 让预览回折线、提交回盒会产生一处只有实现者知道的不对称。
+    // 形状只有命令知道：两个对角点怎么变四个顶点，宿主算不出来。预览与提交是同一种表示，
+    // 两者各算一遍会产生一处只有实现者知道的不对称。
     expect(session.preview?.({ x: 40, y: 20 })).toEqual({
-      boxes: [{ x: 0, y: 0, width: 40, height: 20 }],
+      curves: [{
+        kind: 'polyline',
+        vertices: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 20 }, { x: 0, y: 20 }],
+        closed: true,
+      }],
+      // 意图由命令显式说出：宿主据此挑 `rect` Preset，而不是按 kind 反推。
+      rectangle: true,
     })
   })
 
