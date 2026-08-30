@@ -16,8 +16,6 @@ export type ComposeEditorShortcutAction =
   | 'editor.settings'
   | 'stage.temporaryPan'
   | 'stage.selectTool'
-  | 'stage.scaleTool'
-  | 'stage.rotateTool'
   | 'stage.drawContainerTool'
   | 'stage.drawTextTool'
   | 'stage.fitSelection'
@@ -76,8 +74,6 @@ export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'editor.settings',
   'stage.temporaryPan',
   'stage.selectTool',
-  'stage.scaleTool',
-  'stage.rotateTool',
   'stage.drawContainerTool',
   'stage.drawTextTool',
   'stage.fitSelection',
@@ -110,8 +106,6 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
   'editor.settings': 'editor',
   'stage.temporaryPan': 'stage',
   'stage.selectTool': 'stage',
-  'stage.scaleTool': 'stage',
-  'stage.rotateTool': 'stage',
   'stage.drawContainerTool': 'stage',
   'stage.drawTextTool': 'stage',
   'stage.fitSelection': 'stage',

@@ -88,7 +88,7 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 选中曲线�
   expect(await outlineDistance(page, corner)).toBeGreaterThan(bb.width / 4)
 })
 
-test('OpenSpec: stage / 受控工具模式与专属选区反馈 / scale 工具下盒与手柄回来', async ({ page }) => {
+test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 指示器打开时盒与手柄回来', async ({ page }) => {
   await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -102,8 +102,9 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / scale 工具�
   await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2)
   await expect(editor.getByRole('region', { name: 'Curve 属性', exact: true })).toBeVisible()
 
-  // 能力没有消失，只是从「随时都在」变成「进那个工具」。
-  await editor.getByRole('button', { name: '缩放' }).click()
+  // 能力没有消失，只是从「随时都在」变成「打开指示器」。`scale` 工具已并进指示器：
+  // 一个只为「让手柄显出来」而存在的模式，与「打开一层 chrome」是同一件事的两种说法。
+  await editor.getByRole('button', { name: '变换指示器' }).click()
   await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
   await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(1)
   await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(0)

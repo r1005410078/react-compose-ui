@@ -1220,9 +1220,10 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
     fireEvent.click(screen.getByRole('button', { name: '设置' }))
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
-    // 原先用的是「平移工具」——pan 工具已删除，换成仍然存在的旋转工具。
-    fireEvent.click(screen.getByRole('button', { name: '修改旋转工具快捷键' }))
-    fireEvent.keyDown(screen.getByRole('button', { name: '修改旋转工具快捷键' }), {
+    // 换过三次：平移、旋转、缩放，三个工具都已删除——旋转与缩放的入口都并进了变换指示器，
+    // 而那是 chrome 的可见性、不是工具。换成仍然存在的创建容器。
+    fireEvent.click(screen.getByRole('button', { name: '修改容器工具快捷键' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: '修改容器工具快捷键' }), {
       code: 'KeyV',
       key: 'v',
     })

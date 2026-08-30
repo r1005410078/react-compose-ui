@@ -27,6 +27,19 @@ export {
   rectsIntersect,
   resizeBounds,
   resizeReadoutPoints,
+  STAGE_GIZMO_ARROW_LENGTH,
+  STAGE_GIZMO_MOVE_HIT_START,
+  STAGE_GIZMO_MOVE_HIT_WIDTH,
+  STAGE_GIZMO_ARROW_WIDTH,
+  STAGE_GIZMO_AXIS_LENGTH,
+  STAGE_GIZMO_CENTER_RADIUS,
+  STAGE_GIZMO_RING_HIT_WIDTH,
+  STAGE_GIZMO_RING_RADIUS,
+  STAGE_GIZMO_SCALE_DISTANCE,
+  STAGE_GIZMO_SCALE_HIT_SIZE,
+  STAGE_GIZMO_SCALE_SIZE,
+  gizmoScaleHandle,
+  transformGizmoGeometry,
   resolveTargetFrameId,
   rotationFromPointer,
   rotationMatrixAround,
@@ -55,6 +68,8 @@ export {
   type StageRulerTick,
   type StageScrollAxis,
   type StageTransform,
+  type StageTransformGizmoAxis,
+  type StageTransformGizmoGeometry,
   type StageViewport,
 } from './geometry'
 
@@ -77,10 +92,13 @@ export {
 /** 手势的预览几何与提交规划。 */
 export {
   planTransformCommit,
+  resolveTransformGizmoTarget,
   resolveTransformTargets,
   transformedResizeSelection,
   transformedSelection,
   type StageFinishedTransform,
+  type StageMoveAxis,
+  type StageTransformGizmoTarget,
   type StageTransformKind,
   type StageTransformTargets,
 } from './gesture-planning'

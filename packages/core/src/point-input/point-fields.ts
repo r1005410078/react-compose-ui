@@ -16,6 +16,7 @@ export type ComposePointFieldKind =
   | 'cartesian'
   | 'radius'
   | 'diameter'
+  | 'angle'
 
 /**
  * 单字段的参数化：呈现只暴露第一个字段。
@@ -27,7 +28,7 @@ export type ComposePointFieldKind =
  *
  * @public
  */
-export const COMPOSE_SINGLE_FIELD_KINDS: readonly ComposePointFieldKind[] = ['radius', 'diameter']
+export const COMPOSE_SINGLE_FIELD_KINDS: readonly ComposePointFieldKind[] = ['radius', 'diameter', 'angle']
 
 /**
  * 这一步只有一个字段吗。
@@ -71,6 +72,8 @@ function angleDegrees(dx: number, dy: number) {
  * @remarks
  * `diameter` 是「第一个字段乘二的 `polar`」，正反算与覆盖三处共用这一个数——各写一处 `* 2`
  * 的症状是打进去的直径与读出来的差一倍，而它只在切到直径档之后才现形。
+ *
+ * `angle` 不参与：它的第一个字段是角度而不是距离，乘除二没有意义。
  */
 function firstFieldScale(kind: ComposePointFieldKind) {
   return kind === 'diameter' ? 2 : 1
@@ -103,6 +106,9 @@ export function composePointToFields(
   const dx = point.x - origin.x
   const dy = point.y - origin.y
   if (kind === 'cartesian') return { first: Math.abs(dx), second: Math.abs(dy) }
+  // `angle` 把角度放在**第一个**字段：单字段的呈现只暴露第一个，而旋转唯一影响结果的量是角度。
+  // 到中心的距离对旋转没有任何影响，一个永远不影响结果的只读字段比没有更差。
+  if (kind === 'angle') return { first: angleDegrees(dx, dy), second: Math.hypot(dx, dy) }
   return { first: Math.hypot(dx, dy) * firstFieldScale(kind), second: angleDegrees(dx, dy) }
 }
 
@@ -124,6 +130,14 @@ export function composeFieldsToPoint(
   const origin = reference ?? { x: 0, y: 0 }
   if (kind === 'cartesian') {
     return { x: origin.x + values.first, y: origin.y + values.second }
+  }
+  // `angle` 的两个字段与 `polar` 互换了位置，反算因此也换回来。
+  if (kind === 'angle') {
+    const radians = values.first * RADIANS_PER_DEGREE
+    return {
+      x: origin.x + values.second * Math.cos(radians),
+      y: origin.y - values.second * Math.sin(radians),
+    }
   }
   const radians = values.second * RADIANS_PER_DEGREE
   const distance = values.first / firstFieldScale(kind)

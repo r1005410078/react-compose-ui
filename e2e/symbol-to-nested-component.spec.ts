@@ -157,8 +157,16 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   const dragged = instances.first()
   await expect.poll(() => dragged.boundingBox()).not.toBeNull()
   const before = (await dragged.boundingBox())!
-  // 抓 1/4 处而不是中心：运动路径顶点就在物体中心，按中心会抓到那个顶点。
-  const grip = { x: before.x + before.width / 4, y: before.y + before.height / 4 }
+  /*
+   * 从中心偏一点抓，但偏得有限：中心有运动路径顶点，而**离中心 80px 那一圈是变换指示器的
+   * 旋转环**——动画模式下指示器默认打开，落在那条命中带上的拖动是旋转而不是移动。这是环
+   * 屏幕恒定的既定代价。偏移上限 40/24（距离 47）稳稳落在带的内沿（70）以内，同时不超过
+   * 1/4 处，小对象上也仍在盒内。
+   */
+  const grip = {
+    x: before.x + before.width / 2 - Math.min(before.width / 4, 40),
+    y: before.y + before.height / 2 - Math.min(before.height / 4, 24),
+  }
   await page.mouse.move(grip.x, grip.y)
   await page.mouse.down()
   await page.mouse.move(grip.x + 96, grip.y + 48, { steps: 5 })

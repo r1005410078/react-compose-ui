@@ -29,6 +29,8 @@ type DefaultStageToolbarProps = {
   readonly setGridSize: (size: number) => void
   readonly setGridVisible: Dispatch<SetStateAction<boolean>>
   readonly setTool: (tool: ComposeStageTool) => void
+  readonly setTransformGizmo: (visible: boolean) => void
+  readonly transformGizmo: boolean
   readonly shortcuts?: ComposeEditorPreferences['shortcuts']
   /** 启动一条命令会话；与在命令行里键入这个名字等价。 */
   readonly startCommand: (commandId: string) => void
@@ -128,6 +130,8 @@ export function DefaultStageToolbar({
   setGridSize,
   setGridVisible,
   setTool,
+  setTransformGizmo,
+  transformGizmo,
   shortcuts,
   startCommand,
   toggleSnap,
@@ -201,11 +205,23 @@ export function DefaultStageToolbar({
         >
           <StageToolbarIcon name="select" />
         </button>
-        <button {...titled('scale', messages.scale, shortcut('stage.scaleTool'))} aria-pressed={tool === 'scale'} type="button" onClick={() => setTool('scale')}>
-          <StageToolbarIcon name="scale" />
-        </button>
-        <button {...titled('rotate', messages.rotate, shortcut('stage.rotateTool'))} aria-pressed={tool === 'rotate'} type="button" onClick={() => setTool('rotate')}>
-          <StageToolbarIcon name="rotate" />
+        {/*
+          * 指示器开关**取代**了原来的 rotate 按钮，不是并排多一个：并排等于旋转有两个入口。
+          *
+          * 它按下的不是一个工具：`rotate` 与 `scale` 都是模式（切过去之后每一次拖动的含义都
+          * 变了），而这个开关只决定把手渲不渲染，别处一个字节不变——按下态因此读
+          * `transformGizmo` 而不是 `tool`。
+          *
+          * 缩放也并进来了：`scale` 工具唯一独占的事是「让曲线拿回盒与手柄」，那与「打开一层
+          * chrome」是同一件事的两种说法。
+          */}
+        <button
+          {...titled('transform-gizmo', messages.transformGizmo)}
+          aria-pressed={transformGizmo}
+          type="button"
+          onClick={() => setTransformGizmo(!transformGizmo)}
+        >
+          <StageToolbarIcon name="transform-gizmo" />
         </button>
       </div>
       <div aria-label={messages.snapTools} className="compose-editor__toolbar-group" role="group">

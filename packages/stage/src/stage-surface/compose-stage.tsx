@@ -39,6 +39,7 @@ import {
   collectStageWireEnds,
   createStageSceneIndex,
   getEntityWorldBounds,
+  getEntityWorldMatrix,
   resolveStageDropIndicator,
   screenToWorld,
   scrollAxisToViewport,
@@ -84,7 +85,16 @@ import { useStageInstanceDrilldown } from './instance-drilldown'
 import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
-import { StageDraftingOverlay, stageResizeReadout, useStageDrafting } from '../drafting'
+import {
+  StageDraftingOverlay,
+  stageResizeReadout,
+  stageRotationReadout,
+  useStageDrafting,
+} from '../drafting'
+import {
+  resolveTransformGizmoTarget,
+  transformGizmoGeometry,
+} from '@compose-ui/stage-engine'
 import { useStageGeometryEditing } from '../geometry-editing'
 import type { StageGeometryEditing } from '../geometry-editing'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
@@ -228,6 +238,7 @@ function ComposeStageReady({
   const {
     gridVisible = true,
     lockGestureParent,
+    transformGizmo = false,
   } = policy ?? EMPTY_STAGE_POLICY
   const i18n = useComposeI18nContext()
   const theme = useComposeThemeContext()
@@ -497,6 +508,32 @@ function ComposeStageReady({
     [],
   )
 
+  /**
+   * 变换指示器的屏幕几何。
+   *
+   * @remarks
+   * 中心与轴向由 `resolveTransformGizmoTarget` 回答（单选取该 Entity 的旋转基点与它的朝向，
+   * 多选取包围盒中心与轴对齐）；这里只负责换算成屏幕几何交给覆盖层——覆盖层不认识文档，
+   * 也不知道中心该取基点还是包围盒。
+   *
+   * **读预览文档而不是已提交的文档**：拖动期间指示器必须跟着对象一起走，停在原处会让用户
+   * 以为自己没有抓住它。旋转不受影响——基点是那次旋转的不动点，绕它转不改变它的世界位置。
+   *
+   * 这里刻意**不建预览场景索引**：那是一次整棵树的遍历，而每一个预览帧都会换一份新文档。
+   * `resolveTransformGizmoTarget` 只需要目标那一条祖先链，因此按需算它的世界矩阵。
+   */
+  const gizmoSource = useMemo(() => ({
+    document: previewDocument,
+    layoutSnapshot: previewLayoutSnapshot,
+    getWorldMatrix: (entityId: string) =>
+      getEntityWorldMatrix(previewDocument, previewLayoutSnapshot, entityId),
+  }), [previewDocument, previewLayoutSnapshot])
+  const gizmo = useMemo(() => {
+    if (!transformGizmo || normalizedSelection.length === 0 || !bounds) return null
+    const target = resolveTransformGizmoTarget(gizmoSource, normalizedSelection, bounds)
+    return transformGizmoGeometry({ center: target.center, degrees: target.degrees, viewport })
+  }, [bounds, gizmoSource, normalizedSelection, transformGizmo, viewport])
+
   /*
    * 绘图 Hook 排在几何编辑**之前**：点亮期的预览要读它解算后的落点，而读得晚一拍就等于让
    * 预览慢光标一帧。反方向的两处依赖（进入几何编辑、判断能不能几何编辑）改走 `geometryRef`，
@@ -622,7 +659,18 @@ function ComposeStageReady({
       : null),
     [interaction.resizePreview, viewport],
   )
-  const dynamicInput = draftingSession.dynamicInput ?? resizeReadout
+  /*
+   * 拖环时的角度读数：与缩放读数、取点动态输入共用同一个呈现求解，同一时刻至多一个来源。
+   * 三者构造上互斥——一次指针手势只可能是其中一种，而命令取点时取点插件在 `pointerdown`
+   * 就把手势吃掉了。
+   */
+  const rotationReadout = useMemo(
+    () => (interaction.rotationPreview
+      ? stageRotationReadout(interaction.rotationPreview, viewport)
+      : null),
+    [interaction.rotationPreview, viewport],
+  )
+  const dynamicInput = draftingSession.dynamicInput ?? resizeReadout ?? rotationReadout
 
   /**
    * 十字光标的形态。
@@ -793,20 +841,23 @@ function ComposeStageReady({
    * 而一条对角线的包围盒里绝大部分是空的——那个矩形宣称了对象并不占据的面积，线越接近 45 度
    * 它越大。这不是给曲线开特例，是同一句话在不同形状上给出不同答案。
    *
-   * 只在 `select` 下派生：`scale` 与 `rotate` 是**盒操作**，那时盒就是用户正在操作的东西。
+   * **指示器打开时不派生**：那是用户明确在做盒操作，而盒就是他正在操作的那个东西。原先承担
+   * 这件事的是 `scale` 工具，它已并进指示器——一个只为「让手柄显出来」而存在的模式，与「打开
+   * 一层 chrome」是同一件事的两种说法。
+   *
    * 多选也不派生——多选框回答的是「这一堆的范围」，不宣称任何单个对象的轮廓。
    *
    * 与几何编辑会话画的是**同一条**（`stageCurveOutline`），不另写一份：两份实现的分叉症状是
    * 「双击前后线的轮廓差半个像素」，而那种偏移只在特定缩放下现形。
    */
   const selectionOutline = useMemo(() => {
-    if (tool !== 'select' || normalizedSelection.length !== 1) return null
+    if (tool !== 'select' || transformGizmo || normalizedSelection.length !== 1) return null
     const entityId = normalizedSelection[0]!
     const entity = document.entities[entityId]
     if (!entity || !getComposeCurve(entity)) return null
     const outline = stageCurveOutline(document, sceneIndex, entityId)
     return outline.length > 1 ? outline : null
-  }, [document, normalizedSelection, sceneIndex, tool])
+  }, [document, normalizedSelection, sceneIndex, tool, transformGizmo])
 
   /**
    * 要画出来的导线端点记号。
@@ -1155,6 +1206,7 @@ function ComposeStageReady({
           drawing={interaction.drawing}
           dropIndicator={dropIndicator}
           editableSelection={editableSelection}
+          gizmo={gizmo}
           handlePoints={handlePoints}
           label={messages.editingOverlay}
           marqueeHitTest={interaction.marqueeHitTest}

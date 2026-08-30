@@ -201,10 +201,10 @@ describe('createComposeEditorActions', () => {
     const actions = createComposeEditorActions(context({ dispatch, setTool, zoomBy }))
 
     actions.find((action) => action.id === 'stage.zoomIn')?.run()
-    actions.find((action) => action.id === 'stage.rotateTool')?.run()
+    actions.find((action) => action.id === 'stage.drawContainerTool')?.run()
 
     expect(zoomBy).toHaveBeenCalledTimes(1)
-    expect(setTool).toHaveBeenCalledWith('rotate')
+    expect(setTool).toHaveBeenCalledWith('draw-container')
     // 关键契约：视口与工具动作绝不派发命令，因此不会污染撤销栈。
     expect(dispatch).not.toHaveBeenCalled()
   })

@@ -33,12 +33,8 @@ export {
 } from './stage-kernel-profile'
 export { STAGE_EXTRACTED_PLUGIN_FACTORIES } from './extracted-plugins'
 export {
-  createStageLegacyRotateHitPlugin,
   createStageMarqueeFallbackPlugin,
-  createStageRotateToolFallbackPlugin,
-  STAGE_LEGACY_ROTATE_HIT_PLUGIN_ID,
   STAGE_MARQUEE_FALLBACK_PLUGIN_ID,
-  STAGE_ROTATE_TOOL_FALLBACK_PLUGIN_ID,
 } from './fallback-plugins'
 export {
   createStageGuideCreatePlugin,
@@ -82,13 +78,15 @@ export {
   STAGE_PAINT_SAMPLE_PLUGIN_ID,
 } from './paint-sample-plugin'
 export {
+  claimStageResize,
   createStageResizePlugin,
   STAGE_RESIZE_PLUGIN_ID,
 } from './resize-plugin'
 export {
-  createStageRotatePlugin,
-  STAGE_ROTATE_PLUGIN_ID,
-} from './rotate-plugin'
+  createStageGizmoPlugin,
+  STAGE_GIZMO_PLUGIN_ID,
+} from './gizmo-plugin'
+export { createRotateSession } from './rotate-session'
 export {
   createStagePanPlugin,
   STAGE_PAN_PLUGIN_ID,

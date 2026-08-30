@@ -21,6 +21,7 @@ function renderToolbar(
   angleConstraint: import('@compose-ui/core').ComposeAngleConstraint = 'polar',
 ) {
   const setTool = vi.fn()
+  const setTransformGizmo = vi.fn()
   const setGridSize = vi.fn()
   const startCommand = vi.fn()
   const toggleSnap = vi.fn()
@@ -32,6 +33,8 @@ function renderToolbar(
       canvasSettingsOpen={false}
       dispatch={vi.fn()}
       document={document()}
+      setTransformGizmo={setTransformGizmo}
+      transformGizmo={false}
       gridVisible
       nextId={() => 'toolbar-id'}
       setCanvasSettingsOpen={vi.fn()}
@@ -48,7 +51,7 @@ function renderToolbar(
       setPolarIncrement={setPolarIncrement}
     />,
   )
-  return { setAngleConstraint, setGridSize, setPolarIncrement, setTool, startCommand, toggleSnap }
+  return { setAngleConstraint, setGridSize, setPolarIncrement, setTool, setTransformGizmo, startCommand, toggleSnap }
 }
 
 describe('DefaultStageToolbar', () => {
@@ -93,12 +96,16 @@ describe('DefaultStageToolbar', () => {
   it('OpenSpec: editor-workspace-layout / 扁平工具栏 / 按产品顺序暴露所有工具', () => {
     renderToolbar()
 
-    for (const label of ['选择', '缩放', '旋转', '吸附', '正交', '极轴追踪', '显示网格', '创建容器', '文字']) {
+    for (const label of ['选择', '变换指示器', '吸附', '正交', '极轴追踪', '显示网格', '创建容器', '文字']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
     // 三个与既有手势完全重复的工具位已删除：`select` 空白拖拽即框选、`MOVE` 命令能键入
     // 精确位移、空格与中键是随时可用的临时平移覆盖。
-    for (const label of ['框选', '移动', '平移']) {
+    //
+    // `旋转` 与 `缩放` 一并删除，判据不同：它们不是「有一个更强的等价入口」，而是「它们是
+    // **模式**，而指示器不是」——切过去之后每一次拖动的含义都变了，打开指示器只有把手上的
+    // 拖动有新含义。缩放唯一独占的事（让曲线拿回盒与手柄）已由指示器承担。
+    for (const label of ['框选', '移动', '平移', '旋转', '缩放']) {
       expect(screen.queryByRole('button', { name: label })).toBeNull()
     }
   })
@@ -117,13 +124,24 @@ describe('DefaultStageToolbar', () => {
   it('OpenSpec: editor-workspace-layout / 绘图工具 / 入口切换受控工具状态', () => {
     const { setTool } = renderToolbar()
 
-    fireEvent.click(screen.getByRole('button', { name: '旋转' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
     fireEvent.click(screen.getByRole('button', { name: '创建容器' }))
     fireEvent.click(screen.getByRole('button', { name: '文字' }))
 
-    expect(setTool).toHaveBeenNthCalledWith(1, 'rotate')
+    expect(setTool).toHaveBeenNthCalledWith(1, 'select')
     expect(setTool).toHaveBeenNthCalledWith(2, 'draw-container')
     expect(setTool).toHaveBeenNthCalledWith(3, 'draw-text')
+  })
+
+  it('OpenSpec: stage / Rive 式变换指示器 / 开关不是工具', () => {
+    // 按下态读 `transformGizmo` 而不是 `tool`：它决定的是把手渲不渲染，不是画布上每一次
+    // 拖动的含义。
+    const { setTool, setTransformGizmo } = renderToolbar()
+
+    fireEvent.click(screen.getByRole('button', { name: '变换指示器' }))
+
+    expect(setTransformGizmo).toHaveBeenCalledWith(true)
+    expect(setTool).not.toHaveBeenCalled()
   })
 
   it('OpenSpec: editor-workspace-layout / 网格大小下拉与总吸附开关 / 操作独立可达', () => {

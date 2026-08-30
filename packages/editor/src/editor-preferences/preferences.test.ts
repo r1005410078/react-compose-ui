@@ -148,7 +148,7 @@ describe('editor preferences', () => {
     const defaults = createDefaultComposeEditorPreferences()
     expect(findComposeEditorShortcutConflict(
       defaults.shortcuts,
-      'stage.rotateTool',
+      'stage.drawContainerTool',
       { code: 'KeyV' },
     )).toBe('stage.selectTool')
     expect(findComposeEditorShortcutConflict(

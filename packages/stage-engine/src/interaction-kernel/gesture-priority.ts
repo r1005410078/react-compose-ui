@@ -35,8 +35,13 @@ export interface StageGesturePriorityEntry {
  * 按 `begin()` 实际行序抄录的优先级表。
  *
  * @remarks
- * 三处 `'consumed'` 语义的分支（文字编辑守卫、旧 rotate 命中、rotate 工具兜底）在表中同样
- * 占位：它们「已消费但不开会话」，用 `null` 表达会让仲裁器继续询问后续插件而改变行为。
+ * `'consumed'` 语义的分支（文字编辑守卫）在表中同样占位：它「已消费但不开会话」，用 `null`
+ * 表达会让仲裁器继续询问后续插件而改变行为。
+ *
+ * `rotate` 工具连同它的三项（`rotate-tool`、`legacy-rotate-hit`、`rotate-tool-fallback`）
+ * 已经删除：旋转的入口改为变换指示器的圆环。判据是「模式必须是对象作用域且有明确的进出」
+ * ——`rotate` 是工具也就是模式，切过去之后每一次拖动的含义都变了；指示器打开之后只有把手上
+ * 的拖动有新含义。`gizmo`(1200) **不是**它们的替代，位置与条件都不同。
  *
  * @public
  */
@@ -44,18 +49,16 @@ export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Obje
   { id: 'text-edit-guard', priority: 1800, sourceLine: 1702, condition: 'context.textEditing 且命中编辑目标或变换手柄（consumed）' },
   { id: 'pan', priority: 1700, sourceLine: 1719, condition: 'snapshot.temporaryPan || button === 1' },
   { id: 'drafting-point', priority: 1650, condition: '绘图命令正在等待一个点（consumed）' },
-  { id: 'rotate-tool', priority: 1600, sourceLine: 1839, condition: "tool === 'rotate' 且命中非标尺/辅助线/Paint 柄/路径柄" },
   { id: 'paint-sample', priority: 1500, sourceLine: 1875, condition: 'context.paintSampling 存在' },
   { id: 'path', priority: 1400, sourceLine: 1896, condition: "hit.kind === 'path-handle'" },
   { id: 'paint', priority: 1300, sourceLine: 1940, condition: "hit.kind === 'paint-handle'" },
+  { id: 'gizmo', priority: 1200, condition: "hit.kind === 'gizmo-handle'" },
   { id: 'draw', priority: 1000, sourceLine: 2038, condition: 'isDrawingTool(tool) 且命中 surface 或 entity' },
   { id: 'marquee-converge', priority: 800, sourceLine: 2075, condition: "hit.kind === 'entity' 且 shouldConvergeToMarquee" },
   { id: 'entity-select-move', priority: 700, sourceLine: 2088, condition: "hit.kind === 'entity'（含双击进入文字编辑）" },
   { id: 'resize', priority: 600, sourceLine: 2118, condition: "hit.kind === 'resize'" },
-  { id: 'legacy-rotate-hit', priority: 500, sourceLine: 2125, condition: "hit.kind === 'rotate' 且工具非 rotate（consumed，空操作）" },
   { id: 'guide-create', priority: 400, sourceLine: 2129, condition: "hit.kind === 'ruler' || 'ruler-corner'" },
   { id: 'guide-move', priority: 300, sourceLine: 2171, condition: "hit.kind === 'guide'" },
-  { id: 'rotate-tool-fallback', priority: 200, sourceLine: 2197, condition: "tool === 'rotate' 兜底（consumed，绝不框选）" },
   { id: 'marquee-fallback', priority: 100, sourceLine: 2198, condition: '无条件兜底 startMarquee()' },
 ])
 

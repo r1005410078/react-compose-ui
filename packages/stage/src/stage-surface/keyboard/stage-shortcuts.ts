@@ -17,8 +17,6 @@ export function isEditableTarget(target: EventTarget | null) {
 export const STAGE_SHORTCUT_ACTIONS = [
   'stage.temporaryPan',
   'stage.selectTool',
-  'stage.scaleTool',
-  'stage.rotateTool',
   'stage.drawContainerTool',
   'stage.drawTextTool',
   'stage.fitSelection',
@@ -61,8 +59,6 @@ export const DEFAULT_STAGE_SHORTCUTS: Readonly<
 > = {
   'stage.temporaryPan': [{ code: 'Space' }],
   'stage.selectTool': [{ code: 'KeyV' }],
-  'stage.scaleTool': [{ code: 'KeyS' }],
-  'stage.rotateTool': [{ code: 'KeyR', shift: true }],
   'stage.drawContainerTool': [{ code: 'KeyF' }],
   'stage.drawTextTool': [{ code: 'KeyT' }],
   'stage.fitSelection': [{ code: 'Digit2', shift: true }],

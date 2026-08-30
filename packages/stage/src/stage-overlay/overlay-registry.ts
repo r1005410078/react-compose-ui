@@ -6,7 +6,7 @@ import { MarqueeLayer } from './layers/marquee-layer'
 import { PaintHandlesLayer } from './layers/paint-handles-layer'
 import { PaintSampleLayer } from './layers/paint-sample-layer'
 import { ResizeHandlesLayer } from './layers/resize-handles-layer'
-import { RotationContribution } from './layers/rotation-layer'
+import { TransformGizmoLayer, TransformGizmoRingLayer } from './layers/transform-gizmo-layer'
 import { SelectionLayer } from './layers/selection-layer'
 import { SnapGuidesLayer } from './layers/snap-guides-layer'
 import { WireEndsLayer } from './layers/wire-ends-layer'
@@ -28,9 +28,16 @@ import type { StageOverlayContribution } from './overlay-types'
 const CONTRIBUTIONS: readonly StageOverlayContribution[] = [
   { id: 'canvas-guides', order: 1000, Layer: CanvasGuidesLayer },
   { id: 'selection', order: 900, Layer: SelectionLayer },
+  /*
+   * 指示器的旋转环排在缩放手柄**之下**、轴排在其**上**，这两条是硬约束：
+   * - 角正是用户预期抓到缩放手柄的地方，而环是一条必然穿过某些尺寸的四角的宽带。SVG 的绘制
+   *   顺序**就是**命中顺序，因此重叠归谁由这里的层序回答，而不是靠常量之间的大小关系去躲。
+   * - 轴的方块会落在盒的边缘命中区上（半宽 52 与盒的半宽相近时），排在手柄之下等于方块按不动。
+   */
+  { id: 'transform-gizmo-ring', order: 850, Layer: TransformGizmoRingLayer },
   { id: 'resize-handles', order: 800, Layer: ResizeHandlesLayer },
+  { id: 'transform-gizmo', order: 750, Layer: TransformGizmoLayer },
   { id: 'editable-path', order: 700, Layer: EditablePathContribution },
-  { id: 'rotation', order: 600, Layer: RotationContribution },
   { id: 'paint-handles', order: 400, Layer: PaintHandlesLayer },
   { id: 'paint-sample', order: 350, Layer: PaintSampleLayer },
   { id: 'marquee', order: 300, Layer: MarqueeLayer },

@@ -925,6 +925,15 @@ export interface ComposeEditorController {
   readonly subscribeViewport: (listener: () => void) => () => void
   /** 当前选择或平移工具。 */
   readonly tool: ComposeStageTool
+  /**
+   * 变换指示器是否显示。
+   *
+   * @remarks
+   * 它是 **chrome 的可见性而不是模式**：关掉时把手不渲染，别处任何一次拖动的含义一个字节不变。
+   * 进入动画模式自动打开（那里误拖的代价最高——往时间线塞一条没打算要的轨道，而用户得先发现
+   * 它），之后仍可手动关。
+   */
+  readonly transformGizmo: boolean
   /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
   readonly interactionController: StageInteractionController
   /** 替换当前选择。 */
@@ -935,6 +944,7 @@ export interface ComposeEditorController {
   readonly setViewport: (viewport: StageViewport) => void
   /** 替换 Stage 工具。 */
   readonly setTool: (tool: ComposeStageTool) => void
+  readonly setTransformGizmo: (visible: boolean) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   /** 安装或卸载 dispatch 改写层（传 `null` 卸载）；同一时刻只有一个改写层生效。 */
@@ -1126,6 +1136,7 @@ export function useComposeEditorController({
   const [canvasSettingsOpen, setCanvasSettingsOpen] = useState(false)
   // 网格显示是 Stage 会话偏好；只影响视觉，不进入文档与撤销历史。
   const [gridVisible, setGridVisible] = useState(true)
+  const [transformGizmo, setTransformGizmo] = useState(false)
   const [snapRestore, setSnapRestore] = useState({
     grid: document.canvas.grid.snapEnabled,
     nodes: document.canvas.smartSnap.nodes,
@@ -1919,11 +1930,13 @@ export function useComposeEditorController({
     },
     subscribeViewport: viewportStore.subscribe,
     tool,
+    transformGizmo,
     interactionController,
     setSelectedIds,
     setExpandedIds,
     setViewport,
     setTool,
+    setTransformGizmo,
     dispatch,
     setCommandRewrite,
     createComponentFromSelection,
@@ -1987,7 +2000,9 @@ export function useComposeEditorController({
         setGridSize={setGridSize}
         setGridVisible={setGridVisible}
         setTool={setTool}
+        setTransformGizmo={setTransformGizmo}
         startCommand={startCommand}
+        transformGizmo={transformGizmo}
         toggleSnap={toggleSnap}
         tool={tool}
         angleConstraint={angleConstraint}

@@ -7,6 +7,7 @@ import {
   type StageViewport,
 } from '../geometry'
 import { planMoveCommit, planMovePreview } from '../gesture-planning'
+import type { StageMoveAxis } from '../gesture-planning'
 import { resolveStageClickSelection } from '../hit-testing'
 import { resolveTransformTargets } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
@@ -41,8 +42,8 @@ export interface StageMoveSessionOptions {
   readonly bounds: StageRect
   /** 接管当刻的世界坐标。 */
   readonly startWorld: StagePoint
-  /** 轴向约束；来自 move-axis 手柄，自由拖动时省略。 */
-  readonly axis?: 'x' | 'y'
+  /** 轴向约束：来自变换指示器的轴把手，自由拖动时省略。 */
+  readonly axis?: StageMoveAxis
   /** 接管当刻的屏幕坐标，Space 切换时用于原地重算。 */
   readonly startPoint: StagePoint
   readonly startModifiers: StageInteractionModifiers
@@ -159,7 +160,7 @@ export function claimStageMove(
   event: StagePointerDownEvent,
   ctx: StagePluginContext,
   ids: readonly string[],
-  axis?: 'x' | 'y',
+  axis?: StageMoveAxis,
 ): StageSession | null {
   const { context, index } = ctx
   const targets = resolveTransformTargets({

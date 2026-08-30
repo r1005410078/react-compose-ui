@@ -8,3 +8,4 @@
 export * from './stage-geometry'
 export * from './canvas-geometry'
 export * from './frame-space'
+export * from './transform-gizmo'

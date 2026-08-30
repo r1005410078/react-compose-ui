@@ -80,8 +80,6 @@ export type ComposeStageKeybinding = ComposeKeybinding
 export type ComposeStageShortcutAction =
   | 'stage.temporaryPan'
   | 'stage.selectTool'
-  | 'stage.scaleTool'
-  | 'stage.rotateTool'
   | 'stage.drawContainerTool'
   | 'stage.drawTextTool'
   | 'stage.fitSelection'
@@ -221,6 +219,19 @@ export interface ComposeStagePolicy {
   readonly lockGestureParent?: boolean
   /** 是否显示会话级网格；不会修改文档中的网格吸附设置。 @defaultValue true */
   readonly gridVisible?: boolean
+  /**
+   * 是否显示变换指示器（轴把手 + 旋转圆环 + 基点标记）。
+   *
+   * @remarks
+   * 它是 **chrome 的可见性而不是模式**：关掉时把手根本不渲染，因此那条命中永远不会到达，
+   * 别处任何一次拖动的含义一个字节不变。
+   *
+   * Stage 不认识「动画模式」这个词——宿主在动画模式下把它打开，与 `lockGestureParent` 是同
+   * 一条边界。
+   *
+   * @defaultValue false
+   */
+  readonly transformGizmo?: boolean
 }
 
 /**

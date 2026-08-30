@@ -276,6 +276,7 @@ function renderStage(
     registry?: ReturnType<typeof createComposeEntityRegistry>
     onCreateComponentIntent?: (entityIds: readonly string[]) => void
     tool?: import('../types').ComposeStageTool
+    transformGizmo?: boolean
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
     commands?: import('../types').ComposeStageProps['commands']
     showCrosshair?: boolean
@@ -315,6 +316,7 @@ function renderStage(
       onViewportChange={vi.fn()}
       policy={{
         gridVisible: options.gridVisible,
+        transformGizmo: options.transformGizmo,
       }}
       scriptScope={options.scope}
       services={{ dispatch, registry: options.registry ?? registry }}
@@ -666,10 +668,14 @@ describe('ComposeStage ECS', () => {
     expect(screen.queryByTestId('stage-line-selection')).not.toBeInTheDocument()
   })
 
-  it('OpenSpec: 受控工具模式与专属选区反馈 / scale 工具下曲线的盒与手柄回来', () => {
-    renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], tool: 'scale' })
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 指示器打开时曲线的盒与手柄回来', () => {
+    renderStage(document([curveEntity()]), { selectedIds: ['curve-a'], transformGizmo: true })
 
-    // 能力没有消失，只是从「随时都在」变成「进那个工具」——盒操作时盒就是用户在操作的东西。
+    /*
+     * 原先承担这件事的是 `scale` 工具，它已并进指示器：一个只为「让手柄显出来」而存在的模式，
+     * 与「打开一层 chrome」是同一件事的两种说法。判据没变——盒不是曲线的轮廓，但用户明确在做
+     * 盒操作时，盒就是他正在操作的那个东西。
+     */
     expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
     expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
     expect(screen.queryByTestId('stage-selection-outline')).not.toBeInTheDocument()

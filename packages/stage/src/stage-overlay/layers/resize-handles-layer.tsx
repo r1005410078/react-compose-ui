@@ -10,14 +10,19 @@ import type { ResizeHandle } from '@compose-ui/stage-engine'
  * 几何编辑态同理：角手柄与角顶点几乎压在同一个像素上，两个含义叠在一起谁也点不准。
  *
  * **选区画的是几何轮廓时同样不显示**：手柄是盒的一部分，没有盒的手柄会浮在一圈看不见的角上。
- * 曲线的整体缩放因此让给 `scale` 工具——那里盒与手柄都回来，能力没有消失，只是从「随时都在」
- * 变成「进那个工具」。而 `selectionOutline` 本来就只在 `select` 下由宿主派生。
+ * 曲线的整体缩放因此让给**变换指示器**——它打开时盒与手柄都回来，能力没有消失，只是从
+ * 「随时都在」变成「打开指示器」。判据没变：盒不是曲线的轮廓，但用户明确在做盒操作时，盒
+ * 就是他正在操作的那个东西。
+ *
+ * 原先承担这件事的是 `scale` 工具，它已经并进指示器——一个只为「让手柄显出来」而存在的模式，
+ * 与「打开一层 chrome」是同一件事的两种说法，而模式那种说法会让画布上每一次拖动的含义都变。
  */
-export function ResizeHandlesLayer({ editableSelection, geometryEditing, handlePoints, paintHandles, resizeHandles, screenBounds, selectionOutline, textEditing, tool, visibleResizeHandles, onInteraction }: StageOverlayContext) {
-  const resizeVisible = (tool === 'select' || tool === 'scale')
+export function ResizeHandlesLayer({ editableSelection, geometryEditing, gizmo, handlePoints, paintHandles, resizeHandles, screenBounds, selectionOutline, textEditing, tool, visibleResizeHandles, onInteraction }: StageOverlayContext) {
+  const resizeVisible = tool === 'select'
     && !textEditing
     && !geometryEditing
-    && !selectionOutline
+    // 指示器打开时曲线也拿回盒与手柄：`scale` 工具原本就是干这个的，它已并入指示器。
+    && (!selectionOutline || Boolean(gizmo))
   // 边缘命中区两端各让出 8px 是为了不压住角手柄，但让位不能把命中区挤没：单行文字这种
   // 只有十几像素高的选区，固定让 16px 后 E/W 命中区高度会算成 0，边根本抓不住。按可用
   // 长度收缩让位，至少保留 8px 可抓长度。

@@ -1,10 +1,7 @@
 import { createStageDraftingPointPlugin } from '../drafting/drafting-point-plugin'
 import { createStageDrawPlugin } from './draw-plugin'
-import {
-  createStageLegacyRotateHitPlugin,
-  createStageMarqueeFallbackPlugin,
-  createStageRotateToolFallbackPlugin,
-} from './fallback-plugins'
+import { createStageGizmoPlugin } from './gizmo-plugin'
+import { createStageMarqueeFallbackPlugin } from './fallback-plugins'
 import {
   createStageGuideCreatePlugin,
   createStageGuideMovePlugin,
@@ -20,7 +17,6 @@ import { createStagePaintSamplePlugin } from './paint-sample-plugin'
 import { createStagePanPlugin } from './pan-plugin'
 import { createStagePathPlugin } from './path-plugin'
 import { createStageResizePlugin } from './resize-plugin'
-import { createStageRotatePlugin } from './rotate-plugin'
 import { createStageTextEditGuardPlugin } from './text-edit-guard-plugin'
 import type { StageInteractionPlugin } from './stage-kernel-profile'
 
@@ -43,17 +39,15 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStageTextEditGuardPlugin,
   createStagePanPlugin,
   createStageDraftingPointPlugin,
-  createStageRotatePlugin,
   createStagePaintSamplePlugin,
   createStagePathPlugin,
   createStagePaintPlugin,
+  createStageGizmoPlugin,
   createStageDrawPlugin,
   createStageMarqueeConvergePlugin,
   createStageEntitySelectMovePlugin,
   createStageResizePlugin,
-  createStageLegacyRotateHitPlugin,
   createStageGuideCreatePlugin,
   createStageGuideMovePlugin,
-  createStageRotateToolFallbackPlugin,
   createStageMarqueeFallbackPlugin,
 ]

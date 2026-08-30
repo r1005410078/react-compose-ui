@@ -63,11 +63,26 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / 移动预览�
   it('轴向约束把另一个轴的位移归零', () => {
     const preview = planMovePreview(query({
       world: { x: 210, y: 130 },
-      axis: 'x',
+      axis: { degrees: 0 },
       modifiers: { ...MODIFIERS, command: true },
     }))
 
     expect(preview.transforms.dragged).toMatchObject({ x: 200, y: 0 })
+  })
+
+  it('OpenSpec: stage-engine / 变换指示器把手的命中与仲裁 / 斜轴上的位移投影到该轴', () => {
+    /*
+     * 指示器的轴跟着对象的 `rotation` 转，因此约束不是「把 x 或 y 归零」而是投影到一条方向上。
+     * 45° 轴上拖 (200, 0)：投影长度 200·cos45° = 141.42，两个分量各 100。
+     */
+    const preview = planMovePreview(query({
+      world: { x: 210, y: 10 },
+      axis: { degrees: -45 },
+      modifiers: { ...MODIFIERS, command: true },
+    }))
+
+    expect(preview.transforms.dragged!.x).toBeCloseTo(100)
+    expect(preview.transforms.dragged!.y).toBeCloseTo(100)
   })
 
   it('锁定原父级时经过容器不产生 reparent 落点', () => {

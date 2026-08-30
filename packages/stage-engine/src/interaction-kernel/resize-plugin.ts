@@ -30,11 +30,13 @@ interface ResizeSessionOptions {
   readonly ids: readonly string[]
   readonly handle: ResizeHandle
   readonly bounds: StageRect
+  /** 落点到被拖那条边的世界偏移；把手不画在边上时靠它把首帧的跳变消掉。 */
+  readonly grabOffset: StagePoint
   readonly baselineHolds: StageSpatialBaselineCheck
 }
 
 function createResizeSession(options: ResizeSessionOptions): StageSession {
-  const { pointerId, viewport, ids, handle, bounds, baselineHolds } = options
+  const { pointerId, viewport, ids, handle, bounds, grabOffset, baselineHolds } = options
   let transforms: Readonly<Record<string, StageTransform>> = {}
 
   return {
@@ -43,7 +45,11 @@ function createResizeSession(options: ResizeSessionOptions): StageSession {
       if (event.type !== 'pointer.move' && event.type !== 'pointer.up') return
       // 变换会话使用 pointerdown 时的 viewport：宿主布局重测或受控 viewport 回传不得改变
       // 同一次 Pointer 手势的坐标基线。
-      const world: StagePoint = screenToWorld(event.point, viewport)
+      const pointer: StagePoint = screenToWorld(event.point, viewport)
+      // 把手不画在被拖的那条边上时（指示器的缩放方块在环外），按下当刻的偏移量必须一直带着：
+      // 少了它，第一帧就把那条边挪到光标下——用户只拖了一像素，对象却猛地长到把手那么大。
+      // 偏移排在吸附**之前**：吸附要作用在那条边的位置上，而不是光标的位置上。
+      const world: StagePoint = { x: pointer.x + grabOffset.x, y: pointer.y + grabOffset.y }
       const { context, index } = ctx
       const snapped = snapResizePoint({
         point: world,
@@ -135,8 +141,8 @@ export function createStageResizePlugin(): StageInteractionPlugin {
     priority: RESIZE_PRIORITY,
     claim(event: StagePointerDownEvent, ctx: StagePluginContext): StageClaimResult {
       if (event.hit.kind !== 'resize') return null
-      const { context, index } = ctx
-      if (context.tool !== 'select' && context.tool !== 'scale') return 'consumed'
+      const { context } = ctx
+      if (context.tool !== 'select') return 'consumed'
       // 双击进入几何编辑，即使这一下落在手柄上。**这不是顺手加的分支**：一条水平线的包围盒
       // 高度接近零，n/s 两条边缘命中区把整条线盖住，双击永远打不到实体本身——而水平线正是
       // 最需要几何编辑的那一类。双击手柄本来也没有别的语义。
@@ -154,24 +160,58 @@ export function createStageResizePlugin(): StageInteractionPlugin {
         }])
         return 'consumed'
       }
-      const targets = resolveTransformTargets({
-        document: context.document,
-        index,
-        type: 'resize',
-        ids: context.selectedIds,
-        handle: event.hit.handle,
-      })
-      if (!targets) return 'consumed'
-      ctx.publish({ ...ctx.idleSnapshot(), phase: 'resize' })
-      ctx.apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
-      return createResizeSession({
-        pointerId: event.pointerId,
-        viewport: context.viewport,
-        ids: targets.editableIds,
-        handle: event.hit.handle,
-        bounds: targets.bounds,
-        baselineHolds: captureStageSpatialBaseline(context),
-      })
+      return claimStageResize(event, ctx, context.selectedIds, event.hit.handle) ?? 'consumed'
     },
   }
+}
+
+/**
+ * 用给定的手柄开一次缩放会话。
+ *
+ * @remarks
+ * 手柄插件与**变换指示器的缩放方块**共用它：各写一份的代价是吸附、等比约束、Flow 回流与
+ * 并发中止这四样各漏一部分。返回 `null` 表示选区里没有可缩放的目标，调用方自行决定是消费掉
+ * 这次按下还是放行。
+ *
+ * @param options.offsetFromEdge - 把手不画在被拖的那条边上时置位，会话因此按位移而不是按
+ * 绝对落点解算。四角手柄画在角上，本来就没有偏移，不置位以保持既有行为逐像素不变。
+ * @public
+ */
+export function claimStageResize(
+  event: StagePointerDownEvent,
+  ctx: StagePluginContext,
+  ids: readonly string[],
+  handle: ResizeHandle,
+  options: { readonly offsetFromEdge?: boolean } = {},
+): StageSession | null {
+  const { context, index } = ctx
+  const targets = resolveTransformTargets({
+    document: context.document,
+    index,
+    type: 'resize',
+    ids,
+    handle,
+  })
+  if (!targets) return null
+  // 只记被这个手柄驱动的那一两个分量：`e` 只管 x，另一个分量留 0，否则吸附会拿一个与本次
+  // 缩放无关的坐标去找参考线。
+  const grab = screenToWorld(event.point, context.viewport)
+  const anchor = resizeReadoutPoints(handle, targets.bounds).point
+  const grabOffset: StagePoint = options.offsetFromEdge === true
+    ? {
+        x: handle.includes('e') || handle.includes('w') ? anchor.x - grab.x : 0,
+        y: handle.includes('n') || handle.includes('s') ? anchor.y - grab.y : 0,
+      }
+    : { x: 0, y: 0 }
+  ctx.publish({ ...ctx.idleSnapshot(), phase: 'resize' })
+  ctx.apply([{ type: 'pointer.capture', pointerId: event.pointerId }])
+  return createResizeSession({
+    pointerId: event.pointerId,
+    viewport: context.viewport,
+    ids: targets.editableIds,
+    handle,
+    bounds: targets.bounds,
+    grabOffset,
+    baselineHolds: captureStageSpatialBaseline(context),
+  })
 }

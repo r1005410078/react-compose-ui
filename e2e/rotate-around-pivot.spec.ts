@@ -39,14 +39,25 @@ test('OpenSpec: stage-engine / 旋转工具插件 / 非中心基点下只刻角�
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
 
+  /*
+   * 拖变换指示器的圆环。`rotate` 工具已删除——旋转的入口改为圆环，而进入动画模式会自动打开
+   * 指示器，因此这里不需要额外的开关动作。
+   */
   await expect.poll(() => node.boundingBox()).not.toBeNull()
   const box = (await node.boundingBox())!
   const hinge = { x: box.x, y: box.y + box.height / 2 }
-  await editor.getByRole('button', { name: '旋转', exact: true }).click()
-  const from = { x: box.x + box.width * 0.75, y: box.y + box.height / 2 }
-  await page.mouse.move(from.x, from.y)
+  const ring = stage.getByTestId('stage-gizmo-ring')
+  await expect(ring).toHaveCount(1)
+  // 半径读实际值而不是写死常量：它是指示器的一个内部尺寸，改了这里不该跟着红。
+  const radius = Number(await ring.getAttribute('r'))
+  /*
+   * 从 45° 方向抓，绕 90°。不能从正右方抓——两条轴画在环之上，它们与环相交的那两处各有一个
+   * 约 20px 宽的窗口归轴所有；从那里按下开始的是沿轴平移。
+   */
+  const diagonal = radius * Math.SQRT1_2
+  await page.mouse.move(hinge.x + diagonal, hinge.y + diagonal)
   await page.mouse.down()
-  await page.mouse.move(hinge.x, hinge.y + (from.x - hinge.x), { steps: 10 })
+  await page.mouse.move(hinge.x - diagonal, hinge.y + diagonal, { steps: 10 })
   const during = (await node.boundingBox())!
   await page.mouse.up()
   const after = (await node.boundingBox())!

@@ -90,8 +90,6 @@ export type StageInteractionPhase =
  */
 export type StageInteractionTool =
   | 'select'
-  | 'scale'
-  | 'rotate'
   | 'draw-container'
   | 'draw-text'
 
@@ -139,7 +137,18 @@ export type StageInteractionHit =
       readonly source?: 'body' | 'label'
     }
   | { readonly kind: 'resize'; readonly handle: ResizeHandle }
-  | { readonly kind: 'rotate' }
+  | {
+      /**
+       * 变换指示器的把手。
+       *
+       * @remarks
+       * 一条轴上有两个把手：`move-*` 是环外那支**箭头**（沿轴平移），`scale-*` 是箭头下面那个
+       * **方块**（沿轴缩放）；`rotate` 是圆环。三种形状对应三种语义不是装饰——两个东西长得一样
+       * 而按下去做的事不同，是最难自己发现的一类缺陷。
+       */
+      readonly kind: 'gizmo-handle'
+      readonly handle: 'move-x' | 'move-y' | 'scale-x' | 'scale-y' | 'rotate'
+    }
   | { readonly kind: 'ruler'; readonly axis: 'x' | 'y' }
   | { readonly kind: 'ruler-corner' }
   | { readonly kind: 'guide'; readonly guideId: string }
@@ -557,7 +566,7 @@ export interface StageInteractionSnapshot {
    * 旋转拉线预览（Godot 风格）：从选区中心到当前指针的世界坐标。
    *
    * @remarks
-   * 仅在 `phase === 'rotate'` 时有值；Overlay 画拉杆，不依赖固定旋转手柄。
+   * 仅在 `phase === 'rotate'` 时有值；角度读数由它算出，与缩放的宽高读数共用同一套呈现。
    * Shift 角度吸附时 `pointer` 落在吸附射线上，`angleDegrees` 为本次增量。
    */
   readonly rotationPreview: {
@@ -881,8 +890,6 @@ export function createStageInteractionController(): StageInteractionController {
                 ? 'copy'
                 : next.temporaryPan
                   ? 'grab'
-                  : context?.tool === 'rotate'
-                    ? 'grab'
                   : isDrawingTool(context?.tool ?? 'select')
                     ? 'crosshair'
                   : 'default'

@@ -35,7 +35,7 @@ export function createStageTextEditGuardPlugin(): StageInteractionPlugin {
         && event.hit.entityId === editing.entityId
       // 变换手柄始终作用于当前选区，而编辑态的选区就是编辑目标，因此一并屏蔽——
       // Stage 在编辑态本就不渲染这些手柄，这里是协议层的兜底。
-      const onEditingHandle = event.hit.kind === 'resize' || event.hit.kind === 'rotate'
+      const onEditingHandle = event.hit.kind === 'resize' || event.hit.kind === 'gizmo-handle'
       if (onEditingTarget || onEditingHandle) return 'consumed'
       ctx.apply([{ type: 'text-editing.exit' }])
       // 退出后本次按下继续按普通交互处理：点空白即取消选择，点别的实体即选中它。

@@ -527,60 +527,11 @@
 }
 
 /* Godot 旋转拉线：中心枢轴 — 拉杆 — 末端点（纯视觉，不抢命中） */
-.compose-stage__rotation-gizmo {
-  pointer-events: none;
-}
-
-.compose-stage__rotation-stem {
-  fill: none;
-  stroke: #3687ff;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  opacity: 0.95;
-}
-
-.compose-stage__rotation-center-ring {
-  fill: #f8fbff;
-  stroke: #3687ff;
-  stroke-width: 1.5;
-  pointer-events: none;
-}
-
-.compose-stage__rotation-center-dot {
-  fill: #3687ff;
-  stroke: none;
-  pointer-events: none;
-}
-
 .compose-stage__rotation {
   fill: var(--compose-surface-raised, #f8fbff);
   stroke: #3687ff;
   stroke-width: 1.5;
   pointer-events: none;
-}
-
-.compose-stage__rotation-gizmo.is-snapped .compose-stage__rotation-stem {
-  stroke: #22c55e;
-  stroke-dasharray: 4 3;
-}
-
-.compose-stage__rotation-angle {
-  pointer-events: none;
-}
-
-.compose-stage__rotation-angle rect {
-  fill: rgb(15 23 42 / 88%);
-  stroke: none;
-}
-
-.compose-stage__rotation-angle text {
-  fill: #f8fafc;
-  font: 500 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
-}
-
-.compose-stage__rotation-gizmo.is-snapped .compose-stage__rotation-angle rect {
-  fill: rgb(20 83 45 / 92%);
 }
 
 .compose-stage__paint-handle,
@@ -1448,4 +1399,106 @@
 
 .compose-stage__wire-end[data-wire-end='dangling'] {
   fill: var(--compose-stage-wire-dangling, #f2545b);
+}
+
+/*
+ * 变换指示器（Rive 式）。
+ *
+ * 轴色照抄 3D 工具的通行约定（X 红、Y 绿）。这块画布的颜色已经被占了好几层（捕捉橙、选中蓝、
+ * 框选蓝/绿、导线红、失效琥珀），但轴色是**结构色**而不是状态色：永远成对出现、永远带箭头、
+ * 永远钉在中心上，靠位置与形状先分开、颜色只作二次编码。为避让而另发明一套的代价更大——用户
+ * 从 Rive、Blender、Unity 带来的直觉会全部作废，而那份直觉正是它不需要说明书的原因。
+ *
+ * 每个颜色都带字面量兜底：`var()` 解析不到且没有兜底时整条声明在计算期失效，`fill` 退回初值
+ * 黑色——那正好是深色画布上「什么都看不见」的样子，而它在浅色主题下反而正常。
+ */
+.compose-stage__gizmo {
+  --compose-stage-gizmo-x: #ff6b81;
+  --compose-stage-gizmo-y: #2ecc8f;
+  --compose-stage-gizmo-ring: #e8e0c0;
+}
+
+.compose-stage__gizmo-ring {
+  fill: none;
+  stroke: var(--compose-stage-gizmo-ring, #e8e0c0);
+  stroke-width: 1.25;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* 环画得细，命中靠一条透明加宽的 stroke 承担——与曲线的命中层是同一个做法。 */
+.compose-stage__gizmo-ring-hit {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+.compose-stage__gizmo-axis-line {
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.compose-stage__gizmo-axis-arrow {
+  pointer-events: none;
+}
+
+/*
+ * 覆盖层根是 `pointer-events: none`，每个可交互元素都必须显式打开。漏掉这一行的症状极具
+ * 欺骗性：点击直接穿透到场景节点，于是「沿轴拖」退化成自由拖动——对象确实动了、位置轨道
+ * 也确实写了，只是不沿轴。断言「拖完出现位置关键帧」的用例照样绿。
+ */
+.compose-stage__gizmo-move-hit {
+  fill: none;
+  stroke: transparent;
+  cursor: move;
+  pointer-events: stroke;
+}
+
+/*
+ * 缩放方块的光标按轴给方向。它在对象未旋转时精确；转过之后与真实缩放轴一样会与画出来的箭头
+ * 分开，那是「非曲线 Entity 的缩放仍用 AABB」这条既有欠账的可见形态，不在光标这一层修。
+ */
+.compose-stage__gizmo-scale-handle {
+  pointer-events: none;
+}
+
+/* 靶区比画出来的方块大一圈：10px 的方块偏两三个像素就落到对象本体上，退化成一次自由拖动。 */
+.compose-stage__gizmo-scale-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.compose-stage__gizmo-axis--x .compose-stage__gizmo-scale-hit {
+  cursor: ew-resize;
+}
+
+.compose-stage__gizmo-axis--y .compose-stage__gizmo-scale-hit {
+  cursor: ns-resize;
+}
+
+.compose-stage__gizmo-axis--x .compose-stage__gizmo-axis-line,
+.compose-stage__gizmo-axis--x .compose-stage__gizmo-axis-arrow {
+  stroke: var(--compose-stage-gizmo-x, #ff6b81);
+  fill: var(--compose-stage-gizmo-x, #ff6b81);
+}
+
+.compose-stage__gizmo-axis--x .compose-stage__gizmo-scale-handle {
+  fill: var(--compose-stage-gizmo-x, #ff6b81);
+}
+
+.compose-stage__gizmo-axis--y .compose-stage__gizmo-axis-line,
+.compose-stage__gizmo-axis--y .compose-stage__gizmo-axis-arrow {
+  stroke: var(--compose-stage-gizmo-y, #2ecc8f);
+  fill: var(--compose-stage-gizmo-y, #2ecc8f);
+}
+
+.compose-stage__gizmo-axis--y .compose-stage__gizmo-scale-handle {
+  fill: var(--compose-stage-gizmo-y, #2ecc8f);
+}
+
+/* 中心圆点只标明「绕这里转」，v1 不可拖，因此不接指针。 */
+.compose-stage__gizmo-center {
+  fill: var(--compose-stage-accent, #3b82f6);
+  pointer-events: none;
 }

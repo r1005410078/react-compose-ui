@@ -13,6 +13,7 @@ import type {
   StagePoint,
   StagePreviewGuide,
   StageRect,
+  StageTransformGizmoGeometry,
   StageViewport,
 } from '@compose-ui/stage-engine'
 import type { ComponentType, PointerEvent as ReactPointerEvent } from 'react'
@@ -51,6 +52,14 @@ export interface StageOverlayProps {
   readonly handlePoints: Readonly<
     Record<ResizeHandle, readonly [number, number]>
   > | null
+  /**
+   * 变换指示器的屏幕几何；关闭或无选区时为 `null`。
+   *
+   * @remarks
+   * 覆盖层不认识文档，也不知道中心该取基点还是包围盒——那一步在宿主（`resolveTransformGizmoTarget`），
+   * 这里只把算好的几何画出来。
+   */
+  readonly gizmo?: StageTransformGizmoGeometry | null
   readonly editableSelection: boolean
   readonly resizeHandles: readonly ResizeHandle[]
   readonly visibleResizeHandles: readonly ResizeHandle[]

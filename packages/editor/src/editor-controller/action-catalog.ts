@@ -229,8 +229,6 @@ export function createComposeEditorActionHandlers(
 
   return {
     'stage.selectTool': handler(undefined, () => { context.setTool('select') }),
-    'stage.scaleTool': handler(undefined, () => { context.setTool('scale') }),
-    'stage.rotateTool': handler(undefined, () => { context.setTool('rotate') }),
     'stage.drawContainerTool': handler(undefined, () => { context.setTool('draw-container') }),
     'stage.drawTextTool': handler(undefined, () => { context.setTool('draw-text') }),
     'stage.zoomIn': handler(undefined, () => { context.zoomBy(1.2) }),
@@ -392,8 +390,6 @@ export function createComposeEditorActionHandlers(
 /** 目录呈现顺序；与执行层解耦，改动顺序不影响行为。 */
 const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'stage.selectTool',
-  'stage.scaleTool',
-  'stage.rotateTool',
   'stage.drawContainerTool',
   'stage.drawTextTool',
   'stage.zoomIn',

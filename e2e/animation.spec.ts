@@ -373,10 +373,19 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
 
   // 节点 B：直接在画布拖动，自动记录为它新建位置轨道（200 ms 一帧）。
   const bBox = (await nodes.nth(1).boundingBox())!
-  // 靠左上角抓取并向上拖：避开物体中心的运动路径顶点，也避开底部时间线面板的遮挡。
-  await page.mouse.move(bBox.x + 24, bBox.y + 12)
+  /*
+   * 从中心偏一点抓取并向上拖：中心有运动路径顶点，底部有时间线面板，而**离中心 80px 那一圈
+   * 是变换指示器的旋转环**——环是固定半径的一条命中带，动画模式下指示器默认打开，落在带上的
+   * 拖动是旋转而不是移动。这是环屏幕恒定的既定代价，不是这条用例在迁就缺陷。偏移上限
+   * 40/24（距离 47）稳稳落在带的内沿（70）以内，同时不超过 1/4 处，小对象上也仍在盒内。
+   */
+  const grab = {
+    x: bBox.x + bBox.width / 2 - Math.min(bBox.width / 4, 40),
+    y: bBox.y + bBox.height / 2 - Math.min(bBox.height / 4, 24),
+  }
+  await page.mouse.move(grab.x, grab.y)
   await page.mouse.down()
-  await page.mouse.move(bBox.x + 24, bBox.y + 12 - 120, { steps: 4 })
+  await page.mouse.move(grab.x, grab.y - 120, { steps: 4 })
   await page.mouse.up()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
 

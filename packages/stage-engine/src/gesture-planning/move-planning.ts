@@ -58,13 +58,37 @@ export interface StageMovePreviewQuery {
   readonly startWorld: StagePoint
   /** 当前指针的世界坐标。 */
   readonly world: StagePoint
-  /** 轴向约束；来自 move-axis 手柄，自由拖动时省略。 */
-  readonly axis?: 'x' | 'y'
+  /**
+   * 轴向约束：来自变换指示器的轴把手，自由拖动时省略。
+   *
+   * @remarks
+   * 是**方向角**而不是 `'x' | 'y'`：指示器的轴跟着对象的 `rotation` 转，转过的对象上那两条轴
+   * 不再是水平垂直。轴对齐只是 `0` 与 `90` 这两个取值。
+   */
+  readonly axis?: StageMoveAxis
   /** 接管当刻冻结的 zoom，与手势的坐标基线一致。 */
   readonly zoom: number
   readonly modifiers: StageInteractionModifiers
   /** 手势中按住 Space 表达的原父级锁定。 */
   readonly parentLocked: boolean
+}
+
+/** 变换指示器轴把手给出的方向约束。 @public */
+export interface StageMoveAxis {
+  /** 方向角（度）；与 `距离<角度` 坐标写法同一套约定：逆时针为正、屏幕 Y 向下。 */
+  readonly degrees: number
+}
+
+const RADIANS_PER_DEGREE = Math.PI / 180
+
+/** 把位移投影到一条方向上；没有约束时原样返回。 */
+function projectOntoAxis(delta: StagePoint, axis: StageMoveAxis | undefined): StagePoint {
+  if (!axis) return delta
+  const radians = axis.degrees * RADIANS_PER_DEGREE
+  // 屏幕 Y 轴向下，因此方向向量的 y 取负——与 `angleDegrees` 是同一套约定的反向。
+  const dir = { x: Math.cos(radians), y: -Math.sin(radians) }
+  const along = delta.x * dir.x + delta.y * dir.y
+  return { x: dir.x * along, y: dir.y * along }
 }
 
 /**
@@ -82,11 +106,7 @@ export interface StageMovePreviewQuery {
 export function planMovePreview(query: StageMovePreviewQuery): StageMovePreview {
   const { context, index, ids, bounds, startWorld, world, axis, zoom, modifiers, parentLocked } = query
   const rawDelta = { x: world.x - startWorld.x, y: world.y - startWorld.y }
-  const delta = axis === 'x'
-    ? { x: rawDelta.x, y: 0 }
-    : axis === 'y'
-      ? { x: 0, y: rawDelta.y }
-      : rawDelta
+  const delta = projectOntoAxis(rawDelta, axis)
   if (Math.hypot(delta.x, delta.y) * zoom < MOVE_ACTIVATION_DISTANCE) {
     return { transforms: {}, dropTarget: null, snapGuides: [] }
   }
@@ -109,11 +129,15 @@ export function planMovePreview(query: StageMovePreviewQuery): StageMovePreview 
     },
   )
   return {
-    transforms: transformedSelection(
-      index,
-      ids,
-      translationMatrix(snapped.delta.x, snapped.delta.y),
-    ),
+    transforms: (() => {
+      /*
+       * 吸附之后**再投影一次**：`snapTranslation` 两轴各自独立地把盒边吸到网格或参考线上，
+       * 因此被约束掉的那一轴照样会被吸出一个非零分量，不投影回去的话「沿轴拖」就会歪。
+       * 自由拖动时投影是恒等变换，行为一个字节不变。
+       */
+      const constrained = projectOntoAxis(snapped.delta, axis)
+      return transformedSelection(index, ids, translationMatrix(constrained.x, constrained.y))
+    })(),
     dropTarget: resolveStageDropTarget({
       index,
       draggedIds: ids,

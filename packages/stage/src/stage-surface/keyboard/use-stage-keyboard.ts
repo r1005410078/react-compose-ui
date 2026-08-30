@@ -62,8 +62,6 @@ const NUDGE_DIRECTIONS: Readonly<Record<string, { x: number; y: number }>> = {
 /** 快捷键动作到工具的映射；按表内顺序匹配，先命中者生效。 */
 const TOOL_SHORTCUTS: readonly (readonly [ComposeStageShortcutAction, ComposeStageTool])[] = [
   ['stage.selectTool', 'select'],
-  ['stage.scaleTool', 'scale'],
-  ['stage.rotateTool', 'rotate'],
   ['stage.drawContainerTool', 'draw-container'],
   ['stage.drawTextTool', 'draw-text'],
 ]

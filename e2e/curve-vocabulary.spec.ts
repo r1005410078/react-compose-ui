@@ -217,10 +217,10 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
   await expect(selectedRows).toHaveCount(1)
 
   /*
-   * 盒手柄在 `scale` 工具下。`select` 下曲线画的是几何轮廓——盒不是曲线的轮廓——而这一条
+   * 盒手柄要打开变换指示器才有。曲线在选中时画的是几何轮廓——盒不是曲线的轮廓——而这一条
    * 断的正是**盒操作**：拖盒手柄，几何跟着变。用户明确在做盒操作时盒就在。
    */
-  await editor.getByRole('button', { name: '缩放' }).click()
+  await editor.getByRole('button', { name: '变换指示器' }).click()
   await expect(stage.getByTestId('stage-resize-se')).toBeVisible()
   const handle = (await stage.getByTestId('stage-resize-se').boundingBox())!
   const hx = handle.x + handle.width / 2

@@ -526,6 +526,20 @@ export function ComposeEditor({
   // 自动记录：动画模式 + 开关开启时安装 dispatch 改写层，把画布与 Inspector 的属性编辑
   // 改写为播放头处的关键帧命令；关闭或退出模式即卸载，编辑恢复直写基础文档。
   const setCommandRewrite = controller?.setCommandRewrite
+  /*
+   * 进入动画模式自动打开变换指示器。
+   *
+   * 只在**跨过那一刻**写一次，不是把它派生成 `animationMode.active`：派生的话用户在动画模式
+   * 里就永远关不掉它，而它是视图状态、关掉是正当选择。代价不对称是自动打开的理由——设计模式
+   * 下拖错了就是挪了一下、撤销即可；动画模式下一次误拖往时间线里塞一条没打算要的轨道，而
+   * 用户得先发现它。
+   */
+  const animationWasActive = useRef(false)
+  useEffect(() => {
+    if (animationMode.active && !animationWasActive.current) controller?.setTransformGizmo(true)
+    animationWasActive.current = animationMode.active
+  }, [animationMode.active, controller])
+
   const autoRecordAnimationId = animationMode.active && animationMode.autoRecord
     ? animationMode.animationId
     : null
@@ -2232,6 +2246,7 @@ export function ComposeEditor({
           // 否则对象被静默挂进激活场景，后续打点全部落进别块场景的动画。
           policy: {
             lockGestureParent: animationMode.active || undefined,
+            transformGizmo: controller.transformGizmo,
           },
           onToolChange: controller.setTool,
           scriptScope: activePageSession?.scriptScope,

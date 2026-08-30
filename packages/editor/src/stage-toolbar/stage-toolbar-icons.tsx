@@ -17,7 +17,7 @@ type StageToolbarIconName =
   | 'polar'
   | 'polyline'
   | 'rectangle'
-  | 'rotate'
+  | 'transform-gizmo'
   | 'save'
   | 'scale'
   | 'select'
@@ -191,10 +191,16 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         {gripMark(20, 18)}
       </>
     ),
-    rotate: (
+    /*
+     * 变换指示器：十字轴 + 外圈的环，与它在画布上画出来的东西同形——两条轴管平移、环管旋转、
+     * 中心是基点。图标照着产物画，用户不用先按一次才知道它是什么。
+     */
+    'transform-gizmo': (
       <>
-        <path d="M18.5 8.5A7.2 7.2 0 1 0 19 16" />
-        <path d="M18.5 3.5v5h-5" />
+        <circle cx="12" cy="12" r="7.5" />
+        <path d="M12 12h7.5M12 12V4.5" />
+        <path d="M17.5 10.2 20.5 12l-3 1.8z" fill="currentColor" />
+        <path d="M10.2 6.5 12 3.5l1.8 3z" fill="currentColor" />
       </>
     ),
     // 软盘轮廓：右上角切角表示写入介质，内部上下两块分别是滑片与标签。

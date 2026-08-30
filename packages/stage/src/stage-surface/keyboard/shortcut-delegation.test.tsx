@@ -135,10 +135,13 @@ describe('ComposeStage 快捷键接管', () => {
     const onToolChange = vi.fn()
     const { dispatch, stage } = renderStage({ onToolChange })
 
-    // 原先用的是 pan 工具的 H。pan 工具已删除——空格与中键是随时可用的临时覆盖，
-    // 不需要一个有状态的工具位。这里换成仍然存在的 rotate。
-    fireEvent.keyDown(stage, { code: 'KeyR', key: 'R', shiftKey: true })
-    expect(onToolChange).toHaveBeenCalledWith('rotate')
+    /*
+     * 换过三次：pan 的 H、rotate 的 Shift+R、scale 的 S。三个工具都已删除——旋转与缩放的
+     * 入口都并进了变换指示器，而那是 chrome 的可见性、不是工具。剩下的有状态工具只有绘制
+     * 那两个。
+     */
+    fireEvent.keyDown(stage, { code: 'KeyF', key: 'f' })
+    expect(onToolChange).toHaveBeenCalledWith('draw-container')
 
     fireEvent.keyDown(stage, { code: 'KeyG', key: 'g', metaKey: true })
     expect(dispatch).toHaveBeenCalledTimes(1)
@@ -149,9 +152,9 @@ describe('ComposeStage 快捷键接管', () => {
     const onToolChange = vi.fn()
     const { stage } = renderStage({ onShortcutAction, onToolChange })
 
-    fireEvent.keyDown(stage, { code: 'KeyR', key: 'R', shiftKey: true })
+    fireEvent.keyDown(stage, { code: 'KeyF', key: 'f' })
 
-    expect(onShortcutAction).toHaveBeenCalledWith('stage.rotateTool')
+    expect(onShortcutAction).toHaveBeenCalledWith('stage.drawContainerTool')
     // 接管后 Stage 不再自行切换工具，避免与宿主重复执行。
     expect(onToolChange).not.toHaveBeenCalled()
   })
