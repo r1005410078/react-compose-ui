@@ -1,5 +1,6 @@
-import { getComposeLock, getComposeTransform } from '@compose-ui/core'
+import { getComposeLock, getComposeTransform, getComposeTransformPivot } from '@compose-ui/core'
 import {
+  applyMatrix,
   pointOnRotationRay,
   rotationFromPointer,
   rotationMatrixAround,
@@ -9,6 +10,7 @@ import {
   type StageViewport,
 } from '../geometry'
 import { resolveStageClickSelection } from '../hit-testing'
+import type { StageSceneIndex } from '../hit-testing'
 import { resolveTransformTargets } from '../gesture-planning'
 import { planTransformCommit } from '../gesture-planning'
 import { transformedSelection } from '../gesture-planning'
@@ -30,6 +32,39 @@ const ROTATE_PRIORITY = STAGE_GESTURE_PRIORITY
  * 而是画布 chrome。命中它们时本插件返回 `null`，让级联继续。
  */
 const PASS_THROUGH_HITS = new Set(['ruler', 'ruler-corner', 'guide', 'paint-handle', 'path-handle'])
+
+/**
+ * 这一次旋转绕哪个点转。
+ *
+ * @remarks
+ * 单选时是那个 Entity **自己的旋转基点**——用户设 `Transform.pivot` 就是为了绕它转（刀闸的
+ * 铰点在刀身一端），绕包围盒中心转等于把他刚设的那件事作废。
+ *
+ * 这不是锦上添花：预览的分解（`targetTransform`）读的就是 Entity 自己的基点，世界矩阵这一侧
+ * 若绕包围盒中心构造，两边基点不一致，差额会被写进 `LayoutItem.offset`——症状是「只想刻角度，
+ * 位置也被刻了一帧」，且提交后对象跳一下，位移量恰好是 `2·|基点偏移|·sin(θ/2)`。
+ * `matrixFromTransform` 与 `decomposeMatrix` 必须拿到同一个基点，这里是那条不变量的另一半。
+ *
+ * 多选退回选区包围盒中心：那时没有单一基点可言，各转各的不是一次旋转。默认基点就是盒中心，
+ * 因此绝大多数对象的行为一个像素都不变。
+ */
+function rotationCenter(
+  index: StageSceneIndex,
+  editableIds: readonly string[],
+  bounds: StageRect,
+): StagePoint {
+  const boxCenter = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  if (editableIds.length !== 1) return boxCenter
+  const id = editableIds[0]!
+  const entity = index.document.entities[id]
+  const world = index.getWorldMatrix(id)
+  // 冻结 Snapshot 的已求解盒，与预览分解读的是同一份——回读 LayoutItem fallback 会在 Hug
+  // 或 Fill 的对象上给出另一个尺寸，基点于是又偏了。
+  const box = index.layoutSnapshot.boxes[id]
+  if (!entity || !world || !box) return boxCenter
+  const pivot = getComposeTransformPivot(entity)
+  return applyMatrix(world, { x: pivot.x * box.width, y: pivot.y * box.height })
+}
 
 function createRotateSession(options: {
   readonly pointerId: number
@@ -131,10 +166,7 @@ export function createStageRotatePlugin(): StageInteractionPlugin {
         })
         if (!targets) return null
         const { editableIds, bounds } = targets
-        const center = {
-          x: bounds.x + bounds.width / 2,
-          y: bounds.y + bounds.height / 2,
-        }
+        const center = rotationCenter(index, editableIds, bounds)
         const startWorld = screenToWorld(event.point, context.viewport)
         const baseRotation = getComposeTransform(
           context.document.entities[editableIds[0]!]!,

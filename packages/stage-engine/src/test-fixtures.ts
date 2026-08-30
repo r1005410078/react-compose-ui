@@ -14,6 +14,8 @@ export function entity(
     readonly width?: number
     readonly height?: number
     readonly rotation?: number
+    /** 归一化盒坐标的旋转基点；缺席即盒中心。 */
+    readonly pivot?: { readonly x: number; readonly y: number }
     readonly childIds?: readonly string[]
     readonly locked?: boolean
     readonly visible?: boolean
@@ -51,7 +53,10 @@ export function entity(
         ],
         capabilityIds: [],
       },
-      Transform: { rotation: transform.rotation },
+      Transform: {
+        rotation: transform.rotation,
+        ...(options.pivot ? { pivot: options.pivot } : {}),
+      },
       LayoutItem: {
         positioning: 'absolute',
         offset: transform.position,

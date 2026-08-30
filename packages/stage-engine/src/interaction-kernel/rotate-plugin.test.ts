@@ -37,6 +37,111 @@ function rotateSetup(selectedIds: readonly string[] = ['a']) {
   return { controller, effects, update }
 }
 
+describe('OpenSpec: stage-engine / 旋转工具插件 / 绕 Entity 自己的旋转基点', () => {
+  /** 铰点在左边中点的刀身：`Transform.pivot` 是归一化盒坐标。 */
+  const hinged = document([entity('p', { x: 0, y: 0, width: 100, height: 50, pivot: { x: 0, y: 0.5 } })])
+
+  function hingedSetup() {
+    const effects: StageInteractionEffect[] = []
+    const controller = createStageInteractionController()
+    controller.connectSurface({
+      resolveClientPoint: (point) => point,
+      applyEffects: (next) => effects.push(...next),
+    })
+    controller.updateContext({
+      document: hinged,
+      layoutSnapshot: layoutSnapshot(hinged),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'rotate',
+      selectedIds: ['p'],
+      textEditing: null,
+      drawnEntity: null,
+      isTextEditable: () => false,
+      idFactory: () => 'rotate-cmd',
+    } as never)
+    return { controller, effects }
+  }
+
+  it('单选时旋转中心是基点，不是包围盒中心', () => {
+    const { controller } = hingedSetup()
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 100, y: 25 },
+      hit: { kind: 'blank' },
+      modifiers: MODIFIERS,
+    } as never)
+
+    // 铰点在盒的左边中点 `(0, 25)`；包围盒中心是 `(50, 25)`。
+    expect(controller.getSnapshot().rotationPreview?.center).toEqual({ x: 0, y: 25 })
+  })
+
+  it('只转角度时位置一动不动', () => {
+    /*
+     * `StageTransform` 的 `x`/`y` 是**未旋转盒**的左上角，而旋转绕基点进行、不移动基点，
+     * 因此「基点是定点」等价于「x/y 不变」。
+     *
+     * 世界矩阵绕包围盒中心构造、却按 Entity 自己的基点分解时，两边基点不一致，差额会被写进
+     * `LayoutItem.offset`——症状就是「想刻角度，位置也被刻了一帧」，位移量恰好是
+     * `2·|基点偏移|·sin(θ/2)`。
+     */
+    const { controller } = hingedSetup()
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 100, y: 25 },
+      hit: { kind: 'blank' },
+      modifiers: MODIFIERS,
+    } as never)
+    controller.send({
+      type: 'pointer.move',
+      pointerId: 1,
+      point: { x: 50, y: 75 },
+      modifiers: MODIFIERS,
+    } as never)
+
+    const preview = controller.getSnapshot().previewTransforms.p!
+    expect(preview.rotation).not.toBeCloseTo(0)
+    expect(preview.x).toBeCloseTo(0)
+    expect(preview.y).toBeCloseTo(0)
+  })
+
+  it('多选退回选区包围盒中心', () => {
+    // 多选没有单一基点可言：各转各的不是一次旋转。
+    const many = document([
+      entity('p', { x: 0, y: 0, width: 100, height: 50, pivot: { x: 0, y: 0.5 } }),
+      entity('q', { x: 200, y: 0, width: 100, height: 50 }),
+    ])
+    const controller = createStageInteractionController()
+    controller.connectSurface({ resolveClientPoint: (point) => point, applyEffects: () => {} })
+    controller.updateContext({
+      document: many,
+      layoutSnapshot: layoutSnapshot(many),
+      viewport: { x: 0, y: 0, zoom: 1 },
+      surfaceSize: { width: 800, height: 600 },
+      tool: 'rotate',
+      selectedIds: ['p', 'q'],
+      textEditing: null,
+      drawnEntity: null,
+      isTextEditable: () => false,
+      idFactory: () => 'rotate-cmd',
+    } as never)
+    controller.send({
+      type: 'pointer.down',
+      pointerId: 1,
+      button: 0,
+      point: { x: 400, y: 25 },
+      hit: { kind: 'blank' },
+      modifiers: MODIFIERS,
+    } as never)
+
+    expect(controller.getSnapshot().rotationPreview?.center).toEqual({ x: 150, y: 25 })
+  })
+})
+
 describe('OpenSpec: stage-engine / 受约束变换 System / 旋转工具接管', () => {
   it('在实体上按下同时改选区并开始旋转', () => {
     const { controller, effects } = rotateSetup(['a'])

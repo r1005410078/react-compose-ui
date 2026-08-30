@@ -27,7 +27,12 @@ export function transformDocument(
       ...entity,
       components: {
         ...entity.components,
-        Transform: { rotation: transform.rotation },
+        /*
+         * 展开原有 `Transform` 而不是整个换掉：整换会把 `pivot` 一起抹掉，预览于是绕盒中心
+         * 转、提交按基点转——症状是拖动中的姿态与松手后不一致，对象在提交那一刻跳一下，
+         * 位移量恰好是 `2·|基点偏移|·sin(θ/2)`，且只在非中心基点的对象上出现。
+         */
+        Transform: { ...entity.components.Transform, rotation: transform.rotation },
         LayoutItem: {
           ...item,
           offset: { x: transform.x, y: transform.y },
