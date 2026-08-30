@@ -64,11 +64,12 @@ import { createDemoAssetProvider } from './demo-asset-provider'
 
 registerECharts([BarChart, GridComponent, TitleComponent, CanvasRenderer])
 
+/** 与 `StageToolbarIcon` 共用同一套 20×20 画幅——它就摆在那条工具栏的末尾。 */
 function PreviewIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.75" />
+    <svg aria-hidden="true" viewBox="0 0 20 20">
+      <path d="M2.6 10C4.9 6.2 7.3 4.8 10 4.8s5.1 1.4 7.4 5.2c-2.3 3.8-4.7 5.2-7.4 5.2S4.9 13.8 2.6 10Z" />
+      <circle cx="10" cy="10" r="2.3" />
     </svg>
   )
 }

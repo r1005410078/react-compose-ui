@@ -190,9 +190,17 @@ describe('DefaultStageToolbar', () => {
     // 半径点。判别点在**矩形是 2 而不是 4**——画完之后它有四个顶点夹点，但要你点的只有
     // 两个对角，图标说的是「按下去之后会发生什么」。
     //
+    // 多段线是 3 不是 4：它能取任意多个点，图标只需说清「不止两个」，而方块占的墨比线本身
+    // 大得多，第四块会把折线整个盖掉。一个图标至多三个记号是这套图标的硬上限。
+    //
+    // 箭头是 1：它同样取两个点，但第二个点的位置已经有一个实心 marker 在标了，叠一个方块
+    // 等于同一件事说两遍——「一个位置只放一个记号」压过「每个取点都画方块」。
+    //
     // 形状取方块是另一条：顶点夹点是方块，圆点在这里说的是另一件事，混用会让图标与画布
     // 对不上。
-    for (const [label, marks] of [['直线', 2], ['多段线', 4], ['圆弧', 3], ['矩形', 2], ['圆', 2]] as const) {
+    for (const [label, marks] of [
+      ['直线', 2], ['多段线', 3], ['圆弧', 3], ['矩形', 2], ['圆', 2], ['箭头', 1],
+    ] as const) {
       const icon = screen.getByRole('button', { name: label }).querySelector('svg')
       expect(icon?.querySelectorAll('rect')).toHaveLength(marks)
     }
@@ -202,6 +210,12 @@ describe('DefaultStageToolbar', () => {
       const icon = screen.getByRole('button', { name: label }).querySelector('svg')
       expect(icon?.querySelectorAll('circle')).toHaveLength(0)
     }
+
+    // 导线是唯一的反面：它两端标的是**端口**而不是取点，因此用圆点而不是方块——与画布上
+    // 「端口是实心小圆、捕捉标记是空心方框」同一条区分。零个方块是这条区分的判别点。
+    const wire = screen.getByRole('button', { name: '导线' }).querySelector('svg')
+    expect(wire?.querySelectorAll('rect')).toHaveLength(0)
+    expect(wire?.querySelectorAll('circle')).toHaveLength(2)
   })
 
   it('OpenSpec: editor-workspace-layout / 绘图命令组 / 按下态读上报的命令 id', () => {

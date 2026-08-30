@@ -177,7 +177,12 @@
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.7;
+  /*
+   * 图标画幅是 20×20 且这里按 20px 渲染，因此 1 单位 = 1 设备像素，1.5 的描边正好落在
+   * 像素格上。此前是 24 画幅上的 1.7，乘 5/6 之后是 1.42 设备像素——横平竖直的笔画一根
+   * 都不在格上，整套图标始终带一层灰边。这两个数是一对，改一个就要改另一个。
+   */
+  stroke-width: 1.5;
 }
 
 /**
@@ -186,9 +191,31 @@
  * @remarks
  * 直接声明在 rect 上，因此压得过 `button svg` 那条规则继承下来的 `fill: none`。
  */
-.compose-editor__icon-grip {
+.compose-editor__icon-grip,
+.compose-editor__icon-port {
   fill: var(--compose-accent);
   stroke: none;
+}
+
+/*
+ * 栅格点阵的方点跟着 `currentColor` 而不是 accent：accent 只标「取点的落点」，
+ * 而这些是网格自己的像素，不是用户能点的东西。
+ */
+.compose-editor__icon-dot {
+  fill: currentColor;
+  stroke: none;
+}
+
+/*
+ * 按下态的底是 `--compose-surface-selected`。深色主题下 accent `#3687ff` 压在 `#1b395f` 上
+ * 对比只有 3.4:1，刚过非文本图形 3:1 的下限，而夹点正是这枚图标里最该读得出来的东西；
+ * `--compose-focus` 抬到 4.2:1。浅色主题那一对本来是 4.3:1，跟着换不会变差。
+ */
+.compose-editor__toolbar-group > button[aria-pressed='true'] .compose-editor__icon-grip,
+.compose-editor__toolbar-group > button[aria-pressed='true'] .compose-editor__icon-port,
+.compose-editor__toolbar-menu-anchor > button[aria-pressed='true'] .compose-editor__icon-grip,
+.compose-editor__toolbar-menu-anchor > button[aria-pressed='true'] .compose-editor__icon-port {
+  fill: var(--compose-focus);
 }
 
 /**
@@ -332,14 +359,18 @@
   opacity: 0.45;
 }
 
+/*
+ * 这里渲染的也是 `StageToolbarIcon`，因此尺寸与描边跟着 20 画幅走：19px 是 0.95 的缩放，
+ * 那正是换画幅要消掉的那半个像素。
+ */
 .compose-editor__canvas-viewport-controls svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.7;
+  stroke-width: 1.5;
 }
 
 .compose-editor__canvas-zoom-value {
