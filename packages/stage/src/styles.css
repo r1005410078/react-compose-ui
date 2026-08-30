@@ -6,6 +6,19 @@
   --compose-stage-scrollbar-size: 10px;
 
   /*
+   * 网格的那一支墨。三级线（细 / 中 / 粗）只由不透明度分级，色阶写在
+   * `grid-rendering.ts` 的 `GRID_ALPHA_LADDER` 里——那三个数要参与逐层的堆叠运算，
+   * 留在 CSS 里就算不出来了。
+   *
+   * 此前深色**根本没有 token**：值只存在于 `var(..., 兜底)` 的兜底里，宿主换不了皮，
+   * 而且两个主题的值分居 TS 与 CSS 两种语言。
+   *
+   * 墨要分主题挑，不能两边同一支：同一条阶梯配深色 `#94a3b8`、浅色 `#344054` 时，
+   * 两个主题的对比度最大只差 0.038；浅色若换成场景描边那支更浅的墨，偏差涨到 0.174。
+   */
+  --compose-stage-grid-ink: #94a3b8;
+
+  /*
    * 捕捉标记的颜色。**刻意不是 accent**：橡皮筋、作用对象轮廓与选区框已经全是 accent，
    * 标记混在里面读不出来，而它回答的是一个是非问题——吸上了没有。也**不复用 danger**：
    * 吸附成功不是危险，借那个 token 会让重新配色的人一改就把两件事一起改掉。
@@ -66,8 +79,7 @@
 }
 
 .compose-stage[data-compose-theme='light'] {
-  --compose-stage-grid-minor: rgb(71 84 103 / 14%);
-  --compose-stage-grid-primary: rgb(52 64 84 / 27%);
+  --compose-stage-grid-ink: #344054;
 
   /* 浅底上的浅灰边界读不出来，压深一档。 */
   --compose-scene-outline: rgb(71 84 103 / 42%);

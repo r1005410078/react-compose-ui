@@ -1,6 +1,20 @@
 import { expect, test } from '@playwright/test'
 import { openPageInspector, pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
 
+
+/**
+ * 读出 X 轴上**最细**的那一层网格的屏幕间距。
+ *
+ * @remarks
+ * 不能按固定下标取：网格的图层数会随缩放变化（细档淡到 0 时那一层被丢掉），
+ * 而且大格分两级。X 轴的层写成 `<间距>px 100%`，取最后一条即最细的那层。
+ */
+const finestGridStepX = (element: Element) => {
+  const sizes = getComputedStyle(element).backgroundSize.split(', ')
+  const xs = sizes.filter((size) => size.endsWith('100%'))
+  return Number.parseFloat(xs[xs.length - 1]!)
+}
+
 test('OpenSpec: stage / 四角缩放 / resize 手柄在预览阶段跟随鼠标', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
@@ -396,11 +410,10 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   }
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
   const grid = stage.getByTestId('stage-grid')
-  await expect.poll(() => grid.evaluate((element) =>
-    getComputedStyle(element).backgroundSize.split(',').length)).toBe(4)
-  await expect.poll(() => grid.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
-    .toBeCloseTo(3.2, 1)
+  // 判别点是「还在画」而不是某个具体间距：抽稀让细档间距恒落在 [4, 8)，因此缩到最低倍数
+  // 时网格仍然可见，而满不透明度的线（骨架档，细档的两倍）恒不小于 8px。
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeGreaterThanOrEqual(4)
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeLessThan(8)
 
   const beforeMove = await rectangle.boundingBox()
   expect(beforeMove).not.toBeNull()
@@ -691,11 +704,17 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
     const computed = getComputedStyle(element)
     const sizes = computed.backgroundSize.split(', ')
     const positions = computed.backgroundPosition.split(', ')
+    // 按下标取会随图层数漂：细档淡到 0 时那一层被丢掉，大格又分两级。取每个轴最后一条，
+    // 也就是最细的那一层——世界原点要落在它上面。
+    const lastIndexWhere = (test: (value: string) => boolean) =>
+      sizes.reduce((found, size, index) => (test(size) ? index : found), -1)
+    const x = lastIndexWhere((size) => size.endsWith('100%'))
+    const y = lastIndexWhere((size) => size.startsWith('100%'))
     return {
-      stepX: Number.parseFloat(sizes[2] ?? ''),
-      stepY: Number.parseFloat(sizes[3]?.split(' ')[1] ?? ''),
-      offsetX: Number.parseFloat(positions[2] ?? ''),
-      offsetY: Number.parseFloat(positions[3]?.split(' ')[1] ?? ''),
+      stepX: Number.parseFloat(sizes[x] ?? ''),
+      stepY: Number.parseFloat(sizes[y]?.split(' ')[1] ?? ''),
+      offsetX: Number.parseFloat(positions[x] ?? ''),
+      offsetY: Number.parseFloat(positions[y]?.split(' ')[1] ?? ''),
     }
   })
   const distanceToLine = (position: number, offset: number, step: number) => {

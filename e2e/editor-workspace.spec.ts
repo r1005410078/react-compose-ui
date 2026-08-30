@@ -1,6 +1,20 @@
 import { expect, test } from '@playwright/test'
 import { pointerDrop, drawContainer, drawText, expandInspectorSection } from './support/test-helpers'
 
+
+/**
+ * 读出 X 轴上**最细**的那一层网格的屏幕间距。
+ *
+ * @remarks
+ * 不能按固定下标取：网格的图层数会随缩放变化（细档淡到 0 时那一层被丢掉），
+ * 而且大格分两级。X 轴的层写成 `<间距>px 100%`，取最后一条即最细的那层。
+ */
+const finestGridStepX = (element: Element) => {
+  const sizes = getComputedStyle(element).backgroundSize.split(', ')
+  const xs = sizes.filter((size) => size.endsWith('100%'))
+  return Number.parseFloat(xs[xs.length - 1]!)
+}
+
 test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路径直接展示 Home 页面工作区', async ({ page }) => {
   await page.goto('/')
 
@@ -114,17 +128,13 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   for (let index = 0; index < 2; index += 1) {
     await stage.press('Control+-')
   }
-  await expect.poll(() => grid.evaluate((element) =>
-    getComputedStyle(element).backgroundSize.split(',').length)).toBe(4)
-  await expect.poll(() => grid.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
-    .toBeGreaterThan(4)
+  // 细档间距恒在 [4, 8)：再密就翻倍 stride，因此缩到任何倍数下这个区间都成立。
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeGreaterThanOrEqual(4)
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeLessThan(8)
   for (let index = 0; index < 6; index += 1) {
     await stage.press('Control+-')
   }
-  await expect.poll(() => grid.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
-    .toBeGreaterThanOrEqual(2)
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeGreaterThanOrEqual(4)
   await expect(editor).toHaveScreenshot('stage-workspace-canvas-inspector.png', {
     animations: 'disabled',
     caret: 'hide',
@@ -133,9 +143,8 @@ test('OpenSpec: editor-workspace-layout / 隐式 Canvas Inspector / 快捷选择
   for (let index = 0; index < 5; index += 1) {
     await stage.press('Control+-')
   }
-  await expect.poll(() => grid.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).backgroundSize.split(',')[2]!)))
-    .toBeCloseTo(3.2, 1)
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeGreaterThanOrEqual(4)
+  await expect.poll(() => grid.evaluate(finestGridStepX)).toBeLessThan(8)
   await expect(editor).toHaveScreenshot('stage-workspace-low-zoom-grid.png', {
     animations: 'disabled',
     caret: 'hide',

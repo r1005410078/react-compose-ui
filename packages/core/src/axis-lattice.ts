@@ -46,8 +46,70 @@ export interface ComposeAxisLattice {
 export interface ComposeLatticeBand {
   /** 左（上）边界的 CSS 像素位置。 */
   readonly start: number
-  /** 带宽，恒为 1 CSS px。 */
+  /** 带宽，恒为**一个设备像素**（`1 / devicePixelRatio` CSS px）。 */
   readonly width: number
+}
+
+/**
+ * 满不透明度的网格线之间的最小屏幕间距（CSS px）。
+ *
+ * @remarks
+ * 「多近算太密」在这个产品里只有一个数：它同时是画布网格满值线的下限与标尺细刻度的抽稀阈值。
+ * 此前网格用 2、标尺用 8，两者共用同一个点阵却对同一个问题各有一套答案——标尺已经抽稀两档
+ * 了，画布还在画满。
+ *
+ * 2 那个数的来历是「1px 线至少留 1px 缝才不会退化成整片填色」，那是**退化的下限**而不是
+ * 可读的下限：抽稀后间距恒落在 `[阈值, 2×阈值)`，因此细线间距恒在 2–4px 且全画在满不透明度
+ * 上，25% 缩放时正好是 1px 线配 1px 缝。
+ *
+ * @public
+ */
+export const COMPOSE_LATTICE_MIN_FULL_SPACING = 8
+
+/**
+ * 细档开始退场的屏幕间距（CSS px）。
+ *
+ * @remarks
+ * 淡入区间是 `[T, 2T)`——细档在 `2T` 处才满值，因此它恒为
+ * {@link COMPOSE_LATTICE_MIN_FULL_SPACING} 的一半，两者是一对，改一个必须改另一个。
+ *
+ * 直接把抽稀阈值取成 8 会让 100% 缩放（默认 8 单位网格的间距正好 8px）的细档整档消失。
+ * 这次要改的是缩小的那一段，`zoom >= 1` 必须逐像素不变。
+ *
+ * @public
+ */
+export const COMPOSE_LATTICE_FADE_START = COMPOSE_LATTICE_MIN_FULL_SPACING / 2
+
+/**
+ * 细档的淡入系数：抽稀后的间距恒在 `[T, 2T)`，在这一段里从 0 走到 1。
+ *
+ * @remarks
+ * 只提高间距而不淡入，每次 stride 翻倍会让一半的线**在一帧内**消失。阈值是 2px 时这事发生
+ * 在没人看得清的密度里，所以从来没暴露过；让线更早退场之后它就变成一次显眼的闪动。
+ * **提高间距与补淡入必须一起做。**
+ *
+ * @public
+ */
+export function composeLatticeDetailFade(screenStep: number): number {
+  return Math.max(0, Math.min(1, screenStep / COMPOSE_LATTICE_FADE_START - 1))
+}
+
+/**
+ * 叠在已有墨之上的那一层要写入的不透明度，使合成结果恰好等于 `target`。
+ *
+ * @remarks
+ * 解 `below + b * (1 - below) = target` 得到。两处用它，而它们是同一件事的两个应用：
+ * 骨架档（`2 × stride`）补足淡出中的细档，以及每一级主网格补足它下面那一级。
+ * 它管的是「下面已经有多少墨了」，跟那层墨是为了淡入还是为了分级无关。
+ *
+ * `below` 等于 `target` 时返回 0——细档满值时骨架档根本不画，因此放大时的输出与引入淡入
+ * 之前逐字相同。少了这一步，两档叠加会让**每隔一根线深一档**。
+ *
+ * @public
+ */
+export function composeLatticeStackedAlpha(target: number, below: number): number {
+  if (below >= 1) return 0
+  return (target - below) / (1 - below)
 }
 
 function positiveModulo(value: number, modulus: number) {
@@ -141,10 +203,14 @@ export function latticeLinePosition(lattice: ComposeAxisLattice, world: number):
  * 线以世界坐标为**左边界**向右覆盖 1 CSS px，与 `linear-gradient(色 1px, transparent 1px)`
  * 的语义一致。旧的 SVG `stroke-width: 1` 以坐标为中心，正是恒定半像素错位的来源。
  *
+ * 带宽是**一个设备像素**而不是一个 CSS 像素：`1px` 在 2× 屏上是两个物理像素、3× 屏上是三个
+ * ——屏幕越好线越粗，而网格线从来就该是一条发丝线。本文件上方的注释一直写着「覆盖……那一个
+ * 设备像素列」，实现此前与它不符。
+ *
  * @public
  */
 export function latticeLineBand(lattice: ComposeAxisLattice, world: number): ComposeLatticeBand {
-  return { start: latticeLinePosition(lattice, world), width: 1 }
+  return { start: latticeLinePosition(lattice, world), width: 1 / lattice.devicePixelRatio }
 }
 
 function finitePrecision(value: number) {
@@ -152,8 +218,13 @@ function finitePrecision(value: number) {
   return Object.is(rounded, -0) ? '0' : String(rounded)
 }
 
-/** 细刻度之间的最小屏幕间距；再密就会糊成一片。 */
-const RULER_MIN_TICK_SPACING = 8
+/**
+ * 细刻度之间的最小屏幕间距。
+ *
+ * @remarks
+ * 与画布网格满值线的下限是**同一个数**，因此两者不会对「多密算太密」给出不同答案。
+ */
+const RULER_MIN_TICK_SPACING = COMPOSE_LATTICE_MIN_FULL_SPACING
 
 /** 带数字的刻度之间的最小屏幕间距，保证数字不重叠。 */
 const RULER_MIN_LABEL_SPACING = 48

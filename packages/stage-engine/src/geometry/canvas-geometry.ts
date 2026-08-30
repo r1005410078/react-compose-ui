@@ -19,6 +19,10 @@ import type {
  * stage-engine。这里保留既有导出名，Stage 侧调用点一行不改。
  */
 export {
+  COMPOSE_LATTICE_FADE_START,
+  COMPOSE_LATTICE_MIN_FULL_SPACING,
+  composeLatticeDetailFade,
+  composeLatticeStackedAlpha,
   createAxisLattice,
   createRulerTicks,
   latticeLineBand,

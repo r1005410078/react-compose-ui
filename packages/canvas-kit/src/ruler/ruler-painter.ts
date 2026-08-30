@@ -72,9 +72,13 @@ function axisThickness(input: ComposeRulerPaintInput) {
  * 绘制一条标尺。
  *
  * @remarks
- * 所有沿轴坐标都以 `[position, position + 1)` 的 1 CSS px 带绘制，与画布网格的
- * `linear-gradient(色 1px, transparent 1px)` 语义一致；这是标尺与网格能够严格对齐的前提。
- * 数字以该带的中心（`position + 0.5`）居中，不再左对齐。
+ * 刻度以 `[position, position + 1 / dpr)` 的**一个设备像素**带绘制，与画布网格的线宽一致；
+ * 这是标尺与网格能够严格对齐的前提。同一世界坐标若在标尺上比在图面上粗一倍，修好一个不一致
+ * 就会造出另一个。
+ *
+ * 数字仍以 CSS 像素带的中心（`position + 0.5`）居中：它是一段文字，跟发丝线的宽度无关。
+ *
+ * 选区条与游标不属于点阵，仍按 1 CSS px 绘制——它们是指示 chrome，不是网格线。
  */
 export function paintRuler(ctx: CanvasRenderingContext2D, input: ComposeRulerPaintInput): void {
   const { devicePixelRatio: dpr, palette } = input
@@ -95,7 +99,7 @@ export function paintRuler(ctx: CanvasRenderingContext2D, input: ComposeRulerPai
     // 细刻度短、带数字的刻度长；主网格线上的刻度用更亮的颜色，形成三级层次。
     const top = tick.label ? RULER_TICK_TOP : RULER_MINOR_TICK_TOP
     ctx.fillStyle = tick.major ? palette.tickMajor : palette.tick
-    ctx.fillRect(tick.screen, top, 1, thickness - top)
+    ctx.fillRect(tick.screen, top, 1 / dpr, thickness - top)
     if (!tick.label) continue
     ctx.fillStyle = palette.label
     ctx.fillText(tick.label, tick.screen + 0.5, RULER_LABEL_BASELINE)

@@ -14,7 +14,10 @@ export function createDefaultCanvasSettings(): ComposeCanvasSettings {
       stepY: 8,
       offsetX: 0,
       offsetY: 0,
-      primaryLineEvery: 8,
+      // 主网格按 primaryLineEvery 的幂分级（细 / 中 / 粗 = ×1 / ×4 / ×16），因此这个数同时
+      // 决定两级的层间比。调研里同行的层间比集中在 4–5（Photoshop 4、AutoCAD 5、Inkscape 5、
+      // Excalidraw 5、tldraw 每级 4），没有任何产品超过 10——一个大格里 16 个小格数不过来。
+      primaryLineEvery: 4,
       snapEnabled: true,
     },
     smartSnap: {

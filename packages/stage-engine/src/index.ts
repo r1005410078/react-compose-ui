@@ -8,6 +8,10 @@
 export {
   ROTATION_SNAP_DEGREES,
   applyMatrix,
+  COMPOSE_LATTICE_FADE_START,
+  COMPOSE_LATTICE_MIN_FULL_SPACING,
+  composeLatticeDetailFade,
+  composeLatticeStackedAlpha,
   createAxisLattice,
   createRulerTicks,
   decomposeMatrix,

@@ -25,7 +25,7 @@ describe('OpenSpec: stage / 自适应网格标尺与世界原点 / 刻度线与�
     expect(latticeLinePosition(ruler, world)).toBeCloseTo(latticeLinePosition(grid, world), 9)
   })
 
-  it('落点以世界坐标为左边界覆盖一个 CSS 像素', () => {
+  it('落点以世界坐标为左边界覆盖一个设备像素', () => {
     const lattice = createAxisLattice({ ...base, minScreenSpacing: 2 })
     const band = latticeLineBand(lattice, 0)
     // 旧实现的 SVG stroke 以坐标为中心覆盖 [pos-0.5, pos+0.5)，与 CSS gradient 差半像素。
@@ -33,11 +33,13 @@ describe('OpenSpec: stage / 自适应网格标尺与世界原点 / 刻度线与�
     expect(band.start).toBe(latticeLinePosition(lattice, 0))
   })
 
-  it('设备像素比放大时保持整像素宽度', () => {
-    const lattice = createAxisLattice({ ...base, minScreenSpacing: 2, devicePixelRatio: 2 })
+  it.each([1, 2, 3])('设备像素比为 %i 时带宽恒为一个设备像素', (dpr) => {
+    const lattice = createAxisLattice({ ...base, minScreenSpacing: 2, devicePixelRatio: dpr })
     const band = latticeLineBand(lattice, 0)
-    expect(band.width).toBe(1)
-    expect(Number.isInteger(band.start * 2)).toBe(true)
+    // 判别点：此前这条用例叫「保持整像素宽度」，断言的却是 1 个 **CSS** 像素——在 dpr=2 下
+    // 那正好是两个物理像素，用例名说的是目标、断言写的是实现，两者从一开始就不是一回事。
+    expect(band.width * dpr).toBe(1)
+    expect(Number.isInteger(band.start * dpr)).toBe(true)
   })
 
   it('缩放过密时按二次幂 stride 抽稀', () => {
