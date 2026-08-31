@@ -15,6 +15,7 @@ import {
   type ComposeLayoutSnapshot,
   type ComposePointFieldIndex,
   type ComposePointFieldKind,
+  type ComposeRegularPolygonFit,
   type ComposeWireBinding,
 } from '@compose-ui/core'
 import {
@@ -25,6 +26,7 @@ import {
 } from '@compose-ui/commands'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  COMPOSE_POLYGON_DEFAULT_SIDES,
   createStageDraftingCommands,
   createStageGripSession,
   collectStageRevealedPorts,
@@ -42,7 +44,7 @@ import {
   type StageViewport,
 } from '@compose-ui/stage-engine'
 import { isEditableTarget } from '../stage-surface/keyboard'
-import { resolveStageDynamicInput } from './dynamic-input'
+import { resolveStageDynamicInput, resolveStageDynamicInputPrompt } from './dynamic-input'
 import type { ComposeStageDispatch } from '../types'
 import {
   anchorKey,
@@ -163,6 +165,19 @@ const EMPTY_EXCLUSIONS: readonly string[] = []
  * 两处各写一份的症状是「预览跟着变了、回车却按坐标解析」——同一段文本在两条路径上被读成
  * 两种东西，而屏幕上没有任何线索。
  */
+/**
+ * 修饰键滚轮走一格所需的量，按 `deltaMode` 分档。
+ *
+ * @remarks
+ * 取的是**一次鼠标滚轮刻度**——那正是手感上的「一格」。浏览器把它报成两种量纲：像素模式下
+ * 一刻度是 100～120 像素（Chrome / Safari），行模式下是 3 行（Firefox）。
+ *
+ * 这是本仓库少有的魔法阈值，而它躲不掉：wheel 事件本身没有「一格」的语义，而触控板的一次
+ * 两指滑动会发出几十个小 delta——一个事件一格会让边数从 6 冲到 60。取一次刻度的量至少让它
+ * 有来源，也让触控板的一次滑动给出几格而不是几十格。
+ */
+const WHEEL_NOTCH: Readonly<Record<number, number>> = { 0: 100, 1: 3, 2: 1 }
+
 const BARE_NUMBER = /^-?\d+(\.\d+)?$/
 
 /**
@@ -334,6 +349,28 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 都没取才退出。与几何编辑里「先熄灭热夹点、再退出会话」同构。
    */
   const pickedRef = useRef(false)
+
+  /**
+   * `POLYGON` 上一次用过的边数。
+   *
+   * @remarks
+   * 会话级，不写文档也不持久化——它是「上次怎么画的」而不是「画了什么」。记忆之所以可以存在，
+   * 是因为默认值印在提示的尖括号里：`CIRCLE` 的档位不跨命令记忆，理由正是那份状态看不见。
+   */
+  const polygonSidesRef = useRef(COMPOSE_POLYGON_DEFAULT_SIDES)
+  /**
+   * `POLYGON` 上一次用的档位。
+   *
+   * @remarks
+   * 与边数同一条理由跨命令记住：「不跨命令记忆」的判据是**那份状态看不见**，而档位挪到第一步、
+   * 印成光标旁的胶囊之后，那条理由不再成立。这一版更需要它——档位在第一步就定死，选错只能
+   * 重来，而记住之后重来一次只需按一下 `Tab`。会话级，不写文档、不持久化。
+   */
+  const polygonFitRef = useRef<ComposeRegularPolygonFit>('inscribed')
+
+  /** 修饰键滚轮的累加余量；方向反转与新会话都清零。 */
+  const wheelRemainderRef = useRef(0)
+
   /**
    * 这一条会话到目前为止碰过端口没有。
    *
@@ -489,6 +526,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setActiveCommandId(null)
     portAnchors.current.clear()
     createdIdsRef.current = []
+    wheelRemainderRef.current = 0
     setPrompt(null)
     setReference(null)
     setPreview(null)
@@ -549,13 +587,35 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 点有指针与键入两个来源——各记一次必然漏掉其中一条，而漏掉的那条的症状是「用键盘打了第一
    * 个点之后按 Esc 整条命令没了」。
    */
+  /**
+   * 用一个点推进会话；这一步有待提交的键入值时**先把它交出去**。
+   *
+   * @remarks
+   * `cursorInput` 那一档的缓冲是**这一步的待定值**，而不是一句还没敲完的命令。不先交出去的
+   * 症状是：光标旁那个框写着 `4`，点下中心之后落地的却是六边形——屏幕上写着一件事、做的是
+   * 另一件事，而用户没有任何办法看出来。
+   *
+   * 这与取点步早就成立的那条是同一句话：那里键入的值折进落点里（`applyComposeFieldOverride`
+   * 与「正在键入时预览跟着键入的值走」），缓冲从来不会被静默丢掉。此前只有 `Enter` 会把它
+   * 交出去，因此那一档是这条规则唯一的漏网。
+   *
+   * 交出去被拒绝时 MUST 停手：值非法，此刻落一个点等于拿一个用户没打算要的默认值成图，
+   * 而拒绝的说明还会被下一步的提示顶掉。
+   */
   const advanceWithPoint = useCallback((
     session: ComposeCommandSession<StageDraftingEffect>,
     point: ComposeInputPoint,
   ) => {
     pickedRef.current = true
+    const pending = session.prompt?.cursorInput ? fieldText.trim() : ''
+    if (pending.length > 0) {
+      setFieldText('')
+      applyStep(session.advance({ kind: 'text', text: pending }))
+      // 交出去之后会话可能被拒绝、结束或换了一条；只有它还活着且推进了才继续落点。
+      if (sessionRef.current !== session || session.prompt?.cursorInput) return
+    }
     applyStep(session.advance({ kind: 'point', point }))
-  }, [applyStep])
+  }, [applyStep, fieldText])
 
   /**
    * 特征点捕捉的世界容差。
@@ -603,10 +663,27 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const fieldKind: ComposePointFieldKind | null = prompt?.fields ?? null
   /** 正在取点且这一步有字段：动态输入画不画读它。 */
   const awaitingPointForFields = prompt?.accepts.includes('point') === true && fieldKind !== null
-  /** 这一步有**两个**字段，`Tab` 才有去处。 */
-  const takesTab = awaitingPointForFields
+  /**
+   * 这一步要在光标旁印什么；缺席即不印。
+   *
+   * @remarks
+   * 判据由**提示自己声明**而不由宿主从 `accepts` 反推：反推过一版（「接受文本、既不取点也不
+   * 选对象」），它在第一步同时收点之后就不成立了。而反推还有一处天生的盲区——只有命令知道
+   * 那个框里该印什么值，宿主手上只有一句提示文案。
+   */
+  const cursorInput = prompt?.cursorInput ?? null
+  /**
+   * `Tab` 在这一步有事可做。
+   *
+   * @remarks
+   * 两支互斥，**由构造保证**：有两个数值字段的步没有档位（那一档 `Tab` 归锁定），有档位的步
+   * 没有第二个数值字段。写成互斥的两支而不是一个优先级，是因为「同时成立时听谁的」在屏幕上
+   * 没有可解释的答案。
+   */
+  const takesTab = (awaitingPointForFields
     && fieldKind !== null
-    && !isComposeSingleFieldKind(fieldKind)
+    && !isComposeSingleFieldKind(fieldKind))
+    || cursorInput?.toggle != null
 
   /**
    * 把已锁定的字段覆盖回落点。
@@ -714,6 +791,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
       ...(latest.current.isGeometryEditable
         ? { isGeometryEditable: latest.current.isGeometryEditable }
         : {}),
+      polygonSides: polygonSidesRef.current,
+      onPolygonSidesChange: (sides) => { polygonSidesRef.current = sides },
+      polygonFit: polygonFitRef.current,
+      onPolygonFitChange: (fit) => { polygonFitRef.current = fit },
     }
     setGripTarget(null)
     setReference(null)
@@ -722,6 +803,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 全新会话：端口来源与「我建了哪些」都只描述**这一条**，重开时必须一起清掉。
     portAnchors.current.clear()
     createdIdsRef.current = []
+    wheelRemainderRef.current = 0
     pickedRef.current = false
     setWiring(false)
     /*
@@ -867,6 +949,39 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return
     }
 
+    /*
+     * 这一步接受文本：坐标写法在这里没有意义，一律原样交给会话。
+     *
+     * `'text'` 在协议里一直定义着却从来没有生产者——既有命令要么取点、要么选对象、要么打
+     * 关键字。少了这条路由，`POLYGON` 的第一步收到的 `6` 会因为解析不成坐标、这一步又没有
+     * `fields` 而掉进最后那条兜底，变成一个**关键字**；而命令行会把关键字渲染成可点的选项，
+     * 关键字是一份枚举，边数不是。
+     *
+     * **判据只看接不接受文本，不再要求「且不接受点」**：第一步同时收点（点一下即取用默认
+     * 边数并把那一下当作中心），而键盘与指针是两条不同的通道。它们在这里不会撞车——这一步
+     * 还没有参考点，直接距离输入无从谈起，因此裸数字只可能是那个数。
+     *
+     * 宿主不解析也不校验这段文本：范围与整数是命令自己的规则，放在这里等于让同一条规则有
+     * 两处来源。
+     */
+    if (session.prompt?.accepts.includes('text') === true) {
+      /*
+       * **关键字压过自由文本**，且这条判断只存在于接受文本的步上。
+       *
+       * 别处的次序（坐标 → 裸数字 → 关键字兜底）已经把关键字解析对了，而这一支会把**所有**
+       * 文本原样吞掉，兜底因此永远够不着——症状是在第一步敲 `C` 换档，得到的是「边数必须是
+       * 3 到 1024 之间的整数」。关键字是一份**闭合枚举**，落在里面的输入不可能同时是那个
+       * 自由字段的值。
+       */
+      const keyword = session.prompt.keywords?.find(
+        ({ key }) => key.toUpperCase() === trimmed.toUpperCase(),
+      )
+      applyStep(keyword
+        ? session.advance({ kind: 'keyword', key: keyword.key })
+        : session.advance({ kind: 'text', text: trimmed }))
+      return
+    }
+
     const parsed = parseComposeCoordinate(trimmed, reference ?? undefined)
     if (parsed.ok) {
       // 键入的坐标是精确值，不再经过捕捉、正交与网格。**完整写法优先于裸数字**：
@@ -916,6 +1031,16 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 起来的状态。
    */
   const advanceField = useCallback((text: string) => {
+    /*
+     * 有档位的那一步 `Tab` 换档，走的就是命令行里那个关键字——键位与敲字是**同一件事的两个
+     * 入口**，不是两条实现。它排在字段轮转之前：那一步没有第二个数值字段，轮转无处可去。
+     */
+    const toggle = sessionRef.current?.prompt?.cursorInput?.toggle
+    if (toggle) {
+      const session = sessionRef.current
+      if (session) applyStep(session.advance({ kind: 'keyword', key: toggle.keyword }))
+      return
+    }
     const livePoint = livePointRef.current
     if (!fieldKind || !livePoint) return
     const trimmed = text.trim()
@@ -927,7 +1052,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setLockedFields(activeField === 0 ? [value, null] : [null, value])
     setActiveField(activeField === 0 ? 1 : 0)
     setFieldText('')
-  }, [activeField, fieldKind, reference])
+  }, [activeField, applyStep, fieldKind, reference])
 
   /**
    * 以「没有更多输入了」推进当前会话。
@@ -939,6 +1064,47 @@ export function useStageDrafting(options: StageDraftingOptions) {
     const session = sessionRef.current
     if (!session) return
     applyStep(session.advance({ kind: 'accept' }))
+  }, [applyStep])
+
+  /**
+   * 修饰键滚轮：把它转成命令的 `+` / `-` 关键字。
+   *
+   * @remarks
+   * **裸滚轮不被命令占用**：它是画布平移，`Ctrl`/`Cmd` + 滚轮是缩放，两者在命令进行中一律
+   * 照常工作。这与「取点接管排在画布平移之下」是同一条判断——命令进行中仍要能平移与缩放画布，
+   * 去看远处那个点。因此这条能力挂在 `Alt` 上；`Shift` 不行，浏览器已经把它映射成横向 delta，
+   * 而横向 delta 就是横向平移。
+   *
+   * 走**关键字**而不是第五种输入：增减不该推进状态机，那正是 `preview` 被做成查询而不是输入
+   * 的理由。关键字本来就是「改变后续流程但不取点」的那一档，因此键盘与滚轮走同一条路。
+   *
+   * @returns 本次滚轮是否已被消费；为真时调用方不再平移或缩放。
+   */
+  const handleWheel = useCallback((event: WheelEvent) => {
+    const session = sessionRef.current
+    if (!session || !event.altKey) return false
+    // 这一步没有列出增减关键字就不拦截：`Alt` + 滚轮此时与从前一样是平移。
+    const takesSides = session.prompt?.keywords?.some(
+      ({ key }) => key === '+' || key === '-',
+    ) === true
+    if (!takesSides) return false
+
+    const notch = WHEEL_NOTCH[event.deltaMode] ?? WHEEL_NOTCH[0]!
+    // 方向反转时清零：不清的话反向滚动要先抵消掉上一次的余量才有反应。
+    if (Math.sign(event.deltaY) !== Math.sign(wheelRemainderRef.current)) {
+      wheelRemainderRef.current = 0
+    }
+    wheelRemainderRef.current += event.deltaY
+    while (Math.abs(wheelRemainderRef.current) >= notch) {
+      const direction = Math.sign(wheelRemainderRef.current)
+      wheelRemainderRef.current -= direction * notch
+      // 向前滚（`deltaY` 为负）是加：与「向上滚 = 往多」的通行方向感一致。
+      applyStep(session.advance({ kind: 'keyword', key: direction < 0 ? '+' : '-' }))
+      // 判据只看提示列没列出这两个关键字，而宿主注入的命令可以在它们上面提交。会话一旦结束
+      // 就停手：一次滚动的余量不该继续喂给一条已经死掉的会话。
+      if (sessionRef.current !== session) break
+    }
+    return true
   }, [applyStep])
 
   const cancel = useCallback(() => {
@@ -1154,7 +1320,35 @@ export function useStageDrafting(options: StageDraftingOptions) {
    *
    * 活动字段正在被键入时，框里显示的是那段文本而不是读数：用户打了什么就该看见什么。
    */
+  // 十字线画在捕捉/正交求解**之后**的落点上：让它跟着裸光标走，用户会看见十字线与最终
+  // 落点差着几个像素，而那正是他要对齐的地方。
+  const pointerScreen = useMemo(
+    () => (candidatePoint ? worldToScreen(candidatePoint, viewport) : null),
+    [candidatePoint, viewport],
+  )
+
   const dynamicInput = useMemo(() => {
+    /*
+     * 这一步只等一个数（`POLYGON` 的边数）：`fields` 说的是「这一步的**点**怎么参数化」，
+     * 而这一步没有点，因此走不了下面那条路，但它同样需要被看见——命令行在图面底部，用户的
+     * 眼睛此刻在光标上，「敲一个数」这句话说在他没有在看的地方等于没说。
+     *
+     * 只渲染不接输入：输入端仍然只有命令行一个。正在键入时印缓冲，否则印提示本身
+     * （它里面就带着当前值，例如「输入边数 <6>」）。
+     */
+    if (enabled && cursorInput && pointerScreen) {
+      // 没有键入过就印默认值，且淡下去：「这个数是我给的」与「这个数是默认的」必须一眼可分。
+      const typing = fieldText.length > 0
+      return resolveStageDynamicInputPrompt(
+        pointerScreen,
+        {
+          text: typing ? fieldText : cursorInput.value,
+          state: typing ? 'active' : 'ghost',
+        },
+        cursorInput.toggle?.value ?? null,
+      )
+    }
+
     if (!enabled || !awaitingPointForFields || !fieldKind || !candidatePoint) return null
     const values = composePointToFields(fieldKind, candidatePoint, reference ?? undefined)
     const raw = [values.first, values.second] as const
@@ -1183,16 +1377,11 @@ export function useStageDrafting(options: StageDraftingOptions) {
       measured: prompt?.measured === true,
     })
   }, [
-    activeField, awaitingPointForFields, candidatePoint, enabled, fieldKind, fieldText,
-    lockedFields, prompt, reference, resolvedPointer, typedAway, viewport,
+    activeField, awaitingPointForFields, candidatePoint, cursorInput, enabled, fieldKind,
+    fieldText, lockedFields, pointerScreen, prompt?.measured, reference, resolvedPointer,
+    typedAway, viewport,
   ])
 
-  // 十字线画在捕捉/正交求解**之后**的落点上：让它跟着裸光标走，用户会看见十字线与最终
-  // 落点差着几个像素，而那正是他要对齐的地方。
-  const pointerScreen = useMemo(
-    () => (candidatePoint ? worldToScreen(candidatePoint, viewport) : null),
-    [candidatePoint, viewport],
-  )
 
   // 命令正在请求一个点：捕捉标记与十字线形态都读它，两处不得各判一次。
   const awaitingPoint = enabled && prompt?.accepts.includes('point') === true
@@ -1224,6 +1413,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
       ? selectedIds.length
       : null,
     awaitingPoint,
+    /**
+     * 这一步只等一个数：既不取点也不选对象。
+     *
+     * @remarks
+     * 宿主拿它做一件事——**跟踪指针**，好把那个框画在光标旁。它不画十字光标：十字线的含义是
+     * 「这里可以落一个点」，而这一步点下去什么都不会发生。
+     */
+    cursorInput: enabled ? cursorInput : null,
     awaitingSelection: enabled && prompt?.accepts.includes('selection') === true,
     pointerType,
     prompt: enabled ? prompt : null,
@@ -1273,6 +1470,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
     activeCommandId: enabled ? activeCommandId : null,
     acceptCommand,
     cancel,
+    /** 修饰键滚轮的拦截谓词；交给画布滚轮 Hook 的 `interceptWheel`。 */
+    handleWheel,
     clearNotice,
     handleKeyDown,
     handlePoint,

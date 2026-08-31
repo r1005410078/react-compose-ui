@@ -644,3 +644,71 @@ export function flattenComposeOutline(
     piece.kind === 'segment' ? [piece.segment] : flattenComposeArc(piece.arc)
   ))
 }
+
+/**
+ * 正多边形以哪个圆为准。
+ *
+ * @remarks
+ * `inscribed` 是**全部顶点**落在圆上，`circumscribed` 是**各边中点**落在圆上——AutoCAD
+ * `POLYGON` 的两个选项，取的也是它那两个词。
+ *
+ * @public
+ */
+export type ComposeRegularPolygonFit = 'inscribed' | 'circumscribed'
+
+/**
+ * 由中心与一个落点求正多边形的顶点。
+ *
+ * @remarks
+ * 落点同时给出**大小与相位**两样：内接时它就是其中一个顶点，外切时它是某条边的中点。这正是
+ * AutoCAD 拾取半径时多边形会跟着光标转的原因，而它对键盘也成立——键入的裸数字只替换半径这一个
+ * 字段，角度分量原样保留，因此相位不丢。
+ *
+ * 外切的外接圆半径按半角放大：落点到中心的距离是内切圆半径（边心距），而 `r = R·cos(π/n)`。
+ *
+ * **角度的正负约定在这里不可观测**：本模块沿用 {@link composeArcPointAt} 的裸角
+ * （`atan2(dy, dx)`，Y 轴向下因此角度递增是屏幕顺时针），而点输入那一侧的 `angleDegrees`
+ * 取 `atan2(−dy, dx)`。两者算出来的**顶点集合逐点相同**：内接的首顶点无论如何都落在落点上，
+ * 而外切差的那 `±180/n` 因为 `−180/n ≡ 180/n − 360/n`、顶点又按 `360/n` 整周排布而抵消。
+ *
+ * 绕向取屏幕顺时针，与 `RECTANGLE` 产出的四顶点一致。它不影响任何下游——填充按 nonzero、
+ * 归一化只做平移——因此这里选的是「与既有那条一致」，不是「正确」。
+ *
+ * 边数的产品上界（AutoCAD 的 1024）**不在这里**：那是命令自己的规则，两处各判一次迟早漂移。
+ * 本函数只挡数学上无解的输入。
+ *
+ * @param center - 多边形中心。
+ * @param through - 落点：内接时是一个顶点，外切时是一条边的中点。
+ * @param sides - 边数；必须是不小于 3 的整数。
+ * @param fit - 以内接圆还是外切圆为准。
+ * @returns 顶点序列（屏幕顺时针）；落点与中心重合或边数无效时返回 `null`。
+ * @public
+ */
+export function composeRegularPolygonVertices(
+  center: ComposePlanarPoint,
+  through: ComposePlanarPoint,
+  sides: number,
+  fit: ComposeRegularPolygonFit,
+): readonly ComposePlanarPoint[] | null {
+  if (!Number.isInteger(sides) || sides < 3) return null
+  const dx = through.x - center.x
+  const dy = through.y - center.y
+  const distance = Math.hypot(dx, dy)
+  // 半径为零画不出东西，与整圆的退化判定同一条。
+  if (!(distance > 0) || !Number.isFinite(distance)) return null
+
+  const step = 360 / sides
+  const radius = fit === 'inscribed' ? distance : distance / Math.cos(Math.PI / sides)
+  // 外切的落点在两个顶点正中间，因此首顶点从它转过半步。
+  const first = Math.atan2(dy, dx) / TO_RADIANS + (fit === 'inscribed' ? 0 : step / 2)
+
+  const vertices: ComposePlanarPoint[] = []
+  for (let index = 0; index < sides; index += 1) {
+    const radians = (first + index * step) * TO_RADIANS
+    vertices.push({
+      x: center.x + radius * Math.cos(radians),
+      y: center.y + radius * Math.sin(radians),
+    })
+  }
+  return vertices
+}

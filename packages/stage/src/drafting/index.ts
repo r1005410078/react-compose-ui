@@ -1,4 +1,4 @@
-export { createStageDraftingCurveCommand } from './drafting-entity'
+export { createStageDraftingCurveCommand, STAGE_RECT_PRESET_ID } from './drafting-entity'
 export type { StageDraftingCommitContext } from './drafting-entity'
 export {
   stageCornerRadiusReadout,

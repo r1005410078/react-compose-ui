@@ -1,8 +1,13 @@
 export {
+  COMPOSE_POLYGON_DEFAULT_SIDES,
+  COMPOSE_POLYGON_MAX_SIDES,
+  COMPOSE_POLYGON_MIN_SIDES,
   createStageArcCommand,
   createStageArcSession,
   createStageCircleCommand,
   createStageCircleSession,
+  createStagePolygonCommand,
+  createStagePolygonSession,
   createStagePolylineCommand,
   createStagePolylineSession,
   createStageRectangleCommand,

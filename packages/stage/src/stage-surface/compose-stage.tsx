@@ -29,6 +29,7 @@ import type {
 import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_CURVE_PICK_TOLERANCE,
+  getComposeComposition,
   getComposeCurve,
   getComposeCurveFill,
   isComposeRectangleCurve,
@@ -89,6 +90,7 @@ import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
 import {
+  STAGE_RECT_PRESET_ID,
   StageDraftingOverlay,
   stageCornerRadiusReadout,
   stageResizeReadout,
@@ -474,6 +476,18 @@ function ComposeStageReady({
     specifyDiameter: messages.draftingSpecifyDiameter,
     diameterKeyword: messages.draftingDiameterKeyword,
     radiusKeyword: messages.draftingRadiusKeyword,
+    polygonTitle: messages.draftingPolygonTitle,
+    specifySides: messages.draftingSpecifySides,
+    specifyPolygonCenter: messages.draftingSpecifyPolygonCenter,
+    specifyInscribedRadius: messages.draftingSpecifyInscribedRadius,
+    specifyCircumscribedRadius: messages.draftingSpecifyCircumscribedRadius,
+    inscribedKeyword: messages.draftingInscribedKeyword,
+    circumscribedKeyword: messages.draftingCircumscribedKeyword,
+    inscribedChip: messages.draftingInscribedChip,
+    circumscribedChip: messages.draftingCircumscribedChip,
+    moreSidesKeyword: messages.draftingMoreSidesKeyword,
+    fewerSidesKeyword: messages.draftingFewerSidesKeyword,
+    invalidSides: messages.draftingInvalidSides,
     specifyCorner: messages.draftingSpecifyCorner,
     specifyOppositeCorner: messages.draftingSpecifyOppositeCorner,
     closeKeyword: messages.draftingCloseKeyword,
@@ -668,7 +682,16 @@ function ComposeStageReady({
 
   // 命令等着取点或等着选对象时才跟踪指针；两档合成一个标记，跟踪、挂载与推导读同一个。
   // 几何编辑期间也跟踪：这个模式的全部动作都是在取点，十字光标需要一个中心。
-  const draftingPointerTracked = draftingSession.awaitingPoint || draftingSession.awaitingSelection
+  /*
+   * 光标旁印着东西的那一档也要跟踪指针：那个框要画在它上面。
+   *
+   * 它**不单独决定十字光标**——`POLYGON` 的第一步同时收点，因此那一档的十字线由 `awaitingPoint`
+   * 画出来，而它也确实点得下去。将来若有一步只印框、不收点，那里就不该画十字线：十字线的含义
+   * 是「这里可以落一个点」。
+   */
+  const draftingPointerTracked = draftingSession.awaitingPoint
+    || draftingSession.awaitingSelection
+    || draftingSession.cursorInput !== null
   const pointerTracked = draftingPointerTracked || geometryEditingActive
 
   /*
@@ -785,6 +808,8 @@ function ComposeStageReady({
     onViewportChange: (next) => {
       onViewportChange({ x: next.offset.x, y: next.offset.y, zoom: next.zoom })
     },
+    // 命令进行中的 `Alt` + 滚轮改的是命令的参数（边数）而不是视口；裸滚轮与缩放照常。
+    interceptWheel: draftingSession.handleWheel,
   })
 
   // 引擎只需要会话（entityId + 活动顶点），几何直接交给 Overlay。memo 保持引用稳定，
@@ -915,6 +940,17 @@ function ComposeStageReady({
   const curveCorners = useMemo(() => {
     if (tool !== 'select' || geometryEditingActive || normalizedSelection.length !== 1) return null
     const entityId = normalizedSelection[0]!
+    /*
+     * **只有矩形出手柄。**「选中即出」那条理由是「改圆角是最常做的调整之一」，而它对矩形
+     * 成立（底板、面板、分区框），对别的多段线不成立：一个六边形符号选中之后多出六个点、
+     * 十二边形多出十二个，全都在说一件用户不打算做的事，还挡住了里面的图形。
+     *
+     * 判据读 `Composition.presetId` 而 MUST NOT 按几何反推：闭合四顶点多段线是 `RECTANGLE`
+     * 还是 `PLINE` 连着点四下再闭合，在几何上一模一样，而后者要的确实是折线。`presetId` 是
+     * 文档里「建它的那条命令说了什么」的唯一记录。
+     */
+    const entity = previewGeometry.document.entities[entityId]
+    if (!entity || getComposeComposition(entity).presetId !== STAGE_RECT_PRESET_ID) return null
     const preview = curveCornerSession.preview
     const corners = stageCurveCorners(
       previewGeometry,

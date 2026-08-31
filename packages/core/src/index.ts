@@ -227,6 +227,7 @@ export {
   composePolylineCornerFrames,
   composePolylineCornerRoundings,
   composePolylineSegments,
+  composeRegularPolygonVertices,
   composeRoundedPolylineOutline,
   composeSegmentIntersectsRect,
   composeSegmentMidpoint,
@@ -245,6 +246,7 @@ export type {
   ComposePolylineCornerFrame,
   ComposePolylineCornerRounding,
   ComposeRectShape,
+  ComposeRegularPolygonFit,
   ComposeSegmentShape,
 } from './curve-geometry'
 export {

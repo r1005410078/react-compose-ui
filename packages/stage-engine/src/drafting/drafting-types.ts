@@ -1,5 +1,5 @@
 import type { ComposeCommandPoint } from '@compose-ui/commands'
-import type { ComposeCurve } from '@compose-ui/core'
+import type { ComposeCurve, ComposeRegularPolygonFit } from '@compose-ui/core'
 
 /**
  * 一次夹点取点。
@@ -163,6 +163,42 @@ export interface StageDraftingMessages {
   readonly diameterKeyword: string
   /** 切回半径的关键字标签。 */
   readonly radiusKeyword: string
+  readonly polygonTitle: string
+  /**
+   * `POLYGON` 的第一步提示，默认值印在尖括号里（`输入边数或指定中心点 <6>`）。
+   *
+   * @remarks
+   * 默认值 MUST 出现在提示里：它是「上一次用了几条边就记住几条」这条记忆**能够成立的前提**
+   * ——`CIRCLE` 的档位之所以不跨命令记忆，理由是那份状态看不见，而这个数就写在屏幕上。
+   *
+   * 这一步同时收点：十字光标在图面上，而「点下去什么都不会发生」是屏幕上不该出现的状态。
+   */
+  readonly specifySides: (sides: number) => string
+  /** `POLYGON` 的中心点提示；不复用 `specifyCenter`，那一条写着「圆心」。 */
+  readonly specifyPolygonCenter: (sides: number) => string
+  readonly specifyInscribedRadius: (sides: number) => string
+  readonly specifyCircumscribedRadius: (sides: number) => string
+  /** 切成内接的关键字标签。 */
+  readonly inscribedKeyword: string
+  /** 切成外切的关键字标签。 */
+  readonly circumscribedKeyword: string
+  /**
+   * 内接档在光标旁那枚胶囊里的文案。
+   *
+   * @remarks
+   * 与关键字标签分开：关键字标签进命令行的方括号（「外切(C)」，说的是**切过去**会得到
+   * 什么），胶囊说的是**此刻**是哪一档。两处同一个词会让「外切」在屏幕上同时表示当前值与
+   * 目标值。它还必须短——胶囊坐在光标旁边，长文案会盖住用户正要落笔的地方。
+   */
+  readonly inscribedChip: string
+  /** 外切档在光标旁那枚胶囊里的文案。 */
+  readonly circumscribedChip: string
+  /** 加一条边的关键字标签；它同时是 `Alt` + 滚轮的落点。 */
+  readonly moreSidesKeyword: string
+  /** 减一条边的关键字标签。 */
+  readonly fewerSidesKeyword: string
+  /** 边数越界或不是整数。范围由调用方传入，避免同一对界限在文案里再写一遍。 */
+  readonly invalidSides: (min: number, max: number) => string
   readonly specifyCorner: string
   readonly specifyOppositeCorner: string
   readonly closeKeyword: string
@@ -205,4 +241,34 @@ export interface StageDraftingContext {
    * 不认识文档。缺席时视为全部可编辑。
    */
   readonly isGeometryEditable?: (entityId: string) => boolean
+  /**
+   * `POLYGON` 这一次的起始边数；缺省取 `COMPOSE_POLYGON_DEFAULT_SIDES`。
+   *
+   * @remarks
+   * 由宿主持有而不由命令自己记：命令定义只是一份描述，`start` 每次产出独立会话，没有跨会话
+   * 存放东西的地方。宿主把它记在**本次编辑会话**里——不写文档、不持久化，因为它是「上次怎么
+   * 画的」而不是「画了什么」。
+   */
+  readonly polygonSides?: number
+  /**
+   * `POLYGON` 改变边数时回调，宿主据此更新下一次的起始值。
+   *
+   * @remarks
+   * 键入一个数与按 `+` / `-`（滚轮走的也是这条）都会触发；边数没有真的变化时不触发。
+   */
+  readonly onPolygonSidesChange?: (sides: number) => void
+  /**
+   * `POLYGON` 这一次的起始档位；缺省取内接。
+   *
+   * @remarks
+   * 与 `polygonSides` 同一条理由跨命令记住：原先写着「只作用于本次会话」，判据是**那份状态
+   * 看不见**——用户过两天回来，同一条命令问的问题变了，而屏幕上没有东西解释为什么。档位挪到
+   * 第一步、印成光标旁的胶囊之后，那条理由不再成立。
+   *
+   * 这一版**更需要**它：档位在第一步就定死，选错只能重来，而记住之后重来一次只需按一下
+   * `Tab`。
+   */
+  readonly polygonFit?: ComposeRegularPolygonFit
+  /** `POLYGON` 换档时回调，宿主据此更新下一次的起始值。 */
+  readonly onPolygonFitChange?: (fit: ComposeRegularPolygonFit) => void
 }

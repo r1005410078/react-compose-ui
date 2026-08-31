@@ -2821,13 +2821,22 @@ describe('绘图模式', () => {
   })
 
   describe('OpenSpec: stage / 多段线的圆角手柄', () => {
-    /** 200 × 100 的闭合矩形；四个角都是直角，因此四个手柄。 */
+    /**
+     * 200 × 100 的闭合矩形；四个角都是直角，因此四个手柄。
+     *
+     * `Composition.presetId` 必须是 `rect`：圆角手柄的判据读的就是它。闭合四顶点多段线在几何
+     * 上与 `PLINE` 连点四下再闭合一模一样，判据因此不能按几何反推。
+     */
     function rectangleEntity(cornerRadius?: number): ComposeEntity {
       const base = curveEntity('rect-a')
       return {
         ...base,
         components: {
           ...base.components,
+          Composition: {
+            ...(base.components.Composition as Record<string, unknown>),
+            presetId: 'rect',
+          },
           Curve: {
             kind: 'polyline',
             vertices: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
@@ -3471,5 +3480,278 @@ describe('命令词汇表合并', () => {
     // 会话进行中的空确认按既有语义推进一步（一个点都没取的 LINE 就此结束），不重启 UNDO。
     typeCommand('')
     expect(run).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('POLYGON 的边数输入', () => {
+  afterEach(cleanup)
+
+  function typeCommand(text: string) {
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    return input
+  }
+
+  const prompt = () => screen.getByTestId('stage-drafting-command-prompt')
+
+  it('OpenSpec: stage / 只要文本的一步由命令行原样交给会话 / 数字是文本不是关键字', () => {
+    renderStage(document())
+    typeCommand('POL')
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <6>')
+
+    typeCommand('8')
+    // 走到中心步就说明它被当成了文本：当成关键字会被会话拒绝，提示会停在边数步。
+    expect(prompt()).toHaveTextContent('指定中心点')
+    expect(prompt()).toHaveTextContent('8 边')
+  })
+
+  it('OpenSpec: stage / 只要文本的一步由命令行原样交给会话 / 坐标写法在文本步不被当成点', () => {
+    renderStage(document())
+    typeCommand('POL')
+    typeCommand('100,50')
+    // 这一步只要数不要点：坐标写法原样交给会话，由**它**拒绝——宿主不解析也不校验，
+    // 「3 到 1024 的整数」是命令自己的规则。
+    expect(prompt()).toHaveTextContent('边数必须是 3 到 1024 之间的整数')
+
+    // 拒绝不结束会话：会话仍停在边数步，键入一个合法的数即可继续。
+    typeCommand('7')
+    expect(prompt()).toHaveTextContent('指定中心点')
+  })
+
+  /*
+   * 关键字压过自由文本，且这条判断只存在于接受文本的步上：别处的次序已经把关键字解析对了，
+   * 而文本那一支会把所有输入原样吞掉，兜底永远够不着。
+   */
+  it('OpenSpec: stage / 只要文本的一步由命令行原样交给会话 / 列出的关键字不被当成文本', () => {
+    renderStage(document())
+    typeCommand('POL')
+    typeCommand('C')
+    // 换档而不是「边数必须是 3 到 1024 之间的整数」，且会话仍停在第一步。
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <6>')
+    expect(prompt()).toHaveTextContent('内接(I)')
+  })
+
+  it('OpenSpec: stage / 只要文本的一步由命令行原样交给会话 / 空确认仍是 accept', () => {
+    renderStage(document())
+    typeCommand('POL')
+    typeCommand('')
+    expect(prompt()).toHaveTextContent('指定中心点')
+  })
+
+  it('OpenSpec: stage-engine / POLYGON 命令画正多边形 / 边数记在本次编辑会话里', () => {
+    renderStage(document())
+    typeCommand('POL')
+    typeCommand('12')
+    // 换一条命令再回来：默认值跟着上一次走，而它印在尖括号里，因此这份记忆是看得见的。
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '命令行' }), { key: 'Escape' })
+    typeCommand('POL')
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <12>')
+  })
+})
+
+describe('POLYGON 的档位胶囊', () => {
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  /** jsdom 的 rect 恒为 0，不替身出尺寸指针永远在图面之外，光标旁那两个框就画不出来。 */
+  function measureSurface() {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 1000, height: 600, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 600,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  function typeCommand(text: string) {
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    return input
+  }
+
+  function movePointer(x: number, y: number) {
+    fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+      clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', buttons: 0,
+    })
+  }
+
+  /** 启动 `POLYGON`，指针停在图面中间。 */
+  function startPolygon() {
+    measureSurface()
+    const rendered = renderStage(document())
+    const input = typeCommand('POL')
+    movePointer(400, 300)
+    return { input, ...rendered }
+  }
+
+  const valueBox = () => screen.getByTestId('stage-dynamic-input-field-0')
+  const chip = () => screen.getByTestId('stage-dynamic-input-field-1')
+  const textOf = (node: HTMLElement) => node.querySelector('text')?.textContent
+  const prompt = () => screen.getByTestId('stage-drafting-command-prompt')
+
+  it('OpenSpec: stage / 光标旁的档位胶囊 / 边数与档位并排印在光标旁', () => {
+    startPolygon()
+    expect(textOf(valueBox())).toBe('6')
+    // 默认值淡下去：「这个数是我给的」与「这个数是默认的」必须一眼可分。
+    expect(valueBox().querySelector('.compose-stage__dynamic-input-box'))
+      .toHaveAttribute('data-state', 'ghost')
+    expect(textOf(chip())).toBe('内接')
+    // 形状先分开：胶囊是圆头，且永远不出光标条。
+    const shape = chip().querySelector('.compose-stage__dynamic-input-box')!
+    expect(shape).toHaveAttribute('data-variant', 'chip')
+    expect(shape.getAttribute('rx')).toBe('12')
+    expect(chip().querySelector('.compose-stage__dynamic-input-caret')).toBeNull()
+    expect(chip().querySelector('.compose-stage__dynamic-input-swap')).not.toBeNull()
+  })
+
+  it('OpenSpec: stage / 光标旁的档位胶囊 / Tab 换档', () => {
+    const { input } = startPolygon()
+    const event = createEvent.keyDown(input, { key: 'Tab' })
+    fireEvent(input, event)
+    // 这一步有档位，因此 `Tab` 被接管而不是走浏览器的焦点导航。
+    expect(event.defaultPrevented).toBe(true)
+    expect(textOf(chip())).toBe('外切')
+    // 命令行只列能切过去的那一个，两处读的是同一份事实。
+    expect(prompt()).toHaveTextContent('内接')
+    expect(prompt()).not.toHaveTextContent('外切(C)')
+  })
+
+  it('OpenSpec: stage / 光标旁的档位胶囊 / 后两步既不印胶囊也不受理 Tab', () => {
+    const { input } = startPolygon()
+    typeCommand('')
+    // 中心步：两个坐标框，第 1 个框是 Y 而不是胶囊。
+    expect(screen.getByTestId('stage-dynamic-input-field-1')
+      .querySelector('.compose-stage__dynamic-input-box'))
+      .toHaveAttribute('data-variant', 'value')
+
+    fireEvent.pointerDown(screen.getByTestId('stage-surface'), {
+      clientX: 300, clientY: 300, pointerId: 1, button: 0, bubbles: true,
+    })
+    movePointer(500, 300)
+    // 半径步是单字段：只剩一个框，`Tab` 回到不接管。
+    expect(screen.queryByTestId('stage-dynamic-input-field-1')).toBeNull()
+    const event = createEvent.keyDown(input, { key: 'Tab' })
+    fireEvent(input, event)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  it('OpenSpec: stage / 光标旁的档位胶囊 / 档位跨命令记住', () => {
+    const { input } = startPolygon()
+    fireEvent(input, createEvent.keyDown(input, { key: 'Tab' }))
+    fireEvent.keyDown(input, { key: 'Escape' })
+    typeCommand('POL')
+    movePointer(400, 300)
+    expect(textOf(chip())).toBe('外切')
+  })
+
+  /*
+   * 判别点是**顶点数**：光标旁那个框写着 4，落地却是六边形——屏幕上写着一件事、做的是另一件
+   * 事，而用户没有任何办法看出来。断「进到了下一步」两种实现都会绿。
+   */
+  it('OpenSpec: stage / 光标旁的档位胶囊 / 键入的值不必按回车确认', () => {
+    const { input, runtime } = startPolygon()
+    // 只键入，不按回车。
+    fireEvent.change(input, { target: { value: '4' } })
+    expect(textOf(valueBox())).toBe('4')
+
+    const surface = screen.getByTestId('stage-surface')
+    fireEvent.pointerDown(surface, {
+      clientX: 300, clientY: 300, pointerId: 1, button: 0, bubbles: true,
+    })
+    fireEvent.pointerDown(surface, {
+      clientX: 400, clientY: 300, pointerId: 1, button: 0, bubbles: true,
+    })
+
+    const curve = Object.values(runtime.document.entities)
+      .find((entity) => entity.components.Curve !== undefined)
+    const geometry = curve!.components.Curve as { readonly vertices: readonly unknown[] }
+    expect(geometry.vertices).toHaveLength(4)
+  })
+
+  it('OpenSpec: stage / 光标旁的档位胶囊 / 键入的值非法时不落点', () => {
+    const { input, runtime } = startPolygon()
+    fireEvent.change(input, { target: { value: '2000' } })
+    fireEvent.pointerDown(screen.getByTestId('stage-surface'), {
+      clientX: 300, clientY: 300, pointerId: 1, button: 0, bubbles: true,
+    })
+    // 停在第一步并说明原因：此刻落一个点等于拿一个用户没打算要的默认值成图。
+    expect(prompt()).toHaveTextContent('边数必须是 3 到 1024 之间的整数')
+    expect(Object.values(runtime.document.entities)
+      .some((entity) => entity.components.Curve !== undefined)).toBe(false)
+  })
+
+  it('OpenSpec: stage-engine / POLYGON 命令画正多边形 / 第一步点一下即以那一下为中心', () => {
+    startPolygon()
+    fireEvent.pointerDown(screen.getByTestId('stage-surface'), {
+      clientX: 300, clientY: 300, pointerId: 1, button: 0, bubbles: true,
+    })
+    // 一步跳到半径步：那一下既取用了默认边数，也当了中心点。
+    expect(prompt()).toHaveTextContent('内接圆半径')
+  })
+})
+
+describe('修饰键滚轮增减边数', () => {
+  afterEach(cleanup)
+
+  function typeCommand(text: string) {
+    const input = screen.getByRole('textbox', { name: '命令行' })
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    return input
+  }
+
+  const prompt = () => screen.getByTestId('stage-drafting-command-prompt')
+
+  /*
+   * 走 `createEvent` + `fireEvent`：滚轮改边数会写 React 状态，裸 `dispatchEvent` 不裹在
+   * `act` 里，断言时 DOM 还停在上一帧。
+   */
+  function wheel(options: { readonly deltaY: number, readonly altKey?: boolean }) {
+    const root = screen.getByRole('application').closest('.compose-stage') as HTMLElement
+    const event = createEvent.wheel(root, {
+      deltaY: options.deltaY,
+      deltaMode: 0,
+      altKey: options.altKey ?? false,
+    })
+    fireEvent(root, event)
+    return event
+  }
+
+  it('OpenSpec: stage / 修饰键滚轮在命令进行中增减数值 / Alt 加滚轮改边数', () => {
+    renderStage(document())
+    typeCommand('POL')
+    // 向前滚一刻度（`deltaY` 为负）是加一边——与「向上滚 = 往多」的通行方向感一致。
+    wheel({ deltaY: -100, altKey: true })
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <7>')
+    wheel({ deltaY: 100, altKey: true })
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <6>')
+  })
+
+  it('OpenSpec: stage / 修饰键滚轮在命令进行中增减数值 / 裸滚轮不被命令占用', () => {
+    renderStage(document())
+    typeCommand('POL')
+    const event = wheel({ deltaY: -100 })
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <6>')
+    // 画布仍然消费它：命令进行中平移与缩放照常，这与「取点接管排在画布平移之下」同一条判断。
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('OpenSpec: stage / 修饰键滚轮在命令进行中增减数值 / 触控板的一次滑动不冲到上界', () => {
+    renderStage(document())
+    typeCommand('POL')
+    // 触控板一次两指滑动发出的几十个小 delta；一个事件一格会让边数从 6 冲到 60。
+    for (let index = 0; index < 30; index += 1) wheel({ deltaY: -8, altKey: true })
+    expect(prompt()).toHaveTextContent('输入边数或指定中心点 <8>')
+  })
+
+  it('OpenSpec: stage / 修饰键滚轮在命令进行中增减数值 / 没有列出增减关键字时不拦截', () => {
+    renderStage(document())
+    typeCommand('L')
+    const event = wheel({ deltaY: -100, altKey: true })
+    expect(prompt()).toHaveTextContent('指定第一点')
+    expect(event.defaultPrevented).toBe(true)
   })
 })

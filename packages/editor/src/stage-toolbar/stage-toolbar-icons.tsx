@@ -14,6 +14,7 @@ type StageToolbarIconName =
   | 'ortho'
   | 'pan'
   | 'polar'
+  | 'polygon'
   | 'polyline'
   | 'rectangle'
   | 'transform-gizmo'
@@ -168,6 +169,23 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="m10 10 4.8-4.8" />
         {gripMark(10, 10)}
         {gripMark(14.8, 5.2)}
+      </>
+    ),
+    /*
+     * 正六边形加一条半径：与 `circle` 是同一个图形语法——形状本身 + 中心与半径点两个方块 +
+     * **画出来的那一段半径**，因为 `POLYGON` 的两步取点就是中心与半径点，第三步的标注线画的
+     * 也正是这一段。
+     *
+     * 取六边而不是五边或八边：六边是这条命令最常画的那一个（六角螺母、蜂窝），而它的顶点
+     * 恰好落在正三角栅格上，在 20px 上比五边形读得清。图标不宣称边数固定——那由命令行提示里
+     * 的尖括号回答。
+     */
+    polygon: (
+      <>
+        <path d="M15.89 6.6 10 3.2 4.11 6.6v6.8L10 16.8l5.89-3.4z" />
+        <path d="m10 10 5.89-3.4" />
+        {gripMark(10, 10)}
+        {gripMark(15.89, 6.6)}
       </>
     ),
     /*

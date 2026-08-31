@@ -1382,8 +1382,17 @@
   stroke-width: 1.5;
 }
 
-.compose-stage__dynamic-input-box[data-state='active'] {
+.compose-stage__dynamic-input-box[data-state='active'],
+.compose-stage__dynamic-input-box[data-state='ghost'] {
   stroke: var(--compose-accent, #3687ff);
+}
+
+/*
+ * 档位胶囊：圆头，且**不跟随 `data-state`** —— 它没有「正在键入」这一档，永远在等 `Tab`。
+ * 与数值框在形状上分开是刻意的：一个能打字、一个不能，两者长得一样是最难自己发现的一类缺陷。
+ */
+.compose-stage__dynamic-input-box[data-variant='chip'] {
+  stroke: var(--compose-border, #2c3542);
 }
 
 /* 锁定：实心，与「还在跟鼠标」一眼可分。 */
@@ -1408,6 +1417,14 @@
   font-weight: 600;
 }
 
+/*
+ * 默认值：淡下去。「这个数是我给的」与「这个数是默认的」必须一眼可分，否则用户读不出直接
+ * 确认会得到什么——而那正是把默认值印出来的全部理由。
+ */
+.compose-stage__dynamic-input-text[data-state='ghost'] {
+  fill-opacity: 0.42;
+}
+
 .compose-stage__dynamic-input-prefix {
   fill: var(--compose-accent, #3687ff);
 }
@@ -1422,6 +1439,13 @@
 
 .compose-stage__dynamic-input-caret {
   fill: var(--compose-accent, #3687ff);
+}
+
+/* 换档标记：它是胶囊专属的，说的是「按 Tab 换我」。 */
+.compose-stage__dynamic-input-swap {
+  fill: var(--compose-accent, #3687ff);
+  font-family: var(--compose-font-mono, ui-monospace, monospace);
+  font-size: 12px;
 }
 
 /*

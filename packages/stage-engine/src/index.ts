@@ -193,6 +193,9 @@ export {
 /** `@compose-ui/stage-engine` 的稳定包标识。 @public */
 export const COMPOSE_UI_STAGE_ENGINE_PACKAGE = '@compose-ui/stage-engine' as const
 export {
+  COMPOSE_POLYGON_DEFAULT_SIDES,
+  COMPOSE_POLYGON_MAX_SIDES,
+  COMPOSE_POLYGON_MIN_SIDES,
   createStageCopyCommand,
   createStageCopySession,
   createStageDraftingCommands,
@@ -204,6 +207,8 @@ export {
   createStageLineSession,
   createStageMoveCommand,
   createStageMoveSession,
+  createStagePolygonCommand,
+  createStagePolygonSession,
   createStageVertexCommand,
   createStageVertexSession,
   planStageDraftingEdits,

@@ -24,6 +24,17 @@ import {
 } from '@compose-ui/stage-engine'
 
 /**
+ * 矩形 Preset 的 id。
+ *
+ * @remarks
+ * 落地时挑 Preset 与**圆角手柄该不该出**两处读同一个：`Composition.presetId` 是文档里
+ * 「这是一个矩形」的唯一记录，而闭合四顶点多段线在几何上与 `PLINE` 画出来的折线一模一样
+ * ——按几何反推是错的，意图只能由建它的那条命令说出来。
+ * @internal
+ */
+export const STAGE_RECT_PRESET_ID = 'rect'
+
+/**
  * 取点落点到端口绑定的键。
  *
  * @remarks
@@ -275,7 +286,9 @@ export function createStageDraftingCurveCommand(
    * 而它是主回路、还带着屏幕上看不见的绑定。
    */
   const seed = context.registry.createSeed(
-    wiring || bindings.wire ? 'wire' : arrow ? 'arrow' : rectangle ? 'rect' : 'curve',
+    wiring || bindings.wire
+      ? 'wire'
+      : arrow ? 'arrow' : rectangle ? STAGE_RECT_PRESET_ID : 'curve',
   )
   if (!seed.ok) return null
 

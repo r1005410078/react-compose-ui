@@ -19,6 +19,19 @@ export interface ComposeCanvasWheelNavigationParams {
   readonly containerRef: RefObject<HTMLElement | null>
   /** 求锚点坐标用的图面元素；同时用于判定事件是否落在画布内。 */
   readonly surfaceRef: RefObject<Element | null>
+  /**
+   * 宿主先手：返回真表示本次滚轮已被消费，本 Hook 不再平移或缩放。
+   *
+   * @remarks
+   * 谓词由宿主注入而本包不自己判断：判据要读宿主那边的状态（哪条命令在跑、这一步接受什么），
+   * 而本包不认识文档、选择集或命令。这与绘图上下文注入 `isGeometryEditable` 是同一条边界
+   * ——想在这里判断就得先加一条依赖，而那条依赖会被本包的边界用例挡下。
+   *
+   * 被消费时**仍然 `preventDefault`**：宿主页面照样不该滚动，让路的只是视口。
+   *
+   * @defaultValue 缺席即从不消费，行为与引入本参数之前完全一致
+   */
+  readonly interceptWheel?: (event: WheelEvent) => boolean
 }
 
 /**
@@ -33,6 +46,9 @@ export interface ComposeCanvasWheelNavigationParams {
  * 监听在滚动过程中反复重装并丢帧。
  *
  * 缩放用指数换算：`exp(-Δ·k)` 使同样的滚动距离放大与缩小互为逆运算，线性倍率做不到这一点。
+ *
+ * `interceptWheel` 让宿主先手：命令进行中的修饰键滚轮要改的是命令的参数而不是视口。判据住在
+ * 宿主那边，本包只提供让路这一个动作。
  *
  * @public
  */
@@ -53,6 +69,11 @@ export function useCanvasWheelNavigation(params: ComposeCanvasWheelNavigationPar
         || (!surface.contains(event.target as Node) && event.target !== container)
       ) return
       const current = latestRef.current
+      // 宿主先手排在读取几何之前：被消费时不需要锚点，也不该改动视口。
+      if (current.interceptWheel?.(event) === true) {
+        event.preventDefault()
+        return
+      }
       const rect = surface.getBoundingClientRect()
       const point = { x: event.clientX - rect.left, y: event.clientY - rect.top }
       if (event.ctrlKey || event.metaKey) {

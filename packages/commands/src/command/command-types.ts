@@ -82,6 +82,37 @@ export interface ComposeCommandPrompt {
    */
   readonly fields?: ComposeCommandPointFields
   /**
+   * 这一步在光标旁印什么；缺省表示不印。
+   *
+   * @remarks
+   * `fields` 说的是「这一步的**点**怎么参数化」，而有的步骤要的根本不是点——`POLYGON` 的
+   * 边数就是一个数加一个二选一。命令行在图面底部，用户的眼睛此刻在光标上，「敲一个数」
+   * 这句话说在他没有在看的地方等于没说。
+   *
+   * **它只是呈现，不是第五种输入端**：输入仍然只有命令行一个。宿主据此画框、并把 `Tab`
+   * 派发成 `toggle.keyword`；宿主 MUST NOT 解析或校验 `value`——那是命令自己的规则。
+   *
+   * 判据 MUST 由提示声明而 MUST NOT 由宿主按命令 id 反推：宿主不认识任何一条命令的内部。
+   */
+  readonly cursorInput?: {
+    /** 数值框里印的当前值（例如默认边数 `6`）；用户正在键入时由缓冲覆盖。 */
+    readonly value: string
+    /**
+     * 这一步的二选一档位；缺省表示这一步没有档位。
+     *
+     * @remarks
+     * 档位不是一个能键入的数，因此宿主 MUST 把它画成与数值框**形状不同**的东西，且它
+     * MUST NOT 参与 `Tab` 的字段轮转——那会把焦点带到一个打不了字的地方。`Tab` 直接派发
+     * `keyword`，与在命令行敲它逐字等价。
+     */
+    readonly toggle?: {
+      /** 已本地化的当前档位文案，例如「内接」。 */
+      readonly value: string
+      /** 切到另一档要派发的关键字，例如 `C`。 */
+      readonly keyword: string
+    }
+  }
+  /**
    * 标注量的那一段要不要由标注自己画出来；缺省不画。
    *
    * @remarks

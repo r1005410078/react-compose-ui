@@ -24,8 +24,35 @@ const ANNOTATION_OFFSET = 44
 /** 标注在框后断开时，缺口比框每侧多留的距离。 */
 const BREAK_PADDING = 8
 
-/** 一个数值框此刻的状态。 */
-export type StageDynamicInputBoxState = 'active' | 'idle' | 'locked'
+/**
+ * 中日韩等**全角**字符：这一族的前进宽度约等于字号，而不是 {@link DYNAMIC_INPUT_CHAR_WIDTH}。
+ *
+ * @remarks
+ * 框宽按字符数估算（SVG 里量不到文本宽度而不做一次布局），而那个常量是**拉丁字**的前进
+ * 宽度。档位胶囊里印的是「内接」这样的词，一律按拉丁宽算下来短了近一半，症状是文字被框边
+ * 压住。
+ */
+const WIDE_CHAR =
+  /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/
+
+/** 一段文本的前进宽度；全角按字号算，其余按拉丁前进宽度算。 */
+function textAdvance(text: string) {
+  let advance = 0
+  for (const char of text) {
+    advance += WIDE_CHAR.test(char) ? DYNAMIC_INPUT_FONT_SIZE : DYNAMIC_INPUT_CHAR_WIDTH
+  }
+  return advance
+}
+
+/**
+ * 一个数值框此刻的状态。
+ *
+ * @remarks
+ * `ghost` 是「框里印的是默认值，用户还没有键入过」：它与 `active` 一样在等键入（因此同样
+ * 出光标条、同样是强调色的边），只是文字要淡下去——「这个数是我给的」与「这个数是默认的」
+ * 在屏幕上必须一眼可分，否则用户读不出直接确认会得到什么。
+ */
+export type StageDynamicInputBoxState = 'active' | 'idle' | 'locked' | 'ghost'
 
 /**
  * 框尾的标记。
@@ -34,15 +61,31 @@ export type StageDynamicInputBoxState = 'active' | 'idle' | 'locked'
  * 由状态派生而不是各处自己判断：`locked` 挂锁、`active` 挂光标条、`idle` 什么都不挂。
  * 它同时决定框宽，因此**求宽与画标记读的必须是同一个值**——各判一次的症状是数字被标记压住。
  */
-export type StageDynamicInputAdornment = 'lock' | 'caret' | null
+export type StageDynamicInputAdornment = 'lock' | 'caret' | 'swap' | null
 
-/** 状态到框尾标记的映射；唯一实现。 */
+/**
+ * 状态到框尾标记的映射；唯一实现。
+ *
+ * @remarks
+ * `swap` 不在这张表里：它属于**档位胶囊**，而胶囊没有状态可言——它永远在等 `Tab`。由
+ * {@link resolveStageDynamicInputPrompt} 直接给出。
+ */
 export function dynamicInputAdornment(
   state: StageDynamicInputBoxState,
 ): StageDynamicInputAdornment {
   if (state === 'locked') return 'lock'
-  return state === 'active' ? 'caret' : null
+  return state === 'active' || state === 'ghost' ? 'caret' : null
 }
+
+/**
+ * 一个框画成什么。
+ *
+ * @remarks
+ * **方框是能打字的，胶囊不是。**档位是二选一、不是能键入的数，做成第三个方框会让 `Tab`
+ * 把焦点带到一个打不了字的地方。形状先分开、颜色再分开——这是这块画布的既有规矩，两个
+ * 控件长得一样而按下去做的事不同，是最难自己发现的一类缺陷。
+ */
+export type StageDynamicInputBoxVariant = 'value' | 'chip'
 
 /** 一个已定位的数值框，屏幕坐标。 */
 export interface StageDynamicInputBox {
@@ -56,8 +99,10 @@ export interface StageDynamicInputBox {
   /** `X` / `Y` 这类前缀；只有绝对坐标有。 */
   readonly prefix?: string
   readonly state: StageDynamicInputBoxState
-  /** 框尾标记；由 `state` 派生，已计入 `width`。 */
+  /** 框尾标记；数值框由 `state` 派生，胶囊恒为 `swap`。已计入 `width`。 */
   readonly adornment: StageDynamicInputAdornment
+  /** 画成方框还是胶囊。 */
+  readonly variant: StageDynamicInputBoxVariant
 }
 
 /** 一次动态输入的完整呈现，全部屏幕坐标。 */
@@ -123,8 +168,10 @@ export function dynamicInputBoxWidth(
   prefix?: string,
   adornment: StageDynamicInputAdornment = null,
 ) {
-  const chars = text.length + (prefix ? prefix.length + 1 : 0)
-  return Math.max(34, Math.round(chars * DYNAMIC_INPUT_CHAR_WIDTH) + BOX_PADDING * 2)
+  // 前缀与数字之间留一个拉丁字的间隔，与既有画法一致（前缀画在左侧固定位置上）。
+  const advance = textAdvance(text)
+    + (prefix ? textAdvance(prefix) + DYNAMIC_INPUT_CHAR_WIDTH : 0)
+  return Math.max(34, Math.round(advance) + BOX_PADDING * 2)
     + (adornment ? ADORNMENT_WIDTH : 0)
 }
 
@@ -146,6 +193,7 @@ function box(
     ...(prefix ? { prefix } : {}),
     state: field.state,
     adornment,
+    variant: 'value',
   }
 }
 
@@ -441,6 +489,64 @@ function absoluteAnnotation(request: StageDynamicInputRequest): PositionedAnnota
     guides: [],
     ticks: [],
     locks: [],
+  }
+}
+
+/**
+ * 这一步印在光标旁的东西：一个数值框，可选地跟一枚档位胶囊。
+ *
+ * @remarks
+ * **`fields` 说的是「这一步的点怎么参数化」，而这一步要的不是点**（`POLYGON` 的第一步要的
+ * 是一个数加一个二选一），因此走不了上面那条路。它仍然需要被看见——命令行在图面底部，用户
+ * 的眼睛此刻在光标上，「敲一个数」这句话说在他没有在看的地方等于没说。
+ *
+ * 只渲染，不接输入：输入端只有命令行一个（把框做成真的 `<input>` 会撞上「启动之后焦点交给
+ * 命令行」，而命令由工具栏按钮启动时指针位置还未知，那一刻根本没有框可以聚焦）。档位同理，
+ * `Tab` 派发的是关键字，与在命令行敲它逐字等价。
+ *
+ * 摆位与 `absolute` 那一档相同——光标右下角，那里不压住任何将要落笔的地方；胶囊排在数值框
+ * 之后，间隔也取同一个。
+ *
+ * @param point - 指针的屏幕位置。
+ * @param field - 数值框里的文本与状态。
+ * @param toggle - 档位胶囊里的文案；缺席即这一步没有档位。
+ * @public
+ */
+export function resolveStageDynamicInputPrompt(
+  point: StagePoint,
+  field: StageDynamicInputField,
+  toggle?: string | null,
+): StageDynamicInputAnnotation {
+  const gap = 6
+  const width = dynamicInputBoxWidth(field.text, undefined, dynamicInputAdornment(field.state))
+  const y = point.y + 18 + DYNAMIC_INPUT_BOX_HEIGHT / 2
+  const valueCenter = { x: point.x + 18 + width / 2, y }
+  const boxes: StageDynamicInputBox[] = [box(0, valueCenter, field)]
+  if (toggle) {
+    /*
+     * 胶囊恒带 `swap` 标记，与状态无关：它永远在等 `Tab`，没有「正在键入」这一档可言。
+     * 它也永远不出光标条——那会让用户以为可以往里打字。
+     */
+    const chipWidth = dynamicInputBoxWidth(toggle, undefined, 'swap')
+    boxes.push({
+      index: 1,
+      x: valueCenter.x + width / 2 + gap,
+      y: y - DYNAMIC_INPUT_BOX_HEIGHT / 2,
+      width: chipWidth,
+      height: DYNAMIC_INPUT_BOX_HEIGHT,
+      text: toggle,
+      state: 'idle',
+      adornment: 'swap',
+      variant: 'chip',
+    })
+  }
+  return {
+    boxes,
+    guides: [],
+    ticks: [],
+    locks: [],
+    connector: null,
+    measured: null,
   }
 }
 

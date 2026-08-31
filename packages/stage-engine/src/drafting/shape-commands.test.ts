@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMPOSE_POLYGON_MAX_SIDES,
+  COMPOSE_POLYGON_MIN_SIDES,
   createStageArcSession,
   createStageCircleSession,
+  createStagePolygonSession,
   createStagePolylineSession,
   createStageRectangleSession,
 } from './shape-commands'
@@ -10,7 +13,11 @@ import {
   createStageDraftingCommands,
   createStageLineSession,
 } from './line-command'
-import type { StageDraftingContext, StageDraftingMessages } from './drafting-types'
+import type {
+  StageDraftingContext,
+  StageDraftingEffect,
+  StageDraftingMessages,
+} from './drafting-types'
 
 const messages: StageDraftingMessages = {
   drawCategory: '绘图',
@@ -48,6 +55,18 @@ const messages: StageDraftingMessages = {
   undoKeyword: '放弃',
   collinearArc: '三点共线，无法定弧',
   degenerateShape: '这个形状是退化的',
+  polygonTitle: '多边形',
+  specifySides: (sides: number) => `输入边数 <${sides}>`,
+  specifyPolygonCenter: (sides: number) => `指定中心点 [${sides} 边]`,
+  specifyInscribedRadius: (sides: number) => `指定内接圆半径 [${sides} 边]`,
+  specifyCircumscribedRadius: (sides: number) => `指定外切圆半径 [${sides} 边]`,
+  inscribedKeyword: '内接',
+  circumscribedKeyword: '外切',
+  inscribedChip: '内接',
+  circumscribedChip: '外切',
+  moreSidesKeyword: '加一边',
+  fewerSidesKeyword: '减一边',
+  invalidSides: (min: number, max: number) => `边数必须是 ${min} 到 ${max} 之间的整数`,
 }
 
 const context: StageDraftingContext = { messages }
@@ -409,5 +428,215 @@ describe('OpenSpec: stage-engine / 预览几何 / 会话回答「落在这里会
     const step = session.advance({ kind: 'accept' })
     const curve = step.status === 'commit' ? step.effect?.curves?.[0] : undefined
     expect(curve?.kind === 'polyline' ? curve.vertices : []).toHaveLength(2)
+  })
+})
+
+
+/*
+ * 判别性用例都从「内接与外切的差别只有一句话——落点是顶点还是边的中点」反推，而不是断言
+ * 「画出来了」——那两档都会绿。
+ */
+describe('OpenSpec: stage-engine / POLYGON 命令画正多边形', () => {
+  const context: StageDraftingContext = { messages }
+  const vertexCountOf = (effect: StageDraftingEffect | undefined) => {
+    const curve = effect?.curves?.[0]
+    return curve?.kind === 'polyline' ? curve.vertices.length : -1
+  }
+
+  it('直接确认取用尖括号里的默认边数', () => {
+    const session = createStagePolygonSession(context)
+    expect(session.prompt?.message).toContain('<6>')
+    const step = session.advance({ kind: 'accept' })
+    expect(step.status).toBe('prompt')
+    // 确认之后走到中心步，而不是取消整条命令。
+    if (step.status === 'prompt') expect(step.prompt.message).toContain('中心点')
+  })
+
+  it('起始边数由宿主给出，改变时回调', () => {
+    const seen: number[] = []
+    const session = createStagePolygonSession({
+      messages,
+      polygonSides: 8,
+      onPolygonSidesChange: (sides) => { seen.push(sides) },
+    })
+    expect(session.prompt?.message).toContain('<8>')
+    session.advance({ kind: 'keyword', key: '+' })
+    expect(seen).toEqual([9])
+  })
+
+  it('边数越界或不是整数被拒绝且不结束会话', () => {
+    const session = createStagePolygonSession(context)
+    for (const text of ['2', '2000', '5.5', 'abc']) {
+      const step = session.advance({ kind: 'text', text })
+      expect(step.status).toBe('rejected')
+    }
+    // 会话仍停在边数步。
+    expect(session.prompt?.accepts).toContain('text')
+  })
+
+  it('同一个中心与落点，内接与外切产出不同的顶点', () => {
+    const draw = (fit?: 'C') => {
+      const session = createStagePolygonSession(context)
+      // 档位在**第一步**换，此后一路跟到提交。
+      if (fit) session.advance({ kind: 'keyword', key: fit })
+      session.advance({ kind: 'accept' })
+      session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+      return session.advance({ kind: 'point', point: { x: 160, y: 100 } })
+    }
+    const inscribed = draw()
+    const circumscribed = draw('C')
+    expect(inscribed.status).toBe('commit')
+    expect(circumscribed.status).toBe('commit')
+    if (inscribed.status !== 'commit' || circumscribed.status !== 'commit') return
+    const first = (step: typeof inscribed) => {
+      const curve = step.effect.curves?.[0]
+      return curve?.kind === 'polyline' ? curve.vertices[0]! : null
+    }
+    expect(first(inscribed)).not.toEqual(first(circumscribed))
+    // 外切的顶点在构造圆外，因此离中心更远。
+    const radius = (vertex: { x: number, y: number } | null) => (
+      vertex ? Math.hypot(vertex.x - 100, vertex.y - 100) : 0
+    )
+    expect(radius(first(circumscribed))).toBeGreaterThan(radius(first(inscribed)))
+  })
+
+  it('第一步只列出能切过去的那一档，并把当前档位印在光标旁', () => {
+    const session = createStagePolygonSession(context)
+    const keys = () => session.prompt?.keywords?.map((keyword) => keyword.key) ?? []
+    expect(keys()).toContain('C')
+    expect(keys()).not.toContain('I')
+    expect(session.prompt?.cursorInput?.value).toBe('6')
+    expect(session.prompt?.cursorInput?.toggle).toEqual({ value: '内接', keyword: 'C' })
+    session.advance({ kind: 'keyword', key: 'C' })
+    expect(keys()).toContain('I')
+    expect(keys()).not.toContain('C')
+    expect(session.prompt?.cursorInput?.toggle).toEqual({ value: '外切', keyword: 'I' })
+  })
+
+  /*
+   * 这一版真正要钉住的那条：后两步**收干净了**。半个残留最糟——列不出来却仍然受理，等于留
+   * 一条只有读过源码的人才知道的暗门；因此既断关键字没列出来，也断按下去不起作用。
+   */
+  it('后两步既不列出档位也不受理它', () => {
+    const session = createStagePolygonSession(context)
+    session.advance({ kind: 'accept' })
+    const centerKeys = session.prompt?.keywords?.map((keyword) => keyword.key) ?? []
+    expect(centerKeys).not.toContain('C')
+    expect(centerKeys).not.toContain('I')
+    expect(session.prompt?.cursorInput).toBeUndefined()
+
+    session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    const radiusKeys = session.prompt?.keywords?.map((keyword) => keyword.key) ?? []
+    expect(radiusKeys).not.toContain('C')
+    expect(radiusKeys).not.toContain('I')
+
+    const before = session.preview?.({ x: 160, y: 100 })
+    expect(session.advance({ kind: 'keyword', key: 'C' }).status).toBe('rejected')
+    // 形状一点没变：被拒绝的关键字不该留下任何痕迹。
+    expect(session.preview?.({ x: 160, y: 100 })).toEqual(before)
+  })
+
+  it('档位由宿主持有，跨命令记住', () => {
+    const seen: string[] = []
+    const session = createStagePolygonSession({
+      messages,
+      onPolygonFitChange: (fit) => { seen.push(fit) },
+    })
+    session.advance({ kind: 'keyword', key: 'C' })
+    expect(seen).toEqual(['circumscribed'])
+    // 同一档再按一次不回调：没有真的变化时宿主那份值不该被写一遍。
+    session.advance({ kind: 'keyword', key: 'C' })
+    expect(seen).toEqual(['circumscribed'])
+
+    const next = createStagePolygonSession({ messages, polygonFit: 'circumscribed' })
+    expect(next.prompt?.cursorInput?.toggle?.value).toBe('外切')
+    next.advance({ kind: 'accept' })
+    next.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    expect(next.prompt?.message).toContain('外切')
+  })
+
+  /*
+   * 十字光标在第一步是画着的，让它真的能落点比把它画成装饰要好——「鼠标动了也没反应」是屏幕
+   * 上不该出现的状态。判别点是**那一下就是中心**而不是「进到了下一步」。
+   */
+  it('第一步收点即取用默认边数并把那一下当作中心', () => {
+    const session = createStagePolygonSession(context)
+    expect(session.prompt?.accepts).toContain('point')
+    const step = session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    expect(step.status).toBe('prompt')
+    if (step.status === 'prompt') expect(step.preview?.reference).toEqual({ x: 100, y: 100 })
+    expect(session.prompt?.fields).toBe('radius')
+    expect(vertexCountOf(session.preview?.({ x: 160, y: 100 }) ?? undefined)).toBe(6)
+  })
+
+  it('增减边数在每一步都可用，且当场改变预览', () => {
+    const session = createStagePolygonSession(context)
+    expect(session.prompt?.keywords?.map((keyword) => keyword.key)).toContain('+')
+    session.advance({ kind: 'accept' })
+    expect(session.prompt?.keywords?.map((keyword) => keyword.key)).toContain('+')
+    session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    expect(vertexCountOf(session.preview?.({ x: 160, y: 100 }) ?? undefined)).toBe(6)
+    session.advance({ kind: 'keyword', key: '+' })
+    expect(vertexCountOf(session.preview?.({ x: 160, y: 100 }) ?? undefined)).toBe(7)
+    // 会话仍停在半径步。
+    expect(session.prompt?.fields).toBe('radius')
+  })
+
+  it('增减到边界停住而不回绕', () => {
+    const session = createStagePolygonSession({ messages, polygonSides: COMPOSE_POLYGON_MIN_SIDES })
+    session.advance({ kind: 'keyword', key: '-' })
+    expect(session.prompt?.message).toContain(`<${COMPOSE_POLYGON_MIN_SIDES}>`)
+    const upper = createStagePolygonSession({ messages, polygonSides: COMPOSE_POLYGON_MAX_SIDES })
+    upper.advance({ kind: 'keyword', key: '+' })
+    expect(upper.prompt?.message).toContain(`<${COMPOSE_POLYGON_MAX_SIDES}>`)
+  })
+
+  it('半径步是单字段且画出被量的那一段', () => {
+    const session = createStagePolygonSession(context)
+    session.advance({ kind: 'accept' })
+    session.advance({ kind: 'point', point: { x: 0, y: 0 } })
+    expect(session.prompt?.fields).toBe('radius')
+    expect(session.prompt?.measured).toBe(true)
+  })
+
+  it('预览是完整多边形，不是半径线', () => {
+    const session = createStagePolygonSession(context)
+    session.advance({ kind: 'accept' })
+    // 取到中心之前没有形状可言。
+    expect(session.preview?.({ x: 10, y: 10 })).toBeNull()
+    session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    const preview = session.preview?.({ x: 160, y: 100 })
+    expect(preview?.curves?.[0]).toMatchObject({ kind: 'polyline', closed: true })
+    expect(vertexCountOf(preview ?? undefined)).toBe(6)
+  })
+
+  it('落点与中心重合被拒绝且不结束会话', () => {
+    const session = createStagePolygonSession(context)
+    session.advance({ kind: 'accept' })
+    session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    const step = session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    expect(step.status).toBe('rejected')
+    expect(session.prompt?.fields).toBe('radius')
+  })
+
+  it('提交的是闭合多段线，且不带任何意图标记', () => {
+    const session = createStagePolygonSession(context)
+    session.advance({ kind: 'text', text: '5' })
+    session.advance({ kind: 'point', point: { x: 100, y: 100 } })
+    const step = session.advance({ kind: 'point', point: { x: 160, y: 100 } })
+    expect(step.status).toBe('commit')
+    if (step.status !== 'commit') return
+    expect(step.effect.curves?.[0]).toMatchObject({ kind: 'polyline', closed: true })
+    expect(vertexCountOf(step.effect)).toBe(5)
+    expect(step.effect.rectangle).toBeUndefined()
+    expect(step.effect.arrow).toBeUndefined()
+    expect(step.effect.wire).toBeUndefined()
+  })
+
+  it('注册表里可以按 POL 解析到它', () => {
+    const command = createStageDraftingCommands(messages).find(({ id }) => id === 'POLYGON')
+    expect(command?.aliases).toContain('POL')
+    // 画完一个多边形九成是填色、接线、改顶点，因此不接着画。
+    expect(command?.repeat).toBeUndefined()
   })
 })

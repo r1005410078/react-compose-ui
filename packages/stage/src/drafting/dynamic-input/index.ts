@@ -10,6 +10,7 @@ export {
   dynamicInputAdornment,
   dynamicInputBoxWidth,
   resolveStageDynamicInput,
+  resolveStageDynamicInputPrompt,
   DYNAMIC_INPUT_BOX_HEIGHT,
   DYNAMIC_INPUT_CHAR_WIDTH,
   DYNAMIC_INPUT_FONT_SIZE,

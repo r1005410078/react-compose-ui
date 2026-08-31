@@ -42,6 +42,18 @@ const messages = {
   undoKeyword: '放弃',
   collinearArc: '三点共线，无法定弧',
   degenerateShape: '这个形状是退化的',
+  polygonTitle: '多边形',
+  specifySides: (sides: number) => `输入边数 <${sides}>`,
+  specifyPolygonCenter: (sides: number) => `指定中心点 [${sides} 边]`,
+  specifyInscribedRadius: (sides: number) => `指定内接圆半径 [${sides} 边]`,
+  specifyCircumscribedRadius: (sides: number) => `指定外切圆半径 [${sides} 边]`,
+  inscribedKeyword: '内接',
+  circumscribedKeyword: '外切',
+  inscribedChip: '内接',
+  circumscribedChip: '外切',
+  moreSidesKeyword: '加一边',
+  fewerSidesKeyword: '减一边',
+  invalidSides: (min: number, max: number) => `边数必须是 ${min} 到 ${max} 之间的整数`,
 }
 
 const context: StageDraftingContext = { messages }
@@ -109,7 +121,7 @@ describe('LINE 命令', () => {
   it('命令按名称与别名解析', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
-      'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'PLINE',
+      'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'POLYGON', 'PLINE',
       'MOVE', 'COPY', 'ERASE', 'VERTEX',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])

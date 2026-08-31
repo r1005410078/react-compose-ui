@@ -41,6 +41,18 @@ const messages: StageDraftingMessages = {
   undoKeyword: '放弃',
   collinearArc: '三点共线，无法定弧',
   degenerateShape: '这个形状是退化的',
+  polygonTitle: '多边形',
+  specifySides: (sides: number) => `输入边数 <${sides}>`,
+  specifyPolygonCenter: (sides: number) => `指定中心点 [${sides} 边]`,
+  specifyInscribedRadius: (sides: number) => `指定内接圆半径 [${sides} 边]`,
+  specifyCircumscribedRadius: (sides: number) => `指定外切圆半径 [${sides} 边]`,
+  inscribedKeyword: '内接',
+  circumscribedKeyword: '外切',
+  inscribedChip: '内接',
+  circumscribedChip: '外切',
+  moreSidesKeyword: '加一边',
+  fewerSidesKeyword: '减一边',
+  invalidSides: (min: number, max: number) => `边数必须是 ${min} 到 ${max} 之间的整数`,
 }
 
 const empty: StageDraftingContext = { messages }

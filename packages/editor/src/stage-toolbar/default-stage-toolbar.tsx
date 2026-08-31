@@ -72,6 +72,7 @@ const DRAWING_COMMANDS = [
   ['LINE', 'drawLine', 'line'],
   ['PLINE', 'drawPolyline', 'polyline'],
   ['RECTANGLE', 'drawRectangle', 'rectangle'],
+  ['POLYGON', 'drawPolygon', 'polygon'],
   ['CIRCLE', 'drawCircle', 'circle'],
   ['ARC', 'drawArc', 'arc'],
   ['ARROW', 'drawArrow', 'arrow'],

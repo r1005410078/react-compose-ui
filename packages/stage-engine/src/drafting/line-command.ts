@@ -14,6 +14,7 @@ import {
   createStageArcCommand,
   createStageCircleCommand,
   createStagePolylineCommand,
+  createStagePolygonCommand,
   createStageRectangleCommand,
 } from './shape-commands'
 import type { StageDraftingContext, StageDraftingEffect, StageDraftingMessages } from './drafting-types'
@@ -400,6 +401,7 @@ export function createStageDraftingCommands(
     createStageArcCommand(messages),
     createStageCircleCommand(messages),
     createStageRectangleCommand(messages),
+    createStagePolygonCommand(messages),
     createStagePolylineCommand(messages),
     createStageMoveCommand(messages),
     createStageCopyCommand(messages),

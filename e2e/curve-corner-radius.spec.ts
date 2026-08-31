@@ -48,3 +48,46 @@ test('OpenSpec: stage / 多段线的圆角手柄 / 选中即出，拖一个四�
   await stage.press('Control+z')
   await expect(stage.locator('polygon[data-testid="compose-material-curve-stroke"]')).toHaveCount(1)
 })
+
+
+test('OpenSpec: stage / 多段线的圆角手柄 / 只有矩形出手柄', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const surface = stage.getByTestId('stage-surface')
+  await expect(surface).toBeVisible()
+  const box = (await surface.boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const handles = stage.locator('[data-testid^="stage-curve-corner-"]:not([data-testid*="hit"])')
+
+  // 六边形：选中之后不该多出六个点。「选中即出」那条理由是「改圆角是最常做的调整之一」，
+  // 它对矩形成立，对一个符号轮廓不成立。
+  await commandInput.fill('POL')
+  await commandInput.press('Enter')
+  await commandInput.press('Enter')
+  await page.mouse.click(at(240, 220).x, at(240, 220).y)
+  await page.mouse.click(at(340, 220).x, at(340, 220).y)
+  await page.keyboard.press('Escape')
+  // 顶点在正右方，因此正上方那条边一定落在描边上。
+  await page.mouse.click(at(240, 133).x, at(240, 133).y)
+  await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(1)
+  await expect(handles).toHaveCount(0)
+
+  /*
+   * 判别点：同样是**闭合四顶点多段线**，`PLINE` 连点四下再闭合与 `RECTANGLE` 在几何上一模
+   * 一样，而只有后者出手柄——判据读的是 `Composition.presetId`，不是几何。
+   */
+  await page.keyboard.press('Escape')
+  await commandInput.fill('PL')
+  await commandInput.press('Enter')
+  for (const [x, y] of [[120, 380], [220, 380], [220, 450], [120, 450]] as const) {
+    await page.mouse.click(at(x, y).x, at(x, y).y)
+  }
+  await commandInput.fill('C')
+  await commandInput.press('Enter')
+  await page.keyboard.press('Escape')
+  await page.mouse.click(at(170, 380).x, at(170, 380).y)
+  await expect(handles).toHaveCount(0)
+})

@@ -169,12 +169,12 @@ describe('DefaultStageToolbar', () => {
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 七条命令各一个按钮且点击即启动', () => {
+  it('OpenSpec: editor-workspace-layout / 绘图命令组 / 八条命令各一个按钮且点击即启动', () => {
     const { startCommand } = renderToolbar()
 
     // 形状 split button 已删除：制图几何一律由命令产出，绘图入口因此只有一套。
     expect(screen.queryByRole('button', { name: '形状' })).toBeNull()
-    for (const label of ['直线', '多段线', '矩形', '圆', '圆弧', '箭头', '导线']) {
+    for (const label of ['直线', '多段线', '矩形', '多边形', '圆', '圆弧', '箭头', '导线']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }
 
@@ -200,6 +200,8 @@ describe('DefaultStageToolbar', () => {
     // 对不上。
     for (const [label, marks] of [
       ['直线', 2], ['多段线', 3], ['圆弧', 3], ['矩形', 2], ['圆', 2], ['箭头', 1],
+      // 多边形与圆同形：中心加半径点两个方块，边数不是取点，因此不占记号。
+      ['多边形', 2],
     ] as const) {
       const icon = screen.getByRole('button', { name: label }).querySelector('svg')
       expect(icon?.querySelectorAll('rect')).toHaveLength(marks)

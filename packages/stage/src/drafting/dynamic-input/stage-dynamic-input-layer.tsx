@@ -71,11 +71,16 @@ export function StageDynamicInputLayer({ annotation, testIdPrefix }: StageDynami
       ))}
       {annotation.boxes.map((box) => (
         <g data-testid={`${testIdPrefix}-dynamic-input-field-${box.index}`} key={box.index}>
+          {/*
+            * 胶囊取全圆角（半径等于半高），方框取 3——**形状先分开、颜色再分开**：一个能
+            * 打字、一个不能，两者长得一样是最难自己发现的一类缺陷。
+            */}
           <rect
             className="compose-stage__dynamic-input-box"
             data-state={box.state}
+            data-variant={box.variant}
             height={box.height}
-            rx={3}
+            rx={box.variant === 'chip' ? box.height / 2 : 3}
             width={box.width}
             x={box.x}
             y={box.y}
@@ -108,6 +113,16 @@ export function StageDynamicInputLayer({ annotation, testIdPrefix }: StageDynami
               <rect height="7" width="9" x="0" y="4" />
               <path d="M1.6 4V2.6a2.9 2.9 0 0 1 5.8 0V4" fill="none" strokeWidth="1.5" />
             </g>
+          ) : null}
+          {box.adornment === 'swap' ? (
+            <text
+              className="compose-stage__dynamic-input-swap"
+              x={box.x + box.width - 15}
+              y={box.y + box.height / 2 + 4.5}
+              textAnchor="middle"
+            >
+              {'\u21C6'}
+            </text>
           ) : null}
           {box.adornment === 'caret' ? (
             <rect

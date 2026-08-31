@@ -8,10 +8,11 @@ import type {
 } from '@compose-ui/commands'
 import {
   composeArcThroughPoints,
+  composeRegularPolygonVertices,
   createComposeLineCurve,
   isDegenerateComposePolyline,
 } from '@compose-ui/core'
-import type { ComposeCurve } from '@compose-ui/core'
+import type { ComposeCurve, ComposeRegularPolygonFit } from '@compose-ui/core'
 import type {
   StageDraftingContext,
   StageDraftingEffect,
@@ -406,6 +407,243 @@ export function createStagePolylineSession(
   }
 }
 
+/** `POLYGON` 边数的下界，照抄 AutoCAD。 @public */
+export const COMPOSE_POLYGON_MIN_SIDES = 3
+
+/**
+ * `POLYGON` 边数的上界，照抄 AutoCAD。
+ *
+ * @remarks
+ * 不因为「1024 个顶点在几何编辑里是 2048 个夹点」另设一个更小的值：`PLINE` 今天就画得出同样
+ * 多的顶点，多边形不是这个问题的来源。用户键入 2000 时看到的界限也应当与他在别处学到的一致。
+ *
+ * @public
+ */
+export const COMPOSE_POLYGON_MAX_SIDES = 1024
+
+/**
+ * `POLYGON` 的起始边数。
+ *
+ * @remarks
+ * AutoCAD 取 4，这里取 6：四边形有 `RECTANGLE` 这个更快的入口，走这条命令的多半是六边、三边。
+ * 第一次之后默认就跟着用户走了。
+ *
+ * @public
+ */
+export const COMPOSE_POLYGON_DEFAULT_SIDES = 6
+
+/**
+ * 边数、中心与内接/外切圆的半径点画正多边形。
+ *
+ * @remarks
+ * 产出闭合多段线——正多边形不另立 kind，它唯一多出来的「各边等长」在用户拖动任一顶点之后就
+ * 不再成立，与「矩形是四顶点的闭合多段线」是同一条判断。
+ *
+ * **内接与外切不单独占一步**，而是**边数步上的一个档位**：它和边数一起问、一起印在光标旁
+ * （`cursorInput.toggle`，宿主画成胶囊、`Tab` 换它），然后这条命令就不再提这件事——中心步
+ * 与半径步既不显示也不受理 `I` / `C`。
+ *
+ * 代价说在明处：**拿主意的时候屏幕上还没有形状**，这正是 AutoCAD 那个做法被诟病的地方。
+ * 补偿有两条——它不是一道拦路的问题（已经有值，直接确认就走），而且档位**跨命令记住**，
+ * 选错重来一次只需按一下 `Tab`。
+ *
+ * **后两步 MUST 收干净**：没有胶囊、命令行不列 `I` / `C`、按下去也不受理。半个残留比全留或
+ * 全删都糟——一个还印着却按不动的读数，用户按一下没反应，会以为这条能力根本不存在；而列不
+ * 出来却仍然受理，等于留一条只有读过源码的人才知道的暗门。
+ *
+ * **边数步同时收点**：点一下即取用当前边数与当前档位，**并且那一下就是中心点**。十字光标
+ * 在这一步是画着的，而「点下去什么都不会发生」是屏幕上不该出现的状态。键盘走另一条路——
+ * 这一步没有参考点，直接距离输入无从谈起，因此裸数字一律是边数，两条通道不会撞车。
+ *
+ * **`+` / `-` 在每一步都可用**，各增减一条边。它们是滚轮的落点：滚轮增减 MUST NOT 推进状态机
+ * （那正是 `preview` 被做成查询而不是输入的理由），而关键字本来就是「改变后续流程但不取点」
+ * 的那一档。列进 `keywords` 是因为滚轮是个不可发现的手势，而命令行是这条能力唯一的说明书。
+ * 每一步都可用则让规则没有例外——只在其中一步生效的话，用户在别的步上试一下没反应，会以为
+ * 这条能力不存在。
+ *
+ * @public
+ */
+export function createStagePolygonSession(
+  context: StageDraftingContext,
+): ComposeCommandSession<StageDraftingEffect> {
+  const { messages } = context
+  /** 三步各自要什么，`accept` 与点输入的含义都跟着它分派。 */
+  let step: 'sides' | 'center' | 'radius' = 'sides'
+  let sides = clampPolygonSides(context.polygonSides ?? COMPOSE_POLYGON_DEFAULT_SIDES)
+  let center: ComposeCommandPoint | null = null
+  /** 这一档以内接圆还是外切圆为准；只在边数步可换，此后一路跟到提交。 */
+  let fit: ComposeRegularPolygonFit = context.polygonFit ?? 'inscribed'
+
+  const sidesKeywords = [
+    { key: '+', label: messages.moreSidesKeyword },
+    { key: '-', label: messages.fewerSidesKeyword },
+  ]
+
+  /*
+   * 只列出**能切过去的**那一个：列一个按下去只会把当前状态再确认一遍的关键字，等于给用户
+   * 一个没有效果的选项。胶囊上的文案与它分开——那个说的是**此刻**是哪一档。
+   */
+  const fitKeyword = () => (fit === 'inscribed'
+    ? { key: 'C', label: messages.circumscribedKeyword }
+    : { key: 'I', label: messages.inscribedKeyword })
+
+  const sidesPrompt = (): ComposeCommandPrompt => ({
+    message: messages.specifySides(sides),
+    accepts: ['text', 'keyword', 'point'],
+    keywords: [fitKeyword(), ...sidesKeywords],
+    cursorInput: {
+      value: String(sides),
+      toggle: {
+        value: fit === 'inscribed' ? messages.inscribedChip : messages.circumscribedChip,
+        keyword: fitKeyword().key,
+      },
+    },
+  })
+
+  const centerPrompt = (): ComposeCommandPrompt => ({
+    message: messages.specifyPolygonCenter(sides),
+    accepts: ['point', 'keyword'],
+    keywords: sidesKeywords,
+    fields: 'absolute',
+  })
+
+  /* 两档的 `fields` 都是 `radius`——换的是量哪个圆，不是量什么，而这一步已经不能换了。 */
+  const radiusPrompt = (): ComposeCommandPrompt => ({
+    message: fit === 'inscribed'
+      ? messages.specifyInscribedRadius(sides)
+      : messages.specifyCircumscribedRadius(sides),
+    accepts: ['point', 'keyword'],
+    keywords: sidesKeywords,
+    fields: 'radius',
+    measured: true,
+  })
+
+  const promptForStep = () => {
+    if (step === 'sides') return sidesPrompt()
+    return step === 'center' ? centerPrompt() : radiusPrompt()
+  }
+
+  let prompt = sidesPrompt()
+
+  const polygonAt = (point: ComposeCommandPoint): StageDraftingEffect | null => {
+    if (center === null) return null
+    const vertices = composeRegularPolygonVertices(center, point, sides, fit)
+    if (!vertices) return null
+    return {
+      curves: [{
+        kind: 'polyline',
+        vertices: vertices.map(({ x, y }) => ({ x, y })),
+        closed: true,
+      }],
+    }
+  }
+
+  return {
+    get prompt() {
+      return prompt
+    },
+    /*
+     * 只有半径步画得出形状：在那之前连中心都还没有，没有「落在这里会是什么样」可言。
+     * 半径为零的那一帧不画，与它被 `rejected` 拦下是同一个判断。
+     */
+    preview(point) {
+      return step === 'radius' ? polygonAt(point) : null
+    },
+    advance(input): ComposeCommandStep<StageDraftingEffect> {
+      if (input.kind === 'cancel') return { status: 'cancelled' }
+
+      if (input.kind === 'accept') {
+        // 边数步的确认取用尖括号里的默认值——那正是把它印出来的理由。其余两步没有可省的输入。
+        if (step !== 'sides') return { status: 'cancelled' }
+        step = 'center'
+        prompt = centerPrompt()
+        return { status: 'prompt', prompt }
+      }
+
+      if (input.kind === 'keyword') {
+        const key = input.key.toUpperCase()
+        if (key === '+' || key === '-') {
+          const next = clampPolygonSides(sides + (key === '+' ? 1 : -1))
+          // 到边界停住：没有真的变化时不回调，宿主那份默认值也就不会被写一遍。
+          if (next !== sides) {
+            sides = next
+            context.onPolygonSidesChange?.(sides)
+          }
+          prompt = promptForStep()
+          return {
+            status: 'prompt',
+            prompt,
+            ...(center ? { preview: { reference: center } } : {}),
+          }
+        }
+        /*
+         * 档位只在边数步可换。后两步 MUST 一并**不受理**——列不出来却仍然接受，等于留一条
+         * 只有读过源码的人才知道的暗门，而它与「命令行是这条能力唯一的说明书」直接冲突。
+         */
+        if (step === 'sides' && (key === 'I' || key === 'C')) {
+          const next: ComposeRegularPolygonFit = key === 'I' ? 'inscribed' : 'circumscribed'
+          if (next !== fit) {
+            fit = next
+            context.onPolygonFitChange?.(fit)
+          }
+          prompt = sidesPrompt()
+          return { status: 'prompt', prompt }
+        }
+        return { status: 'rejected', message: messages.expectedPoint }
+      }
+
+      if (input.kind === 'text') {
+        if (step !== 'sides') return { status: 'rejected', message: messages.expectedPoint }
+        const typed = Number(input.text.trim())
+        if (
+          !Number.isInteger(typed)
+          || typed < COMPOSE_POLYGON_MIN_SIDES
+          || typed > COMPOSE_POLYGON_MAX_SIDES
+        ) {
+          return {
+            status: 'rejected',
+            message: messages.invalidSides(COMPOSE_POLYGON_MIN_SIDES, COMPOSE_POLYGON_MAX_SIDES),
+          }
+        }
+        if (typed !== sides) {
+          sides = typed
+          context.onPolygonSidesChange?.(sides)
+        }
+        step = 'center'
+        prompt = centerPrompt()
+        return { status: 'prompt', prompt }
+      }
+
+      if (input.kind !== 'point') {
+        return { status: 'rejected', message: messages.expectedPoint }
+      }
+
+      /*
+       * 边数步也收点：取用当前边数与当前档位，**并且这一下就是中心点**。十字光标在这一步是
+       * 画着的，让它真的能落点比把它画成装饰要好——「鼠标动了也没反应」是屏幕上不该出现的
+       * 状态。因此两步汇到同一支。
+       */
+      if (step === 'sides' || step === 'center') {
+        center = input.point
+        step = 'radius'
+        prompt = radiusPrompt()
+        return { status: 'prompt', prompt, preview: { reference: center } }
+      }
+
+      const effect = polygonAt(input.point)
+      // 落点与中心重合时画不出东西；两档共用这一条退化判定，与 `CIRCLE` 一致。
+      if (!effect) return { status: 'rejected', message: messages.degenerateShape }
+      return { status: 'commit', effect }
+    },
+  }
+}
+
+/** 把边数夹回合法区间；到边界停住而不回绕——回绕会让一次连续滚动从 3 跳到 1024。 */
+function clampPolygonSides(sides: number) {
+  if (!Number.isFinite(sides)) return COMPOSE_POLYGON_DEFAULT_SIDES
+  return Math.min(COMPOSE_POLYGON_MAX_SIDES, Math.max(COMPOSE_POLYGON_MIN_SIDES, Math.round(sides)))
+}
+
 /** ARC 命令定义。 @public */
 export function createStageArcCommand(
   messages: StageDraftingMessages,
@@ -455,5 +693,18 @@ export function createStagePolylineCommand(
     title: messages.polylineTitle,
     category: messages.drawCategory,
     start: createStagePolylineSession,
+  }
+}
+
+/** POLYGON 命令定义。 @public */
+export function createStagePolygonCommand(
+  messages: StageDraftingMessages,
+): ComposeCommandDefinition<StageDraftingContext, StageDraftingEffect> {
+  return {
+    id: 'POLYGON',
+    aliases: ['POL'],
+    title: messages.polygonTitle,
+    category: messages.drawCategory,
+    start: createStagePolygonSession,
   }
 }
