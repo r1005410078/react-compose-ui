@@ -27,6 +27,22 @@ const MARKER_SIZE = 10
  */
 const PORT_MARKER_RADIUS = 3
 
+/**
+ * 沙漏形捕捉记号：`nearest` 专用。
+ *
+ * @remarks
+ * 边长与方框记号同为 {@link MARKER_SIZE}，因此它同样**套得住**拾取框——比框小的记号会整个
+ * 藏进框里，用户根本看不见吸没吸上。
+ */
+function hourglassPath(center: StagePoint): string {
+  const half = MARKER_SIZE / 2
+  const left = center.x - half
+  const right = center.x + half
+  const top = center.y - half
+  const bottom = center.y + half
+  return `M${left} ${top}H${right}L${left} ${bottom}H${right}Z`
+}
+
 /** {@link StageDraftingOverlay} 的属性。 @internal */
 export interface StageDraftingOverlayProps {
   readonly viewport: StageViewport
@@ -42,6 +58,14 @@ export interface StageDraftingOverlayProps {
    * 「这里只有一个端子」。
    */
   readonly revealedPorts: readonly StagePoint[] | null
+  /**
+   * 落笔会接上的那条导线的整条几何，世界坐标；不会接线时为 `null`。
+   *
+   * @remarks
+   * 高亮整条而不只画那一个点：密集图上两条平行导线只隔几个像素，只画一个点说不清它长在谁
+   * 身上，而用户此刻要回答的正是「我会接到哪条线上」。
+   */
+  readonly revealedWire: readonly StagePoint[] | null
   /**
    * 待定几何的世界折线（弧已拍扁）；命令给不出时为 `null`。
    *
@@ -97,6 +121,7 @@ export function StageDraftingOverlay({
   crosshair,
   snap,
   revealedPorts,
+  revealedWire,
   previewOutline,
   dynamicInput,
   rubberBand,
@@ -148,6 +173,16 @@ export function StageDraftingOverlay({
           y2={rayOrigin.y + rayUnit.y * raySpan}
         />
       ) : null}
+      {revealedWire ? (
+        <polyline
+          className="compose-stage__drafting-tap-target"
+          data-testid="stage-drafting-tap-target"
+          points={revealedWire
+            .map((point) => worldToScreen(point, viewport))
+            .map(({ x, y }) => `${x},${y}`)
+            .join(' ')}
+        />
+      ) : null}
       {previewPoints ? (
         <polyline
           className="compose-stage__drafting-preview"
@@ -196,7 +231,19 @@ export function StageDraftingOverlay({
           />
         )
       })}
-      {snapScreen ? (
+      {/*
+        * `nearest` 画沙漏而不是方框（AutoCAD 的 Nearest 记号就是沙漏）：这块画布的规矩是
+        * **形状先分开、颜色再分开**，而「吸在这条线上的某一点」与「吸在一个特征点上」是两件
+        * 事——后者说得出那个点是什么（端点、中点、圆心），前者说不出。
+        */}
+      {snapScreen && snap?.mode === 'nearest' ? (
+        <path
+          className="compose-stage__drafting-snap compose-stage__drafting-snap--nearest"
+          d={hourglassPath(snapScreen)}
+          data-snap-mode={snap.mode}
+          data-testid="stage-drafting-snap"
+        />
+      ) : snapScreen ? (
         <rect
           className="compose-stage__drafting-snap"
           data-snap-mode={snap?.mode}

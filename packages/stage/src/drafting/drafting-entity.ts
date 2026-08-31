@@ -13,6 +13,8 @@ import {
   type JsonValue,
 } from '@compose-ui/core'
 import type { ComposePosition, ComposeWire, ComposeWireBinding } from '@compose-ui/core'
+import { batchStageCommands, planStageWireTap } from './wire-tap'
+import type { StageWireTapAnchor } from './wire-tap'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   applyMatrix,
@@ -62,6 +64,30 @@ export function wireBindingsFor(
   if (!ends) return undefined
   const start = anchors.get(anchorKey(ends[0]))
   const end = anchors.get(anchorKey(ends[1]))
+  return {
+    ...(start ? { start } : {}),
+    ...(end ? { end } : {}),
+  }
+}
+
+/**
+ * 按取点记录求出一条曲线两端各落在了哪条既有导线上。
+ *
+ * @remarks
+ * 与 {@link wireBindingsFor} 是同一张表的两半：端口那一头已经是可绑的目标，线身这一头还要
+ * 先把节点建出来。两者读的是**同一个键**（解算后的世界坐标），因此一次取点只可能落进其中
+ * 一张表——捕捉给出的候选只有一个。
+ * @internal
+ */
+export function wireTapsFor(
+  anchors: ReadonlyMap<string, StageWireTapAnchor>,
+  curve: ComposeCurve,
+): { readonly start?: StageWireTapAnchor; readonly end?: StageWireTapAnchor } | undefined {
+  const ends = composeCurveEndpoints(curve)
+  if (!ends) return undefined
+  const start = anchors.get(anchorKey(ends[0]))
+  const end = anchors.get(anchorKey(ends[1]))
+  if (!start && !end) return undefined
   return {
     ...(start ? { start } : {}),
     ...(end ? { end } : {}),
@@ -217,6 +243,20 @@ export interface StageDraftingCurveOptions {
    * （`DEFAULT_ARROW_PROPS`），Stage 认识 Preset id 就够了，不必也认识 prop 名。
    */
   readonly arrow?: boolean
+  /**
+   * 取点时落在**另一条导线**上的那些端。
+   *
+   * @remarks
+   * 与 {@link StageDraftingCurveOptions.wire} 是同一件事的另一种目标：那个是「落在端口上」，
+   * 这个是「落在线身上」。后者要先把节点建出来，因此它在这里被展开成建节点、断线与改绑三条
+   * 命令，与本条曲线的创建一起收进**同一个事务**。
+   */
+  readonly taps?: {
+    readonly start?: StageWireTapAnchor
+    readonly end?: StageWireTapAnchor
+  }
+  /** 事务的展示名；接线一步会产出多条命令，历史里需要一句话说清它是什么。 */
+  readonly tapLabel?: string
 }
 
 /** {@link createStageDraftingCurveCommand} 的结果。 @internal */
@@ -245,7 +285,7 @@ export function createStageDraftingCurveCommand(
   curve: ComposeCurve,
   options: StageDraftingCurveOptions = {},
 ): StageDraftingCurveCommand | null {
-  const { arrow, rectangle, wire, wiring } = options
+  const { arrow, rectangle, taps, tapLabel, wire, wiring } = options
   /*
    * 导线走 `wire` Preset（一次回路的红色粗实线），判据是**这条线真的绑上了端口**而不是
    * 走了哪条命令——`WIRE` 合并进 `LINE` 之后没有第二种线可分，绑定跟着取点来源走，因此
@@ -272,8 +312,39 @@ export function createStageDraftingCurveCommand(
     toParentCurve(curve, toParent, rotationDegrees),
   )
 
+  /*
+   * 接入另一条导线：先把节点建出来、把被接入的线断成两段，再让本条曲线的那一端绑上去。
+   *
+   * 排在过滤之前是因为它**产出**绑定：节点是本次事务新建的，此刻还不在 `document` 里，因此
+   * 它天然通过同父级过滤（那一条只拦「已存在但父级不同」的目标）。
+   *
+   * 跨父级的接入在 `planStageWireTap` 里被拒绝并返回 null，与端口那一侧同一条判据：不接是
+   * **可见的**降级，非法文档是不可见的。
+   */
+  const parentId = parent ? parent.id : null
+  const tapEdits: EditorCommand[] = []
+  const tapJunctions: EditorCommand[] = []
+  const tapBindings: { start?: ComposeWireBinding; end?: ComposeWireBinding } = {}
+  const droppedTaps: ('start' | 'end')[] = []
+  for (const key of ['start', 'end'] as const) {
+    const anchor = taps?.[key]
+    if (!anchor) continue
+    const plan = planStageWireTap(context, anchor, parentId)
+    if (!plan) {
+      droppedTaps.push(key)
+      continue
+    }
+    tapEdits.push(...plan.edits)
+    tapJunctions.push(plan.junction)
+    tapBindings[key] = plan.binding
+  }
+  const tapped = Object.keys(tapBindings).length > 0
+  const requested: ComposeWire | undefined = wire || tapped
+    ? { ...(wire ?? {}), ...tapBindings }
+    : undefined
+
   // 过滤必须排在这里而不是调用方：只有算完落地父级才知道哪一端跨了层级。
-  const bindings = sameParentWireEnds(context.document, wire, parent ? parent.id : null)
+  const bindings = sameParentWireEnds(context.document, requested, parentId)
   /*
    * 导线走 `wire` Preset（一次回路的红色粗实线）。判据有两条，任一成立即可：用户是在**接线**
    * （`WIRE`），或者这条线**事实上绑上了**端口（`LINE` 顺手吸上了）。前者让两端都自由的导线
@@ -312,16 +383,33 @@ export function createStageDraftingCurveCommand(
     },
   }
 
-  return {
-    command: {
-      id: context.idFactory(),
-      type: BUILTIN_COMMAND_TYPES.createEntity,
-      payload: {
-        entity: entity as unknown as JsonValue,
-        parentId: parent ? parent.id : null,
-      },
-      meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
+  const create: EditorCommand = {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.createEntity,
+    payload: {
+      entity: entity as unknown as JsonValue,
+      parentId,
     },
-    droppedWireEnds: bindings.dropped,
+    meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
+  }
+  /*
+   * 接线的三件事与本条曲线的创建收进**同一个事务**：撤销一步 MUST 回到接入之前，而不是回到
+   * 「接了一半」。批次的 `targetIds` 仍指向新画的这条线——`LINE` 的 `U` 靠它出栈。
+   *
+   * **节点排在最后**：子级顺序就是绘制顺序，先建的在底下。它排在新画的那条导线之前时，接头
+   * 正中央按下去抓到的是那条线——而接头是三条支路唯一的公共入口。绑定指向一个此刻还不存在的
+   * Entity 不成问题：批次是原子的，而「指向不存在的实体」本来就只是解算失败、不是文档非法。
+   */
+  const command = tapJunctions.length > 0
+    ? batchStageCommands(
+        context.idFactory,
+        [...tapEdits, create, ...tapJunctions],
+        tapLabel ?? entity.name,
+        { label: tapLabel ?? entity.name, source: 'stage', targetIds: [entityId] },
+      ) ?? create
+    : create
+  return {
+    command,
+    droppedWireEnds: [...bindings.dropped, ...droppedTaps],
   }
 }

@@ -470,6 +470,7 @@ function ComposeStageReady({
     lineTitle: messages.draftingLineTitle,
     wireTitle: messages.draftingWireTitle,
     wireParentMismatch: messages.draftingWireParentMismatch,
+    wireTap: messages.draftingWireTap,
     arrowTitle: messages.draftingArrowTitle,
     arcTitle: messages.draftingArcTitle,
     circleTitle: messages.draftingCircleTitle,
@@ -1356,6 +1357,7 @@ function ComposeStageReady({
             dynamicInput={dynamicInput}
             snap={draftingSession.snap}
             revealedPorts={draftingSession.revealedPorts}
+            revealedWire={draftingSession.revealedWire}
             surfaceSize={surfaceSize}
             viewport={viewport}
           />

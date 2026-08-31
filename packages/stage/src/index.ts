@@ -17,6 +17,14 @@ export { ComposeStage } from './stage-surface'
  */
 export { DEFAULT_STAGE_SHORTCUTS } from './stage-surface/keyboard'
 export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './component-palette'
+/**
+ * 接线节点的身份判据。
+ *
+ * @remarks
+ * 导出给宿主的删除入口用：删除有好几个入口，而「删掉一条支路之后收拾支路不足的节点」只有
+ * `createStageDeleteEntitiesCommand` 一份实现，它需要这条谓词才认得出节点。
+ */
+export { isStageJunctionEntity, STAGE_JUNCTION_PRESET_ID } from './drafting'
 export type {
   ComposeStageClipboard,
   ComposeStageDispatch,

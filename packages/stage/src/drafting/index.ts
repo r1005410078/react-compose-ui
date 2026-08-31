@@ -1,4 +1,10 @@
 export { createStageDraftingCurveCommand, STAGE_RECT_PRESET_ID } from './drafting-entity'
+export {
+  isStageJunctionEntity,
+  isStageWireEntity,
+  STAGE_JUNCTION_PRESET_ID,
+  STAGE_WIRE_PRESET_ID,
+} from './wire-tap'
 export type { StageDraftingCommitContext } from './drafting-entity'
 export {
   stageCornerRadiusReadout,

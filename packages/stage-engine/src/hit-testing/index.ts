@@ -16,6 +16,7 @@ export {
 export type {
   StageFeaturePoint,
   StageFeatureSnapMode,
+  StageWirePredicate,
   StageRevealedPorts,
   StageWireEnd,
 } from './feature-points'

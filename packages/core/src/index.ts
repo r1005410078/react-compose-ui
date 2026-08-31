@@ -193,6 +193,10 @@ export type {
 export {
   COMPOSE_CURVE_MIN_EXTENT,
   COMPOSE_CURVE_PICK_TOLERANCE,
+  COMPOSE_JUNCTION_DIAMETER_RATIO,
+  COMPOSE_JUNCTION_PORT_ID,
+  composeJunctionGeometry,
+  composeJunctionSize,
   collectComposeCurveValidationIssues,
   composeCurveSegments,
   composeCurveBounds,
@@ -209,8 +213,10 @@ export {
   isValidComposeCurve,
   normalizeComposeCurveGeometry,
   projectComposeCurveToBox,
+  splitComposeCurveAt,
   translateComposeCurve,
   type ComposeCurveBoxScale,
+  type ComposeCurveSplit,
   type ComposeCurveViewBox,
 } from './curve'
 export {
@@ -232,6 +238,7 @@ export {
   composeSegmentIntersectsRect,
   composeSegmentMidpoint,
   composeSquaredDistance,
+  closestPointOnComposeSegment,
   flattenComposeArc,
   flattenComposeOutline,
   isComposeFullCircle,

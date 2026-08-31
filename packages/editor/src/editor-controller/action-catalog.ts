@@ -1,5 +1,6 @@
 import { BUILTIN_COMMAND_TYPES } from '@compose-ui/core'
 import {
+  createStageDeleteEntitiesCommand,
   createDuplicateCommand,
   createGroupCommand,
   createLayerOrderCommand,
@@ -27,6 +28,7 @@ import type {
   ComposeLayoutSnapshot,
   EditorCommand,
 } from '@compose-ui/core'
+import { isStageJunctionEntity } from '@compose-ui/stage'
 import type { ComposeStageTool } from '@compose-ui/stage'
 import type { ComposeLocale } from '@compose-ui/ui-context'
 import {
@@ -361,19 +363,18 @@ export function createComposeEditorActionHandlers(
       if (result.status === 'committed') context.setSelectedIds([entity.id])
     }),
     'edit.delete': handler(selectionMissing, () => {
-      context.dispatch({
-        id: context.idFactory(),
-        type: BUILTIN_COMMAND_TYPES.deleteEntity,
-        payload: { entityIds: [...editable] },
-        meta: {
-          // 与 Stage 键盘删除保持同一措辞：英文动词加 Entity 名称，便于历史面板辨认。
-          label: `Delete ${editable
-            .map((id) => document.entities[id]?.name ?? id)
-            .join(', ')}`,
-          source: 'command-panel',
-          targetIds: [...editable],
-        },
+      // 删除与「因此失去支路的节点」收进同一条命令：四个删除入口共用这一份清理，
+      // 逐条挂钩子漏一条的症状是「删掉一条线之后图上留着一个孤零零的点」。
+      const removal = createStageDeleteEntitiesCommand(document, [...editable], {
+        idFactory: context.idFactory,
+        isJunction: isStageJunctionEntity,
+        source: 'command-panel',
+        // 与 Stage 键盘删除保持同一措辞：英文动词加 Entity 名称，便于历史面板辨认。
+        label: `Delete ${editable
+          .map((id) => document.entities[id]?.name ?? id)
+          .join(', ')}`,
       })
+      if (removal) context.dispatch(removal)
     }),
     'history.undo': handler(
       context.canUndo ? undefined : 'nothingToUndo',

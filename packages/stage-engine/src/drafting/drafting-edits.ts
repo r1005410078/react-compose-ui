@@ -12,7 +12,8 @@ import {
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
-import { createDuplicateCommand } from '../commands'
+import { createDuplicateCommand, createStageDeleteEntitiesCommand } from '../commands'
+import type { StageJunctionPredicate } from '../commands'
 import { applyStageCurveGrip, stageCurveBoxGeometry, stageCurveLocalPoint } from '../geometry-editing'
 import { translationMatrix } from '../geometry'
 import {
@@ -70,6 +71,14 @@ export interface StageDraftingEditQuery {
    * 而那个绑定在屏幕上完全不可见。键入的坐标因此永远不绑——它没有来源可言。
    */
   readonly wireBinding?: ComposeWireBinding
+  /**
+   * 判断一个 Entity 是不是接线节点。
+   *
+   * @remarks
+   * 由宿主注入：节点的身份是 `Composition.presetId`，而引擎不认识 Preset id。缺席时删除不做
+   * 节点清理，行为与引入本能力之前逐字相同。
+   */
+  readonly isJunction?: StageJunctionPredicate
   /** 夹点几何变更的已本地化标签；缺席时退回 Entity 名。 */
   readonly curveLabel?: (name: string) => string
 }
@@ -173,18 +182,16 @@ export function planStageDraftingEdits(query: StageDraftingEditQuery): readonly 
       return entity !== undefined && !getComposeLock(entity).locked
     })
     if (entityIds.length > 0) {
-      commands.push({
-        id: idFactory(),
-        type: BUILTIN_COMMAND_TYPES.deleteEntity,
-        payload: { entityIds },
-        meta: {
-          label: `Delete ${entityIds
-            .map((id) => document.entities[id]?.name ?? id)
-            .join(', ')}`,
-          source: 'stage',
-          targetIds: entityIds,
-        },
+      // 删除与「因此失去支路的节点」收进同一条命令：清理只有一份实现，见
+      // `createStageDeleteEntitiesCommand`。
+      const removal = createStageDeleteEntitiesCommand(document, entityIds, {
+        idFactory,
+        ...(query.isJunction ? { isJunction: query.isJunction } : {}),
+        label: `Delete ${entityIds
+          .map((id) => document.entities[id]?.name ?? id)
+          .join(', ')}`,
       })
+      if (removal) commands.push(removal)
     }
   }
 

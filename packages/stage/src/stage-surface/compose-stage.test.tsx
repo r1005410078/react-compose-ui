@@ -2079,6 +2079,53 @@ describe('绘图模式', () => {
     })
   })
 
+  describe('OpenSpec: stage / 接入目标在取点时整条显现', () => {
+    /** 一条从 (20,30) 到 (120,80) 的导线：夹具 Entity 的 offset 就是它的起点。 */
+    function wire(id = 'wire-a'): ComposeEntity {
+      const base = curveEntity(id)
+      return { ...base, components: { ...base.components, Wire: {} } }
+    }
+
+    function movePointerTo(x: number, y: number) {
+      measureSurfaceAs(1000, 800)
+      fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+        clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', bubbles: true,
+      })
+    }
+
+    it('取点时整条高亮，并在最近点画记号', () => {
+      renderStage(document([wire()]), { angleConstraint: 'off' })
+      startLine()
+      // 线身中间：既不靠近端点也不靠近中点，因此命中的是 `nearest`。
+      movePointerTo(45, 42)
+      expect(screen.getByTestId('stage-drafting-tap-target')).toBeTruthy()
+      expect(screen.getByTestId('stage-drafting-snap').getAttribute('data-snap-mode'))
+        .toBe('nearest')
+    })
+
+    it('空闲时既不高亮也不画记号', () => {
+      renderStage(document([wire()]), { angleConstraint: 'off' })
+      // 常驻会让一张图上每条线都在抢注意力，而此刻用户还没有在找接线点。
+      movePointerTo(45, 42)
+      expect(screen.queryByTestId('stage-drafting-tap-target')).toBeNull()
+    })
+
+    it('普通曲线不高亮：接到线身中间是接线特有的手势', () => {
+      renderStage(document([curveEntity()]), { angleConstraint: 'off' })
+      startLine()
+      movePointerTo(45, 42)
+      expect(screen.queryByTestId('stage-drafting-tap-target')).toBeNull()
+    })
+
+    it('最近点记号与端口记号形状不同', () => {
+      renderStage(document([wire()]), { angleConstraint: 'off' })
+      startLine()
+      movePointerTo(45, 42)
+      // 这块画布的规矩是形状先分开、颜色再分开：端口是实心圆，最近点是沙漏。
+      expect(screen.getByTestId('stage-drafting-snap').tagName).toBe('path')
+    })
+  })
+
   describe('OpenSpec: stage / 导线两端的接线状态画在图面上', () => {
     function wireEntity(id: string, binding: unknown): ComposeEntity {
       const base = curveEntity(id)

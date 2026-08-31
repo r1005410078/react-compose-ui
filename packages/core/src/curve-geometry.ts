@@ -100,6 +100,34 @@ export function pointToComposeSegmentDistance(
   return Math.hypot(px - t * dx, py - t * dy)
 }
 
+/**
+ * 线段上离给定点最近的那个点。
+ *
+ * @remarks
+ * 与 {@link pointToComposeSegmentDistance} 是同一段投影，因此**必须**放在一起改：一个回答
+ * 「多远」、另一个回答「哪一点」，两处各写一遍投影钳制的话，捕捉标记会画在离命中判定
+ * 几个像素之外的地方。
+
+ * 参数 `t` 钳制在 `[0, 1]`：投影落在线段之外时结果是最近的那个端点，而不是延长线上的点——
+ * 接线要落在**画出来的那条线**上。
+ *
+ * @public
+ */
+export function closestPointOnComposeSegment(
+  segment: ComposeSegmentShape,
+  point: ComposePlanarPoint,
+): ComposePlanarPoint {
+  const { start, end } = segment
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  // 零长度线段退化成它自己那个点：除法会给出 NaN，而 NaN 的一切比较都为 false，
+  // 症状是捕捉在某些退化几何上静默失效。
+  if (lengthSquared === 0) return { x: start.x, y: start.y }
+  const t = Math.min(1, Math.max(0, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
+  return { x: start.x + t * dx, y: start.y + t * dy }
+}
+
 /** 线段中点。 @public */
 export function composeSegmentMidpoint(segment: ComposeSegmentShape): ComposePlanarPoint {
   return {

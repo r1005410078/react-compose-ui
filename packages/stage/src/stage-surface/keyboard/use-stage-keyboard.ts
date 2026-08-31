@@ -8,6 +8,7 @@ import {
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import {
+  createStageDeleteEntitiesCommand,
   createDuplicateCommand,
   createGroupCommand,
   createLayerOrderCommand,
@@ -30,6 +31,7 @@ import type {
   ComposeStageTool,
 } from '../../types'
 import type { getStageMessages } from '../../stage-i18n'
+import { isStageJunctionEntity } from '../../drafting/wire-tap'
 import { planStageNudge } from './nudge-planning'
 import { fitViewportTo, zoomViewportByIntent } from '../stage-viewport-actions'
 import {
@@ -454,16 +456,13 @@ export function useStageKeyboardCommands(
       return
     }
     if (actionMatches('edit.delete')) {
-      dispatch({
-        id: idFactory(),
-        type: BUILTIN_COMMAND_TYPES.deleteEntity,
-        payload: { entityIds: editableIds },
-        meta: {
-          label: `Delete ${describeEntityTargets(document, editableIds)}`,
-          source: 'stage',
-          targetIds: editableIds,
-        },
+      // 删除与「因此失去支路的节点」收进同一条命令；四个删除入口共用这一份清理。
+      const removal = createStageDeleteEntitiesCommand(document, editableIds, {
+        idFactory,
+        isJunction: isStageJunctionEntity,
+        label: `Delete ${describeEntityTargets(document, editableIds)}`,
       })
+      if (removal) dispatch(removal)
       event.preventDefault()
       return
     }

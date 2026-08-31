@@ -260,6 +260,16 @@ function curveEntity(
   }
 }
 
+/** 与 {@link curveEntity} 相同的几何，外加一个 `Wire`：`nearest` 只对导线产出。 */
+function wireEntity(
+  id: string,
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
+) {
+  const base = curveEntity(id, start, end)
+  return { ...base, components: { ...base.components, Wire: {} } }
+}
+
 function shapeEntity(id: string, curve: ComposeCurve) {
   const next = normalizeComposeCurveGeometry(curve)
   const base = entity(id, {
@@ -320,6 +330,37 @@ describe('弧与多段线的特征点', () => {
     // 端点正落在光标上，端口差 2 个单位——优先级严格先于距离。
     expect(hit).toMatchObject({ mode: 'port', entityId: 'device' })
     expect(hit?.point).toMatchObject({ x: 300, y: 200 })
+  })
+
+  it('OpenSpec: stage-engine / 特征点捕捉 / 线身中间返回最近点', () => {
+    // (100,100)→(300,100) 的导线；查询点在它下方 3 个单位、且离两个顶点与中点都很远。
+    const wire = wireEntity('w', { x: 100, y: 100 }, { x: 300, y: 100 })
+    const value = document([wire], ['w'])
+
+    const hit = findStageFeaturePoint(value, indexFor(value), { x: 160, y: 103 }, 8)
+
+    expect(hit).toMatchObject({ mode: 'nearest', entityId: 'w' })
+    expect(hit?.point.x).toBeCloseTo(160, 6)
+    expect(hit?.point.y).toBeCloseTo(100, 6)
+  })
+
+  it('OpenSpec: stage-engine / 特征点捕捉 / 端点压过更近的最近点', () => {
+    const wire = wireEntity('w', { x: 100, y: 100 }, { x: 300, y: 100 })
+    const value = document([wire], ['w'])
+
+    // 光标在端点右下方：线身上的最近点 (102,100) 比端点 (100,100) 更近，优先级仍先于距离。
+    const hit = findStageFeaturePoint(value, indexFor(value), { x: 102, y: 101 }, 8)
+
+    expect(hit).toMatchObject({ mode: 'endpoint' })
+    expect(hit?.point).toMatchObject({ x: 100, y: 100 })
+  })
+
+  it('OpenSpec: stage-engine / 特征点捕捉 / 普通曲线不产出最近点', () => {
+    // 同样的几何、同样的查询点，只是没有 `Wire`：接到线身中间是接线特有的手势。
+    const plain = curveEntity('plain', { x: 100, y: 100 }, { x: 300, y: 100 })
+    const value = document([plain], ['plain'])
+
+    expect(findStageFeaturePoint(value, indexFor(value), { x: 160, y: 103 }, 8)).toBeNull()
   })
 
   it('OpenSpec: stage-engine / 端口捕捉 / 没有端口的 Entity 不产生候选', () => {

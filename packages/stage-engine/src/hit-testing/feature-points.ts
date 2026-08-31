@@ -1,7 +1,9 @@
 import {
+  closestPointOnComposeSegment,
   composeArcEndpoints,
   composeArcMidpoint,
   composeArcQuadrants,
+  composeCurveSegments,
   composePolylineSegments,
   getComposeCurve,
   getComposeEntityPorts,
@@ -32,9 +34,19 @@ import type { StageSceneIndex } from './scene-index'
  * **端口排在最前**：端口几乎总是画在符号线段的端点上，端点若在同等距离下胜出，用户会画出一条
  * 像素级正确但**没有绑定**的导线——而这个错误在屏幕上完全不可见。
  *
+ * **`nearest` 排在最后**：它是导线上离查询点最近的那个点，因此只要指针在容差内就**永远**有
+ * 答案。排在任何点状候选之前，端点、中点与圆心会被整个吞掉，而「把这个角对到那个端子上」正是
+ * 画图时最常做的事。
+ *
  * @public
  */
-export type StageFeatureSnapMode = 'port' | 'endpoint' | 'midpoint' | 'center' | 'quadrant'
+export type StageFeatureSnapMode =
+  | 'port'
+  | 'endpoint'
+  | 'midpoint'
+  | 'center'
+  | 'quadrant'
+  | 'nearest'
 
 /** 一个特征点候选。 @public */
 export interface StageFeaturePoint {
@@ -58,6 +70,7 @@ const MODE_ORDER: readonly StageFeatureSnapMode[] = [
   'midpoint',
   'center',
   'quadrant',
+  'nearest',
 ]
 
 /** 点级排除的判等阈值；见 {@link findStageFeaturePoint} 为什么不用容差。 */
@@ -126,6 +139,56 @@ function curveFeaturePoints(
 }
 
 /**
+ * 判断一个 Entity 是不是导线。
+ *
+ * @remarks
+ * **默认是文档级契约**（带 `Wire`），而宿主通常要放宽它：一条刚画完、两端都还没接上的导线
+ * **没有 `Wire`**——那个 Component 只记录「这一端绑到了哪个端口」，没有绑定就不写。它在文档
+ * 里唯一的身份是 `Composition.presetId`，而引擎不认识 Preset id，因此这条谓词由宿主注入，
+ * 与「一个 Entity 能不能几何编辑由宿主注入谓词」是同一条既有边界。
+ *
+ * 不注入的症状是「新画的导线接不上，接过一次之后就能接了」——用户完全无从解释。
+ *
+ * @public
+ */
+export type StageWirePredicate = (entity: ComposeEntity) => boolean
+
+/**
+ * 导线上离查询点最近的那个点。
+ *
+ * @remarks
+ * **只对导线产出**：接到线身中间是接线特有的手势，而给每一条曲线都配一个「永远命中」的候选
+ * 会让端点在密集图上难以对准。
+ *
+ * 与命中、框选走**同一条**投影链（`projectComposeCurveToBox` → 世界矩阵），弧按既有规则拍扁
+ * ——各算一遍必然在某个缩放下差半个像素，而这里差半个像素就是「看起来接上了却没接上」。
+ *
+ * 判定留在**世界空间**（把几何变换过去），不把查询点逆变换进几何空间：非等比缩放会把圆形容差
+ * 变成椭圆，距离比较不再是标量。
+ */
+function wireNearestPoint(
+  entity: ComposeEntity,
+  box: { readonly width: number; readonly height: number } | undefined,
+  toWorld: (point: StagePoint) => StagePoint,
+  point: StagePoint,
+  isWire: StageWirePredicate,
+): LocalFeaturePoint | null {
+  const geometry = getComposeCurve(entity)
+  if (!geometry || !box || !isWire(entity)) return null
+  const segments = composeCurveSegments(projectComposeCurveToBox(geometry, box))
+  let best: { readonly point: StagePoint; readonly distance: number } | null = null
+  for (const segment of segments) {
+    const world = { start: toWorld(segment.start), end: toWorld(segment.end) }
+    const candidate = closestPointOnComposeSegment(world, point)
+    const dx = candidate.x - point.x
+    const dy = candidate.y - point.y
+    const distance = dx * dx + dy * dy
+    if (best === null || distance < best.distance) best = { point: candidate, distance }
+  }
+  return best ? { mode: 'nearest', point: best.point } : null
+}
+
+/**
  * 在世界点附近求解几何特征点。
  *
  * @remarks
@@ -140,6 +203,7 @@ function curveFeaturePoints(
  * @param tolerance - 世界单位的容差；调用方用屏幕像素除以 zoom 换算。
  * @param excludedIds - 不参与捕捉的整个 Entity。
  * @param excludedPoint - 不参与捕捉的**单个世界点**。
+ * @param isWire - 哪些 Entity 产出 `nearest` 候选；见 {@link StageWirePredicate}。
  *
  * @remarks
  * 两级排除服务不同的事：Entity 级挡的是「这个对象整体不该出现在候选里」，点级挡的是
@@ -159,6 +223,7 @@ export function findStageFeaturePoint(
   tolerance: number,
   excludedIds: readonly string[] = [],
   excludedPoint: StagePoint | null = null,
+  isWire: StageWirePredicate = (entity) => getComposeWire(entity) !== undefined,
 ): StageFeaturePoint | null {
   if (!(tolerance > 0)) return null
   const excluded = new Set(excludedIds)
@@ -173,6 +238,7 @@ export function findStageFeaturePoint(
     if (!matrix) continue
     const toWorld = (local: StagePoint) => applyMatrix(matrix, local)
     const box = index.layoutSnapshot.boxes[entityId]
+    const nearestOnWire = wireNearestPoint(entity, box, toWorld, point, isWire)
     const candidates = [
       // 端口与曲线特征点共用同一个世界矩阵：各算一遍必然在某个缩放下差半个像素。
       ...getComposeEntityPorts(entity).map((port) => ({
@@ -181,6 +247,7 @@ export function findStageFeaturePoint(
         portId: port.id,
       })),
       ...curveFeaturePoints(entity, box, toWorld),
+      ...(nearestOnWire ? [nearestOnWire] : []),
     ]
     for (const candidate of candidates) {
       if (excludedPoint && isSameWorldPoint(candidate.point, excludedPoint)) continue

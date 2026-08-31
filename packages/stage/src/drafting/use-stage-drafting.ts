@@ -5,7 +5,9 @@ import {
   composeCurveSegments,
   composePointToFields,
   formatComposeNumber,
+  getComposeCurve,
   isComposeSingleFieldKind,
+  projectComposeCurveToBox,
   parseComposeCoordinate,
   resolveComposePoint,
   resolveComposePointDetail,
@@ -26,6 +28,7 @@ import {
 } from '@compose-ui/commands'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
+  applyMatrix,
   COMPOSE_POLYGON_DEFAULT_SIDES,
   createStageDraftingCommands,
   createStageGripSession,
@@ -50,7 +53,10 @@ import {
   anchorKey,
   createStageDraftingCurveCommand,
   wireBindingsFor,
+  wireTapsFor,
 } from './drafting-entity'
+import { isStageJunctionEntity, isStageWireEntity } from './wire-tap'
+import type { StageWireTapAnchor } from './wire-tap'
 
 /** 绘图模式需要的额外文案。 @internal */
 export interface StageDraftingHookMessages extends StageDraftingMessages {
@@ -70,6 +76,8 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly editGeometry: (name: string) => string
   /** 端口与线段不在同一父级、因此没能绑上时的说明。 */
   readonly wireParentMismatch: string
+  /** 一次接线的历史标签；它产出建节点、断线与改绑三条命令。 */
+  readonly wireTap: string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -219,6 +227,11 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const sessionRef = useRef<ComposeCommandSession<StageDraftingEffect> | null>(null)
   /** 本次命令里落在端口上的取点；键是解算后的世界坐标。 */
   const portAnchors = useRef(new Map<string, ComposeWireBinding>())
+  /*
+   * 落在**另一条导线**上的那些取点。与端口锚点分成两张表：端口那一头已经是可绑的目标，
+   * 线身这一头还要先把节点建出来。一次取点只可能落进其中一张——捕捉给出的候选只有一个。
+   */
+  const wireAnchors = useRef(new Map<string, StageWireTapAnchor>())
   /** 上一条成功启动的命令 id；空闲时的空确认按它重启。取消过的命令仍算数。 */
   const lastCommandRef = useRef<string | null>(null)
   const [prompt, setPromptState] = useState<ComposeCommandSession<StageDraftingEffect>['prompt']>(null)
@@ -477,6 +490,11 @@ export function useStageDrafting(options: StageDraftingOptions) {
         // 是让同一个意图说两遍。两端都没碰过端口时 `wireBindingsFor` 给出空对象，落地时
         // 因此不写 `Wire`，也不走导线 Preset——没碰过端口的普通线一个字节都不变。
         wire: wireBindingsFor(portAnchors.current, curve),
+        // 落在线身上的那些端：宿主在同一个事务里建节点、断线并绑上去。
+        ...(() => {
+          const taps = wireTapsFor(wireAnchors.current, curve)
+          return taps ? { taps, tapLabel: current.messages.wireTap } : {}
+        })(),
         ...(effect.wire ? { wiring: true } : {}),
         ...(effect.arrow ? { arrow: true } : {}),
         ...(effect.rectangle ? { rectangle: true } : {}),
@@ -495,6 +513,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
       index: current.index,
       effect: undone ? { ...effect, removed: [...(effect.removed ?? []), undone] } : effect,
       idFactory: current.idFactory,
+      // 引擎不认识 Preset id，节点的身份由这条谓词注入：`ERASE` 删掉一条支路之后，
+      // 支路不足的节点在同一个事务里一起收掉。
+      isJunction: isStageJunctionEntity,
       // 绑定来自**取点时记下的来源**，与新建导线读的是同一张表。
       ...(effect.curveGrip
         ? (() => {
@@ -525,6 +546,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setWiring(false)
     setActiveCommandId(null)
     portAnchors.current.clear()
+    wireAnchors.current.clear()
     createdIdsRef.current = []
     wheelRemainderRef.current = 0
     setPrompt(null)
@@ -656,6 +678,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     if (!enabled || !snapEnabled || !pointer) return null
     return findStageFeaturePoint(
       document, index, pointer, featureTolerance, excluded, snapExcludedPoint,
+      isStageWireEntity,
     )
   }, [document, enabled, excluded, featureTolerance, index, pointer, snapEnabled, snapExcludedPoint])
 
@@ -713,11 +736,16 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const resolvePointerHit = useCallback((world: StagePoint): {
     readonly point: ComposeInputPoint
     readonly port?: ComposeWireBinding
+    /** 落在另一条导线上的那次取点；接线时先建节点再绑它。 */
+    readonly tap?: StageWireTapAnchor
     /** 角度约束命中的那条射线；追踪射线画不画读它，不另判一次。 */
     readonly ray: number | null
   } => {
     const hit = snapEnabled
-      ? findStageFeaturePoint(document, index, world, featureTolerance, excluded, snapExcludedPoint)
+      ? findStageFeaturePoint(
+          document, index, world, featureTolerance, excluded, snapExcludedPoint,
+          isStageWireEntity,
+        )
       : null
     const resolved = resolveComposePointDetail(world, 'pointer', {
       ...(hit ? { snapped: hit.point } : {}),
@@ -739,8 +767,24 @@ export function useStageDrafting(options: StageDraftingOptions) {
      * 同源；反过来（先覆盖再吸附）会让网格把刚锁死的 300 挪成 296。
      */
     const point = applyFieldLocks(resolved.point)
-    return hit?.mode === 'port' && hit.portId
-      ? { point, ray: resolved.ray, port: { entityId: hit.entityId, portId: hit.portId } }
+    if (hit?.mode === 'port' && hit.portId) {
+      return { point, ray: resolved.ray, port: { entityId: hit.entityId, portId: hit.portId } }
+    }
+    /*
+     * 落在另一条导线上：`endpoint`、`midpoint` 与 `nearest` 三种模式一视同仁——它们都是导线
+     * 上的点。只认 `nearest` 的症状是「瞄准一段线的正中间反而接不上」（中点优先级更高），
+     * 而那在屏幕上与接上了逐像素相同。
+     *
+     * 落点被字段锁定挪走时**不接**：锁定的值是用户键入的，此刻这一点已经不在那条线上了，
+     * 而「键入的坐标永远不接」是同一条规则的另一半。
+     */
+    const onWire = hit
+      && (hit.mode === 'endpoint' || hit.mode === 'midpoint' || hit.mode === 'nearest')
+      && point.x === hit.point.x
+      && point.y === hit.point.y
+      && isStageWireEntity(document.entities[hit.entityId])
+    return onWire && hit
+      ? { point, ray: resolved.ray, tap: { entityId: hit.entityId, point: hit.point } }
       : { point, ray: resolved.ray }
   }, [
     angleConstraint, applyFieldLocks, document, excluded, featureTolerance, gridSettings, index,
@@ -758,7 +802,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     if (!session) return
     // 按这次按下自己的坐标重算捕捉，不沿用上一帧 hover 的结果：pointerdown 可能赶在 React
     // 为上一次 pointermove 重渲染之前到达，落点会被吸回用户已经离开的特征点上。
-    const { point, port } = resolvePointerHit(world)
+    const { point, port, tap } = resolvePointerHit(world)
     // 锁定与活动字段描述的是**这一步**；点落下之后它们说的是一件已经过去的事。
     resetFields()
     // 导线的绑定来自**取点时记下的来源**，不是事后按坐标反查已有端口：反查会让一条恰好路过
@@ -766,6 +810,10 @@ export function useStageDrafting(options: StageDraftingOptions) {
     // 它没有来源可言。
     if (port) {
       portAnchors.current.set(anchorKey(point), port)
+      setWiring(true)
+    } else if (tap) {
+      // 接到另一条导线上的线**事实上**就是导线：它跟着走导线 Preset，也跟着钉死正交。
+      wireAnchors.current.set(anchorKey(point), tap)
       setWiring(true)
     }
     advanceWithPoint(session, point)
@@ -802,6 +850,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setNotice(null)
     // 全新会话：端口来源与「我建了哪些」都只描述**这一条**，重开时必须一起清掉。
     portAnchors.current.clear()
+    wireAnchors.current.clear()
     createdIdsRef.current = []
     wheelRemainderRef.current = 0
     pickedRef.current = false
@@ -883,6 +932,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     const session = createStageGripSession(latest.current.messages, target)
     sessionRef.current = session
     portAnchors.current.clear()
+    wireAnchors.current.clear()
     setGripTarget(target)
     setPrompt(session.prompt)
     setReference(target.origin)
@@ -1402,6 +1452,33 @@ export function useStageDrafting(options: StageDraftingOptions) {
     return collectStageRevealedPorts(document, index, pointer, featureTolerance)
   }, [awaitingPoint, document, featureTolerance, index, pointer])
 
+  /**
+   * 落笔会接上的那条导线的**整条**几何，世界坐标；不会接线时为 `null`。
+   *
+   * @remarks
+   * 高亮整条而不只画那一个点：用户此刻要回答的是「我会接到哪条线上」，而密集图上两条平行导线
+   * 只隔几个像素，只画一个点说不清它长在谁身上。
+   *
+   * 读的是**同一次捕捉**（`snap`），因此高亮的一定就是落笔真会接上的那条——各判一次的症状是
+   * 「亮的是这条、接上的是那条」。
+   */
+  const revealedWire = useMemo<readonly StagePoint[] | null>(() => {
+    if (!awaitingPoint || !snap) return null
+    if (snap.mode !== 'endpoint' && snap.mode !== 'midpoint' && snap.mode !== 'nearest') return null
+    const entity = document.entities[snap.entityId]
+    const geometry = entity ? getComposeCurve(entity) : undefined
+    const box = index.layoutSnapshot.boxes[snap.entityId]
+    const matrix = index.getWorldMatrix(snap.entityId)
+    if (!entity || !isStageWireEntity(entity) || !geometry || !box || !matrix) return null
+    const segments = composeCurveSegments(projectComposeCurveToBox(geometry, box))
+    if (segments.length === 0) return null
+    // 相邻段共用端点，因此收成一条折线：各段起点 + 最后一段终点。
+    return [
+      ...segments.map((segment) => applyMatrix(matrix, segment.start)),
+      applyMatrix(matrix, segments[segments.length - 1]!.end),
+    ]
+  }, [awaitingPoint, document, index, snap])
+
   return {
     index,
     // 几何编辑的夹点拖动读同一个解算：两份实现的分叉症状是「画线时吸端点、拖顶点时不吸」，
@@ -1446,6 +1523,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
      * 键入的值决定，捕捉没有参与。
      */
     snap: enabled && !typedAway && (awaitingPoint || gripTarget !== null) ? snap : null,
+    /** 落笔会接上的那条导线；与捕捉标记读同一次捕捉。 */
+    revealedWire: enabled && !typedAway ? revealedWire : null,
     /** 取点期间显现的端口，世界坐标；不在取点时为空。 */
     revealedPorts: revealedPorts?.points ?? null,
     previewOutline,

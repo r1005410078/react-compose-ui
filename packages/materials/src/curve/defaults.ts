@@ -1,4 +1,4 @@
-import type { ComposeAppearance, ComposeCurve, JsonObject } from '@compose-ui/core'
+import type { ComposeAppearance, ComposeColor, ComposeCurve, JsonObject } from '@compose-ui/core'
 
 /** 曲线默认尺寸，同时决定默认几何的两个端点。 @internal */
 export const DEFAULT_CURVE_SIZE = Object.freeze({ width: 240, height: 140 })
@@ -118,14 +118,48 @@ export const DEFAULT_CIRCLE_GEOMETRY: ComposeCurve = Object.freeze({
  *
  * @internal
  */
+export const COMPOSE_WIRE_STROKE: ComposeColor = '#ff3b30'
+
+/** 导线的默认线宽；节点直径由它推出，见 {@link composeJunctionSize}。 @internal */
+export const COMPOSE_WIRE_STROKE_WIDTH = 2
+
 export const DEFAULT_WIRE_PROPS: JsonObject = Object.freeze({
   ...DEFAULT_CURVE_PROPS,
-  stroke: '#ff3b30',
-  strokeWidth: 2,
+  stroke: COMPOSE_WIRE_STROKE,
+  strokeWidth: COMPOSE_WIRE_STROKE_WIDTH,
 })
 
 /** Arrow 的默认描边：终点箭头。 @internal */
 export const DEFAULT_ARROW_PROPS: JsonObject = Object.freeze({
   ...DEFAULT_CURVE_PROPS,
   markerEnd: 'arrow',
+})
+
+/**
+ * 节点的默认外观：**填实**。
+ *
+ * @remarks
+ * 曲线默认空心，而节点是这条规则的例外——它就是图上那个实心圆点，空心的接头读作「两个同心
+ * 的小圆圈」而不是「这里接上了」。填色取自接入时那条导线的 `stroke`，这里的红只是没有来源
+ * 时的兜底。
+ *
+ * @internal
+ */
+export const DEFAULT_JUNCTION_APPEARANCE: ComposeAppearance = Object.freeze({
+  ...DEFAULT_CURVE_APPEARANCE,
+  backgroundPaint: { kind: 'solid', color: COMPOSE_WIRE_STROKE },
+} satisfies ComposeAppearance)
+
+/**
+ * 节点的默认描边：与填色同色、宽度为 0。
+ *
+ * @remarks
+ * 描边宽度取 0 而不是照抄导线的 2：接头的直径本来就是按线宽算出来的，再加一圈同样粗的描边会
+ * 让它胖出一倍。颜色仍与填色一致，免得作者改了填色之后边上留一圈旧色。
+ *
+ * @internal
+ */
+export const DEFAULT_JUNCTION_PROPS: JsonObject = Object.freeze({
+  ...DEFAULT_WIRE_PROPS,
+  strokeWidth: 0,
 })

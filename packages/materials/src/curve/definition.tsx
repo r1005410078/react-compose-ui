@@ -4,7 +4,12 @@ import type {
   ComposeRendererDefinition,
 } from '@compose-ui/component-registry'
 import * as v from 'valibot'
-import type { ComposeCurve, JsonObject } from '@compose-ui/core'
+import {
+  COMPOSE_JUNCTION_PORT_ID,
+  composeJunctionGeometry,
+  composeJunctionSize,
+} from '@compose-ui/core'
+import type { ComposeAppearance, ComposeCurve, JsonObject } from '@compose-ui/core'
 import type { ReactNode } from 'react'
 import type { ComposeBasicMaterialOptions, ComposeCurveMaterialOptions } from '../types'
 import {
@@ -15,6 +20,7 @@ import {
 } from '../material-icons'
 import { mergeAppearance, mergeJson, rendererPresetComponents } from '../material-preset'
 import {
+  COMPOSE_WIRE_STROKE_WIDTH,
   composeRectangleGeometry,
   DEFAULT_ARROW_PROPS,
   DEFAULT_CIRCLE_GEOMETRY,
@@ -22,6 +28,8 @@ import {
   DEFAULT_CURVE_GEOMETRY,
   DEFAULT_CURVE_PROPS,
   DEFAULT_CURVE_SIZE,
+  DEFAULT_JUNCTION_APPEARANCE,
+  DEFAULT_JUNCTION_PROPS,
   DEFAULT_WIRE_PROPS,
 } from './defaults'
 import {
@@ -56,17 +64,26 @@ function valueContract(
  * 同时存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
  */
 function curvePreset(
-  id: 'curve' | 'arrow' | 'circle' | 'rect' | 'wire',
+  id: 'curve' | 'arrow' | 'circle' | 'rect' | 'wire' | 'junction',
   fallbackLabel: string,
   fallbackProps: JsonObject,
   geometry: (size: { readonly width: number; readonly height: number }) => ComposeCurve,
   icon: ReactNode,
   paletteHidden: boolean,
   options: ComposeBasicMaterialOptions = {},
+  extra: {
+    readonly fallbackSize?: { readonly width: number; readonly height: number }
+    readonly fallbackAppearance?: ComposeAppearance
+    /** 额外的 Component；节点靠它带上自己的那一个端口。 */
+    readonly components?: (size: { readonly width: number; readonly height: number }) => JsonObject
+  } = {},
 ): ComposeEntityPreset {
-  const size = options.defaultSize ?? DEFAULT_CURVE_SIZE
+  const size = options.defaultSize ?? extra.fallbackSize ?? DEFAULT_CURVE_SIZE
   const props = mergeJson(fallbackProps, options.defaultProps)
-  const appearance = mergeAppearance(DEFAULT_CURVE_APPEARANCE, options.defaultAppearance)
+  const appearance = mergeAppearance(
+    extra.fallbackAppearance ?? DEFAULT_CURVE_APPEARANCE,
+    options.defaultAppearance,
+  )
   return {
     id,
     label: options.label ?? fallbackLabel,
@@ -76,6 +93,7 @@ function curvePreset(
     createComponents: () => ({
       ...rendererPresetComponents({ type: 'curve', props, size, appearance }),
       Curve: geometry(size) as unknown as JsonObject,
+      ...(extra.components ? extra.components(size) : {}),
     }),
   }
 }
@@ -102,6 +120,7 @@ export function createCurveMaterial(
 ): {
   renderer: ComposeRendererDefinition
   presets: readonly [
+    ComposeEntityPreset,
     ComposeEntityPreset,
     ComposeEntityPreset,
     ComposeEntityPreset,
@@ -191,6 +210,35 @@ export function createCurveMaterial(
         true,
         options.wire,
       ),
+      /*
+       * 节点是曲线的**第五个起点**：一个填实的整圆，外加它自己的那一个端口。接线时三条支路
+       * 都绑到这个端口上，因此既有的「端点绑端口」协议一个字节不改——求解、失效判定、
+       * `port` 最高捕捉优先级与 Inspector 全部白拿。
+       *
+       * `paletteHidden`：从物料面板拖出来的节点不连着任何导线，而一个不表达任何连接的实心点
+       * 读不出意图。
+       */
+      curvePreset(
+        'junction',
+        'Junction',
+        DEFAULT_JUNCTION_PROPS,
+        composeJunctionGeometry,
+        <ComposeCircleMaterialIcon />,
+        true,
+        options.junction,
+        {
+          fallbackSize: composeJunctionSize(COMPOSE_WIRE_STROKE_WIDTH),
+          fallbackAppearance: DEFAULT_JUNCTION_APPEARANCE,
+          components: (size) => ({
+            Ports: {
+              items: [{
+                id: COMPOSE_JUNCTION_PORT_ID,
+                position: { x: size.width / 2, y: size.height / 2 },
+              }],
+            },
+          }),
+        },
+      ),
     ],
   }
 }
@@ -208,3 +256,5 @@ export const DEFAULT_COMPOSE_CIRCLE_PRESET = curve.presets[2]
 export const DEFAULT_COMPOSE_RECT_PRESET = curve.presets[3]
 /** 默认 Wire Entity Preset。 @public */
 export const DEFAULT_COMPOSE_WIRE_PRESET = curve.presets[4]
+/** 默认 Junction Entity Preset。 @public */
+export const DEFAULT_COMPOSE_JUNCTION_PRESET = curve.presets[5]

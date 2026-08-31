@@ -7,6 +7,8 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_CURVE_PICK_TOLERANCE,
+  COMPOSE_JUNCTION_DIAMETER_RATIO,
+  composeJunctionSize,
   getComposeCurve,
   getComposeLayoutItem,
   getComposeRenderer,
@@ -14,6 +16,8 @@ import {
 } from '@compose-ui/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from '../create-basic-materials'
+
+import { DEFAULT_COMPOSE_JUNCTION_PRESET } from './definition'
 
 afterEach(cleanup)
 
@@ -423,5 +427,55 @@ describe('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩', () => 
 
     expect(screen.getByTestId(`compose-material-curve-${entity.id}`))
       .toHaveAttribute('viewBox', '0 0 80 1')
+  })
+})
+
+describe('junction Preset', () => {
+  const { registry } = createComposeBasicMaterials()
+
+  it('与导线共用同一个 Renderer，且带 Curve', () => {
+    const junction = registry.createSeed('junction')
+    const wire = registry.createSeed('wire')
+    expect(junction.ok).toBe(true)
+    expect(wire.ok).toBe(true)
+    if (!junction.ok || !wire.ok) return
+    const junctionRenderer = junction.seed.components.Renderer as { type: string }
+    const wireRenderer = wire.seed.components.Renderer as { type: string }
+    expect(junctionRenderer.type).toBe(wireRenderer.type)
+    expect(junction.seed.components.Curve).toBeDefined()
+  })
+
+  it('是填实的整圆，并带恰好一个落在盒心的端口', () => {
+    const created = registry.createSeed('junction')
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const curve = created.seed.components.Curve as { kind: string; sweep: number }
+    expect(curve.kind).toBe('arc')
+    expect(Math.abs(curve.sweep)).toBe(360)
+    // 填实是节点对「曲线默认空心」的例外：空心的接头读作两个同心小圆圈。
+    const appearance = created.seed.components.Appearance as { backgroundPaint: { color: string } }
+    expect(appearance.backgroundPaint.color).not.toBe('transparent')
+    const item = created.seed.components.LayoutItem as {
+      width: { value: number }
+      height: { value: number }
+    }
+    const ports = created.seed.components.Ports as {
+      items: readonly { id: string; position: { x: number; y: number } }[]
+    }
+    expect(ports.items).toHaveLength(1)
+    expect(ports.items[0]!.position).toEqual({
+      x: item.width.value / 2,
+      y: item.height.value / 2,
+    })
+  })
+
+  it('直径跟着线宽走', () => {
+    // 绝对值会让粗线把自己的接头盖住，因此直径必须由线宽推出。
+    expect(composeJunctionSize(2).width).toBeLessThan(composeJunctionSize(6).width)
+    expect(composeJunctionSize(2).width).toBe(2 * COMPOSE_JUNCTION_DIAMETER_RATIO)
+  })
+
+  it('默认不出现在 Palette', () => {
+    expect(DEFAULT_COMPOSE_JUNCTION_PRESET.paletteHidden).toBe(true)
   })
 })

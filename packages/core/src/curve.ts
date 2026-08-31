@@ -697,3 +697,157 @@ export function getComposeCurveFill(entity: ComposeEntity): string | null {
   if (/^rgba?\([^)]*,\s*0(?:\.0+)?\s*\)$/i.test(color)) return null
   return color
 }
+
+/**
+ * 在一个落点处把曲线拆开的结果。
+ *
+ * @remarks
+ * `at-end` 与 `split` 是两件不同的事而不是同一件事的两个程度：落点就在首尾顶点上时那里没有
+ * 需要断开的线身，接线只改绑定；落在线身中间才要断。合成一种会产出一段零长度的残线，而它在
+ * 图上看不见、却出现在场景树里。
+ *
+ * @public
+ */
+export type ComposeCurveSplit =
+  | { readonly kind: 'split'; readonly first: ComposeCurve; readonly second: ComposeCurve }
+  | { readonly kind: 'at-end'; readonly end: 'start' | 'end' }
+
+/** 两个顶点收成 `line`、更多收成 `polyline`；拆出来的半条不该凭空变一种 kind。 */
+function curveFromVertices(vertices: readonly ComposePosition[]): ComposeCurve | null {
+  if (vertices.length < 2) return null
+  const [first, second] = vertices
+  if (vertices.length === 2 && first && second) return { kind: 'line', start: first, end: second }
+  return { kind: 'polyline', vertices, closed: false }
+}
+
+/** 两点是否近到该当作同一个顶点；见 {@link splitComposeCurveAt} 为什么用相对量。 */
+function isSameVertex(a: ComposePosition, b: ComposePosition, epsilon: number) {
+  return Math.abs(a.x - b.x) <= epsilon && Math.abs(a.y - b.y) <= epsilon
+}
+
+/**
+ * 把一条导线在它上面的一个落点处拆成两段。
+ *
+ * @remarks
+ * 接线的「断成两段」走这里：被接入的导线在落点处断开，两段各自把靠近落点的那一端绑到节点。
+ * 不断的话节点只是**压在**那条线上，那条线一移动就与它分家——而这在屏幕上要过很久才看出来，
+ * 正是「端点画在端子上」与「真的接上了」逐像素相同的那个老问题。
+ *
+ * **弧与闭合多段线返回 `null`**：弧没有首尾顶点可言（协议已经拒绝弧做导线），而闭合几何断开
+ * 之后是一条首尾都在落点上的开放折线——那不是「两段」，让调用方少一支特判比让它多一种返回
+ * 形状便宜。
+ *
+ * 落点落在**内部顶点**上时不复制那个顶点：两段共用它即可，多一个重合顶点会让后续的几何编辑
+ * 出现一个抓不住、看不见的夹点。
+ *
+ * 判「是不是端点」不只看 `epsilon`，还要看**拆出来的两半是不是都还成立**：落点由另一条链
+ * （世界矩阵来回换算）算出，与顶点数值上不会逐位相等，单靠一个绝对小量会在某些缩放下把
+ * 端点判成线身，产出一段零长度的残线。
+ *
+ * @param epsilon - 判定落点与顶点重合的容差，几何自身的单位。
+ * @returns 不可拆（弧、闭合、顶点不足）时为 `null`。
+ * @public
+ */
+export function splitComposeCurveAt(
+  curve: ComposeCurve,
+  point: ComposePosition,
+  epsilon = 1e-6,
+): ComposeCurveSplit | null {
+  if (curve.kind === 'arc') return null
+  if (curve.kind === 'polyline' && curve.closed) return null
+  const vertices = curve.kind === 'line' ? [curve.start, curve.end] : curve.vertices
+  if (vertices.length < 2) return null
+  const first = vertices[0]!
+  const last = vertices[vertices.length - 1]!
+  if (isSameVertex(point, first, epsilon)) return { kind: 'at-end', end: 'start' }
+  if (isSameVertex(point, last, epsilon)) return { kind: 'at-end', end: 'end' }
+
+  let index = 0
+  let best = Number.POSITIVE_INFINITY
+  for (let i = 0; i < vertices.length - 1; i += 1) {
+    const distance = pointToComposeSegmentDistance(
+      { start: vertices[i]!, end: vertices[i + 1]! },
+      point,
+    )
+    if (distance < best) {
+      best = distance
+      index = i
+    }
+  }
+  // 落在内部顶点上：两段共用它，不插入重合的第二个顶点。
+  const head = isSameVertex(point, vertices[index]!, epsilon)
+    ? vertices.slice(0, index + 1)
+    : [...vertices.slice(0, index + 1), point]
+  const tail = isSameVertex(point, vertices[index + 1]!, epsilon)
+    ? vertices.slice(index + 1)
+    : [point, ...vertices.slice(index + 1)]
+  const firstHalf = curveFromVertices(head)
+  const secondHalf = curveFromVertices(tail)
+  // 有一半立不住，说明落点其实就在某一端上——容差没判出来，几何判出来了。
+  if (!firstHalf) return { kind: 'at-end', end: 'start' }
+  if (!secondHalf) return { kind: 'at-end', end: 'end' }
+  return { kind: 'split', first: firstHalf, second: secondHalf }
+}
+
+/**
+ * 节点直径相对导线线宽的倍率。
+ *
+ * @remarks
+ * 3 倍是 KiCad 的量级。**由线宽推出而不是取一个绝对值**：线粗了而点没跟着粗，点就被线自己
+ * 盖住，接头在图上再也读不出来。
+ *
+ * 住在 `core` 与 `COMPOSE_CURVE_PICK_TOLERANCE` 是同一条理由：`materials`（节点 Preset 的
+ * 默认尺寸）与 `stage`（接线时按被接入导线的线宽建节点）之间没有依赖关系，各写一份的症状是
+ * 「面板拖出来的点与接出来的点不一样大」。
+ *
+ * @public
+ */
+export const COMPOSE_JUNCTION_DIAMETER_RATIO = 3
+
+/**
+ * 节点端口的 id。
+ *
+ * @remarks
+ * 一个节点只有一个端口，所有支路都绑它。id 稳定是导线绑定不断的前提，因此它是常量而不是
+ * 每次新建时铸的随机串。
+ *
+ * @public
+ */
+export const COMPOSE_JUNCTION_PORT_ID = 'p'
+
+/**
+ * 按线宽推出节点的盒尺寸。
+ *
+ * @remarks
+ * 盒是正方形，几何是内切的整圆——非正方盒里的整圆经 `viewBox` 会被拉成椭圆，而接头是圆的。
+ *
+ * @public
+ */
+export function composeJunctionSize(
+  strokeWidth: number,
+): { readonly width: number; readonly height: number } {
+  const diameter = Math.max(1, roundComposeGeometry(strokeWidth * COMPOSE_JUNCTION_DIAMETER_RATIO))
+  return { width: diameter, height: diameter }
+}
+
+/**
+ * 节点的几何：内切于盒的整圆。
+ *
+ * @remarks
+ * 整圆是扫掠 360 的弧，不另立 kind——归一化、平移、距离、特征点、渲染与校验六条路径因此一行
+ * 都不必为节点分支。
+ *
+ * @public
+ */
+export function composeJunctionGeometry(
+  size: { readonly width: number; readonly height: number },
+): ComposeCurve {
+  const radius = Math.min(size.width, size.height) / 2
+  return {
+    kind: 'arc',
+    center: { x: size.width / 2, y: size.height / 2 },
+    radius,
+    startAngle: 0,
+    sweep: 360,
+  }
+}

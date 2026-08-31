@@ -1258,6 +1258,29 @@
 }
 
 /*
+ * 沙漏形的 `nearest` 记号：形状与方框分开，颜色仍是捕捉那一支——它回答的还是「吸上了没有」。
+ * 半透明底会让交叉的两条边把中间涂成两块，因此这一个只描边。
+ */
+.compose-stage__drafting-snap--nearest {
+  fill: none;
+  stroke-linejoin: round;
+}
+
+/*
+ * 落笔会接上的那条导线：整条加一层半透明的粗底。
+ *
+ * 用捕捉那一支的橙而不是 accent：它与沙漏记号说的是同一件事的两半（哪条线 / 哪一点），
+ * 而 accent 已经被橡皮筋、作用对象轮廓与选区框占满，混在里面读不出来。
+ */
+.compose-stage__drafting-tap-target {
+  fill: none;
+  stroke: color-mix(in srgb, var(--compose-stage-snap, #ffa53c) 45%, transparent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/*
  * 取点期间显现的端口。
  *
  * 自己的 token 而不是借捕捉那个橙：两者会同时出现在同一个点上，而它们回答两个问题——

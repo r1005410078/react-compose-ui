@@ -12,12 +12,12 @@ import {
   formatComposeKeybindings,
 } from '@compose-ui/components'
 import {
-  BUILTIN_COMMAND_TYPES,
   getComposeHierarchy,
   type ComposeDocument,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import {
+  createStageDeleteEntitiesCommand,
   createDuplicateCommand,
   createGroupCommand,
   createLayerOrderCommand,
@@ -37,6 +37,7 @@ import type {
   ComposeStageShortcutAction,
 } from '../types'
 import type { getStageMessages } from '../stage-i18n'
+import { isStageJunctionEntity } from '../drafting/wire-tap'
 import type { StageClipboardAction, StageClipboardAvailability } from './use-stage-clipboard'
 import {
   fitViewportTo,
@@ -249,16 +250,14 @@ export function StageContextMenu({
             <ComposeContextMenuItem
               disabled={editableIds.length === 0}
               variant="destructive"
-              onClick={() => dispatch({
-                id: idFactory(),
-                type: BUILTIN_COMMAND_TYPES.deleteEntity,
-                payload: { entityIds: editableIds },
-                meta: {
+              onClick={() => {
+                const removal = createStageDeleteEntitiesCommand(document, editableIds, {
+                  idFactory,
+                  isJunction: isStageJunctionEntity,
                   label: `Delete ${describeEntityTargets(document, editableIds)}`,
-                  source: 'stage',
-                  targetIds: editableIds,
-                },
-              })}
+                })
+                if (removal) dispatch(removal)
+              }}
             >{messages.delete}{shortcutHint('edit.delete')}</ComposeContextMenuItem>
             <ComposeContextMenuSeparator />
           </>

@@ -118,6 +118,7 @@ export {
   createPasteFromClipboard,
   createReparentCommand,
   createReplaceSelectionWithEntityCommand,
+  createStageDeleteEntitiesCommand,
   createUngroupCommand,
   describeEntityCreation,
   describeEntityTargets,
@@ -128,6 +129,7 @@ export {
   isComposeContainerEntity,
   isInvalidCutInsertion,
   normalizeClipboardEntityIds,
+  planStageJunctionCleanup,
   resolveNextScenePlacement,
   resolveSuggestedEntityInsertion,
   type ComposeClipboardPastePlan,
@@ -139,6 +141,8 @@ export {
   type ComposeEntityInsertion,
   type ComposeLayerOrderOperation,
   type ComposeStructureCommandAvailability,
+  type StageDeleteEntitiesOptions,
+  type StageJunctionPredicate,
 } from './commands'
 
 /** 交互运行时入口。 */
@@ -234,6 +238,7 @@ export {
 export type {
   StageFeaturePoint,
   StageFeatureSnapMode,
+  StageWirePredicate,
   StageRevealedPorts,
   StageSelectionMode,
   StageWireEnd,
