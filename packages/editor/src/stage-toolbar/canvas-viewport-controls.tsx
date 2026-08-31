@@ -8,18 +8,26 @@ import { StageToolbarIcon } from './stage-toolbar-icons'
 type CanvasViewportControlsProps = {
   readonly store: ViewportStore
   readonly surfaceSize: { readonly width: number; readonly height: number } | null
+  /**
+   * 「居中视图」的实现；把视口适配到激活场景。
+   *
+   * @remarks
+   * 由 Stage 的命令式句柄承担而不是在这里按视口代数算：这个按钮要做的正是对激活场景的
+   * 一次「适配选择」，而目标的回退、留白与缩放钳制的事实来源在 Stage。
+   */
+  readonly onCenterView: () => void
 }
 
 /** 置于画布左上角的视口控制；视口属于会话状态而非文档。 @internal */
-export function CanvasViewportControls({ store, surfaceSize }: CanvasViewportControlsProps) {
+export function CanvasViewportControls({
+  store,
+  surfaceSize,
+  onCenterView,
+}: CanvasViewportControlsProps) {
   const viewport = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage).stageToolbar
   const titled = (label: string) => ({ 'aria-label': label, title: label })
-  const center = () => {
-    if (!surfaceSize) return
-    store.setViewport({ x: surfaceSize.width / 2, y: surfaceSize.height / 2, zoom: 1 })
-  }
   const zoom = (factor: number) => {
     if (!surfaceSize) return
     const origin = { x: surfaceSize.width / 2, y: surfaceSize.height / 2 }
@@ -38,7 +46,7 @@ export function CanvasViewportControls({ store, surfaceSize }: CanvasViewportCon
 
   return (
     <div aria-label={messages.zoomTools} className="compose-editor__canvas-viewport-controls" role="group">
-      <button {...titled(messages.centerView)} disabled={!surfaceSize} type="button" onClick={center}>
+      <button {...titled(messages.centerView)} disabled={!surfaceSize} type="button" onClick={onCenterView}>
         <StageToolbarIcon name="center-view" />
       </button>
       <button {...titled(messages.zoomOut)} disabled={!surfaceSize} type="button" onClick={() => zoom(1 / 1.2)}>

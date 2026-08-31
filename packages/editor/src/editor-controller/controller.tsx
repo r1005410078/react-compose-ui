@@ -1613,6 +1613,17 @@ export function useComposeEditorController({
     requestCreateComponent,
   ])
 
+  /*
+   * 「居中视图」把视口适配到激活场景，与 `Shift+2` 对这块场景的「适配选择」是同一次取景。
+   *
+   * 走 Stage 句柄而不是这里的 `fitBounds`：激活场景可能由宿主的页面会话覆盖，而目标的回退
+   * （缺省或失效时取第一块根 Frame）与留白的事实来源都在 Stage。此前它把视口重置成原点、
+   * 100% 缩放，那个落点与任何一块场景都没有关系。
+   */
+  const centerView = useCallback(() => {
+    stageHandleRef.current?.fitActiveFrame()
+  }, [])
+
   // 默认 Stage 元素直接构造而不是回调调用一次：在渲染期调用 useCallback 会被 React 规则
   // 判定为渲染期读 ref。带覆盖的调用才走 renderStage。
   const stageElement = useMemo(() => (
@@ -1621,8 +1632,9 @@ export function useComposeEditorController({
       stageRef={stageHandleRef}
       store={viewportStore}
       surfaceSize={surfaceSize}
+      onCenterView={centerView}
     />
-  ), [stageProps, viewportStore, surfaceSize])
+  ), [centerView, stageProps, viewportStore, surfaceSize])
 
   const renderStage = useCallback((overrides?: ComposeEditorStageOverrides) => (
     overrides
@@ -1632,10 +1644,11 @@ export function useComposeEditorController({
             stageRef={stageHandleRef}
             store={viewportStore}
             surfaceSize={surfaceSize}
+            onCenterView={centerView}
           />
         )
       : stageElement
-  ), [stageElement, stageProps, viewportStore, surfaceSize])
+  ), [centerView, stageElement, stageProps, viewportStore, surfaceSize])
 
   const fitBounds = useCallback((ids: readonly string[]) => {
     if (!surfaceSize || layoutState.status !== 'ready') return

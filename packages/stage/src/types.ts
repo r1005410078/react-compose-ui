@@ -248,6 +248,17 @@ export interface ComposeStagePolicy {
  */
 export interface ComposeStageHandle {
   /**
+   * 把视口适配到激活场景。
+   *
+   * @remarks
+   * 与首次进入的自动适配（`autoFitActiveFrame`）走**同一条**求解：激活场景缺省或已失效时
+   * 回退第一块根 Frame，留白与缩放钳制来自同一个 `fitViewportTo`。宿主自己按文档算一遍的话，
+   * 同一块场景会在「居中视图」与刚进入时取到不同的取景。
+   *
+   * 目标缺失或求解宽高为 0 时不改变视口。
+   */
+  fitActiveFrame(): void
+  /**
    * 启动一条命令会话。
    *
    * @remarks

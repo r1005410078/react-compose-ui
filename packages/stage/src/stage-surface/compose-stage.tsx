@@ -319,6 +319,30 @@ function ComposeStageReady({
     if (next) onViewportChange(next)
   }
 
+  /**
+   * 把视口适配到激活场景。
+   *
+   * @remarks
+   * 首次进入的自动适配与命令式句柄（宿主的「居中视图」按钮）共用它：目标的回退与留白
+   * 各写一遍的话，同一块场景会在两个入口取到不同的取景。
+   *
+   * @returns 目标缺失或求解宽高为 0 时返回 false，表示视口没有变化。
+   */
+  const fitActiveFrame = useCallback(() => {
+    // 激活场景缺省或已失效时回退第一块根 Frame，与 resolveTargetFrameId 的回退一致。
+    const frameId = activeFrameId && document.entities[activeFrameId]
+      ? activeFrameId
+      : document.rootIds[0]
+    if (!frameId || !document.entities[frameId]) return false
+    const next = fitViewportTo(
+      getEntityWorldBounds(document, layoutSnapshot, frameId),
+      surfaceSize,
+    )
+    if (!next) return false
+    onViewportChange(next)
+    return true
+  }, [activeFrameId, document, layoutSnapshot, onViewportChange, surfaceSize])
+
   /*
    * 首次布局就绪后把视口适配到激活场景。
    *
@@ -331,28 +355,9 @@ function ComposeStageReady({
    */
   useEffect(() => {
     if (!autoFitActiveFrame || autoFitDoneRef.current || !surfaceMeasured) return
-    // 激活场景缺省或已失效时回退第一块根 Frame，与 resolveTargetFrameId 的回退一致。
-    const frameId = activeFrameId && document.entities[activeFrameId]
-      ? activeFrameId
-      : document.rootIds[0]
-    if (!frameId || !document.entities[frameId]) return
-    const next = fitViewportTo(
-      getEntityWorldBounds(document, layoutSnapshot, frameId),
-      surfaceSize,
-    )
     // 求解宽高为 0 时不占用这次机会：下一次布局就绪还应该再试。
-    if (!next) return
-    autoFitDoneRef.current = true
-    onViewportChange(next)
-  }, [
-    activeFrameId,
-    autoFitActiveFrame,
-    document,
-    layoutSnapshot,
-    onViewportChange,
-    surfaceMeasured,
-    surfaceSize,
-  ])
+    if (fitActiveFrame()) autoFitDoneRef.current = true
+  }, [autoFitActiveFrame, fitActiveFrame, surfaceMeasured])
 
   /**
    * 提交场景的新尺寸，并按新尺寸适配一次视口。
@@ -630,6 +635,9 @@ function ComposeStageReady({
    */
   const startDraftingCommand = draftingSession.start
   useImperativeHandle(handleRef, () => ({
+    fitActiveFrame() {
+      fitActiveFrame()
+    },
     startCommand(commandId: string) {
       startDraftingCommand(commandId)
       /*
@@ -642,7 +650,7 @@ function ComposeStageReady({
        */
       commandInputRef.current?.focus()
     },
-  }), [startDraftingCommand])
+  }), [fitActiveFrame, startDraftingCommand])
 
   // 单向上报：宿主 chrome 的按下态读它，事实来源留在会话这一侧。
   const activeCommandId = draftingSession.activeCommandId

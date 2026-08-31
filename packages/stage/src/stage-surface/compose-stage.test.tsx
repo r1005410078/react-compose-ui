@@ -1913,12 +1913,14 @@ describe('OpenSpec: stage / 场景视口适配', () => {
     const runtime = createTransactionRuntime({ document: value })
     const dispatchSpy = vi.fn()
     const viewportSpy = vi.fn()
+    const handle = createRef<ComposeStageHandle>()
     const dispatch: ComposeStageDispatch = (command) => {
       dispatchSpy(command)
       return runtime.dispatch(command)
     }
     render(
       <ComposeStage
+        ref={handle}
         activeFrameId={ROOT_FRAME_ID}
         autoFitActiveFrame={options.autoFitActiveFrame}
         document={value}
@@ -1931,13 +1933,23 @@ describe('OpenSpec: stage / 场景视口适配', () => {
         onViewportChange={viewportSpy}
       />,
     )
-    return { dispatch: dispatchSpy, viewport: viewportSpy }
+    return { dispatch: dispatchSpy, handle, viewport: viewportSpy }
   }
 
   it('首次布局就绪后把视口适配到激活场景', () => {
     measureSurfaceAs(1000, 800)
     const { viewport } = renderFitStage()
     // 1280×720 的场景放进 1000×800：更紧的是宽轴，缩放 = 1000 / 1280 * 0.85。
+    expect(viewport).toHaveBeenCalledTimes(1)
+    expect(viewport.mock.calls[0]![0].zoom).toBeCloseTo(0.6640625)
+    expect(viewport.mock.calls[0]![0].x).toBeCloseTo(75)
+  })
+
+  it('句柄的 fitActiveFrame 把视口适配到激活场景', () => {
+    measureSurfaceAs(1000, 800)
+    // 关掉自动适配，断言的这一次视口变化只可能来自句柄。
+    const { handle, viewport } = renderFitStage({ autoFitActiveFrame: false })
+    act(() => { handle.current?.fitActiveFrame() })
     expect(viewport).toHaveBeenCalledTimes(1)
     expect(viewport.mock.calls[0]![0].zoom).toBeCloseTo(0.6640625)
     expect(viewport.mock.calls[0]![0].x).toBeCloseTo(75)
