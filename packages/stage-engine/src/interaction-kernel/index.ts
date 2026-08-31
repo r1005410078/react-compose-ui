@@ -100,6 +100,10 @@ export {
   STAGE_GEOMETRY_EDIT_FALLBACK_PLUGIN_ID,
 } from './geometry-edit-fallback-plugin'
 export {
+  createStageHollowMoveFallbackPlugin,
+  STAGE_HOLLOW_MOVE_FALLBACK_PLUGIN_ID,
+} from './hollow-move-fallback-plugin'
+export {
   createStagePathPlugin,
   STAGE_PATH_PLUGIN_ID,
 } from './path-plugin'

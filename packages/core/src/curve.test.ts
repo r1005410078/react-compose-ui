@@ -9,6 +9,7 @@ import {
   createComposeLineCurve,
   distanceToComposeCurve,
   getComposeCurve,
+  isComposeClosedCurve,
   isPointInsideComposeCurve,
   isValidComposeCurve,
   normalizeComposeCurveGeometry,
@@ -618,5 +619,46 @@ describe('OpenSpec: compose-document / 多段线的四角联动圆角', () => {
     expect(isValidComposeCurve(rectangle(-1))).toBe(false)
     expect(isValidComposeCurve(rectangle(12))).toBe(true)
     expect(isValidComposeCurve(rectangle())).toBe(true)
+  })
+})
+
+/*
+ * 判据是「盒是不是这个对象的轮廓」，而闭合与否是它在文档里读得出来的代理。用例因此都从
+ * **不是矩形**的形状取：拿矩形当证据会让「只认矩形」那个旧实现照样绿。
+ */
+describe('OpenSpec: compose-document / 曲线闭不闭合有一个谓词', () => {
+  const hexagon = (closed: boolean): ComposeCurve => ({
+    kind: 'polyline',
+    vertices: [
+      { x: 100, y: 0 }, { x: 150, y: 87 }, { x: 100, y: 174 },
+      { x: 0, y: 174 }, { x: -50, y: 87 }, { x: 0, y: 0 },
+    ],
+    closed,
+  })
+
+  it('闭合多段线为真，顶点数与是否轴对齐都不影响', () => {
+    expect(isComposeClosedCurve(hexagon(true))).toBe(true)
+  })
+
+  it('未闭合的折线为假', () => {
+    expect(isComposeClosedCurve(hexagon(false))).toBe(false)
+  })
+
+  it('整圆为真，一段弧为假', () => {
+    const arc = (sweep: number): ComposeCurve => ({
+      kind: 'arc',
+      center: { x: 0, y: 0 },
+      radius: 50,
+      startAngle: 0,
+      sweep,
+    })
+    expect(isComposeClosedCurve(arc(360))).toBe(true)
+    expect(isComposeClosedCurve(arc(-360))).toBe(true)
+    expect(isComposeClosedCurve(arc(90))).toBe(false)
+  })
+
+  it('直线为假', () => {
+    // 两个端点表达不了一块面积。
+    expect(isComposeClosedCurve(createComposeLineCurve({ x: 0, y: 0 }, { x: 90, y: 60 }))).toBe(false)
   })
 })

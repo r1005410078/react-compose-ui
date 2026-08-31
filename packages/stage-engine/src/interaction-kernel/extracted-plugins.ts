@@ -3,6 +3,7 @@ import { createStageCurveCornerPlugin } from './curve-corner-plugin'
 import { createStageDrawPlugin } from './draw-plugin'
 import { createStageGeometryEditFallbackPlugin } from './geometry-edit-fallback-plugin'
 import { createStageGizmoPlugin } from './gizmo-plugin'
+import { createStageHollowMoveFallbackPlugin } from './hollow-move-fallback-plugin'
 import { createStageMarqueeFallbackPlugin } from './fallback-plugins'
 import {
   createStageGuideCreatePlugin,
@@ -48,6 +49,7 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStageGizmoPlugin,
   createStageDrawPlugin,
   createStageGeometryEditFallbackPlugin,
+  createStageHollowMoveFallbackPlugin,
   createStageMarqueeConvergePlugin,
   createStageEntitySelectMovePlugin,
   createStageResizePlugin,

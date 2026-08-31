@@ -751,6 +751,73 @@ describe('ComposeStage ECS', () => {
     expect(screen.queryByTestId('stage-selection-outline')).not.toBeInTheDocument()
   })
 
+  /*
+   * 判别性用例都从**不是矩形**的闭合形状取：拿矩形当证据会让「只认矩形」那个旧实现照样绿。
+   * 同一组顶点只翻 `closed`，两种呈现因此只能由这一个字段解释。
+   */
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 闭合曲线画盒，未闭合的画轮廓', () => {
+    const polygon = (closed: boolean): ComposeEntity => {
+      const base = curveEntity('poly-a')
+      return {
+        ...base,
+        components: {
+          ...base.components,
+          Curve: {
+            kind: 'polyline',
+            vertices: [
+              { x: 100, y: 0 }, { x: 150, y: 87 }, { x: 100, y: 174 },
+              { x: 0, y: 174 }, { x: -50, y: 87 }, { x: 0, y: 0 },
+            ],
+            closed,
+          },
+        },
+      }
+    }
+
+    renderStage(document([polygon(true)]), { selectedIds: ['poly-a'], tool: 'select' })
+    // 闭合图形占据的就是它盒里那块面积——盒宣称的是真话。
+    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-resize-se')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-outline')).toBeNull()
+    // 圆角手柄的判据与本条正交：它读 `Composition.presetId`，六边形不该多出六个点。
+    expect(screen.queryByTestId('stage-curve-corner-0')).toBeNull()
+
+    cleanup()
+    renderStage(document([polygon(false)]), { selectedIds: ['poly-a'], tool: 'select' })
+    expect(screen.getByTestId('stage-selection-outline')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-bounds')).toBeNull()
+  })
+
+  it('OpenSpec: 受控工具模式与专属选区反馈 / 整圆画盒，一段弧画轮廓', () => {
+    const arc = (sweep: number): ComposeEntity => {
+      const base = curveEntity('arc-a')
+      return {
+        ...base,
+        components: {
+          ...base.components,
+          Curve: {
+            kind: 'arc',
+            center: { x: 50, y: 50 },
+            radius: 50,
+            startAngle: 0,
+            sweep,
+          },
+        },
+      }
+    }
+
+    renderStage(document([arc(360)]), { selectedIds: ['arc-a'], tool: 'select' })
+    // 整圆是一块面积，填自己盒的 78.5% 且四条边都被切到。
+    expect(screen.getByTestId('stage-selection-bounds')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-outline')).toBeNull()
+
+    cleanup()
+    renderStage(document([arc(90)]), { selectedIds: ['arc-a'], tool: 'select' })
+    // 一段弧是一条开放的线，它的盒正是「大半是空的」那一类。
+    expect(screen.getByTestId('stage-selection-outline')).toBeInTheDocument()
+    expect(screen.queryByTestId('stage-selection-bounds')).toBeNull()
+  })
+
   it('OpenSpec: 受控工具模式与专属选区反馈 / 非曲线 Entity 照旧画盒', () => {
     renderStage(document(), { selectedIds: ['a'], tool: 'select' })
 

@@ -65,6 +65,35 @@ test('OpenSpec: stage-engine / POLYGON 命令画正多边形 / 三步取值落�
   expect(await vertexCount(stroke)).toBe(6)
 })
 
+/*
+ * 闭合图形占据的就是它盒里那块面积，因此走与矩形、图片、容器完全相同的一套。判别点是**同时**
+ * 断「有盒有手柄」与「没有圆角手柄」——后者的判据（`Composition.presetId`）与本条正交，
+ * 一起放宽会让六边形多出六个用户不打算碰的点。
+ */
+test('OpenSpec: stage / 闭合曲线的选中呈现走盒那一套 / 多边形选中画盒', async ({ page }) => {
+  const { editor, stage, commandInput, stroke, click } = await openStage(page)
+
+  await commandInput.fill('POL')
+  await commandInput.press('Enter')
+  await commandInput.press('Enter')
+  await click(250, 250)
+  await click(350, 250)
+
+  /*
+   * 点**最左**那个顶点。不能点最右——六边形的首顶点就落在刚才那个半径落点上，同一个像素上
+   * 紧接着的第二下会被浏览器算成 `detail=2`，直接进几何编辑，而那一档盒与手柄本来就该让位。
+   * 空心图形只有描边可点，因此落点必须压在顶点上。
+   */
+  const bb = (await stroke.boundingBox())!
+  await page.mouse.click(bb.x + 1, bb.y + bb.height / 2)
+  await expect(editor.getByRole('region', { name: 'Curve 属性', exact: true })).toBeVisible()
+
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-resize-nw')).toHaveCount(1)
+  await expect(stage.getByTestId('stage-selection-outline')).toHaveCount(0)
+  await expect(stage.locator('[data-testid^="stage-curve-corner-"]')).toHaveCount(0)
+})
+
 test('OpenSpec: stage-engine / POLYGON 命令画正多边形 / 外切档同一落点画得更大', async ({ page }) => {
   const { prompt, commandInput, stroke, click } = await openStage(page)
 

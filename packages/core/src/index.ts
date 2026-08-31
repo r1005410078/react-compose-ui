@@ -204,7 +204,7 @@ export {
   distanceToComposeCurve,
   getComposeCurve,
   getComposeCurveFill,
-  isComposeRectangleCurve,
+  isComposeClosedCurve,
   isPointInsideComposeCurve,
   isValidComposeCurve,
   normalizeComposeCurveGeometry,

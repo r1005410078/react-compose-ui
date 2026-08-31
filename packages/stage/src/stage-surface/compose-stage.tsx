@@ -32,7 +32,7 @@ import {
   getComposeComposition,
   getComposeCurve,
   getComposeCurveFill,
-  isComposeRectangleCurve,
+  isComposeClosedCurve,
   type ComposeLayoutSnapshot,
   type ComposeSize,
 } from '@compose-ui/core'
@@ -888,8 +888,9 @@ function ComposeStageReady({
    *
    * @remarks
    * 判据是**盒是不是这个对象的轮廓**：矩形、图片、容器的盒就是它们的轮廓，文字占满自己的盒，
-   * 而一条对角线的包围盒里绝大部分是空的——那个矩形宣称了对象并不占据的面积，线越接近 45 度
-   * 它越大。这不是给曲线开特例，是同一句话在不同形状上给出不同答案。
+   * 闭合曲线占据的就是它盒里那块面积；而一条对角线的包围盒里绝大部分是空的——那个矩形宣称了
+   * 对象并不占据的面积，线越接近 45 度它越大。这不是给曲线开特例，是同一句话在不同形状上给出
+   * 不同答案。
    *
    * **指示器打开时不派生**：那是用户明确在做盒操作，而盒就是他正在操作的那个东西。原先承担
    * 这件事的是 `scale` 工具，它已并进指示器——一个只为「让手柄显出来」而存在的模式，与「打开
@@ -906,10 +907,10 @@ function ComposeStageReady({
     const entity = previewGeometry.document.entities[entityId]
     const curve = entity ? getComposeCurve(entity) : null
     if (!curve) return null
-    // **矩形的盒就是它的轮廓**，因此走普通选区框与八个手柄，与矩形物料、图片、容器一致。
-    // 这不是给矩形开特例，是同一条判据的第三个答案：一条对角线的包围盒里绝大部分是空的，
-    // 而矩形占满自己的盒。圆角不改变答案——角弧与四条边相切，盒仍是它占据的面积。
-    if (isComposeRectangleCurve(curve)) return null
+    // **闭合图形占据的就是它盒里那块面积**，因此走普通选区框与八个手柄，与矩形物料、图片、
+    // 容器一致。这不是给某一种形状开特例，是同一条判据的一般化——矩形只是它的一个实例。
+    // 圆角不改变答案：角弧与四条边相切，盒仍是它占据的面积。
+    if (isComposeClosedCurve(curve)) return null
     // 拖圆角手柄时读预览几何：文档要到松手那一刻才变，轮廓让用户看见**松手会变成什么样**。
     // 与夹点拖动是同一种分工，因此这里也走同一个 `override` 参数。
     const preview = curveCornerSession.preview

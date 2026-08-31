@@ -56,6 +56,7 @@ export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Obje
   { id: 'gizmo', priority: 1200, condition: "hit.kind === 'gizmo-handle'" },
   { id: 'draw', priority: 1000, sourceLine: 2038, condition: 'isDrawingTool(tool) 且命中 surface 或 entity' },
   { id: 'geometry-edit-fallback', priority: 850, condition: "clickCount === 2 且命中 surface 或会收敛成框选的容器体，且盒内含可几何编辑对象（consumed）" },
+  { id: 'hollow-move-fallback', priority: 825, condition: '单击、无 Shift、选中的恰好是一个空心曲线，且按下点落在它盒内（本来会变成框选的那一下）' },
   { id: 'marquee-converge', priority: 800, sourceLine: 2075, condition: "hit.kind === 'entity' 且 shouldConvergeToMarquee" },
   { id: 'entity-select-move', priority: 700, sourceLine: 2088, condition: "hit.kind === 'entity'（含双击进入文字编辑）" },
   { id: 'resize', priority: 600, sourceLine: 2118, condition: "hit.kind === 'resize'" },

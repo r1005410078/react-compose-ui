@@ -300,26 +300,31 @@ export function composeCurvePoints(curve: ComposeCurve): readonly ComposePositio
 }
 
 /**
- * 这条曲线是不是一个**轴对齐矩形**——四个顶点恰好就是它紧包围盒的四个角。
+ * 这条曲线是不是一块**闭合的面积**。
  *
  * @remarks
- * 它回答的是既有那条判据在这个形状上的答案：**盒是不是这个对象的轮廓**。一条对角线的包围盒
- * 里绝大部分是空的，所以那时画轮廓不画盒；而矩形的盒**就是**它的轮廓，因此选中时画的是普通
- * 包围盒与八个手柄，与矩形物料、图片、容器一致。这不是给矩形开特例，是同一句话的第三个答案。
+ * 它回答的是既有那条判据：**盒是不是这个对象的轮廓**。一个闭合图形占据的就是它盒里那块面积，
+ * 四条边都被顶点顶到，盒宣称的是真话；而一条对角线的包围盒里绝大部分是空的——线越接近 45 度
+ * 它越大，拖端点时还一直在变。因此闭合的画普通包围盒与八个手柄（与矩形物料、图片、容器一致），
+ * 开放的画几何轮廓。
  *
- * **圆角不改变答案**：角弧仍与四条边相切，盒仍是那个形状占据的面积。
+ * **矩形不是特例，是这条规则的一个实例**：它就是闭合四顶点多段线。圆角同样不改变答案——角弧
+ * 与四条边相切，盒仍是它占据的那块面积。旋转过的形状也一样，`Transform.rotation` 不在几何里。
  *
- * 旋转过的矩形同样为真——`Transform.rotation` 不在几何里，盒局部顶点仍是轴对齐的。
+ * **整圆算闭合，一段弧不算**：整圆是一块面积（填自己盒的 78.5%，四条边都被切到），一段弧是
+ * 一条开放的线。`arc` 上没有 `closed` 字段也不该加——整圆本来就是「扫掠 ±360 的弧」，
+ * `projectComposeCurveToBox` 早就在用 `closed: isComposeFullCircle(curve)` 表达同一件事。
+ *
+ * **刻意不取「几何面积占包围盒的比例」**，哪怕那更贴近判据本身（闭合三角形只填盒的一半，
+ * L 形闭合折线更空）：那个阈值是一个魔法数，而更糟的是同一个形状会在用户**拖一个顶点时**
+ * 突然换一套 chrome——盒与手柄凭空出现或消失，屏幕上没有任何东西解释为什么。闭合不是完美的
+ * 代理，这是一次明知不完美而选它的取舍。
  *
  * @public
  */
-export function isComposeRectangleCurve(curve: ComposeCurve): boolean {
-  if (curve.kind !== 'polyline' || !curve.closed || curve.vertices.length !== 4) return false
-  const xs = new Set(curve.vertices.map(({ x }) => x))
-  const ys = new Set(curve.vertices.map(({ y }) => y))
-  // 恰好两个不同的 x 与两个不同的 y，且四个顶点互不相同——退化成线段的「矩形」不算。
-  if (xs.size !== 2 || ys.size !== 2) return false
-  return new Set(curve.vertices.map(({ x, y }) => `${x},${y}`)).size === 4
+export function isComposeClosedCurve(curve: ComposeCurve): boolean {
+  if (curve.kind === 'polyline') return curve.closed
+  return curve.kind === 'arc' && isComposeFullCircle(curve)
 }
 
 /** 曲线的紧包围盒；**不**做退化轴钳制。 @public */
