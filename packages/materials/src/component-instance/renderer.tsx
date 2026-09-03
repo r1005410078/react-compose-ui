@@ -39,6 +39,11 @@ import {
   ComposeComponentInstanceNestProvider,
 } from './nest-context'
 import { sampleComponentInstanceDocument } from './animation'
+import {
+  componentInstanceContentScale,
+  readComponentInstanceContentFit,
+  type ComponentInstanceContentFit,
+} from './content-fit'
 import { useComposeComponentInstanceNest } from './nest-state'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,6 +153,7 @@ export function ComponentInstanceRenderer({
       animationId={props.animation}
       animationTime={props.animationTime}
       assetResolver={assetResolver}
+      contentFit={readComponentInstanceContentFit(props)}
       document={document}
       mode={mode}
       registry={registry}
@@ -191,11 +197,43 @@ function alignComponentDocumentOutput(document: ComposeDocument): ComposeDocumen
   }
 }
 
+/**
+ * 把组件根锚到原点。
+ *
+ * @remarks
+ * 根的 `LayoutItem.offset` 是「场景摆在组件文档工作区的哪里」——那是宿主编辑视图的摆位，
+ * 不是内容；Frame 的「坐标原点」隔离边界意味着实例必须从 (0,0) 取景。不锚的话，在组件
+ * 文档里挪过一次场景，保存后所有实例的内容整体平移一段并被盒裁掉——组件文档里明明画着，
+ * 页面上的实例却是空的，而屏幕上没有任何东西解释为什么。
+ */
+function anchorComponentDocumentRoot(document: ComposeDocument): ComposeDocument {
+  const rootId = document.rootIds[0]
+  if (!rootId || document.rootIds.length !== 1) return document
+  const root = document.entities[rootId]
+  if (!root) return document
+  const item = getComposeLayoutItem(root)
+  if (!item || (item.offset.x === 0 && item.offset.y === 0)) return document
+  return {
+    ...document,
+    entities: {
+      ...document.entities,
+      [rootId]: {
+        ...root,
+        components: {
+          ...root.components,
+          LayoutItem: { ...item, offset: { x: 0, y: 0 } },
+        },
+      },
+    },
+  }
+}
+
 function ResolvedComponentContent({
   ancestorKey,
   animationId,
   animationTime,
   assetResolver,
+  contentFit,
   document,
   mode,
   registry,
@@ -205,6 +243,7 @@ function ResolvedComponentContent({
   readonly animationId: unknown
   readonly animationTime: unknown
   readonly assetResolver: ComposeRendererProps['assetResolver']
+  readonly contentFit: ComponentInstanceContentFit
   readonly document: ComposeDocument
   readonly mode: 'editor' | 'preview'
   readonly registry: ComposeEntityRegistry
@@ -225,10 +264,18 @@ function ResolvedComponentContent({
    * 状态驱动的实例一次业务事件才变一次。没选动画时采样返回原引用，一次多余的重解都不会发生。
    */
   const layoutDocument = useMemo(
-    () => alignComponentDocumentOutput(
-      sampleComponentInstanceDocument(document, animationId, animationTime),
-    ),
-    [animationId, animationTime, document],
+    () => {
+      const anchored = anchorComponentDocumentRoot(
+        sampleComponentInstanceDocument(document, animationId, animationTime),
+      )
+      /*
+       * `'scale'` 不走 `alignComponentDocumentOutput`：那是 `'layout'` 那一支把盒尺寸写进
+       * 嵌套根的机制。缩放模式下嵌套文档按自然尺寸求解、由外层按比值缩放，两支不得同时改
+       * 一份尺寸数据——同时做的症状是拖一次角手柄图形跳两次。
+       */
+      return contentFit === 'scale' ? anchored : alignComponentDocumentOutput(anchored)
+    },
+    [animationId, animationTime, contentFit, document],
   )
   const [runtime] = useState(() => createComposeLayoutRuntime({ document: layoutDocument }))
   const adapter = useMemo(() => createComposeRendererMeasurementAdapter({
@@ -266,12 +313,61 @@ function ResolvedComponentContent({
     })
   }, [adapter])
 
+  /*
+   * `'scale'` 需要宿主盒的尺寸求比值，而 Renderer 拿不到宿主文档的布局快照——量自己的 DOM。
+   * 读 `getComputedStyle` 而不是 `getBoundingClientRect`：后者含祖先 transform（画布 zoom），
+   * 比值会把 zoom 乘进去、内容被双重缩放；ResizeObserver 上报的同样是未变换的布局盒。
+   * useLayoutEffect 在绘制之前跑完，首帧因此不会闪一下未缩放的内容。
+   */
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const [hostBox, setHostBox] = useState<
+    { readonly width: number; readonly height: number } | null
+  >(null)
+  useLayoutEffect(() => {
+    if (contentFit !== 'scale') return
+    const element = hostRef.current
+    if (!element) return
+    const read = () => {
+      const style = getComputedStyle(element)
+      const width = Number.parseFloat(style.width)
+      const height = Number.parseFloat(style.height)
+      // jsdom 没有布局，量出来是 NaN——保持 null，比值回退 1，画未缩放的内容。
+      if (!Number.isFinite(width) || !Number.isFinite(height)) return
+      setHostBox((previous) => (
+        previous && previous.width === width && previous.height === height
+          ? previous
+          : { width, height }
+      ))
+    }
+    read()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(read)
+    observer.observe(element)
+    return () => observer.disconnect()
+    // 内容 div 只在 ready 分支渲染：状态翻到 ready 时 ref 才有值，effect 必须重跑一次。
+  }, [contentFit, currentState.status])
+
   if (currentState.status === 'loading') {
     return <Status testId="compose-component-instance-loading">载入组件布局…</Status>
   }
   if (currentState.status === 'error') {
     return <Status testId="compose-component-instance-layout-error" alert>组件布局失败</Status>
   }
+  const roots = layoutDocument.rootIds.map((rootId) => (
+    <NestedEntity
+      assetResolver={assetResolver}
+      document={layoutDocument}
+      entityId={rootId}
+      key={rootId}
+      layoutSnapshot={currentState.snapshot}
+      mode={mode}
+      registry={registry}
+      scriptModuleLoader={scriptModuleLoader}
+    />
+  ))
+  const rootId = layoutDocument.rootIds[0]
+  const rootFrameSize = (rootId ? getComposeFrame(layoutDocument.entities[rootId]) : null)?.size ?? null
+  const scale = componentInstanceContentScale(hostBox, rootFrameSize)
   return (
     <ComposeComponentInstanceNestProvider
       ancestorKeys={[...nest.ancestorKeys, ancestorKey]}
@@ -280,6 +376,7 @@ function ResolvedComponentContent({
       <div
         className="compose-material compose-material--component-instance"
         data-testid="compose-component-instance-content"
+        ref={hostRef}
         style={{
           position: 'absolute',
           inset: 0,
@@ -287,18 +384,28 @@ function ResolvedComponentContent({
           ...(mode === 'editor' ? { pointerEvents: 'none' as const } : {}),
         }}
       >
-        {layoutDocument.rootIds.map((rootId) => (
-          <NestedEntity
-            assetResolver={assetResolver}
-            document={layoutDocument}
-            entityId={rootId}
-            key={rootId}
-            layoutSnapshot={currentState.snapshot}
-            mode={mode}
-                  registry={registry}
-            scriptModuleLoader={scriptModuleLoader}
-          />
-        ))}
+        {contentFit === 'scale' && rootFrameSize
+          ? (
+            /*
+             * 嵌套内容按组件根的自然尺寸摆放，整体乘一个比值。下钻选中与命中走 DOM 测量
+             * （`getBoundingClientRect` 如实反映 transform），因此对它们零改动。
+             */
+            <div
+              data-testid="compose-component-instance-scale"
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: rootFrameSize.width,
+                height: rootFrameSize.height,
+                transform: `scale(${scale.x}, ${scale.y})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              {roots}
+            </div>
+          )
+          : roots}
       </div>
     </ComposeComponentInstanceNestProvider>
   )

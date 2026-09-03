@@ -14,7 +14,7 @@ import {
   type JsonObject,
 } from '@compose-ui/core'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createComposeBasicMaterials } from '../create-basic-materials'
 import { ComposeComponentInstanceNestProvider } from './nest-context'
 
@@ -425,5 +425,109 @@ describe('OpenSpec: basic-materials / 组件实例的动画播放头', () => {
     // 「粒度」这个问题在屏幕上的样子，就是同一帧里两个实例姿态不同。
     expect(await nestedRotation(screen.getByTestId('open'))).toBe('rotate(0deg)')
     expect(await nestedRotation(screen.getByTestId('closed'))).toBe('rotate(90deg)')
+  })
+})
+
+describe('OpenSpec: basic-materials / 组件实例的内容缩放', () => {
+  const renderInstance = (props: JsonObject) => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    return render(<Renderer
+      authoredProps={props}
+      entity={{ id: 'instance', name: 'Card', components: {} } as ComposeEntity}
+      mode="editor"
+      props={props}
+      registry={materials.registry}
+      renderer={{ type: 'component-instance', props }}
+    />)
+  }
+
+  it('不声明 contentFit 时不出现缩放包装层', async () => {
+    renderInstance(instanceProps())
+    await screen.findByTestId('compose-component-instance-content')
+    await waitFor(() => {
+      expect(screen.getByTestId('compose-material-rectangle')).toBeInTheDocument()
+    })
+    // 判别点：`'layout'`（缺席）分支的 DOM 与本变更前逐字相同，没有中间层。
+    expect(screen.queryByTestId('compose-component-instance-scale')).toBeNull()
+  })
+
+  it('scale 下按盒与组件根尺寸的两轴比值缩放，嵌套文档尺寸不变', async () => {
+    /*
+     * jsdom 没有布局，getComputedStyle 量不出盒——把宿主内容层的尺寸桩成 240×120
+     * （组件根是 120×80），期望两轴各自的比值 2 与 1.5。
+     */
+    const original = window.getComputedStyle.bind(window)
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
+      const style = original(element as Element, pseudo as string | null | undefined)
+      if ((element as HTMLElement).dataset?.testid === 'compose-component-instance-content') {
+        return new Proxy(style, {
+          get: (target, property) => property === 'width'
+            ? '240px'
+            : property === 'height'
+              ? '120px'
+              : Reflect.get(target, property),
+        }) as CSSStyleDeclaration
+      }
+      return style
+    })
+    try {
+      renderInstance({ ...instanceProps(), contentFit: 'scale' } as JsonObject)
+      const wrapper = await screen.findByTestId('compose-component-instance-scale')
+      // 包装层按组件根的自然尺寸摆放：嵌套文档没有被改写成盒尺寸。
+      expect(wrapper.style.width).toBe('120px')
+      expect(wrapper.style.height).toBe('80px')
+      expect(wrapper.style.transformOrigin).toBe('0 0')
+      await waitFor(() => {
+        expect(wrapper.style.transform).toBe('scale(2, 1.5)')
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('compose-material-rectangle')).toBeInTheDocument()
+      })
+    }
+    finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('组件根锚到原点：根的工作区摆位不得平移实例内容', async () => {
+    /*
+     * 根的 `LayoutItem.offset` 是场景在组件文档工作区里的摆位。在组件文档里挪过场景再保存，
+     * 快照里的根就带着非零 offset——不锚到原点的话内容整体平移出盒又被 overflow 裁掉，
+     * 症状是「组件文档里明明画着，页面上的实例是空的」。
+     */
+    const base = snapshot()
+    const root = base.document.entities['component-root']!
+    const item = root.components.LayoutItem as { offset: { x: number; y: number } }
+    const shifted = {
+      ...base,
+      document: {
+        ...base.document,
+        entities: {
+          ...base.document.entities,
+          'component-root': {
+            ...root,
+            components: {
+              ...root.components,
+              LayoutItem: { ...item, offset: { x: 64, y: 74 } },
+            },
+          },
+        },
+      },
+    }
+    renderInstance({ reference, resolvedSnapshot: shifted, propertyOverrides: {} } as unknown as JsonObject)
+    await screen.findByTestId('compose-component-instance-content')
+    await waitFor(() => {
+      const rootNode = document.querySelector('[data-component-instance-entity-id="component-root"]') as HTMLElement
+      expect(rootNode).not.toBeNull()
+      expect(rootNode.style.left).toBe('0px')
+      expect(rootNode.style.top).toBe('0px')
+    })
+  })
+
+  it('scale 下量不到盒时比值回退 1，不按错误比值画', async () => {
+    renderInstance({ ...instanceProps(), contentFit: 'scale' } as JsonObject)
+    const wrapper = await screen.findByTestId('compose-component-instance-scale')
+    expect(wrapper.style.transform).toBe('scale(1, 1)')
   })
 })

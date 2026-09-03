@@ -28,12 +28,13 @@ import { COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS } from './props'
 function valueContract(
   name: keyof typeof COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS,
   label: string,
+  category: 'animation' | 'content' = 'animation',
 ): ComposeRendererPropContract {
   return {
     name,
     kind: 'value',
     label,
-    category: 'animation',
+    category,
     validate: (value) => v.safeParse(COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS[name], value).success
       ? true
       : `${label} 取值非法`,
@@ -65,9 +66,13 @@ export function createComponentInstanceMaterial(
       propContracts: [
         valueContract('animation', '动画'),
         valueContract('animationTime', '播放头'),
+        valueContract('contentFit', '内容适配', 'content'),
       ],
-      propCategories: [{ id: 'animation', label: '动画', inspectorDefaultExpanded: true }],
-      inspectorPropNames: ['animation', 'animationTime'],
+      propCategories: [
+        { id: 'animation', label: '动画', inspectorDefaultExpanded: true },
+        { id: 'content', label: '内容', inspectorDefaultExpanded: true },
+      ],
+      inspectorPropNames: ['animation', 'animationTime', 'contentFit'],
       inspector: createComponentInstanceAnimationInspector(idFactory),
       measurement: COMPONENT_INSTANCE_RENDERER_MEASUREMENT,
     },

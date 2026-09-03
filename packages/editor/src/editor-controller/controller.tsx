@@ -493,6 +493,43 @@ function routeInstanceResize(
     } | undefined
     const size = transform?.size
     if (!size || typeof size.width !== 'number' || typeof size.height !== 'number') continue
+    const scaleFacts = readComposeComponentInstance(runtime.document.entities[instanceId]!)
+    if (scaleFacts?.contentFit === 'scale') {
+      /*
+       * `'scale'` 实例的尺寸事实在宿主 LayoutItem 的盒上：resize 只写宿主，不产生嵌套根
+       * 覆盖——写了覆盖会把嵌套根钉死，组件尺寸的改动从此传不过来。
+       * 直接写宿主而不是放行默认 setTransform：已落盘的旧实例宿主可能是 `resize: 'none'`，
+       * 默认路径会拒绝，而 Stage 的手柄推导对实例强制按 `free` 处理，写入侧必须与它一致。
+       */
+      const hostEntity = runtime.document.entities[instanceId]!
+      const hostItem = getComposeLayoutItem(hostEntity)
+      const position = (update.transform as {
+        readonly position?: { readonly x?: number; readonly y?: number }
+      } | undefined)?.position
+      runtime.dispatch({
+        id: defaultIdFactory(),
+        type: BUILTIN_COMMAND_TYPES.updateComponent,
+        payload: {
+          entityId: instanceId,
+          key: 'LayoutItem',
+          value: {
+            ...hostItem,
+            ...(position && typeof position.x === 'number' && typeof position.y === 'number'
+              ? { offset: { x: position.x, y: position.y } }
+              : {}),
+            width: { ...hostItem.width, mode: 'fixed', value: size.width },
+            height: { ...hostItem.height, mode: 'fixed', value: size.height },
+          },
+        },
+        meta: {
+          label: `Resize ${hostEntity.name}`,
+          source: 'stage',
+          targetIds: [instanceId],
+        },
+      } as unknown as EditorCommand)
+      handled = true
+      continue
+    }
     const target = resolveInstanceEditTarget(runtime, document, instanceId)
     if (!target) continue
     const rootId = target.entity.id
@@ -576,7 +613,8 @@ function routeInstanceLayoutItemSize(
   } | undefined
   if (payload?.key !== 'LayoutItem' || typeof payload.entityId !== 'string') return false
   const host = document.entities[payload.entityId]
-  if (!host || !readComposeComponentInstance(host)) return false
+  const facts = host ? readComposeComponentInstance(host) : null
+  if (!host || !facts) return false
   if (!payload.value || typeof payload.value !== 'object' || Array.isArray(payload.value)) {
     return false
   }
@@ -586,6 +624,41 @@ function routeInstanceLayoutItemSize(
     || !layoutSizingEqual(hostItem.height, nextItem.height)
   // 仅偏移/对齐变化时仍写宿主，页面布局位置属于实例层。
   if (!sizeChanged) return false
+
+  if (facts.contentFit === 'scale') {
+    /*
+     * `'scale'` 实例的尺寸事实在宿主盒上：Inspector 的尺寸编辑直接落宿主，不写嵌套根覆盖。
+     * 值改了而模式还是 hug 时 coerce 成 fixed——hug 会被测量改回组件根尺寸，屏幕上什么都
+     * 不变；显式的模式切换（hug→fill 等）原样放行，那是用户对模式本身的意图。
+     */
+    const coerce = (
+      current: typeof hostItem.width,
+      next: typeof nextItem.width,
+    ) => (
+      !layoutSizingEqual(current, next) && next.mode === current.mode && next.mode !== 'fixed'
+        ? { ...next, mode: 'fixed' as const }
+        : next
+    )
+    runtime.dispatch({
+      id: defaultIdFactory(),
+      type: BUILTIN_COMMAND_TYPES.updateComponent,
+      payload: {
+        entityId: payload.entityId,
+        key: 'LayoutItem',
+        value: {
+          ...nextItem,
+          width: coerce(hostItem.width, nextItem.width),
+          height: coerce(hostItem.height, nextItem.height),
+        },
+      },
+      meta: {
+        label: `Resize ${host.name}`,
+        source: 'inspector',
+        targetIds: [payload.entityId],
+      },
+    } as unknown as EditorCommand)
+    return true
+  }
 
   const target = resolveInstanceEditTarget(runtime, document, payload.entityId)
   if (!target) return false

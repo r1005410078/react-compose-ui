@@ -895,6 +895,93 @@ describe('useComposeEditorController', () => {
     expect(overrides.operations.some(({ entityId }) => entityId === 'c-root')).toBe(true)
   })
 
+  it('scale 实例 Resize 只写宿主盒，不产生嵌套根覆盖', () => {
+    /*
+     * OpenSpec: basic-materials / 组件实例的内容缩放 / scale 下绝对定位子级跟着放大。
+     * 判别点是**两处各断一半**：宿主 LayoutItem 变成 fixed 新尺寸（内容缩放的事实来源），
+     * 且覆盖列表仍为空——写了覆盖的实现会把嵌套根钉死，组件尺寸的改动从此传不过来。
+     */
+    const fixture = instanceDocumentFixture()
+    const instanceEntity = fixture.entities.instance as unknown as { components: { Renderer: { props: Record<string, unknown> } } }
+    instanceEntity.components.Renderer.props.contentFit = 'scale'
+    const editorRuntime = createTransactionRuntime({
+      document: fixture,
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    act(() => {
+      result.current.dispatch({
+        id: 'resize-scale-1',
+        type: BUILTIN_COMMAND_TYPES.setTransform,
+        payload: {
+          operation: 'resize',
+          updates: [{
+            entityId: 'instance',
+            transform: {
+              position: { x: 0, y: 0 },
+              size: { width: 300, height: 200 },
+              rotation: 0,
+            },
+          }],
+        },
+        meta: { label: 'resize', source: 'stage', targetIds: ['instance'] },
+      })
+    })
+
+    const host = result.current.document.entities.instance!
+    expect(getComposeLayoutItem(host)).toMatchObject({
+      width: { mode: 'fixed', value: 300 },
+      height: { mode: 'fixed', value: 200 },
+    })
+    const overrides = (host.components.Renderer as { props: Record<string, unknown> })
+      .props.instanceOverrides as { operations: readonly unknown[] }
+    expect(overrides.operations).toHaveLength(0)
+  })
+
+  it('scale 实例的 Inspector 尺寸编辑落宿主并 coerce 成 fixed', () => {
+    const fixture = instanceDocumentFixture()
+    const instanceEntity = fixture.entities.instance as unknown as { components: { Renderer: { props: Record<string, unknown> } } }
+    instanceEntity.components.Renderer.props.contentFit = 'scale'
+    const editorRuntime = createTransactionRuntime({
+      document: fixture,
+      idFactory: () => 'transaction-0',
+      clock: () => 0,
+    })
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+
+    const hostBefore = getComposeLayoutItem(result.current.document.entities.instance!)
+    act(() => {
+      result.current.dispatch({
+        id: 'layout-size-scale-1',
+        type: BUILTIN_COMMAND_TYPES.updateComponent,
+        payload: {
+          entityId: 'instance',
+          key: 'LayoutItem',
+          value: {
+            ...hostBefore,
+            width: { ...hostBefore.width, value: 360 },
+          },
+        },
+        meta: { label: 'size', source: 'inspector', targetIds: ['instance'] },
+      })
+    })
+
+    const host = result.current.document.entities.instance!
+    // 值改了而模式没动 → coerce 成 fixed：留在 hug 会被测量改回组件根尺寸，屏幕上什么都不变。
+    expect(getComposeLayoutItem(host).width).toMatchObject({ mode: 'fixed', value: 360 })
+    const overrides = (host.components.Renderer as { props: Record<string, unknown> })
+      .props.instanceOverrides as { operations: readonly unknown[] }
+    expect(overrides.operations).toHaveLength(0)
+  })
+
   it('Inspector 修改实例尺寸写入组件根覆盖而不是宿主 LayoutItem', () => {
     const editorRuntime = createTransactionRuntime({
       document: instanceDocumentFixture(),

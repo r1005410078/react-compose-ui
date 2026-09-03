@@ -524,6 +524,13 @@ export function createComponentInstanceAnimationInspector(idFactory: InspectorId
   return function ComponentInstanceAnimationInspector(context: ComposeRendererInspectorProps) {
     const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
     const props = inspectorBaseProps(context)
+    /*
+     * 自定义 Inspector 按 `propCategory` 每个分类渲染一次：不过滤的话同一批字段在
+     * 「动画」与「内容」两个分组里各画一遍，屏幕上出现两个一模一样的下拉。
+     */
+    const category = context.propCategory?.id
+    const showAnimation = category === undefined || category === 'animation'
+    const showContent = category === undefined || category === 'content'
     const animations = readComponentInstanceAnimations(props.resolvedSnapshot)
     const selected = typeof props.animation === 'string' && props.animation.length > 0
       ? props.animation
@@ -537,7 +544,7 @@ export function createComponentInstanceAnimationInspector(idFactory: InspectorId
         ? { [selected]: title(zh, `Missing: ${selected}`, `已失效：${selected}`) }
         : {}),
     }
-    const schema = v.object({
+    const fullSchema = v.object({
       animation: v.pipe(
         v.picklist(optionIds),
         v.title(title(zh, 'Animation', '动画')),
@@ -548,17 +555,43 @@ export function createComponentInstanceAnimationInspector(idFactory: InspectorId
         v.title(title(zh, 'Playhead', '播放头')),
         v.metadata({ propertyPanel: { unit: 'ms' } }),
       ),
+      contentFit: v.pipe(
+        v.picklist(['layout', 'scale']),
+        v.title(title(zh, 'Content fit', '内容适配')),
+        v.metadata({
+          propertyPanel: {
+            optionLabels: {
+              layout: title(zh, 'Reflow', '重排布局'),
+              scale: title(zh, 'Scale', '整体缩放'),
+            },
+          },
+        }),
+      ),
     })
+    const schema = category === 'content'
+      ? v.pick(fullSchema, ['contentFit'])
+      : category === 'animation'
+        ? v.pick(fullSchema, ['animation', 'animationTime'])
+        : fullSchema
     const value = {
       animation: selected,
       animationTime: typeof props.animationTime === 'number' && Number.isFinite(props.animationTime)
         ? props.animationTime
         : 0,
+      // 缺席即 'layout'：默认值不写成显式值，与 fillRule 缺席即 nonzero 同一条判断。
+      contentFit: props.contentFit === 'scale' ? 'scale' as const : 'layout' as const,
     }
+    const panelLabel = category === 'content'
+      ? title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)
+      : title(zh, `${context.entity.name} animation`, `${context.entity.name} 动画`)
+    const visiblePropNames = new Set([
+      ...(showAnimation ? ['animation', 'animationTime'] : []),
+      ...(showContent ? ['contentFit'] : []),
+    ])
     return (
       <ComposePropertyPanel
-        aria-label={title(zh, `${context.entity.name} animation`, `${context.entity.name} 动画`)}
-        binding={createPropsBinding(context)}
+        aria-label={panelLabel}
+        binding={createPropsBinding(context, visiblePropNames)}
         readOnly={context.readOnly}
         schema={schema}
         value={value}
@@ -566,7 +599,9 @@ export function createComponentInstanceAnimationInspector(idFactory: InspectorId
           const propName = change.path[0]
           if (change.path.length !== 1 || typeof propName !== 'string' || !(propName in next)) return
           // 面板里「未选择」是空串，文档里是 null——空串不是一个动画 id。
-          const written = propName === 'animation' && change.value === UNSET
+          // 内容适配同理：'layout' 是默认值，不写成显式值，写 null 表示回到默认。
+          const written = (propName === 'animation' && change.value === UNSET)
+            || (propName === 'contentFit' && change.value === 'layout')
             ? null
             : change.value as JsonValue
           dispatchProps(context, {

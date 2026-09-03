@@ -13,4 +13,6 @@ import * as v from 'valibot'
 export const COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS = {
   animation: v.nullable(v.string()),
   animationTime: v.pipe(v.number(), v.finite()),
+  // 缺席即 'layout'（默认值不写成显式值）；null 表示「回到默认」，与 animation 的空态同形。
+  contentFit: v.nullable(v.picklist(['layout', 'scale'])),
 } as const

@@ -28,6 +28,16 @@ export interface ComposeComponentInstanceFacts {
    * 宿主可据此在下一次写入时把实体落盘为分区形状；读取本身不改写文档。
    */
   readonly migratedFromLegacy: boolean
+  /**
+   * 内容适配（`contentFit` Renderer prop），缺席即 `'layout'`。
+   *
+   * @remarks
+   * 宿主用它分流 resize 的写入路径：`'layout'` 把尺寸写进嵌套根（既有机制），`'scale'`
+   * 只写宿主 LayoutItem 的盒、由渲染按比值缩放内容——两支不得同时改一份尺寸数据。
+   * prop 契约由 `@compose-ui/materials` 定义；本包与它之间没有依赖，这一处按同一契约
+   * 直读 props，与上面读 `resolvedSnapshot` 是同一条边界。
+   */
+  readonly contentFit: 'layout' | 'scale'
 }
 
 /**
@@ -80,6 +90,7 @@ export function readComposeComponentInstance(entity: ComposeEntity): ComposeComp
     snapshot: snapshot as unknown as ComposeResolvedComponentSnapshot,
     overrides,
     migratedFromLegacy,
+    contentFit: renderer.props.contentFit === 'scale' ? 'scale' : 'layout',
   }
 }
 

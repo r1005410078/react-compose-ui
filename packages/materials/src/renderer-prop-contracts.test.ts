@@ -80,11 +80,14 @@ describe('first-party Renderer Prop Contracts', () => {
     // 组件实例的两条 Prop 是「宿主怎么驱动这个实例」的全部入口；实例内不持有时钟，
     // 因此没有 playing / playbackMode 之类的第三条。
     expect(contractNames(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER))
-      .toEqual(['animation', 'animationTime'])
+      .toEqual(['animation', 'animationTime', 'contentFit'])
     expect(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER.inspectorPropNames)
-      .toEqual(['animation', 'animationTime'])
+      .toEqual(['animation', 'animationTime', 'contentFit'])
     expect(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER.propCategories)
-      .toEqual([{ id: 'animation', label: '动画', inspectorDefaultExpanded: true }])
+      .toEqual([
+        { id: 'animation', label: '动画', inspectorDefaultExpanded: true },
+        { id: 'content', label: '内容', inspectorDefaultExpanded: true },
+      ])
   })
 
   it('OpenSpec: component-registry / 字段绑定校验 / Contract 与 Inspector Schema 接受同一值域', () => {
@@ -102,6 +105,10 @@ describe('first-party Renderer Prop Contracts', () => {
     expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'animation', 7)).not.toBe(true)
     expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'animationTime', 250)).toBe(true)
     expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'animationTime', Number.NaN))
+      .not.toBe(true)
+    expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'contentFit', 'scale')).toBe(true)
+    expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'contentFit', null)).toBe(true)
+    expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'contentFit', 'stretch'))
       .not.toBe(true)
   })
 })
