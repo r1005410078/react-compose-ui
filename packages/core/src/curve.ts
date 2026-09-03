@@ -1029,7 +1029,8 @@ export function splitComposeCurveAt(
   point: ComposePosition,
   epsilon = 1e-6,
 ): ComposeCurveSplit | null {
-  if (curve.kind === 'arc') return null
+  // `path` 与弧一样没有可拆的顶点序列——导线几何本来就只允许 line 与 polyline。
+  if (curve.kind === 'arc' || curve.kind === 'path') return null
   if (curve.kind === 'polyline' && curve.closed) return null
   const vertices = curve.kind === 'line' ? [curve.start, curve.end] : curve.vertices
   if (vertices.length < 2) return null
