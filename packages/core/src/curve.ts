@@ -20,12 +20,16 @@ import {
 } from './document-types'
 import {
   composeArcBoundsPoints,
+  composeCubicBoundsPoints,
   composeRoundedPolylineOutline,
   flattenComposeArc,
+  flattenComposeCubic,
   flattenComposeOutline,
   isComposeFullCircle,
   pointToComposeArcDistance,
+  pointToComposeCubicDistance,
   pointToComposeSegmentDistance,
+  type ComposeCubicShape,
   type ComposeOutlinePiece,
   type ComposeSegmentShape,
 } from './curve-geometry'
@@ -39,7 +43,7 @@ import { COMPOSE_GEOMETRY_PRECISION, roundComposeGeometry } from './geometry-pre
  * 新增 kind 是新增分支，既有文档一行不动——这正是当初把它留成联合类型的理由。
  * @public
  */
-export type ComposeCurveKind = 'line' | 'arc' | 'polyline'
+export type ComposeCurveKind = 'line' | 'arc' | 'polyline' | 'path'
 
 /** 直线段：两个盒局部端点。 @public */
 export interface ComposeLineCurve extends JsonObject {
@@ -108,6 +112,66 @@ export type ComposePolylineCurve = JsonObject & {
 }
 
 /**
+ * 一段三次贝塞尔：两个控制点与终点，起点由前一段（或子路径起点）给出。
+ *
+ * @remarks
+ * 不存起点是因为它**永远等于**前一段的终点，存两份就会有两份能对不上的事实；这与「`closed`
+ * 是布尔而不是首尾顶点重复」是同一条判断。
+ *
+ * @public
+ */
+export interface ComposeCubicSegment extends JsonObject {
+  readonly c1: ComposePosition
+  readonly c2: ComposePosition
+  readonly to: ComposePosition
+}
+
+/**
+ * `path` 的一条子路径：一个起点、一列三次贝塞尔段与一个闭合标志。
+ *
+ * @remarks
+ * 带洞的图形（字母 O、有孔的垫片）是**一条**路径的两条子路径，靠 `fillRule` 决定内圈是不是
+ * 洞。拆成两个 Entity 会把洞画成一块实心的覆盖物，而用户看见的是「导进来多了一块色块」。
+ *
+ * @public
+ */
+export interface ComposeSubpath extends JsonObject {
+  readonly start: ComposePosition
+  readonly segments: readonly ComposeCubicSegment[]
+  readonly closed: boolean
+}
+
+/**
+ * 自由路径：子路径序列加可选的填充规则。
+ *
+ * @remarks
+ * 段**全部是三次贝塞尔**，直线段规范化成控制点落在段上的三次段。多留一种段类型只会让归一化、
+ * 平移、距离、包围盒、渲染与校验六条路径各多一支逐字相同的实现——与「整圆是扫掠 ±360 的弧」
+ * 「矩形是四顶点的闭合多段线」是同一条判断。
+ *
+ * 写入方 MUST 取能表达该几何的**最窄** kind：能用 `line`、`arc` 或 `polyline` 表达的几何不落
+ * 成 `path`。落错 kind 的症状是「这条线看起来一样却拖不动顶点」。
+ *
+ * 用 `JsonObject &` 交叉而不是 `extends`：索引签名的 `JsonValue` 不接受 `undefined`，而
+ * `fillRule` 是可选的；`ComposePolylineCurve` 与 `ComposeWire` 出于同样原因采用这种写法。
+ *
+ * @public
+ */
+export type ComposePathCurve = JsonObject & {
+  readonly kind: 'path'
+  readonly subpaths: readonly ComposeSubpath[]
+  /**
+   * 填充规则；**缺席即非零绕数**（`nonzero`）。
+   *
+   * @remarks
+   * 缺席即 `nonzero` 这条回退让本字段不需要迁移，也让它与 SVG 的默认值一致——渲染与命中因此
+   * 自动读出同一个答案。`nonzero` MUST NOT 写成显式值：缺席与显式是同一件事，留两种表示会让
+   * 「填充规则是什么」在两处读出不同答案，与 `cornerRadius` 归零时删掉字段是同一条判断。
+   */
+  readonly fillRule?: 'evenodd'
+}
+
+/**
  * 可选的 `Curve` Component。
  *
  * @remarks
@@ -115,7 +179,11 @@ export type ComposePolylineCurve = JsonObject & {
  * 组合规则由 `validateComposeDocument` 强制。
  * @public
  */
-export type ComposeCurve = ComposeLineCurve | ComposeArcCurve | ComposePolylineCurve
+export type ComposeCurve =
+  | ComposeLineCurve
+  | ComposeArcCurve
+  | ComposePolylineCurve
+  | ComposePathCurve
 
 /**
  * 归一化后盒在退化轴上的最小尺寸。
@@ -156,6 +224,9 @@ export interface ComposeCurveValidationIssue {
 const LINE_FIELDS = ['kind', 'start', 'end'] as const
 const ARC_FIELDS = ['kind', 'center', 'radius', 'startAngle', 'sweep'] as const
 const POLYLINE_FIELDS = ['kind', 'vertices', 'closed', 'cornerRadius'] as const
+const PATH_FIELDS = ['kind', 'subpaths', 'fillRule'] as const
+const SUBPATH_FIELDS = ['start', 'segments', 'closed'] as const
+const CUBIC_FIELDS = ['c1', 'c2', 'to'] as const
 const POINT_FIELDS = ['x', 'y'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -205,7 +276,12 @@ export function collectComposeCurveValidationIssues(
     return [{ path: [], message: 'Curve 必须是对象' }]
   }
   // 未知 kind 必须拒绝而不是静默忽略：静默忽略会让一条画好的曲线在升级后无声消失。
-  if (value.kind !== 'line' && value.kind !== 'arc' && value.kind !== 'polyline') {
+  if (
+    value.kind !== 'line'
+    && value.kind !== 'arc'
+    && value.kind !== 'polyline'
+    && value.kind !== 'path'
+  ) {
     return [{ path: ['kind'], message: `不支持的 kind ${String(value.kind)}` }]
   }
   const issues: ComposeCurveValidationIssue[] = []
@@ -229,6 +305,47 @@ export function collectComposeCurveValidationIssues(
     if (typeof value.sweep !== 'number' || !Number.isFinite(value.sweep) || value.sweep === 0) {
       issues.push({ path: ['sweep'], message: 'sweep 必须是非零有限数' })
     }
+    return issues
+  }
+
+  if (value.kind === 'path') {
+    collectUnknownFields(value, PATH_FIELDS, [], issues)
+    // 缺席即 nonzero，因此显式写 `nonzero` 非法：同一件事留两种表示会让它在两处读出不同答案。
+    if (value.fillRule !== undefined && value.fillRule !== 'evenodd') {
+      issues.push({ path: ['fillRule'], message: 'fillRule 在场时只能是 evenodd' })
+    }
+    if (!Array.isArray(value.subpaths) || value.subpaths.length === 0) {
+      issues.push({ path: ['subpaths'], message: 'subpaths 至少要有一条子路径' })
+      return issues
+    }
+    value.subpaths.forEach((subpath, index) => {
+      const base = ['subpaths', index] as const
+      if (!isRecord(subpath)) {
+        issues.push({ path: [...base], message: '子路径必须是对象' })
+        return
+      }
+      collectUnknownFields(subpath, SUBPATH_FIELDS, base, issues)
+      collectPointIssues(subpath.start, [...base, 'start'], issues)
+      if (typeof subpath.closed !== 'boolean') {
+        issues.push({ path: [...base, 'closed'], message: 'closed 必须是布尔' })
+      }
+      // 一条没有段的子路径只是一个点：画不出东西，也点不中——与半径为零的圆是同一类幽灵。
+      if (!Array.isArray(subpath.segments) || subpath.segments.length === 0) {
+        issues.push({ path: [...base, 'segments'], message: 'segments 至少要有一段' })
+        return
+      }
+      subpath.segments.forEach((segment, segmentIndex) => {
+        const segmentBase = [...base, 'segments', segmentIndex] as const
+        if (!isRecord(segment)) {
+          issues.push({ path: [...segmentBase], message: '贝塞尔段必须是对象' })
+          return
+        }
+        collectUnknownFields(segment, CUBIC_FIELDS, segmentBase, issues)
+        CUBIC_FIELDS.forEach((key) => {
+          collectPointIssues(segment[key], [...segmentBase, key], issues)
+        })
+      })
+    })
     return issues
   }
 
@@ -281,6 +398,49 @@ export function createComposeLineCurve(
 }
 
 /**
+ * 把 `path` 展开成有序的三次贝塞尔段。
+ *
+ * @remarks
+ * 这是 `path` 的**唯一**展开入口：包围盒、距离、拍平与内部判定全部读它。各自遍历一遍
+ * `subpaths` 的话，下一个改闭合语义的人只会改到其中一处，而漏掉的那处的症状是「看得见的形状
+ * 与点得中的形状不是同一个」——这与圆角多段线收敛成一列轮廓片段是同一条判断。
+ *
+ * 闭合子路径的**收尾直段升阶成三次**（控制点落在弦上），因此下游不需要为「直的还是弯的」
+ * 分两支；`flattenComposeCubic` 对这样一段恰好只产出一条线段。
+ *
+ * @public
+ */
+export function composePathCubics(curve: ComposePathCurve): readonly ComposeCubicShape[] {
+  return curve.subpaths.flatMap(subpathCubics)
+}
+
+/** 一条子路径展开成的三次贝塞尔段；填充判定要按**子路径**取环，因此单独一份。 */
+function subpathCubics(subpath: ComposeSubpath): readonly ComposeCubicShape[] {
+  const cubics: ComposeCubicShape[] = []
+  let start: ComposePosition = subpath.start
+  subpath.segments.forEach((segment) => {
+    cubics.push({ start, c1: segment.c1, c2: segment.c2, end: segment.to })
+    start = segment.to
+  })
+  // 末点已经落在起点上时不补——那会产出一段零长度的段，它对形状没有贡献，却会在特征点与
+  // 夹点派生里凭空多出一个重合的候选。
+  if (subpath.closed && (start.x !== subpath.start.x || start.y !== subpath.start.y)) {
+    cubics.push(straightCubic(start, subpath.start))
+  }
+  return cubics
+}
+
+/** 一条直段升阶成的三次贝塞尔：控制点落在弦的三等分点上，形状逐像素相同。 */
+function straightCubic(start: ComposePosition, end: ComposePosition): ComposeCubicShape {
+  return {
+    start,
+    c1: { x: start.x + (end.x - start.x) / 3, y: start.y + (end.y - start.y) / 3 },
+    c2: { x: start.x + ((end.x - start.x) * 2) / 3, y: start.y + ((end.y - start.y) * 2) / 3 },
+    end,
+  }
+}
+
+/**
  * 决定曲线**紧包围盒**的那组点。
  *
  * @remarks
@@ -294,6 +454,17 @@ export function createComposeLineCurve(
 export function composeCurvePoints(curve: ComposeCurve): readonly ComposePosition[] {
   if (curve.kind === 'line') return [curve.start, curve.end]
   if (curve.kind === 'polyline') return curve.vertices
+  if (curve.kind === 'path') {
+    // 端点之外还要算上导数为零处的极值点：控制点凸包是紧包围盒的超集，在 S 形段上肉眼可见地
+    // 大一圈。这与弧要算象限点是同一条规则。子路径起点单列，一条只有起点的子路径校验会拒，
+    // 但包围盒不该因此把它丢掉。
+    return [
+      ...curve.subpaths.map((subpath) => subpath.start),
+      ...composePathCubics(curve).flatMap((cubic) => (
+        composeCubicBoundsPoints(cubic).map(({ x, y }) => ({ x, y }))
+      )),
+    ]
+  }
   // 弧不能只用两个端点：90° 到 270° 的弧鼓出来的那一侧在端点之外，盒会把弧裁掉一块，
   // 而这只在跨象限的弧上出现。落在扫掠内的象限点必须一并纳入。
   return composeArcBoundsPoints(curve).map(({ x, y }) => ({ x, y }))
@@ -324,6 +495,13 @@ export function composeCurvePoints(curve: ComposeCurve): readonly ComposePositio
  */
 export function isComposeClosedCurve(curve: ComposeCurve): boolean {
   if (curve.kind === 'polyline') return curve.closed
+  // 一条子路径没闭合就有一段开放的轮廓，盒因此不再是这个对象的轮廓——判据是「盒宣称的是不是
+  // 真话」，而只要有一处开口它就不是。
+  // 空 `subpaths` 校验会拒，但这里仍要显式挡住：`[].every` 为真，那会让一条画不出东西的曲线
+  // 自称是闭合的面积，而选区 chrome 读的正是这个答案。
+  if (curve.kind === 'path') {
+    return curve.subpaths.length > 0 && curve.subpaths.every((subpath) => subpath.closed)
+  }
   return curve.kind === 'arc' && isComposeFullCircle(curve)
 }
 
@@ -355,6 +533,20 @@ export function translateComposeCurve(
   })
   if (curve.kind === 'line') return { ...curve, start: shift(curve.start), end: shift(curve.end) }
   if (curve.kind === 'polyline') return { ...curve, vertices: curve.vertices.map(shift) }
+  if (curve.kind === 'path') {
+    return {
+      ...curve,
+      subpaths: curve.subpaths.map((subpath) => ({
+        ...subpath,
+        start: shift(subpath.start),
+        segments: subpath.segments.map((segment) => ({
+          c1: shift(segment.c1),
+          c2: shift(segment.c2),
+          to: shift(segment.to),
+        })),
+      })),
+    }
+  }
   // 弧只动圆心：半径与角度是形状本身，平移不改变它们。
   return { ...curve, center: shift(curve.center) }
 }
@@ -508,6 +700,22 @@ export function projectComposeCurveToBox(
   })
   if (curve.kind === 'line') return { ...curve, start: map(curve.start), end: map(curve.end) }
   if (curve.kind === 'polyline') return { ...curve, vertices: curve.vertices.map(map) }
+  // 贝塞尔的控制点在仿射变换下**精确**，因此 `path` 没有弧那条等比/非等比分流：非等比拉伸
+  // 之后它仍然是同一条贝塞尔，只是被拉扁了。
+  if (curve.kind === 'path') {
+    return {
+      ...curve,
+      subpaths: curve.subpaths.map((subpath) => ({
+        ...subpath,
+        start: map(subpath.start),
+        segments: subpath.segments.map((segment) => ({
+          c1: map(segment.c1),
+          c2: map(segment.c2),
+          to: map(segment.to),
+        })),
+      })),
+    }
+  }
   if (isUniformBoxScale(view, scaleX, scaleY)) {
     return { ...curve, center: map(curve.center), radius: curve.radius * scaleX }
   }
@@ -541,6 +749,16 @@ export function distanceToComposeCurve(
   if (curve.kind === 'line') return pointToComposeSegmentDistance(curve, point)
   // 弧有闭式解，比线段还便宜：方位角落在扫掠内时距离就是 `|到圆心距离 − 半径|`。
   if (curve.kind === 'arc') return pointToComposeArcDistance(curve, point)
+  if (curve.kind === 'path') {
+    return composePathCubics(curve).reduce(
+      (nearest, cubic) => Math.min(nearest, pointToComposeCubicDistance(cubic, point)),
+      // 一条段都没有（校验会拒）时退化成到各子路径起点的距离，与多段线那一支的处理一致。
+      curve.subpaths.reduce(
+        (nearest, { start }) => Math.min(nearest, Math.hypot(point.x - start.x, point.y - start.y)),
+        Number.POSITIVE_INFINITY,
+      ),
+    )
+  }
   const pieces = composePolylineOutline(curve)
   // 单顶点多段线（校验会拒，但命中不该因此抛错）退化成到那个点的距离。
   if (pieces.length === 0) {
@@ -575,6 +793,7 @@ export function distanceToComposeCurve(
 export function composeCurveSegments(curve: ComposeCurve): readonly ComposeSegmentShape[] {
   if (curve.kind === 'line') return [{ start: curve.start, end: curve.end }]
   if (curve.kind === 'arc') return flattenComposeArc(curve)
+  if (curve.kind === 'path') return composePathCubics(curve).flatMap(flattenComposeCubic)
   const pieces = composePolylineOutline(curve)
   // 单顶点多段线（校验会拒，但判定不该因此认为它不存在）退化成一条零长度线段：
   // 下游的裁剪判定对它天然退化成「点是否落在框内」。
@@ -613,6 +832,11 @@ export function composePolylineOutline(
  * `<polyline fill>` 画的就是首尾相连围出的那块）。渲染与命中因此自动一致，不需要在两处
  * 各写一遍「什么算封闭」。直线没有可填充的面积，恒为假。
  *
+ * **按 `fillRule` 分派，缺席即非零绕数**——SVG 的默认值也是它。对单条不自交的轮廓两条规则
+ * 给出相同答案，因此既有的多段线与弧逐点不变；自交轮廓（五角星那样一笔画出来的）上两者不同，
+ * 而此前这里写死奇偶、渲染却按 SVG 的非零绕数填充，星心是**画着实心却点不中**的。改成读同一
+ * 条规则顺带修掉了它。
+ *
  * 输入几何 MUST 已经由 `projectComposeCurveToBox` 投影进盒坐标系——盒到几何的换算只有一个
  * 入口，这里再做一次就会有第二份。
  *
@@ -622,23 +846,79 @@ export function isPointInsideComposeCurve(
   curve: ComposeCurve,
   point: { readonly x: number; readonly y: number },
 ): boolean {
-  const vertices = curve.kind === 'line'
-    ? []
-    : curve.kind === 'polyline'
-      ? outlineVertices(curve)
-      : arcOutline(curve)
-  if (vertices.length < 3) return false
-  // 奇偶规则射线法：向 +x 射一条线，数它穿过多少条边。半开区间 `[y0, y1)` 让顶点恰好落在
-  // 射线上时只被计一次，否则穿过顶点的射线会数出两次而把内外判反。
-  let inside = false
-  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
-    const a = vertices[i]!
-    const b = vertices[j]!
+  const rings = composeCurveFillRings(curve).filter((ring) => ring.length >= 3)
+  if (rings.length === 0) return false
+  if (curve.kind === 'path' && curve.fillRule === 'evenodd') {
+    // 奇偶规则：数射线穿过**全部**环的次数，奇数即内部。带洞图形的内圈因此被减掉。
+    const crossings = rings.reduce((total, ring) => total + ringCrossings(ring, point), 0)
+    return crossings % 2 === 1
+  }
+  return rings.reduce((total, ring) => total + ringWinding(ring, point), 0) !== 0
+}
+
+/**
+ * 曲线的填充轮廓环；每个环按**隐式闭合**处理。
+ *
+ * @remarks
+ * `path` 一条子路径一个环，其余 kind 至多一个环。直线没有可填充的面积，返回空。
+ */
+function composeCurveFillRings(
+  curve: ComposeCurve,
+): readonly (readonly ComposePosition[])[] {
+  if (curve.kind === 'line') return []
+  if (curve.kind === 'polyline') return [outlineVertices(curve)]
+  if (curve.kind === 'arc') return [segmentsOutline(flattenComposeArc(curve))]
+  return curve.subpaths.map((subpath) => (
+    segmentsOutline(subpathCubics(subpath).flatMap(flattenComposeCubic))
+  ))
+}
+
+/**
+ * 射线向 +x 穿过一个环的次数。
+ *
+ * @remarks
+ * 半开区间 `[y0, y1)` 让顶点恰好落在射线上时只被计一次，否则穿过顶点的射线会数出两次而把
+ * 内外判反。
+ */
+function ringCrossings(
+  ring: readonly ComposePosition[],
+  point: { readonly x: number; readonly y: number },
+): number {
+  let crossings = 0
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i]!
+    const b = ring[(i + 1) % ring.length]!
     if ((a.y > point.y) === (b.y > point.y)) continue
     const crossX = a.x + ((point.y - a.y) / (b.y - a.y)) * (b.x - a.x)
-    if (point.x < crossX) inside = !inside
+    if (point.x < crossX) crossings += 1
   }
-  return inside
+  return crossings
+}
+
+/**
+ * 一个环绕点的绕数。
+ *
+ * @remarks
+ * 与 {@link ringCrossings} 的差别只在**方向**：穿越向上记 +1、向下记 −1。两个同向的环因此
+ * 叠加（内圈仍是实心），反向的环相消（内圈是洞）——这正是 `nonzero` 与 `evenodd` 的全部差别。
+ *
+ * 屏幕坐标 Y 朝下会让整体符号反过来，而判据是「绕数是不是零」，与符号无关。
+ */
+function ringWinding(
+  ring: readonly ComposePosition[],
+  point: { readonly x: number; readonly y: number },
+): number {
+  let winding = 0
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i]!
+    const b = ring[(i + 1) % ring.length]!
+    const side = (b.x - a.x) * (point.y - a.y) - (point.x - a.x) * (b.y - a.y)
+    if (a.y <= point.y) {
+      if (b.y > point.y && side > 0) winding += 1
+    }
+    else if (b.y <= point.y && side < 0) winding -= 1
+  }
+  return winding
 }
 
 /**
@@ -650,18 +930,14 @@ export function isPointInsideComposeCurve(
  */
 function outlineVertices(curve: ComposePolylineCurve): readonly ComposePosition[] {
   if (!(curve.cornerRadius ?? 0)) return curve.vertices
-  const segments = flattenComposeOutline(composePolylineOutline(curve))
-  const first = segments[0]
-  if (!first) return curve.vertices
-  return [
-    { x: first.start.x, y: first.start.y },
-    ...segments.map(({ end }) => ({ x: end.x, y: end.y })),
-  ]
+  const outline = segmentsOutline(flattenComposeOutline(composePolylineOutline(curve)))
+  return outline.length > 0 ? outline : curve.vertices
 }
 
-/** 弧的填充轮廓：拍扁成顶点序列，整圆因此自然闭合。 */
-function arcOutline(curve: ComposeArcCurve): readonly ComposePosition[] {
-  const segments = flattenComposeArc(curve)
+/** 把一串首尾相接的线段收成顶点序列。 */
+function segmentsOutline(
+  segments: readonly ComposeSegmentShape[],
+): readonly ComposePosition[] {
   const first = segments[0]
   if (!first) return []
   return [

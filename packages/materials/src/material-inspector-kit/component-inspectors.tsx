@@ -810,6 +810,9 @@ export function createCurveInspector(
           end: point(zh ? '终点' : 'End'),
         })
       }
+      // `path` 不呈现几何字段，因此这里也没有 schema 可给。它仍然要在这一支产出一个合法的
+      // schema：早退发生在 Hook 之后，Hook 本身不能有条件地不跑。
+      if (kind === 'path') return v.object({})
       if (kind === 'arc') {
         return v.object({
           center: point(zh ? '圆心' : 'Center'),
@@ -851,6 +854,13 @@ export function createCurveInspector(
         ),
       })
     }, [kind, zh])
+
+    /*
+     * `path` 不呈现逐控制点的几何字段：一条导入来的路径有几十个控制点，逐点列出的面板既读
+     * 不懂也点不动，而它的几何编辑入口在画布上（顶点方块与控制手柄）。描边、填充与变换由各自
+     * 的 Component Inspector 呈现，不受这一条影响。
+     */
+    if (curve.kind === 'path') return null
 
     const offset = getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 }
     const toParent = (point: { readonly x: number; readonly y: number }) => ({

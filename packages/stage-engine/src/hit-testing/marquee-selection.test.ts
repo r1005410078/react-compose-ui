@@ -145,3 +145,42 @@ describe('框选判定模式协议', () => {
       .toEqual(['left'])
   })
 })
+
+/*
+ * 框选对 `path` 同样走几何而不是世界 AABB。判别点仍是包围盒的空角：一个只盖住空角的窗交框
+ * 在按盒判定的实现上会选中它。
+ */
+describe('OpenSpec: stage-engine / 框选按几何判定 / path', () => {
+  const bulge = entity('bulge', { x: 100, y: 100, width: 100, height: 75 })
+  const pathNode = {
+    ...bulge,
+    components: {
+      ...bulge.components,
+      Renderer: { type: 'curve', props: {} },
+      Curve: {
+        kind: 'path',
+        subpaths: [{
+          start: { x: 0, y: 0 },
+          segments: [{ c1: { x: 0, y: 100 }, c2: { x: 100, y: 100 }, to: { x: 100, y: 0 } }],
+          closed: false,
+        }],
+      },
+    },
+  }
+
+  it('只盖住包围盒空角的窗交框不选中', () => {
+    expect(resolveMarqueeSelection(query(
+      { x: 130, y: 101, width: 40, height: 10 },
+      { direction: 'rtl' },
+      [pathNode],
+    ))).toEqual([])
+  })
+
+  it('盖住曲线的窗交框选中', () => {
+    expect(resolveMarqueeSelection(query(
+      { x: 130, y: 165, width: 40, height: 20 },
+      { direction: 'rtl' },
+      [pathNode],
+    ))).toEqual(['bulge'])
+  })
+})

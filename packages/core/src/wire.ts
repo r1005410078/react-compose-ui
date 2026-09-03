@@ -201,7 +201,9 @@ function resolveWireGeometry(
   if (!curve || (curve.kind !== 'line' && curve.kind !== 'polyline') || !box) return null
   // 作者几何按**画出来的**那条线读：盒被拉过之后，`Curve` 里的值不再是屏幕上的位置。
   const drawn = projectComposeCurveToBox(curve, box)
-  if (drawn.kind === 'arc') return null
+  // 上面的守卫已经排除了别的 kind，投影也不会换成第三种；这里重述一遍是为了把收窄写在类型里，
+  // 而不是靠读者去追投影的实现。
+  if (drawn.kind !== 'line' && drawn.kind !== 'polyline') return null
   /*
    * 首尾两个顶点就是导线的两端，中间的拐点是纯几何——`Wire` 回答的是「这一端接到了哪个端口」，
    * 而拐点不接任何东西。两种 kind 因此收敛成同一串顶点处理，只有首尾会被写。

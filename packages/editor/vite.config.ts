@@ -35,6 +35,7 @@ export default defineConfig({
         '@compose-ui/component-registry',
         '@compose-ui/component-library',
         '@compose-ui/dxf',
+        '@compose-ui/svg-import',
         '@compose-ui/history',
         '@compose-ui/layout-engine',
         '@compose-ui/pages',

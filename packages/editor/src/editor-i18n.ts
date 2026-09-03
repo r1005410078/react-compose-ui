@@ -164,6 +164,11 @@ const messages = {
       importPartial: '部分内容未能完整导入',
       importFailed: 'DXF 导入失败',
     },
+    svg: {
+      importAsComponent: '导入为组件',
+      importPartial: '部分内容未能完整导入',
+      importFailed: 'SVG 导入失败',
+    },
     pages: {
       createPage: '创建页面',
       createPageTitle: '新建页面',
@@ -389,6 +394,11 @@ const messages = {
       importAsPage: 'Import as page',
       importPartial: 'Some content could not be fully imported',
       importFailed: 'Failed to import the DXF file',
+    },
+    svg: {
+      importAsComponent: 'Import as component',
+      importPartial: 'Some content could not be fully imported',
+      importFailed: 'Failed to import the SVG file',
     },
     pages: {
       createPage: 'New page',
@@ -807,6 +817,9 @@ export function getEditorMessages(
     dxf: Object.fromEntries(
       Object.entries(current.dxf).map(([key, fallback]) => [key, format(`dxf.${key}`, fallback)]),
     ) as Record<keyof typeof current.dxf, string>,
+    svg: Object.fromEntries(
+      Object.entries(current.svg).map(([key, fallback]) => [key, format(`svg.${key}`, fallback)]),
+    ) as Record<keyof typeof current.svg, string>,
     pages: {
       createPage: format('pages.createPage', current.pages.createPage),
       createPageTitle: format('pages.createPageTitle', current.pages.createPageTitle),

@@ -479,3 +479,92 @@ describe('junction Preset', () => {
     expect(DEFAULT_COMPOSE_JUNCTION_PRESET.paletteHidden).toBe(true)
   })
 })
+
+/*
+ * `path` 的判别性用例都围绕一句话：**全部子路径写进同一个 `d`**。拆成多个元素时形状看起来
+ * 一样，只有带洞图形会露馅——因此这里断的是元素个数与 `fill-rule`，不是「画出来了」。
+ */
+describe('OpenSpec: basic-materials / curve 物料渲染并编辑曲线 Entity / path', () => {
+  /** 外环加内环：`evenodd` 下内环是洞。 */
+  const nested = {
+    kind: 'path',
+    subpaths: [ring(0, 0, 100), ring(25, 25, 50)],
+    fillRule: 'evenodd',
+  } as const
+
+  function ring(x: number, y: number, size: number) {
+    const corners = [
+      { x: x + size, y },
+      { x: x + size, y: y + size },
+      { x, y: y + size },
+    ]
+    let from = { x, y }
+    const segments = corners.map((to) => {
+      const segment = {
+        c1: { x: from.x + (to.x - from.x) / 3, y: from.y + (to.y - from.y) / 3 },
+        c2: { x: from.x + ((to.x - from.x) * 2) / 3, y: from.y + ((to.y - from.y) * 2) / 3 },
+        to,
+      }
+      from = to
+      return segment
+    })
+    return { start: { x, y }, segments, closed: true }
+  }
+
+  function pathEntity(curve: unknown): {
+    readonly entity: ComposeEntity
+    readonly materials: ReturnType<typeof createComposeBasicMaterials>
+  } {
+    const { entity, materials } = curveSeed()
+    return {
+      entity: { ...entity, components: { ...entity.components, Curve: curve as never } },
+      materials,
+    }
+  }
+
+  it('全部子路径写进同一个 d，只产出一个几何元素', () => {
+    const { entity, materials } = pathEntity(nested)
+    const { container } = render(
+      <ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />,
+    )
+    // 描边层与命中层各一个，没有第三个——两条子路径没有被拆成两个元素。
+    expect(container.querySelectorAll('path')).toHaveLength(2)
+    const stroke = screen.getByTestId('compose-material-curve-stroke')
+    expect(stroke.getAttribute('d')?.match(/M /g)).toHaveLength(2)
+    expect(stroke.getAttribute('d')?.endsWith('Z')).toBe(true)
+  })
+
+  it('fill-rule 写在描边层与命中层上——洞不该接住点击', () => {
+    const { entity, materials } = pathEntity(nested)
+    render(
+      <ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />,
+    )
+    expect(screen.getByTestId('compose-material-curve-stroke'))
+      .toHaveAttribute('fill-rule', 'evenodd')
+    expect(screen.getByTestId('compose-material-curve-hit'))
+      .toHaveAttribute('fill-rule', 'evenodd')
+  })
+
+  it('缺席 fillRule 时不写这个属性——缺席与显式 nonzero 是同一件事', () => {
+    const { entity, materials } = pathEntity({ kind: 'path', subpaths: [ring(0, 0, 100)] })
+    render(
+      <ComposeRegistryEntityRenderer entity={entity} mode="editor" registry={materials.registry} />,
+    )
+    expect(screen.getByTestId('compose-material-curve-stroke'))
+      .not.toHaveAttribute('fill-rule')
+  })
+
+  it('Inspector 不为 path 列出逐控制点字段', () => {
+    const { entity, materials } = pathEntity(nested)
+    render(
+      <ComposeRegistryComponentInspector
+        componentKey="Curve"
+        dispatch={vi.fn()}
+        entity={entity}
+        readOnly={false}
+        registry={materials.registry}
+      />,
+    )
+    expect(screen.queryAllByRole('spinbutton')).toHaveLength(0)
+  })
+})

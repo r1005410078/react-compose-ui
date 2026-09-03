@@ -24,6 +24,7 @@ import {
 import { AnimationInspector } from '../animation-mode/animation-inspector'
 import { createPageAnimationFile } from '../animation-mode/animation-asset-store'
 import { createDxfContextMenuItems } from '../dxf'
+import { createSvgContextMenuItems } from '../svg'
 import { PageAnimationScopePanel } from '../animation-mode/page-animation-scope-panel'
 import type { PageAnimationSceneBinding } from '../animation-mode/page-animation-scope-panel'
 import { rewriteAutoRecordCommand } from '../animation-mode/auto-record'
@@ -1443,19 +1444,55 @@ export function ComposeEditor({
     pageStore,
   ])
 
+  const svgContextMenuItems = useMemo(() => {
+    const store = componentWorkspace.store
+    // eslint-disable-next-line react-hooks/refs -- 与 DXF 那一项同理：菜单项的 `onSelect` 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
+    return createSvgContextMenuItems({
+      componentStore: store,
+      idFactory: animationCommandId,
+      messages: editorMessages,
+      onComponentCreated: (component) => {
+        // 导入之后用户要做的是改这个符号，因此直接打开它的组件文档。
+        void openComponentDocument({
+          entryId: component.entryId,
+          assetKey: component.assetKey,
+          displayName: component.asset.name,
+          componentId: component.asset.componentId,
+          kind: component.asset.kind,
+          revision: component.revision,
+          reference: store!.createReference(component.assetKey),
+        })
+      },
+      onError: setComponentNotice,
+      // 诊断与失败都走同一条提示：用户要看的是「有没有东西没导进来」，而不是它属于哪一类。
+      onNotice: setComponentNotice,
+      provider: assets?.browser?.provider,
+      registry: controller?.registry,
+    })
+  }, [
+    assets?.browser?.provider,
+    componentWorkspace.store,
+    controller?.registry,
+    editorMessages,
+    openComponentDocument,
+  ])
+
   const hostContextMenuItems = useMemo(() => {
     const hostItems = assets?.browser?.contextMenuItems ?? []
     return [
       ...hostItems,
       ...pageContextMenuItems,
+      // eslint-disable-next-line react-hooks/refs -- 合并的是几个已经各自解释过的菜单项数组：它们的 `onSelect` 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
       ...componentContextMenuItems,
       ...dxfContextMenuItems,
+      ...svgContextMenuItems,
     ]
   }, [
     assets?.browser?.contextMenuItems,
     componentContextMenuItems,
     dxfContextMenuItems,
     pageContextMenuItems,
+    svgContextMenuItems,
   ])
 
   // 页面面板自身没有保存入口：保存由这里按面板 ID 注册，交给页面 Store 写入。

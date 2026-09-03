@@ -185,3 +185,52 @@ describe('填充过的曲线内部也命中', () => {
     expect(index.entityAtPoint({ x: 130, y: 110 }, 2)).not.toBe('square')
   })
 })
+
+/*
+ * `path` 的判别性用例与直线那一组同源：**包围盒里绝大部分是空的**。一段向下鼓的贝塞尔，它的
+ * 盒左上角是起点、右上角是终点，而中间那一整条上边缘全是空的——按盒判定会命中，按几何不会。
+ * 缩放必须取多个值：`world = 屏幕 / zoom`，漏乘 zoom 时 zoom 恒为 1 的用例仍然会绿。
+ */
+describe('OpenSpec: stage-engine / 曲线点选按距离而不是包围盒 / path', () => {
+  /** 从 (100,100) 向下鼓到 (200,100)，最低点在 y = 175。 */
+  const bulge = {
+    kind: 'path',
+    subpaths: [{
+      start: { x: 0, y: 0 },
+      segments: [{ c1: { x: 0, y: 100 }, c2: { x: 100, y: 100 }, to: { x: 100, y: 0 } }],
+      closed: false,
+    }],
+  }
+
+  function pathEntity() {
+    const base = entity('path', { x: 100, y: 100, width: 100, height: 75 })
+    return {
+      ...base,
+      components: {
+        ...base.components,
+        Renderer: { type: 'curve', props: {} },
+        Curve: bulge,
+      },
+    }
+  }
+
+  it('盒的上边缘中点是空的，不命中', () => {
+    const index = indexFor(document([pathEntity()], ['path']))
+    // (150, 102) 在盒里、贴着上边，而曲线在那个 x 上已经落到 y ≈ 175。
+    expect(index.entityAtPoint({ x: 150, y: 102 }, 6)).not.toBe('path')
+  })
+
+  it('曲线最低点上命中', () => {
+    const index = indexFor(document([pathEntity()], ['path']))
+    expect(index.entityAtPoint({ x: 150, y: 175 }, 6)).toBe('path')
+  })
+
+  it('容差随缩放换算后结果一致', () => {
+    const index = indexFor(document([pathEntity()], ['path']))
+    for (const zoom of [0.5, 1, 2.37]) {
+      const tolerance = 8 / zoom
+      expect(index.entityAtPoint({ x: 150, y: 175 }, tolerance)).toBe('path')
+      expect(index.entityAtPoint({ x: 150, y: 102 }, tolerance)).not.toBe('path')
+    }
+  })
+})

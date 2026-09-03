@@ -201,6 +201,23 @@ function toParentCurve(
   if (curve.kind === 'polyline') {
     return { ...curve, vertices: curve.vertices.map(toParent) }
   }
+  // 绘图命令眼下不产出 `path`（最窄 kind 落成直线、弧或多段线），但这条链是「任意曲线落地」
+  // 的唯一入口，缺这一支的症状会是某天从别处落一条 `path` 时它静默地把控制点留在原坐标系里。
+  // 旋转不出现在这里：只有弧把它记成角，其余 kind 由 `mapPoint` 一并带过去。
+  if (curve.kind === 'path') {
+    return {
+      ...curve,
+      subpaths: curve.subpaths.map((subpath) => ({
+        ...subpath,
+        start: toParent(subpath.start),
+        segments: subpath.segments.map((segment) => ({
+          c1: toParent(segment.c1),
+          c2: toParent(segment.c2),
+          to: toParent(segment.to),
+        })),
+      })),
+    }
+  }
   return {
     ...curve,
     center: toParent(curve.center),

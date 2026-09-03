@@ -29,11 +29,25 @@ function applyGripAt(
   entityId: string,
   gripId: string,
   world: StagePoint,
+  breakSymmetry = false,
 ): ComposeCurve | null {
   const geometry = stageCurveBoxGeometry(source, entityId)
   if (!geometry) return null
   const local = stageCurveLocalPoint(source, entityId, world)
-  return local ? applyStageCurveGrip(geometry, gripId, local) : null
+  return local ? applyStageCurveGrip(geometry, gripId, local, { breakSymmetry }) : null
+}
+
+/**
+ * 一次路径手势对应的夹点 id。
+ *
+ * @remarks
+ * 可编辑路径把切线手势报成「顶点 id + 哪一侧」，而曲线夹点的求解手上只有一个 id：后缀在这里
+ * 合上，反查由 `stageCurveGripVertexId` 拆开。两处读同一份 id 语法，语法本身住在引擎里。
+ */
+function gripIdOf(change: ComposeStageEditablePathChange): string {
+  if (change.handle === 'tangent-in') return `${change.vertexId}i`
+  if (change.handle === 'tangent-out') return `${change.vertexId}o`
+  return change.vertexId
 }
 
 /**
@@ -208,9 +222,20 @@ export function useStageGeometryEditing(
     latest.current = { geometry, resolvePoint, session }
   })
   /** 拖动期：裸落点先过点输入管线，再应用。点亮期不走这里——那边的落点已经解算过了。 */
-  const solve = useCallback((target: string, gripId: string, world: StagePoint) => {
+  const solve = useCallback((
+    target: string,
+    gripId: string,
+    world: StagePoint,
+    breakSymmetry: boolean,
+  ) => {
     const current = latest.current
-    return applyGripAt(current.geometry, target, gripId, current.resolvePoint(world).point)
+    return applyGripAt(
+      current.geometry,
+      target,
+      gripId,
+      current.resolvePoint(world).point,
+      breakSymmetry,
+    )
   }, [])
 
   /**
@@ -244,10 +269,21 @@ export function useStageGeometryEditing(
       vertices: grips.map((grip) => ({
         id: grip.id,
         point: grip.point,
-        // 曲线词汇里没有三次段，因此没有切线手柄可给。
-        inTangent: null,
-        outTangent: null,
-        mode: 'corner' as const,
+        // `path` 的顶点两侧有控制点，走既有的切线手柄通道：那条通道本来就画「一个小圆加一根
+        // 连到顶点的杆」。其余 kind 没有三次段，两侧都是 null。
+        inTangent: grip.inTangent ?? null,
+        outTangent: grip.outTangent ?? null,
+        /*
+         * 有控制点的顶点报 `smooth`，覆盖层因此**在会话里一直画**它的手柄。
+         *
+         * 曾经只画「正在被会话作用着的那个顶点」的，理由是密度；那条**行不通**：点亮的语义
+         * 是「下一次按下就是取点」，于是按向手柄的那一下会先被点亮的会话吃掉，提交成一次顶点
+         * 移动——手柄永远按不到。悬停显形有同一个毛病（指针离开顶点手柄就没了），这两条是同
+         * 一个可达性问题的两种说法。
+         *
+         * 运动路径那一头不受影响：它的顶点两侧都是 `null`，仍然报 `corner`。
+         */
+        mode: (grip.inTangent ?? grip.outTangent) ? 'smooth' as const : 'corner' as const,
         // 角色与方向角原样带上：覆盖层照它画形状，不认识多段线。
         role: grip.role,
         ...(grip.angle === undefined ? {} : { angle: grip.angle }),
@@ -271,15 +307,21 @@ export function useStageGeometryEditing(
       const grip = stageCurveGrips(current.geometry, entityId)
         .find(({ id }) => id === change.vertexId)
       if (!grip) return true
+      // 拖的是控制点时，橡皮筋与被排除出捕捉的那一个点都该是**它**，不是它挂着的顶点。
+      const origin = change.handle === 'tangent-in'
+        ? grip.inTangent ?? grip.point
+        : change.handle === 'tangent-out'
+          ? grip.outTangent ?? grip.point
+          : grip.point
       gestureRef.current = {
         start: change.worldPoint,
         moved: false,
         armable: (change.clickCount ?? 1) <= 1,
       }
       setDragging(true)
-      current.session.start({ entityId, gripId: change.vertexId, origin: grip.point })
+      current.session.start({ entityId, gripId: gripIdOf(change), origin })
       // 按下即解一次：用户不必先移动一下才看到落点。
-      const preview = solve(entityId, change.vertexId, change.worldPoint)
+      const preview = solve(entityId, gripIdOf(change), change.worldPoint, change.modifiers.alt)
       if (preview) setPreview(preview)
       return true
     }
@@ -289,7 +331,8 @@ export function useStageGeometryEditing(
       gesture.moved = true
     }
     if (change.phase === 'move') {
-      const preview = solve(entityId, change.vertexId, change.worldPoint)
+      // `Alt` 每一帧都重读：用户可以拖到一半才按下它，而对称与否是这一帧的事。
+      const preview = solve(entityId, gripIdOf(change), change.worldPoint, change.modifiers.alt)
       if (preview) setPreview(preview)
       return true
     }

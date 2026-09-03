@@ -48,6 +48,7 @@
     "@compose-ui/scene-tree": "workspace:*",
     "@compose-ui/script-runtime": "workspace:*",
     "@compose-ui/stage": "workspace:*",
+    "@compose-ui/svg-import": "workspace:*",
     "@compose-ui/stage-engine": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "dockview-react": "^7.0.2",

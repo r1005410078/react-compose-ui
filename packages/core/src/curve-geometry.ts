@@ -1,5 +1,5 @@
 /**
- * 平面曲线的形状运算：圆弧与多段线。
+ * 平面曲线的形状运算：圆弧、三次贝塞尔与多段线。
  *
  * @remarks
  * 纯形状函数，不认识任何文档协议，因此住在 `core`。这里是一整套闭式解（角度包含判定、
@@ -241,11 +241,14 @@ export function composeArcBoundsPoints(arc: ComposeArcShape): readonly ComposePl
 }
 
 /**
- * 单段弦与弧之间允许的最大偏差（世界单位）。
+ * 单段弦与曲线之间允许的最大偏差（世界单位）。
  *
  * @remarks
  * 按**弦高误差**而不是固定段数分段：固定段数在大半径上误差发散，而弦高直接就是「最多偏几个
  * 世界单位」，可以拿它跟命中容差比较。
+ *
+ * 圆弧与三次贝塞尔共用同一个容差——两者拍平之后进的是同一批下游（命中、框选、内部判定），
+ * 各取一个值会让同一个容差在同一张图上有两个含义。
  */
 const MAX_SAGITTA = 0.25
 
@@ -321,6 +324,161 @@ export function composeArcThroughPoints(
   )
   const sweep = throughTravel <= clockwise ? clockwise : clockwise - 360
   return { center, radius, startAngle, sweep }
+}
+
+/**
+ * 一段三次贝塞尔。
+ *
+ * @remarks
+ * 只有三次一种：二次贝塞尔与直线段都能**精确**升阶成三次，因此多留一种段类型只会让归一化、
+ * 平移、距离、包围盒、渲染与校验六条路径各多一支逐字相同的实现。这与「整圆是扫掠 ±360 的
+ * 弧」「矩形是四顶点的闭合多段线」是同一条判断。
+ *
+ * @public
+ */
+export interface ComposeCubicShape {
+  readonly start: ComposePlanarPoint
+  readonly c1: ComposePlanarPoint
+  readonly c2: ComposePlanarPoint
+  readonly end: ComposePlanarPoint
+}
+
+/** 三次贝塞尔在参数 `t` 处的点。 @public */
+export function composeCubicPointAt(cubic: ComposeCubicShape, t: number): ComposePlanarPoint {
+  const u = 1 - t
+  const a = u * u * u
+  const b = 3 * u * u * t
+  const c = 3 * u * t * t
+  const d = t * t * t
+  return {
+    x: a * cubic.start.x + b * cubic.c1.x + c * cubic.c2.x + d * cubic.end.x,
+    y: a * cubic.start.y + b * cubic.c1.y + c * cubic.c2.y + d * cubic.end.y,
+  }
+}
+
+/**
+ * 一个轴上导数为零的参数值，只取落在 `(0, 1)` 开区间内的。
+ *
+ * @remarks
+ * `B'(t) = 3[a t² + b t + c]`，因此极值就是这条一元二次的根。端点不必解——它们本来就在候选
+ * 集合里，而 `t` 恰好取到 0 或 1 时求根会因浮点误差反复横跳。
+ *
+ * 二次项退化（四个控制点在该轴上共线分布）时降成一次方程；两者都退化时这一轴是常量，没有
+ * 极值。漏掉这一支的症状是 `a` 极小时根被算成一个巨大的数，包围盒随之炸开。
+ */
+function cubicAxisExtrema(p0: number, p1: number, p2: number, p3: number): readonly number[] {
+  const a = -p0 + 3 * p1 - 3 * p2 + p3
+  const b = 2 * (p0 - 2 * p1 + p2)
+  const c = p1 - p0
+  const inRange = (t: number) => (Number.isFinite(t) && t > 0 && t < 1 ? [t] : [])
+  if (a === 0) return b === 0 ? [] : inRange(-c / b)
+  const discriminant = b * b - 4 * a * c
+  if (discriminant < 0) return []
+  const root = Math.sqrt(discriminant)
+  return [...inRange((-b + root) / (2 * a)), ...inRange((-b - root) / (2 * a))]
+}
+
+/**
+ * 决定三次贝塞尔**紧**包围盒的那组点：两个端点加两轴上导数为零处的极值点。
+ *
+ * @remarks
+ * **不能拿控制点凸包凑合**：凸包是紧包围盒的超集，在 S 形段上肉眼可见地大一圈，盒会宣称
+ * 对象并不占据的面积。这与「弧的紧包围盒必须把落在扫掠内的象限点算进去」是同一条规则的
+ * 另一个实例，症状也一样——只在特定形状上出现，很容易被当成渲染问题。
+ *
+ * @public
+ */
+export function composeCubicBoundsPoints(
+  cubic: ComposeCubicShape,
+): readonly ComposePlanarPoint[] {
+  const ts = [
+    ...cubicAxisExtrema(cubic.start.x, cubic.c1.x, cubic.c2.x, cubic.end.x),
+    ...cubicAxisExtrema(cubic.start.y, cubic.c1.y, cubic.c2.y, cubic.end.y),
+  ]
+  return [cubic.start, cubic.end, ...ts.map((t) => composeCubicPointAt(cubic, t))]
+}
+
+/**
+ * 在参数 `t` 处把一段三次贝塞尔分成两段（de Casteljau）。
+ *
+ * @remarks
+ * 两段拼起来与原段**逐像素相同**，这正是拍平可以放心递归下去的前提。
+ */
+function splitCubic(cubic: ComposeCubicShape, t: number): readonly [ComposeCubicShape, ComposeCubicShape] {
+  const lerp = (a: ComposePlanarPoint, b: ComposePlanarPoint): ComposePlanarPoint => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  })
+  const ab = lerp(cubic.start, cubic.c1)
+  const bc = lerp(cubic.c1, cubic.c2)
+  const cd = lerp(cubic.c2, cubic.end)
+  const abbc = lerp(ab, bc)
+  const bccd = lerp(bc, cd)
+  const mid = lerp(abbc, bccd)
+  return [
+    { start: cubic.start, c1: ab, c2: abbc, end: mid },
+    { start: mid, c1: bccd, c2: cd, end: cubic.end },
+  ]
+}
+
+/**
+ * 递归拍平的深度上限。
+ *
+ * @remarks
+ * 病态输入（控制点相距极远、或含近似无穷的坐标）下弦高判据可能一直不满足，而 2^12 段已经
+ * 远超任何屏幕能分辨的精度。它是安全阀，正常几何在四五层内就收敛。
+ */
+const MAX_CUBIC_FLATTEN_DEPTH = 12
+
+/**
+ * 把三次贝塞尔拍扁成线段。
+ *
+ * @remarks
+ * 按**弦高误差**递归细分，与圆弧拍平取同一个容差：控制点到弦的距离都落在容差内时，这一段
+ * 与它的弦在屏幕上分不出来。固定段数是错的——同一个段数在一段 5px 的曲线上是浪费，在一段
+ * 跨屏的曲线上是可见的折线。
+ *
+ * 命中、框选与内部判定都走这里。贝塞尔的最近点没有闭式解（要解五次方程），因此这条近似不是
+ * 偷懒而是唯一可行的做法；容差与命中容差同一个量级，误差不以任何方式呈现给用户。
+ *
+ * @public
+ */
+export function flattenComposeCubic(cubic: ComposeCubicShape): readonly ComposeSegmentShape[] {
+  const segments: ComposeSegmentShape[] = []
+  const walk = (current: ComposeCubicShape, depth: number) => {
+    const chord = { start: current.start, end: current.end }
+    const deviation = Math.max(
+      pointToComposeSegmentDistance(chord, current.c1),
+      pointToComposeSegmentDistance(chord, current.c2),
+    )
+    if (depth >= MAX_CUBIC_FLATTEN_DEPTH || !(deviation > MAX_SAGITTA)) {
+      segments.push(chord)
+      return
+    }
+    const [left, right] = splitCubic(current, 0.5)
+    walk(left, depth + 1)
+    walk(right, depth + 1)
+  }
+  walk(cubic, 0)
+  return segments
+}
+
+/**
+ * 点到三次贝塞尔的距离。
+ *
+ * @remarks
+ * 经 {@link flattenComposeCubic} 近似。见那里关于「没有闭式解」的说明。
+ *
+ * @public
+ */
+export function pointToComposeCubicDistance(
+  cubic: ComposeCubicShape,
+  point: ComposePlanarPoint,
+): number {
+  return flattenComposeCubic(cubic).reduce(
+    (nearest, segment) => Math.min(nearest, pointToComposeSegmentDistance(segment, point)),
+    Number.POSITIVE_INFINITY,
+  )
 }
 
 /**

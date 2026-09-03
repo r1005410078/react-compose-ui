@@ -125,6 +125,18 @@ function curveFeaturePoints(
     ]
   }
 
+  /*
+   * `path` 只出顶点，**不出中点**：一段贝塞尔的中点是 `t = 0.5` 处的曲线点，而不是它两个端点
+   * 连线的中点，两者在弯得厉害的段上差得很远。出弦中点会给用户一个**不在形状上**的捕捉目标，
+   * 而捕捉的全部意义就是落在几何上。
+   */
+  if (curve.kind === 'path') {
+    return curve.subpaths.flatMap((subpath) => [
+      subpath.start,
+      ...subpath.segments.map((segment) => segment.to),
+    ]).map((point) => ({ mode: 'endpoint' as const, point: toWorld(point) }))
+  }
+
   const segments = curve.kind === 'line'
     ? [{ start: curve.start, end: curve.end }]
     : composePolylineSegments(curve.vertices, curve.closed)
@@ -358,7 +370,9 @@ export function collectStageWireEnds(
    * **两端就是首尾两个顶点**，因此直线与多段线走同一条路——只认 `line` 的症状是「折线导线
    * 选中之后两端什么都不显示」。中间的拐点不画记号：它不接任何东西。
    */
-  if (curve.kind === 'arc') return []
+  // 导线的几何只可能是直线或多段线（`Wire` 的校验就是这么写的）；这里重述一遍是为了把收窄
+  // 写在类型里，而不是靠读者去追那条校验。
+  if (curve.kind !== 'line' && curve.kind !== 'polyline') return []
   const ends = curve.kind === 'line'
     ? [curve.start, curve.end]
     : [curve.vertices[0], curve.vertices[curve.vertices.length - 1]]

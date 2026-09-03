@@ -202,6 +202,7 @@ export {
   composeCurveBounds,
   composeCurveBoxScale,
   composeCurvePoints,
+  composePathCubics,
   composePolylineOutline,
   composeCurveViewBox,
   createComposeLineCurve,
@@ -239,15 +240,20 @@ export {
   composeSegmentMidpoint,
   composeSquaredDistance,
   closestPointOnComposeSegment,
+  composeCubicBoundsPoints,
+  composeCubicPointAt,
   flattenComposeArc,
+  flattenComposeCubic,
   flattenComposeOutline,
   isComposeFullCircle,
   isDegenerateComposePolyline,
   pointToComposeArcDistance,
+  pointToComposeCubicDistance,
   pointToComposeSegmentDistance,
 } from './curve-geometry'
 export type {
   ComposeArcShape,
+  ComposeCubicShape,
   ComposeOutlinePiece,
   ComposePlanarPoint,
   ComposePolylineCornerFrame,
@@ -283,12 +289,15 @@ export type {
 } from './point-input'
 export type {
   ComposeArcCurve,
+  ComposeCubicSegment,
   ComposeCurve,
   ComposeCurveKind,
   ComposeCurveValidationIssue,
   ComposeLineCurve,
   ComposeNormalizedCurveGeometry,
+  ComposePathCurve,
   ComposePolylineCurve,
+  ComposeSubpath,
 } from './curve'
 export { applyDocumentPatches, jsonEqual } from './patches'
 export { createDocumentTransactionRuntime, createTransactionRuntime } from './runtime'

@@ -2,6 +2,8 @@ import {
   clampComposeCornerRadius,
   composeArcEndpoints,
   composeArcMidpoint,
+  composePathCubics,
+  flattenComposeCubic,
   composeCornerArcCenter,
   composeCornerRadiusAt,
   composePolylineCornerFrames,
@@ -15,7 +17,10 @@ import {
 } from '@compose-ui/core'
 import type {
   ComposeArcCurve,
+  ComposeCubicSegment,
   ComposeCurve,
+  ComposePathCurve,
+  ComposeSubpath,
   ComposeDocument,
   ComposeLayoutSnapshot,
   ComposePolylineCurve,
@@ -78,6 +83,19 @@ export interface StageCurveGrip {
    * 视口加了旋转，这里是会静默错位的地方之一。
    */
   readonly angle?: number
+  /**
+   * 这个顶点两侧的贝塞尔控制点，世界坐标；`null` 表示该侧没有。
+   *
+   * @remarks
+   * 只有 `path` 的顶点有。它们**复用既有可编辑路径的切线手柄**——那条通道本来就画「一个小圆
+   * 加一根连到顶点的杆」，并且只在活动顶点上显形，与「手柄只画正在被会话作用着的那个顶点的」
+   * 逐字是同一件事。为控制点另造一套夹点等于把同一个东西画两遍。
+   *
+   * 一条导入来的路径有几十个顶点，手柄全画就是几十根杆糊在图形上；显形由呈现层按活动顶点
+   * 决定，因此这里恒给出，不做筛选。
+   */
+  readonly inTangent?: StagePoint | null
+  readonly outTangent?: StagePoint | null
 }
 
 /** 夹点的呈现角色。 @public */
@@ -111,6 +129,39 @@ const VERTEX_PREFIX = 'v'
  */
 const SEGMENT_PREFIX = 'm'
 
+/**
+ * `path` 夹点的 id 形状。
+ *
+ * @remarks
+ * 顶点是 `p{子路径}v{点}`，两侧的控制点是同一个 id **加一个后缀**（`i` 入向、`o` 出向）。
+ * 后缀式而不是另起一套编号，是因为可编辑路径把切线手势报成「顶点 id + 哪一侧」，而求解手上
+ * 只有一个 id：后缀让这个反查是一次字符串匹配，不需要第二张表。
+ */
+const PATH_VERTEX = /^p(\d+)v(\d+)$/
+const PATH_TANGENT = /^p(\d+)v(\d+)([io])$/
+
+/** 一条子路径上的顶点序列：起点加每段的终点。 */
+function subpathPoints(subpath: ComposeSubpath): readonly ComposePosition[] {
+  return [subpath.start, ...subpath.segments.map((segment) => segment.to)]
+}
+
+/** 解析 `path` 夹点 id 指向的顶点，以及它是不是某一侧的控制点。 */
+function parsePathGripId(gripId: string): {
+  readonly subpath: number
+  readonly point: number
+  readonly side: 'in' | 'out' | null
+} | null {
+  const vertex = PATH_VERTEX.exec(gripId)
+  if (vertex) return { subpath: Number(vertex[1]), point: Number(vertex[2]), side: null }
+  const tangent = PATH_TANGENT.exec(gripId)
+  if (!tangent) return null
+  return {
+    subpath: Number(tangent[1]),
+    point: Number(tangent[2]),
+    side: tangent[3] === 'i' ? 'in' : 'out',
+  }
+}
+
 const TO_DEGREES = 180 / Math.PI
 
 /** `ComposePosition` 带 JSON 索引签名，接口类型的点要经字面量才能赋进去。 */
@@ -141,6 +192,7 @@ function normalizeSweep(delta: number, sign: number) {
  */
 function localGrips(curve: ComposeCurve): readonly StageCurveGrip[] {
   const vertex = (id: string, point: StagePoint): StageCurveGrip => ({ id, point, role: 'vertex' })
+  if (curve.kind === 'path') return pathGrips(curve)
   if (curve.kind === 'line') {
     // 中点夹点表达的是「按中点捕捉着移动」，而不是盒拖动的第二个入口：盒拖动走
     // `snapTranslation`，吸的是其他 Entity 的包围盒参考线且逐轴独立；这里走落点解算，
@@ -180,6 +232,30 @@ function segmentGrip(id: string, start: StagePoint, end: StagePoint): StageCurve
 }
 
 /**
+ * `path` 的夹点：一个顶点一个方块，两侧的控制点挂在它身上。
+ *
+ * @remarks
+ * 控制点走既有可编辑路径的切线通道，因此显形由呈现层按活动顶点决定——一条导入来的路径有几十
+ * 个顶点，手柄全画就是几十根杆糊在图形上。
+ *
+ * **刻意不按悬停显形**：手柄画在离顶点一段距离的地方，鼠标从顶点移过去的路上就已经离开了
+ * 顶点，手柄会在够到之前消失，那样它永远抓不住。活动顶点是既有会话本来就有的一档，且它是
+ * 用户显式做出的选择。
+ */
+function pathGrips(curve: ComposePathCurve): readonly StageCurveGrip[] {
+  return curve.subpaths.flatMap((subpath, subpathIndex) => (
+    subpathPoints(subpath).map((point, index): StageCurveGrip => ({
+      id: `p${subpathIndex}v${index}`,
+      point,
+      role: 'vertex',
+      // 入向控制点在前一段的 `c2` 上，出向在这一段的 `c1` 上；开放子路径的首尾各只有一侧。
+      inTangent: subpath.segments[index - 1]?.c2 ?? null,
+      outTangent: subpath.segments[index]?.c1 ?? null,
+    }))
+  ))
+}
+
+/**
  * 多段线的段列表。
  *
  * @remarks
@@ -203,6 +279,12 @@ function polylineSegments(
 /** 盒局部几何的轮廓点；弧按弦高拍扁，多段线与直线本来就是折线。 */
 function localOutline(curve: ComposeCurve): readonly StagePoint[] {
   if (curve.kind === 'line') return [curve.start, curve.end]
+  if (curve.kind === 'path') {
+    // 轮廓与命中、框选读的是**同一条**展开：各拍各的会让选中框贴不住画出来的形状。
+    const segments = composePathCubics(curve).flatMap(flattenComposeCubic)
+    const first = segments[0]
+    return first ? [first.start, ...segments.map(({ end }) => end)] : []
+  }
   if (curve.kind === 'polyline') {
     // 有圆角时轮廓必须跟着圆——它与渲染读的是同一列片段，各画各的会让选区框在角上露出
     // 一个尖，而形状本身是圆的。
@@ -256,7 +338,13 @@ export function stageCurveGrips(
   const curve = override ?? stageCurveBoxGeometry(source, entityId)
   const matrix = source.getWorldMatrix(entityId)
   if (!curve || !matrix) return []
-  return localGrips(curve).map((grip) => ({ ...grip, point: applyMatrix(matrix, grip.point) }))
+  return localGrips(curve).map((grip) => ({
+    ...grip,
+    point: applyMatrix(matrix, grip.point),
+    // 切线端点与顶点走同一个矩阵：各变换各的会让杆在旋转过的曲线上指错方向。
+    ...(grip.inTangent ? { inTangent: applyMatrix(matrix, grip.inTangent) } : null),
+    ...(grip.outTangent ? { outTangent: applyMatrix(matrix, grip.outTangent) } : null),
+  }))
 }
 
 /**
@@ -286,6 +374,7 @@ export function stageCurveOutline(
  * 弧的每个夹点**只改一个自由度，另一端一动不动**：拖起点而终点跟着跑是最容易写出来也最难用
  * 的版本——用户拖的是这一端，另一端凭什么动。
  *
+ * @param options - `breakSymmetry` 为真时，拖控制手柄只动被拖的那一个（`Alt`）。
  * @returns 夹点 id 不属于这条曲线时返回 `null`，调用方据此放弃这次写入。
  * @public
  */
@@ -293,7 +382,11 @@ export function applyStageCurveGrip(
   curve: ComposeCurve,
   gripId: string,
   point: StagePoint,
+  options?: { readonly breakSymmetry?: boolean },
 ): ComposeCurve | null {
+  if (curve.kind === 'path') {
+    return applyPathGrip(curve, gripId, point, options?.breakSymmetry === true)
+  }
   if (curve.kind === 'line') {
     if (gripId === START) return { ...curve, start: position(point) }
     if (gripId === END) return { ...curve, end: position(point) }
@@ -345,6 +438,77 @@ export function applyStageCurveGrip(
     }
   }
   return applyArcGrip(curve, gripId, point)
+}
+
+/**
+ * 把落点应用到 `path` 的顶点或控制手柄上。
+ *
+ * @remarks
+ * 拖**顶点**时两侧手柄跟着同一个位移走：手柄表达的是这个点两侧的切向，顶点搬家而切向留在
+ * 原地会让曲线在松手的瞬间扭一下，而用户拖的是那个点。
+ *
+ * 拖**手柄**默认让对侧**共线且等长**（关于顶点作镜像），`breakSymmetry` 时只动被拖的那一个。
+ * 平滑与尖角**不存标志位**：共不共线从控制点本身读得出来，存一位就是给同一份事实造第二个
+ * 来源，而它在用户拖出共线的那一刻就失真了。
+ *
+ * 对侧只在**同一条子路径里相邻的两段之间**存在。闭合子路径的收尾直段是展开时补出来的、
+ * 并不存在于数据里，因此接缝处没有对侧可镜像——那里的两个手柄各自独立。
+ */
+function applyPathGrip(
+  curve: ComposePathCurve,
+  gripId: string,
+  point: StagePoint,
+  breakSymmetry: boolean,
+): ComposePathCurve | null {
+  const parsed = parsePathGripId(gripId)
+  if (!parsed) return null
+  const subpath = curve.subpaths[parsed.subpath]
+  if (!subpath) return null
+  const points = subpathPoints(subpath)
+  const anchor = points[parsed.point]
+  if (!anchor) return null
+
+  const withSegments = (segments: readonly ComposeCubicSegment[], start = subpath.start) => ({
+    ...curve,
+    subpaths: curve.subpaths.map((item, index) => (
+      index === parsed.subpath ? { ...subpath, start, segments } : item
+    )),
+  })
+
+  if (parsed.side === null) {
+    const deltaX = point.x - anchor.x
+    const deltaY = point.y - anchor.y
+    const shift = (value: ComposePosition): ComposePosition => ({
+      x: value.x + deltaX,
+      y: value.y + deltaY,
+    })
+    const segments = subpath.segments.map((segment, at): ComposeCubicSegment => {
+      // 出向控制点在第 `point` 段上，入向控制点与这个顶点本身在第 `point - 1` 段上。
+      if (at === parsed.point) return { ...segment, c1: shift(segment.c1) }
+      if (at === parsed.point - 1) {
+        return { ...segment, c2: shift(segment.c2), to: position(point) }
+      }
+      return segment
+    })
+    return withSegments(segments, parsed.point === 0 ? position(point) : subpath.start)
+  }
+
+  // 入向控制点住在前一段的 `c2` 上，出向住在这一段的 `c1` 上；对侧就是另一个。
+  const draggedIndex = parsed.side === 'in' ? parsed.point - 1 : parsed.point
+  const oppositeIndex = parsed.side === 'in' ? parsed.point : parsed.point - 1
+  if (!subpath.segments[draggedIndex]) return null
+  // 对侧关于顶点作镜像：等长让「共线且等长」在两个分量上同时成立。
+  const opposite: ComposePosition = { x: 2 * anchor.x - point.x, y: 2 * anchor.y - point.y }
+  const segments = subpath.segments.map((segment, at): ComposeCubicSegment => {
+    if (at === draggedIndex) {
+      return parsed.side === 'in'
+        ? { ...segment, c2: position(point) }
+        : { ...segment, c1: position(point) }
+    }
+    if (breakSymmetry || at !== oppositeIndex) return segment
+    return parsed.side === 'in' ? { ...segment, c1: opposite } : { ...segment, c2: opposite }
+  })
+  return withSegments(segments)
 }
 
 function applyArcGrip(

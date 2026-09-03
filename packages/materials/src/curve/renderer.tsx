@@ -9,6 +9,7 @@ import {
   type ComposeArcCurve,
   type ComposeCurve,
   type ComposeOutlinePiece,
+  type ComposePathCurve,
   type ComposePolylineCurve,
 } from '@compose-ui/core'
 import type { ComposeRendererProps } from '@compose-ui/component-registry'
@@ -112,12 +113,30 @@ function roundedPolylinePathData(pieces: readonly ComposeOutlinePiece[], closed:
 }
 
 /**
+ * 自由路径的 `d`。
+ *
+ * @remarks
+ * 全部子路径写进**同一个** `d`：带洞图形的洞正是同一条路径内多条子路径共同决定的，拆成多个
+ * 元素会让 `fill-rule` 失效，屏幕上的洞变成一块实心。
+ *
+ * 段全是三次贝塞尔，因此这里只有 `C` 一种命令——直线段在协议层就已经升阶过了。
+ */
+function pathData(curve: ComposePathCurve): string {
+  return curve.subpaths.map((subpath) => {
+    const commands = subpath.segments.map((segment) => (
+      `C ${segment.c1.x} ${segment.c1.y} ${segment.c2.x} ${segment.c2.y} ${segment.to.x} ${segment.to.y}`
+    ))
+    return `M ${subpath.start.x} ${subpath.start.y} ${commands.join(' ')}${subpath.closed ? ' Z' : ''}`
+  }).join(' ')
+}
+
+/**
  * 按 `kind` 产出几何元素。
  *
  * @remarks
  * 多段线是**一个** `<polyline>` / `<polygon>` 而不是 N 个 `<line>`：命中由
  * `pointer-events: stroke` 天然承担，与直线用的是同一个机制，因此拆成 N 个元素换不来任何
- * 东西。
+ * 东西。`path` 同理是**一个** `<path>`，理由更硬：见 {@link pathData}。
  */
 function geometryElement(
   curve: ComposeCurve,
@@ -125,6 +144,12 @@ function geometryElement(
 ) {
   if (curve.kind === 'line') {
     return <line {...shared} x1={curve.start.x} x2={curve.end.x} y1={curve.start.y} y2={curve.end.y} />
+  }
+  if (curve.kind === 'path') {
+    // `fillRule` 缺席时 React 不写这个属性，SVG 的默认值本来就是 `nonzero`——与 core 的
+    // 判定读出同一个答案，因此渲染与命中不会分家。命中层也要带上它：`evenodd` 的洞是看得见
+    // 的空白，它不该接住点击。
+    return <path {...shared} d={pathData(curve)} fillRule={curve.fillRule} />
   }
   if (curve.kind === 'arc') {
     if (isComposeFullCircle(curve)) {
