@@ -450,8 +450,12 @@ export function StageDemoWorkspace() {
   const [switchDemo] = useState(
     () => new URLSearchParams(window.location.search).has('switch-demo'),
   )
+  /** `?symbols`：把 `app/symbols/` 里那批储能一次接线图元件挂进资源浏览器，用来试 SVG 导入。 */
+  const [symbols] = useState(
+    () => new URLSearchParams(window.location.search).has('symbols'),
+  )
   const [assetProvider] = useState(
-    () => createDemoAssetProvider({ navigationDemo, switchDemo }),
+    () => createDemoAssetProvider({ navigationDemo, switchDemo, symbols }),
   )
   const [providerOffline, setProviderOffline] = useState(false)
   const [componentStore] = useState(() => createComposeComponentStore({ provider: assetProvider }))

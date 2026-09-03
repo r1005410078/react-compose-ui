@@ -270,6 +270,58 @@ const demoCounterPageText = (navigation: boolean) => serializeComposePageFile({
  * `TERMINAL` 的基点 `(-30, 0)` **落在自身几何包围盒之外**，且它那次插入带 180 度旋转：块基点
  * 若被写成盒中心，转出来的位置会差整整一个基点偏移，而这个错误在基点落在盒内时看不出来。
  */
+/**
+ * 一个刀闸符号的演示 SVG。
+ *
+ * @remarks
+ * 这份夹具同时承担三件事：
+ *
+ * - **每个部件是一个 Entity**：`blade`（刀）与两个端子各自可选中，改一个的颜色不会波及另一个。
+ * - **样式在导入期求值掉**：描边写在 `<style>` 的 class 上，文档里不该留下任何 class。
+ * - **不能表达的属性降级、元素永不丢弃**：`nameplate` 带滤镜与渐变填充，它必须仍然在场景树里，
+ *   同时出现在诊断里。
+ *
+ * `viewBox` 与 `width` 一致，因此导入之后的坐标就是这里写的数——端到端断言可以直接读它们。
+ */
+/*
+ * 一个隔离开关（刀闸）符号。
+ *
+ * **每个图形都要写 `fill`**：SVG 的 `fill` 默认值是黑色，漏掉的图形在浏览器里就是一块黑，
+ * 导入器忠实照搬因此画布上也是一块黑——看起来像导入坏了，实际是素材坏了。这里靠 `.lead`
+ * 上的 `fill:none` 统一给出，唯一的例外是铭牌，它要显式填充。
+ *
+ * **符号画在 160×260 而不是 40×60**：端到端用例在 `?no-auto-fit` 下跑，缩放恒为 1，因此一个
+ * SVG 单位就是一个屏幕像素，而夹点与控制手柄的命中框是 16px 见方。画在 40×60 上时整条软连接
+ * 只有十几个像素宽，四个手柄的命中框叠成一团，按向某一个抓到的是相邻那一个。放大是坐标的
+ * 整体缩放，形状一个像素都没变。
+ */
+const demoSvgText = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 260" width="160" height="260">',
+  '<style>.lead{stroke:#33aa55;stroke-width:8;fill:none;stroke-linecap:round}</style>',
+  '<defs>',
+  '<linearGradient id="plate"><stop stop-color="#ff0000"/><stop stop-color="#0000ff"/></linearGradient>',
+  '<filter id="glow"><feGaussianBlur stdDeviation="4"/></filter>',
+  '</defs>',
+  '<g id="terminals">',
+  '<line id="lead-top" class="lead" x1="80" y1="8" x2="80" y2="64"/>',
+  '<line id="contact-fixed" class="lead" x1="52" y1="64" x2="108" y2="64"/>',
+  '<line id="lead-bottom" class="lead" x1="80" y1="240" x2="80" y2="254"/>',
+  '</g>',
+  '<line id="blade" class="lead" x1="80" y1="180" x2="124" y2="76"/>',
+  '<circle id="hinge" class="lead" cx="80" cy="180" r="6.4"/>',
+  // 灭弧罩：一段二次贝塞尔，导入期升次成三次；开放路径的首尾各只有一侧控制手柄。
+  '<path id="arcmark" class="lead" d="M48 48 Q 80 12 112 48"/>',
+  /*
+   * 铰点到下端子的软连接。两段三次贝塞尔，因此中间那个顶点两侧各有一个控制点——对称拖动
+   * 只有在这样的顶点上才看得见。四个控制点**刻意两两相隔三十个像素以上**：命中框重叠时
+   * 按向某一个抓到的是哪一个全凭叠放次序，而相邻顶点的手柄（这一个的出向与下一个的入向）
+   * 恰恰最容易挤在一起。
+   */
+  '<path id="flex" class="lead" d="M80 180 C 124 180 124 210 80 210 C 36 210 36 240 80 240"/>',
+  '<rect id="nameplate" x="8" y="104" width="36" height="24" rx="6" fill="url(#plate)" filter="url(#glow)"/>',
+  '</svg>',
+].join('')
+
 const demoDxfText = [
   '0', 'SECTION', '2', 'TABLES',
   '0', 'TABLE', '2', 'LAYER',
@@ -317,9 +369,18 @@ export function createDemoAssetProvider(options: {
    * 默认多两个成员会改掉它们。示例应用用 `?switch-demo` 打开。
    */
   readonly switchDemo?: boolean
+  /**
+   * 是否把 `app/symbols/` 整个映射成资源浏览器里的 `Symbols` 文件夹。
+   *
+   * @remarks
+   * 默认关闭，理由与上面两个相同：图片资源库列出 Provider 里的全部图片，而 `.svg` 算图片——
+   * 默认打开会让那张黄金图凭空多出二十项。示例应用用 `?symbols` 打开。
+   */
+  readonly symbols?: boolean
 } = {}): DemoAssetProvider {
   const navigationDemo = options.navigationDemo ?? false
   const switchDemo = options.switchDemo ?? false
+  const symbols = options.symbols ?? false
   const homePageText = demoHomePageText(navigationDemo)
   const counterPageText = demoCounterPageText(navigationDemo)
   let revisionNumber = 1
@@ -398,6 +459,19 @@ export function createDemoAssetProvider(options: {
       },
       content: new Blob([demoDxfText], { type: 'image/vnd.dxf' }),
     }],
+    ['demo-disconnector-svg', {
+      entry: {
+        id: 'demo-disconnector-svg',
+        parentId: root.id,
+        name: 'Disconnector.svg',
+        kind: 'file',
+        mediaType: 'image/svg+xml',
+        size: demoSvgText.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-disconnector-svg',
+      },
+      content: new Blob([demoSvgText], { type: 'image/svg+xml' }),
+    }],
     ['demo-pages', {
       entry: {
         id: 'demo-pages',
@@ -472,6 +546,47 @@ export function createDemoAssetProvider(options: {
       content: new Blob(['# Demo assets\n\nFiles are stored by an in-memory ComposeAssetProvider.\n']),
     }],
   ])
+
+  if (symbols) {
+    assets.set('demo-symbols', {
+      entry: { id: 'demo-symbols', parentId: root.id, name: 'Symbols', kind: 'folder' },
+    })
+    /*
+     * 目录整个映射进来而不是逐个列举：这批素材存在的意义就是「往文件夹里丢一个 `.svg`，
+     * 资源浏览器里就多一项」，逐个列举会让每加一个素材都要改一次这里，而漏改的症状是
+     * 「文件明明在盘上却导不进来」。
+     *
+     * 一级子目录成为资源浏览器里的子文件夹：素材按元件分类摆放，铺平成五十多项一列会让
+     * 「找到那一个」变成翻页。更深的层级不做——素材库没有，做了也没有东西验证它。
+     */
+    for (const [path, text] of Object.entries(
+      import.meta.glob('../symbols/**/*.svg', { query: '?raw', import: 'default', eager: true }),
+    ) as [string, string][]) {
+      const segments = path.replace('../symbols/', '').split('/')
+      const name = segments[segments.length - 1]!
+      const category = segments.length > 1 ? segments[0]! : null
+      const parentId = category === null ? 'demo-symbols' : `demo-symbols-${category}`
+      if (category !== null && !assets.has(parentId)) {
+        assets.set(parentId, {
+          entry: { id: parentId, parentId: 'demo-symbols', name: category, kind: 'folder' },
+        })
+      }
+      const id = `demo-symbol-${category ?? ''}-${name}`
+      assets.set(id, {
+        entry: {
+          id,
+          parentId,
+          name,
+          kind: 'file',
+          mediaType: 'image/svg+xml',
+          size: text.length,
+          revision: revision(revisionNumber),
+          assetKey: id,
+        },
+        content: new Blob([text], { type: 'image/svg+xml' }),
+      })
+    }
+  }
 
   options.pages?.forEach((page) => {
     const text = serializeComposePageFile({ ...createEmptyComposePageFile(), document: page.document })
