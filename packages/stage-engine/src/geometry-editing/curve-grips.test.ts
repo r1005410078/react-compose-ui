@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { COMPOSE_BUILTIN_COMPONENT_KEYS } from '@compose-ui/core'
 import { createStageSceneIndex } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
-import { applyStageCurveGrip, stageCurveCorners, stageCurveGrips } from './curve-grips'
+import {
+  applyStageCurveGrip,
+  stageCurveCorners,
+  stageCurveGripNeighbor,
+  stageCurveGrips,
+} from './curve-grips'
 import type { ComposeArcCurve, ComposeCurve, ComposeEntity } from '@compose-ui/core'
 
 /** 几何是 100×50 的斜线，盒可以另给——夹点必须跟着**画出来的**那条线走。 */
@@ -291,5 +296,52 @@ describe('stageCurveCorners', () => {
 
     stageCurveCorners(index, 'curve-a')
       .forEach(({ radius }) => { expect(radius).toBeCloseTo(20) })
+  })
+})
+
+describe('stageCurveGripNeighbor', () => {
+  function polylineEntity(closed: boolean): ComposeEntity {
+    const base = entity('poly', { width: 200, height: 100 })
+    return {
+      ...base,
+      components: {
+        ...base.components,
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]: { type: 'curve', props: {} },
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.curve]: {
+          kind: 'polyline',
+          vertices: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }],
+          closed,
+        },
+      },
+    }
+  }
+
+  it('直线的两个端点互为相邻顶点，中点没有', () => {
+    // 盒宽翻倍：相邻顶点与夹点读的是同一个投影，否则参照会停在没画出来的地方。
+    const value = document([curveEntity(200, 50)])
+    const index = createStageSceneIndex(value, layoutSnapshot(value))
+
+    expect(stageCurveGripNeighbor(index, 'curve-a', 'start')).toMatchObject({ x: 200, y: 50 })
+    expect(stageCurveGripNeighbor(index, 'curve-a', 'end')).toMatchObject({ x: 0, y: 0 })
+    expect(stageCurveGripNeighbor(index, 'curve-a', 'move')).toBeNull()
+  })
+
+  it('开放多段线只有首尾顶点有相邻顶点', () => {
+    const value = document([polylineEntity(false)])
+    const index = createStageSceneIndex(value, layoutSnapshot(value))
+
+    expect(stageCurveGripNeighbor(index, 'poly', 'v0')).toMatchObject({ x: 200, y: 0 })
+    expect(stageCurveGripNeighbor(index, 'poly', 'v2')).toMatchObject({ x: 200, y: 0 })
+    // 内部顶点两侧各有一段，没有唯一的「上一点」；段中点平移的是一整段，也没有。
+    expect(stageCurveGripNeighbor(index, 'poly', 'v1')).toBeNull()
+    expect(stageCurveGripNeighbor(index, 'poly', 'm0')).toBeNull()
+  })
+
+  it('闭合多段线没有端点可言', () => {
+    const value = document([polylineEntity(true)])
+    const index = createStageSceneIndex(value, layoutSnapshot(value))
+
+    expect(stageCurveGripNeighbor(index, 'poly', 'v0')).toBeNull()
+    expect(stageCurveGripNeighbor(index, 'poly', 'v2')).toBeNull()
   })
 })

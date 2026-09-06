@@ -924,7 +924,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 与按名启动并列的第二个入口：本会话由手势启动而不由词启动，因此没有名字，也不进
    * 「重复上一条命令」的序列——那条记的是命令名，而这里没有名可记。
    *
-   * `reference` 设成夹点的**原**位置，橡皮筋与相对坐标的参照因此白拿。
+   * `reference` 取目标自带的参照，缺席即夹点的**原**位置：橡皮筋、相对坐标与角度约束都从它
+   * 量起。导线的端点把参照放在相邻顶点上，正交因此保住那一段横平竖直——与画线时相对上一点
+   * 是同一件事；被排除出捕捉的仍是 `origin`，那是端点出发的地方。
    */
   const startGripSession = useCallback((target: StageGripTarget) => {
     // 文案从 ref 读：宿主每帧新建的 messages 若进依赖数组，会让 `applyStep` 每帧换身份，
@@ -935,7 +937,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     wireAnchors.current.clear()
     setGripTarget(target)
     setPrompt(session.prompt)
-    setReference(target.origin)
+    setReference(target.reference ?? target.origin)
     setPreview(null)
     setNotice(null)
   }, [setPrompt])

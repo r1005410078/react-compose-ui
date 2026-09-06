@@ -30,12 +30,18 @@ export function createStageGripSession(
 ): ComposeCommandSession<StageDraftingEffect> {
   // 提示恒定：取到点即结束，没有第二步可走。
   //
-  // `polar`：夹点的原位置就是 `reference`，因此两个数读作「从原来的地方挪了多远、往哪边」。
+  // `polar`：会话的参照点就是 `reference`（缺席时是夹点的原位置），两个数读作「离参照多远、
+  // 往哪边」。
+  //
+  // `constrain` 原样进提示：钉死角度约束这件事由**提示**声明，宿主的落点解算只认这一个字段，
+  // 夹点会话因此与 `WIRE` 的第二个点走同一条解算。
   const prompt: ComposeCommandPrompt = {
     message: messages.specifyNewLocation,
     accepts: ['point'],
     fields: 'polar',
+    ...(target.constrain ? { constrain: target.constrain } : {}),
   }
+  const { entityId, gripId, origin } = target
   let done = false
   return {
     get prompt() {
@@ -45,7 +51,8 @@ export function createStageGripSession(
       if (input.kind === 'cancel') return { status: 'cancelled' }
       if (input.kind === 'point') {
         done = true
-        return { status: 'commit', effect: { curveGrip: { ...target, point: input.point } } }
+        // 效果只带规划要用的三样加落点：约束与参照是取点期的事，点已经取到了。
+        return { status: 'commit', effect: { curveGrip: { entityId, gripId, origin, point: input.point } } }
       }
       return { status: 'rejected', message: messages.expectedPoint }
     },

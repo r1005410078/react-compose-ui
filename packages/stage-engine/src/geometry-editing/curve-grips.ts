@@ -348,6 +348,49 @@ export function stageCurveGrips(
 }
 
 /**
+ * 端点夹点的**相邻顶点**，世界坐标。
+ *
+ * @remarks
+ * 只对开放几何的两个端点有值：直线的 `start` 对 `end`、`end` 对 `start`，开放多段线的第一个
+ * 顶点对第二个、最后一个对倒数第二个。其余夹点（内部顶点、段中点、弧、闭合多段线、`path`）
+ * 一律 `null`——它们没有唯一的「上一点」可言。
+ *
+ * 它回答的是「拖这个端点时方向从哪里量」：画线时角度约束相对**上一点**生效，而端点在顶点
+ * 模式里的上一点就是它相邻的那个顶点。从端点自己的原位置量，正交只能让它沿出发方向走。
+ *
+ * id 语法住在本模块，因此这个反查也住在这里：调用方手上只有 id，不该自己拆 `v{下标}`。
+ *
+ * @public
+ */
+export function stageCurveGripNeighbor(
+  source: StageCurveGeometrySource,
+  entityId: string,
+  gripId: string,
+): StagePoint | null {
+  const curve = stageCurveBoxGeometry(source, entityId)
+  const matrix = source.getWorldMatrix(entityId)
+  if (!curve || !matrix) return null
+  const local = localGripNeighbor(curve, gripId)
+  return local ? applyMatrix(matrix, local) : null
+}
+
+/** 盒局部坐标里的相邻顶点；见 {@link stageCurveGripNeighbor}。 */
+function localGripNeighbor(curve: ComposeCurve, gripId: string): StagePoint | null {
+  if (curve.kind === 'line') {
+    if (gripId === START) return curve.end
+    if (gripId === END) return curve.start
+    return null
+  }
+  if (curve.kind !== 'polyline' || curve.closed || !gripId.startsWith(VERTEX_PREFIX)) return null
+  const index = Number(gripId.slice(VERTEX_PREFIX.length))
+  const last = curve.vertices.length - 1
+  if (!Number.isInteger(index) || last < 1) return null
+  if (index === 0) return curve.vertices[1] ?? null
+  if (index === last) return curve.vertices[last - 1] ?? null
+  return null
+}
+
+/**
  * 派生一个 Entity 的世界坐标轮廓折线。
  *
  * @remarks

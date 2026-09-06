@@ -4,6 +4,7 @@ export {
   applyStageCurveGrip,
   stageCurveBoxGeometry,
   stageCurveCorners,
+  stageCurveGripNeighbor,
   stageCurveGrips,
   stageCurveLocalPoint,
   stageCurveOutline,

@@ -3,10 +3,12 @@ import { getComposeCurve, getComposeLock } from '@compose-ui/core'
 import {
   applyStageCurveGrip,
   stageCurveBoxGeometry,
+  stageCurveGripNeighbor,
   stageCurveGrips,
   stageCurveLocalPoint,
   stageCurveOutline,
 } from '@compose-ui/stage-engine'
+import { isStageWireEntity } from '../drafting/wire-tap'
 import type { ComposeCurve } from '@compose-ui/core'
 import type {
   StageCurveGeometrySource,
@@ -319,9 +321,27 @@ export function useStageGeometryEditing(
         armable: (change.clickCount ?? 1) <= 1,
       }
       setDragging(true)
-      current.session.start({ entityId, gripId: gripIdOf(change), origin })
+      /*
+       * 导线的夹点会话钉死正交：画线时从第二个点起钉住的规范，进了顶点模式不该凭空消失——
+       * 用户拖一下端点就得到一条斜导线，而那是一张画错的图。钉的是提示里的那一档，管线次序
+       * 原样成立：捕捉到端口仍然短路（改接线不受影响），键入的坐标仍然不被改写。
+       *
+       * 端点的参照是**相邻顶点**（那一段因此始终横平竖直，与画线时相对上一点同一件事）；
+       * 内部顶点与段中点没有唯一的上一点，参照留在原位置——顶点只沿一根轴走，段只沿一根轴
+       * 平移，与 AutoCAD 的 ORTHO 相对夹点基点一致。
+       */
+      const gripId = gripIdOf(change)
+      const wire = isStageWireEntity(current.geometry.document.entities[entityId])
+      const neighbor = wire ? stageCurveGripNeighbor(current.geometry, entityId, gripId) : null
+      current.session.start({
+        entityId,
+        gripId,
+        origin,
+        ...(wire ? { constrain: 'ortho' as const } : {}),
+        ...(neighbor ? { reference: neighbor } : {}),
+      })
       // 按下即解一次：用户不必先移动一下才看到落点。
-      const preview = solve(entityId, gripIdOf(change), change.worldPoint, change.modifiers.alt)
+      const preview = solve(entityId, gripId, change.worldPoint, change.modifiers.alt)
       if (preview) setPreview(preview)
       return true
     }

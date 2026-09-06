@@ -102,6 +102,27 @@ describe('夹点取点会话', () => {
     expect(step.status).toBe('rejected')
     expect(session.prompt?.message).toBe('指定新位置')
   })
+
+  it('目标钉死的角度约束原样进提示，不钉时提示不带这个字段', () => {
+    // 钉死由提示声明：宿主的落点解算只认 `prompt.constrain`，与 `WIRE` 的第二个点同一条路。
+    const pinned = createStageGripSession(messages, { ...target, constrain: 'ortho' })
+    expect(pinned.prompt?.constrain).toBe('ortho')
+
+    const free = createStageGripSession(messages, target)
+    expect(free.prompt).not.toHaveProperty('constrain')
+  })
+
+  it('约束与参照不进效果：规划只需要目标与落点', () => {
+    const session = createStageGripSession(messages, {
+      ...target,
+      constrain: 'ortho',
+      reference: { x: 0, y: 0 },
+    })
+
+    const step = session.advance({ kind: 'point', point: { x: 140, y: 20 } })
+    if (step.status !== 'commit') throw new Error('取到点之后应当提交')
+    expect(step.effect.curveGrip).toEqual({ ...target, point: { x: 140, y: 20 } })
+  })
 })
 
 describe('夹点几何规划', () => {

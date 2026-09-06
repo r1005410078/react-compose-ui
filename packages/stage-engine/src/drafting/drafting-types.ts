@@ -14,6 +14,27 @@ export interface StageGripTarget {
   readonly entityId: string
   readonly gripId: string
   readonly origin: ComposeCommandPoint
+  /**
+   * 这一次取点被钉死的角度约束；缺席即跟随会话级设置。
+   *
+   * @remarks
+   * 由宿主按**目标 Entity 的性质**给出，引擎不判断：导线只走横平竖直是那条线的规范，而本包
+   * 不认识导线。它落进夹点会话的**提示**（`ComposeCommandPrompt.constrain`），与 `WIRE` 从
+   * 第二个点起钉死正交走的是同一个字段、同一条解算——画线时钉住的规范在顶点模式里不该
+   * 凭空消失。
+   */
+  readonly constrain?: 'ortho'
+  /**
+   * 方向与距离的参照点；缺席即 `origin`。
+   *
+   * @remarks
+   * 正交约束、极坐标读数与橡皮筋都从它量起。拖**端点**时它该是相邻的那个顶点而不是端点自己
+   * 的原位置：从原位置量，正交只能让端点沿自己出发的方向走，往另一轴一拖那一段就斜了；从
+   * 相邻顶点量，那一段始终是横的或竖的——与画线时「相对上一点」逐字相同。
+   *
+   * `origin` 仍然是被排除出捕捉的那一个点：要挡的是端点出发的地方，与参照无关。
+   */
+  readonly reference?: ComposeCommandPoint
 }
 
 /**
