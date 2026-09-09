@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMPOSE_ANIMATION_WORKSPACE_ID,
   COMPOSE_DEFAULT_WORKSPACES,
   COMPOSE_DRAWING_WORKSPACE_ID,
   COMPOSE_PAGE_WORKSPACE_ID,
@@ -26,7 +27,7 @@ describe('工作区定义与注入', () => {
 
   it('OpenSpec: editor-workspace-layout / 工作区定义与注入 / 用户另存的与注入的合成一份，撞 id 的跳过', () => {
     const list = resolveWorkspaceList(COMPOSE_DEFAULT_WORKSPACES, [custom('substation', '变电站'), custom('page', '冒充内建')])
-    expect(list.map((workspace) => workspace.id)).toEqual(['page', 'drawing', 'substation'])
+    expect(list.map((workspace) => workspace.id)).toEqual(['page', 'drawing', 'animation', 'substation'])
     expect(isInjectedWorkspace(COMPOSE_DEFAULT_WORKSPACES, 'page')).toBe(true)
     expect(isInjectedWorkspace(COMPOSE_DEFAULT_WORKSPACES, 'substation')).toBe(false)
   })
@@ -37,10 +38,11 @@ describe('工作区定义与注入', () => {
     expect(resolveWorkspaceTitle(page, 'en-US')).toBe('Page')
     expect(resolveWorkspaceTitle(custom('x', '变电站'), 'en-US')).toBe('变电站')
   })
-  it('OpenSpec: editor-workspace-layout / 内建工作区 / 恰好两个，差别在面板、库与种子', () => {
-    const [page, drawing] = COMPOSE_DEFAULT_WORKSPACES
-    expect(COMPOSE_DEFAULT_WORKSPACES).toHaveLength(2)
-    expect([page?.id, drawing?.id]).toEqual([COMPOSE_PAGE_WORKSPACE_ID, COMPOSE_DRAWING_WORKSPACE_ID])
+  it('OpenSpec: editor-workspace-layout / 内建工作区 / 恰好三个，差别在面板、库与种子', () => {
+    const [page, drawing, animation] = COMPOSE_DEFAULT_WORKSPACES
+    expect(COMPOSE_DEFAULT_WORKSPACES).toHaveLength(3)
+    expect([page?.id, drawing?.id, animation?.id])
+      .toEqual([COMPOSE_PAGE_WORKSPACE_ID, COMPOSE_DRAWING_WORKSPACE_ID, COMPOSE_ANIMATION_WORKSPACE_ID])
     // 会话开关只有十字光标臂长不同，其余逐字相同。
     expect({ ...page!.session, crosshairSize: 0 }).toEqual({ ...drawing!.session, crosshairSize: 0 })
     expect([page!.session.crosshairSize, drawing!.session.crosshairSize]).toEqual([5, 100])
@@ -60,6 +62,27 @@ describe('工作区定义与注入', () => {
     expect(preset(page)?.right).toEqual(preset(drawing)?.right)
     expect(preset(page)?.bottom).toEqual(preset(drawing)?.bottom)
     expect(preset(drawing)?.leftWeights?.[1]).toBeGreaterThan(preset(page)?.leftWeights?.[1] ?? 0.4)
+  })
+
+  it('OpenSpec: editor-workspace-layout / 内建工作区 / 动画与页面只差底部一行', () => {
+    const [page, , animation] = COMPOSE_DEFAULT_WORKSPACES
+    // 货架、会话开关与种子逐字相同：这个工作区存在的理由只是把时间线铺开。
+    expect(animation!.session).toEqual(page!.session)
+    expect(animation!.seeds).toEqual(page!.seeds)
+    expect(animation!.palette).toEqual(page!.palette)
+    const preset = (workspace: typeof page) => (
+      workspace!.layout.kind === 'preset' ? workspace!.layout : null
+    )
+    expect(preset(animation)?.left).toEqual(preset(page)?.left)
+    expect(preset(animation)?.right).toEqual(preset(page)?.right)
+    // 时间线打头、活动，底部展开；页面的底部没有时间线。
+    expect(preset(animation)?.bottom).toEqual(['timeline', 'assetBrowser', 'command', 'transactionLog'])
+    expect(preset(animation)?.bottomCollapsed).toBe(false)
+    expect(preset(page)?.bottom ?? ['assetBrowser', 'command', 'transactionLog']).not.toContain('timeline')
+    // 货架多一格「动画编辑」，它指向的动作在目录里，因此不是唯一入口。
+    expect(animation!.toolbar).toContain('animation')
+    expect(page!.toolbar).not.toContain('animation')
+    expect(resolveWorkspaceTitle(animation!, 'en-US')).toBe('Animation')
   })
 
   it('OpenSpec: editor-workspace-layout / 内建工作区 / 两份货架', () => {

@@ -77,9 +77,10 @@ const messages = {
       assetBrowserEmpty: '连接资源 Provider 以浏览文件',
       selectNode: '选择一个组件以编辑其属性',
       selectSingleNode: '同时选中了多个组件；只选中一个才能编辑属性',
-      modeSwitcher: '编辑模式',
-      modeDesign: '设计',
-      modeAnimation: '动画',
+      /** 时间线 chrome 上的动画编辑开关：`aria-pressed`，回答「拖动会不会变成关键帧」。 */
+      animationEditing: '动画编辑',
+      animationEditingOn: '拖动与属性编辑写入播放头处的关键帧',
+      animationEditingOff: '拖播放头或打点即开始编辑动画',
     },
     workspaces: {
       switcher: '工作区',
@@ -173,6 +174,7 @@ const messages = {
       scale: '缩放',
       rotate: '旋转',
       transformGizmo: '变换指示器',
+      animationEditing: '动画编辑',
       pan: '平移',
       snap: '吸附',
       grid: '显示网格',
@@ -363,9 +365,9 @@ const messages = {
       assetBrowserEmpty: 'Connect an asset provider to browse files',
       selectNode: 'Select one component to edit its properties',
       selectSingleNode: 'Multiple components selected; select exactly one to edit properties',
-      modeSwitcher: 'Editor mode',
-      modeDesign: 'Design',
-      modeAnimation: 'Animation',
+      animationEditing: 'Animate',
+      animationEditingOn: 'Drags and property edits write keyframes at the playhead',
+      animationEditingOff: 'Scrub the playhead or set a key to start animating',
     },
     workspaces: {
       switcher: 'Workspace',
@@ -460,6 +462,7 @@ const messages = {
       scale: 'Scale',
       rotate: 'Rotate',
       transformGizmo: 'Transform gizmo',
+      animationEditing: 'Animate',
       pan: 'Pan',
       snap: 'Snap',
       grid: 'Show grid',
@@ -596,7 +599,7 @@ const actionLabels: Record<
   'zh-CN': {
     'editor.settings': '打开设置',
     'document.save': '保存文档',
-    'document.toggleAnimationMode': '切换动画模式',
+    'document.toggleAnimationMode': '动画编辑',
     'stage.temporaryPan': '临时平移',
     'stage.selectTool': '选择工具',
     'stage.drawContainerTool': '容器工具',
@@ -634,7 +637,7 @@ const actionLabels: Record<
   'en-US': {
     'editor.settings': 'Open settings',
     'document.save': 'Save document',
-    'document.toggleAnimationMode': 'Toggle animation mode',
+    'document.toggleAnimationMode': 'Animate',
     'stage.temporaryPan': 'Temporary pan',
     'stage.selectTool': 'Select tool',
     'stage.drawContainerTool': 'Container tool',
@@ -693,6 +696,7 @@ const actionReasons = {
     flowUngroup: '自动布局 Flow 子项不能参与解组；请先转为 Absolute',
     emptyClipboard: '剪贴板为空',
     noDocument: '没有打开的文档',
+    noTimeline: '当前工作区没有时间线；切到动画工作区',
   },
   'en-US': {
     noSelection: 'Select an object first',
@@ -706,6 +710,7 @@ const actionReasons = {
     flowUngroup: 'Auto layout flow children cannot be ungrouped; convert them to absolute first',
     emptyClipboard: 'Clipboard is empty',
     noDocument: 'No document is open',
+    noTimeline: 'This workspace has no timeline; switch to the Animation workspace',
   },
 } as const
 
@@ -730,6 +735,7 @@ export interface EditorActionReasons {
   readonly flowUngroup: string
   readonly emptyClipboard: string
   readonly noDocument: string
+  readonly noTimeline: string
 }
 
 /**
@@ -781,6 +787,7 @@ export function getEditorActionReasons(
     flowUngroup: formatMessage('editor.actionReason.flowUngroup', current.flowUngroup),
     emptyClipboard: formatMessage('editor.actionReason.emptyClipboard', current.emptyClipboard),
     noDocument: formatMessage('editor.actionReason.noDocument', current.noDocument),
+    noTimeline: formatMessage('editor.actionReason.noTimeline', current.noTimeline),
   }
 }
 

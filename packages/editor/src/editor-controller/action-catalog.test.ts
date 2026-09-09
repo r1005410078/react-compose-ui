@@ -434,9 +434,18 @@ describe('OpenSpec: editor-preferences / 文档级动作进入目录', () => {
     const actions = createComposeEditorActions(context({ toggleAnimationMode }))
     const toggle = actions.find((action) => action.id === 'document.toggleAnimationMode')
 
-    expect(toggle).toMatchObject({ title: '切换动画模式', disabledReason: undefined })
+    expect(toggle).toMatchObject({ title: '动画编辑', disabledReason: undefined })
     toggle?.run()
     expect(toggleAnimationMode).toHaveBeenCalledOnce()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 动画编辑开关 / 没有时间线时列出但不可用并说明原因', () => {
+    const toggleAnimationMode = vi.fn()
+    const actions = createComposeEditorActions(context({ toggleAnimationMode, animationTimelineMissing: true }))
+    const toggle = actions.find((action) => action.id === 'document.toggleAnimationMode')
+    expect(toggle?.disabledReason).toBe('当前工作区没有时间线；切到动画工作区')
+    toggle?.run()
+    expect(toggleAnimationMode).not.toHaveBeenCalled()
   })
 
   it('保存默认绑 Cmd/Ctrl+S，模式切换默认不绑键', () => {

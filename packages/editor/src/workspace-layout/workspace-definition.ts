@@ -3,6 +3,7 @@ import type { ComposeAngleConstraint } from '@compose-ui/core'
 import type { ComposeLocale } from '@compose-ui/ui-context'
 import type { ReactNode } from 'react'
 import {
+  ANIMATION_TOOLBAR_SHELF,
   DRAWING_TOOLBAR_SHELF,
   PAGE_TOOLBAR_SHELF,
 } from '../stage-toolbar/toolbar-shelf'
@@ -14,7 +15,9 @@ import { WORKSPACE_PANEL_IDS } from './workspace-ids'
  *
  * @remarks
  * 画布不在其中：它永远在中央，宿主摆的是围着它的东西。`history` 只在宿主提供了历史控制器或
- * 显式历史面板时才真的出现，没有时从布局里静默略过。
+ * 显式历史面板时才真的出现，没有时从布局里静默略过。`timeline` 是动画时间线：它像别的面板一样
+ * 随布局持久化，不再由任何模式动态加入或移除——动画编辑是一个显式开关，时间线只是它的可见
+ * 依据，不在布局里的工作区里也就没有动画编辑。
  *
  * @public
  */
@@ -26,6 +29,7 @@ export type ComposeWorkspacePanelName =
   | 'assetBrowser'
   | 'command'
   | 'transactionLog'
+  | 'timeline'
 
 /** 面板名到 Dockview 面板 id 的映射。 @internal */
 export const WORKSPACE_PANEL_ID_BY_NAME: Readonly<Record<ComposeWorkspacePanelName, string>> = {
@@ -36,6 +40,8 @@ export const WORKSPACE_PANEL_ID_BY_NAME: Readonly<Record<ComposeWorkspacePanelNa
   assetBrowser: WORKSPACE_PANEL_IDS.assetBrowser,
   command: WORKSPACE_PANEL_IDS.command,
   transactionLog: WORKSPACE_PANEL_IDS.transactionLog,
+  // 面板 id 沿用 `compose-animation`：它持久化在快照里，改名等于让既有快照全部失配。
+  timeline: WORKSPACE_PANEL_IDS.animation,
 }
 
 /**
@@ -194,6 +200,9 @@ export const COMPOSE_PAGE_WORKSPACE_ID = 'page'
 /** 内建工作区「绘图」的 id。 @public */
 export const COMPOSE_DRAWING_WORKSPACE_ID = 'drawing'
 
+/** 内建工作区「动画」的 id。 @public */
+export const COMPOSE_ANIMATION_WORKSPACE_ID = 'animation'
+
 /** 内建的默认布局：今天的四区。 @internal */
 export const DEFAULT_WORKSPACE_LAYOUT_PRESET: ComposeWorkspaceLayoutPreset = {
   kind: 'preset',
@@ -213,6 +222,19 @@ export const DEFAULT_WORKSPACE_LAYOUT_PRESET: ComposeWorkspaceLayoutPreset = {
 const DRAWING_WORKSPACE_LAYOUT_PRESET: ComposeWorkspaceLayoutPreset = {
   ...DEFAULT_WORKSPACE_LAYOUT_PRESET,
   leftWeights: [0.35, 0.65],
+}
+
+/**
+ * 动画的默认布局：与页面同一套四区，只有底部一行不同——时间线打头、展开、活动。
+ *
+ * @remarks
+ * 这个工作区存在的理由就是把时间线铺开，别的都不该变：货架、会话开关与种子与页面逐字相同。
+ * 时间线是它唯一的差别，而动画编辑开关不在这里——切换工作区永远不打开它。
+ */
+const ANIMATION_WORKSPACE_LAYOUT_PRESET: ComposeWorkspaceLayoutPreset = {
+  ...DEFAULT_WORKSPACE_LAYOUT_PRESET,
+  bottom: ['timeline', 'assetBrowser', 'command', 'transactionLog'],
+  bottomCollapsed: false,
 }
 
 /** 内建的默认会话开关：与 controller 的初值逐字相同。 @internal */
@@ -285,12 +307,13 @@ const DRAWING_WORKSPACE_PALETTE: ComposeComponentShelf = {
 }
 
 /**
- * 内建工作区列表：页面与绘图。
+ * 内建工作区列表：页面、绘图与动画。
  *
  * @remarks
  * 「页面」就是今天的默认布局有了个名字；「绘图」把工具的耗材铺开——符号库拉高、十字光标贯穿
- * 图面、网格种子按 CAD 取 10、对齐吸附关掉。两者的工具栏货架**不同**，因为各自要用的入口不同；
- * 这不违反「工作区不是模式」——收走的是入口，命令行、快捷键与命令面板三条路一条都没少。
+ * 图面、网格种子按 CAD 取 10、对齐吸附关掉；「动画」把时间线铺开——它是页面加一块底部展开的
+ * 时间线，其余逐字相同。三者的工具栏货架**不同**，因为各自要用的入口不同；这不违反「工作区
+ * 不是模式」——收走的是入口，命令行、快捷键与命令面板三条路一条都没少。
  * 宿主经 `workspaces` prop 替换这份列表（`[...COMPOSE_DEFAULT_WORKSPACES, mine]`）。
  *
  * @public
@@ -314,12 +337,22 @@ export const COMPOSE_DEFAULT_WORKSPACES: readonly ComposeEditorWorkspaceDefiniti
     session: DRAWING_WORKSPACE_SESSION,
     seeds: DRAWING_WORKSPACE_SEEDS,
   },
+  {
+    id: COMPOSE_ANIMATION_WORKSPACE_ID,
+    title: '动画',
+    layout: ANIMATION_WORKSPACE_LAYOUT_PRESET,
+    palette: PAGE_WORKSPACE_PALETTE,
+    toolbar: ANIMATION_TOOLBAR_SHELF,
+    session: DEFAULT_WORKSPACE_SESSION,
+    seeds: DEFAULT_WORKSPACE_SEEDS,
+  },
 ]
 
 /** 内建工作区的本地化标题；定义里的 `title` 只是回退。 */
 const BUILTIN_TITLES: Readonly<Record<string, Readonly<Record<ComposeLocale, string>>>> = {
   [COMPOSE_PAGE_WORKSPACE_ID]: { 'zh-CN': '页面', 'en-US': 'Page' },
   [COMPOSE_DRAWING_WORKSPACE_ID]: { 'zh-CN': '绘图', 'en-US': 'Drawing' },
+  [COMPOSE_ANIMATION_WORKSPACE_ID]: { 'zh-CN': '动画', 'en-US': 'Animation' },
 }
 
 /** 内建工作区的本地化说明：hover / focus 时说这个工作区会换的东西。 */
@@ -331,6 +364,10 @@ const BUILTIN_DESCRIPTIONS: Readonly<Record<string, Readonly<Record<ComposeLocal
   [COMPOSE_DRAWING_WORKSPACE_ID]: {
     'zh-CN': '面板：场景图、符号库（拉高）、属性。十字光标贯穿图面，新建页面网格 10。',
     'en-US': 'Panels: scene, symbol library (taller), inspector. Full-canvas crosshair, new pages use a 10px grid.',
+  },
+  [COMPOSE_ANIMATION_WORKSPACE_ID]: {
+    'zh-CN': '页面的面板加底部展开的时间线。动画编辑是时间线上的开关，切换工作区不会打开它。',
+    'en-US': 'The page panels plus an expanded timeline. Animating is a switch on the timeline; switching workspaces never turns it on.',
   },
 }
 

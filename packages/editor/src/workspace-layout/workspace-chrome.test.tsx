@@ -144,39 +144,21 @@ describe('WorkspaceDocumentTabs', () => {
     expect(content.activateDocument).toHaveBeenCalledWith('asset')
   })
 
-  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 切换器住在标签行尾', () => {
+  it('OpenSpec: editor-workspace-layout / 动画编辑开关 / 标签行尾没有模式切换器', () => {
     /*
-     * 标签行说「这是哪个文档、在编它的哪一层」，工具栏行说「用什么工具」——两行各有一个单一
-     * 作用域。它在 `tablist` 之外，因此方向键在标签之间循环时走不进它。
+     * 「设计 / 动画」切换器已删：布局那一半归了工作区（时间线是面板），语义那一半归了时间线
+     * chrome 上的开关。标签行只剩文档。
      */
     const documents = new Map([['b', pageSession('b', 'Counter', true)]])
     renderTabs({
       documents,
       activeDocumentPanelId: 'b',
-      editorMode: 'design',
-      onEditorModeChange: vi.fn(),
+      animationEditing: false,
+      toggleAnimationEditing: vi.fn(),
       saveDocument: vi.fn(),
     })
-    const mode = screen.getByRole('radiogroup', { name: '编辑模式' })
-    expect(mode).toBeInTheDocument()
-    expect(screen.getByRole('tablist').contains(mode)).toBe(false)
-  })
-
-  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 资源文档没有模式', () => {
-    // 资源文件文档没有场景，也就没有「在编哪一层」这个问题。
-    renderTabs({
-      documents: new Map([['asset', {
-        kind: 'asset',
-        panelId: 'asset',
-        readOnly: false,
-        dirty: false,
-        entry: { name: 'logo.svg' },
-      } as unknown as ComposeWorkspaceDocumentSession]]),
-      activeDocumentPanelId: 'asset',
-      editorMode: 'design',
-      onEditorModeChange: vi.fn(),
-    })
     expect(screen.queryByRole('radiogroup', { name: '编辑模式' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: '动画' })).not.toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / 文档标签条 / 标签条上没有顶栏那三段', () => {

@@ -16,6 +16,7 @@ import {
 } from '@compose-ui/core'
 import { ComposeAssetBrowser } from '@compose-ui/asset-browser'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
+import type { ComposeAnimationPanelAction, ComposeAnimationPanelValue } from '@compose-ui/animation-panel'
 import {
   COMPOSE_ANIMATION_COMMAND_TYPES,
   createComposeAnimationCommandHandlers,
@@ -113,7 +114,6 @@ import {
 } from '../workspace-layout'
 import type {
   ComposeComponentDocumentSession,
-  ComposeEditorMode,
   ComposePageDocumentSession,
   ComposeWorkspaceDocumentSession,
   ComposeWorkspaceSeeds,
@@ -123,6 +123,8 @@ import {
   ComposeToolbarShelfContext,
 } from '../stage-toolbar/toolbar-shelf'
 import type { ComposeToolbarItem } from '../stage-toolbar/toolbar-shelf'
+import { COMPOSE_TOOLBAR_ANIMATION_ID } from '../stage-toolbar/toolbar-shelf'
+import { StageToolbarIcon } from '../stage-toolbar/stage-toolbar-icons'
 import {
   applyWorkspaceInitialSizes,
   COMPOSE_DEFAULT_WORKSPACES,
@@ -144,7 +146,6 @@ import {
   EditorTopBar,
   WorkspacePortals,
   WORKSPACE_CARD_GAP,
-  WORKSPACE_COMPONENT_IDS,
   WORKSPACE_HEADER_HEIGHT,
   WORKSPACE_PANEL_IDS,
 } from '../workspace-layout'
@@ -1988,82 +1989,62 @@ export function ComposeEditor({
     settingsButtonRef.current = element
   }, [])
 
-  /** setEditorMode 正在重组底部面板时抑制 onDidActivePanelChange 的回流。 */
-  const editorModeGuardRef = useRef(false)
-  /** 进入动画模式前底部组的折叠状态；切回设计模式时恢复。 */
-  const bottomCollapsedBeforeAnimationRef = useRef<boolean | null>(null)
   /**
-   * 设计/动画模式的唯一切换入口：驱动会话状态并重组底部 Dockview 工具组。
+   * 时间线面板此刻在不在布局里：动画编辑只有在它在的时候才谈得上。
    *
    * @remarks
-   * 进入动画：动态加入时间线面板、激活并展开底部组；回到设计：移除时间线面板、
-   * 恢复资源标签与切换前的折叠状态。addPanel/removePanel 会触发
-   * `onDidActivePanelChange`，用 guard 防止监听器把切换路由回自己形成循环。
+   * 它是 React 状态而不是每次去问 Dockview：命令面板那一条要在渲染期读它。由布局事件同步
+   * （见 `syncAnimationPanel`）。
    */
+  const [timelinePanelPresent, setTimelinePanelPresent] = useState(false)
   /**
-   * 把时间线面板加进底部组、激活并展开。
+   * 让时间线可见：设为组内活动标签；住在底部边缘组时把那个组展开。
    *
-   * @remarks
-   * 进入动画模式与工作区切换之后都要它：时间线不进布局快照，切换重建面板之后得加回来。
+   * @returns 布局里没有时间线时 `false`——那时进不了动画编辑，它唯一的可见依据不在。
    */
-  const ensureAnimationPanel = useCallback(() => {
+  const revealAnimationPanel = useCallback(() => {
     // 宿主测试替身可能只实现部分 api：Dockview 操作逐个防御。
     const api = dockviewApiRef.current as Partial<DockviewReadyEvent['api']> | null
-    if (!api) return
-    const bottomGroup = typeof api.getEdgeGroup === 'function' ? api.getEdgeGroup('bottom') : undefined
-    let panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
-    if (!panel && bottomGroup && typeof api.addPanel === 'function') {
-      panel = api.addPanel({
-        id: WORKSPACE_PANEL_IDS.animation,
-        component: WORKSPACE_COMPONENT_IDS.animation,
-        tabComponent: 'workspaceTab',
-        title: editorMessagesRef.current.workspace.animation,
-        position: { referenceGroup: bottomGroup.id },
-      })
-    }
-    panel?.api.setActive()
-    bottomGroup?.expand()
+    const panel = api?.getPanel?.(WORKSPACE_PANEL_IDS.animation)
+    if (!panel) return false
+    panel.api.setActive()
+    const bottomGroup = typeof api?.getEdgeGroup === 'function' ? api.getEdgeGroup('bottom') : undefined
+    const group = (panel as { readonly group?: { readonly id: string } }).group
+    // 时间线被拖去别处时没有折叠可言；只有它住在底部边缘组时才展开那个组。
+    if (bottomGroup && (group === undefined || group.id === bottomGroup.id)) bottomGroup.expand()
+    return true
   }, [])
-  const setEditorMode = useCallback((
-    mode: ComposeEditorMode,
-    options?: { readonly restoreCollapsed?: boolean },
-  ) => {
-    const rawApi = dockviewApiRef.current
-    if (!rawApi || editorModeGuardRef.current) return
-    const active = animationModeRef.current.active
-    if ((mode === 'animation') === active) return
-    editorModeGuardRef.current = true
-    try {
-      // 宿主测试替身可能只实现部分外层 api：Dockview 操作逐个防御，会话状态照常切换。
-      const api = rawApi as Partial<DockviewReadyEvent['api']>
-      const bottomGroup = typeof api.getEdgeGroup === 'function'
-        ? api.getEdgeGroup('bottom')
-        : undefined
-      if (mode === 'animation') {
-        bottomCollapsedBeforeAnimationRef.current = bottomGroup?.isCollapsed() ?? null
-        ensureAnimationPanel()
-        animationModeRef.current.setActive(true)
-      }
-      else {
-        const panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
-        const animationWasActive = panel?.api.isActive ?? false
-        if (panel) api.removePanel?.(panel)
-        // 只有时间线仍是活动标签（切换器退出）才回到资源标签；用户点击其它底部标签
-        // 退出时，保持他们刚选中的标签。
-        if (animationWasActive) {
-          api.getPanel?.(WORKSPACE_PANEL_IDS.assetBrowser)?.api.setActive()
-        }
-        // 折叠恢复同理：点击底部标签退出说明用户正要使用底部内容，不应立刻折叠回去。
-        if ((options?.restoreCollapsed ?? true)
-          && bottomCollapsedBeforeAnimationRef.current === true) bottomGroup?.collapse()
-        bottomCollapsedBeforeAnimationRef.current = null
-        animationModeRef.current.setActive(false)
-      }
-    }
-    finally {
-      editorModeGuardRef.current = false
-    }
-  }, [ensureAnimationPanel])
+  /**
+   * 动画编辑开关的唯一写入口。
+   *
+   * @remarks
+   * 开只在时间线在布局里时成立，关随时可以。开关本身是 `useAnimationMode` 的会话状态；这里
+   * 只负责把它与时间线的可见性绑在一起：开之前先把时间线亮出来，用户按下去就看得见它在说什么。
+   * 切换工作区**永不**走这里开它——按文档记忆的工作区会让「打开页面」等于「进了录制态」。
+   */
+  const setAnimationEditing = useCallback((on: boolean) => {
+    if (on && !revealAnimationPanel()) return
+    animationModeRef.current.setActive(on)
+  }, [revealAnimationPanel])
+  /**
+   * 时间线面板不再可见即退出动画编辑，并更新「布局里有没有时间线」。
+   *
+   * @remarks
+   * 判据是**可见依据**：屏幕上唯一说明「拖动会变成关键帧」的东西就是时间线，它被别的标签
+   * 盖住、被关掉、被换掉的布局去掉时都不允许那个状态存在。用微任务合并：工作区切换是
+   * `clear` + 重建，中途面板会消失一瞬，同步判断会把「切到另一个也有时间线的布局」误判成退出。
+   */
+  const syncAnimationPanel = useCallback(() => {
+    queueMicrotask(() => {
+      const api = dockviewApiRef.current as Partial<DockviewReadyEvent['api']> | null
+      if (!api) return
+      const panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
+      setTimelinePanelPresent(panel !== undefined)
+      // 测试替身的面板 api 未必实现 `isVisible`：缺席按可见算，只有明确的 false 才算被盖住。
+      const visible = panel !== undefined && panel.api.isVisible !== false
+      if (!visible && animationModeRef.current.active) animationModeRef.current.setActive(false)
+    })
+  }, [])
 
   /** 空态创建引导：在页面同目录创建动画文件、绑定并水合镜像。 */
   const animationModeMessages = editorMessages.animationMode
@@ -2094,6 +2075,7 @@ export function ComposeEditor({
      */
     if (activeComponentSession) {
       hydrateAnimation(manifest, animationScopeFrameId)
+      setAnimationEditing(true)
       return
     }
     if (!activePageSession || !pageProvider) return
@@ -2122,6 +2104,8 @@ export function ComposeEditor({
         },
         animationScopeFrameId,
       )
+      // 创建是用户对动画本身的动作：紧接着就要打点，直接进入动画编辑。
+      setAnimationEditing(true)
     }
     catch {
       setPageNotice(animationModeMessages.animationOperationFailed)
@@ -2135,6 +2119,7 @@ export function ComposeEditor({
     handlePageAnimationChanged,
     hydrateAnimation,
     pageProvider,
+    setAnimationEditing,
   ])
 
   /** 撤销越过水合事务后的恢复入口：重新派发水合，不再创建文件。 */
@@ -2148,6 +2133,7 @@ export function ComposeEditor({
       : undefined
     if (manifest) {
       hydrateAnimation(manifest)
+      setAnimationEditing(true)
       return
     }
     // 打开页面时文件加载失败会让会话没有基线清单：按当前引用重新加载一次。
@@ -2156,7 +2142,7 @@ export function ComposeEditor({
         activePageSession.pageKey,
         reference,
         animationScopeFrameId,
-      ).catch(() => {
+      ).then(() => { setAnimationEditing(true) }).catch(() => {
         setPageNotice(animationModeMessages.animationOperationFailed)
       })
     }
@@ -2167,16 +2153,17 @@ export function ComposeEditor({
     animationScopeFrameId,
     handlePageAnimationChanged,
     hydrateAnimation,
+    setAnimationEditing,
   ])
 
   const historyEnabled = resolvedHistory !== undefined || slots?.history !== undefined
   /**
-   * Dockview 就绪：摆出四区并订阅底部标签的活动事件。
+   * Dockview 就绪：摆出四区并订阅布局事件。
    *
    * @remarks
    * 文档不是 Dockview 面板，因此这里不再从活动面板事件推导活动文档——那由标签条与打开路径
-   * 直接写 state。留下的订阅只做一件事：动画模式下点击底部的其它标签等价于切回设计模式。
-   * `onReady` 在 Strict Mode 下会重放，按 api 身份去重。
+   * 直接写 state。留下的订阅只做一件事：跟着布局判断时间线在不在、可不可见，据此维护动画编辑
+   * 开关。`onReady` 在 Strict Mode 下会重放，按 api 身份去重。
    */
   const handleReady = useCallback((event: DockviewReadyEvent) => {
     if (dockviewApiRef.current === event.api) {
@@ -2199,18 +2186,19 @@ export function ComposeEditor({
         applyWorkspaceInitialSizes(event.api, workspaceToolsWeightRef.current)
       })
     }
-    event.api.onDidActivePanelChange?.((change) => {
-      if (editorModeGuardRef.current) return
-      const panelId = change.panel?.id
-      if (
-        panelId === WORKSPACE_PANEL_IDS.transactionLog
-        || panelId === WORKSPACE_PANEL_IDS.command
-        || panelId === WORKSPACE_PANEL_IDS.assetBrowser
-      ) {
-        setEditorMode('design', { restoreCollapsed: false })
-      }
-    })
-  }, [historyEnabled, hostI18n?.formatMessage, resolvedPreferences.locale, setEditorMode])
+    // 时间线在不在、可不可见随布局走：这几个事件覆盖活动标签切换、面板增删与整份布局换掉。
+    const api = event.api as Partial<DockviewReadyEvent['api']>
+    for (const subscribe of [
+      api.onDidActivePanelChange,
+      api.onDidAddPanel,
+      api.onDidRemovePanel,
+      api.onDidLayoutChange,
+      api.onDidLayoutFromJSON,
+    ]) {
+      if (typeof subscribe === 'function') subscribe.call(event.api, () => { syncAnimationPanel() })
+    }
+    syncAnimationPanel()
+  }, [historyEnabled, hostI18n?.formatMessage, resolvedPreferences.locale, syncAnimationPanel])
 
   // 两侧的收起状态从组的可见性派生：隐藏是布局的一部分，随工作区的快照走。
   const sideCollapse = useWorkspaceSideCollapse(dockviewApiRef, workspaceReady)
@@ -2260,8 +2248,6 @@ export function ComposeEditor({
     formatMessage: hostI18n?.formatMessage,
     historyEnabled,
     activeDocumentKey: activeDocumentPanelId,
-    animationActive: animationMode.active,
-    restoreAnimationPanel: ensureAnimationPanel,
     sessionPort,
     notify: setPageNotice,
   })
@@ -2269,20 +2255,44 @@ export function ComposeEditor({
     workspaceSeedsRef.current = workspaceSession.seeds
     workspaceToolsWeightRef.current = workspaceSession.toolsWeight
   })
+  // 切换工作区之后再同步一次时间线的在场与可见：布局应用在会话 Hook 自己的 effect 里完成，
+  // 这个 effect 排在它后面；宿主替身不发 Dockview 事件时也靠它。
+  const workspaceCurrentId = workspaceSession.currentId
+  useEffect(() => {
+    syncAnimationPanel()
+  }, [syncAnimationPanel, workspaceCurrentId])
   /*
    * 货架与宿主目录项经 Context 下发：中间那一层属于宿主（`slots.stageToolbar` 可以把工具栏包进
    * 自己的节点里），`cloneElement` 补 prop 那条路在那里就断了。
    */
   const { openDialog, setToolbarShelf, toolbar: workspaceToolbar } = workspaceSession
   const openToolbarDialog = useCallback(() => { openDialog('toolbar') }, [openDialog])
+  /**
+   * 「动画编辑」在工具栏目录里的那一格：指向 `document.toggleAnimationMode`，按下态读开关本身。
+   *
+   * @remarks
+   * 与宿主注入的项合成一份目录，Context 与直接给 `DefaultStageToolbar` 的 prop 都拿这一份——
+   * 两处不同的症状是宿主自己渲染工具栏时这一格不见了。
+   */
+  const animationToolbarItem = useMemo<ComposeToolbarItem>(() => ({
+    id: COMPOSE_TOOLBAR_ANIMATION_ID,
+    label: editorMessages.stageToolbar.animationEditing,
+    icon: <StageToolbarIcon name="animation" />,
+    target: { kind: 'action', id: 'document.toggleAnimationMode' },
+    pressed: animationMode.active,
+  }), [animationMode.active, editorMessages.stageToolbar.animationEditing])
+  const resolvedToolbarItems = useMemo(
+    () => [...(toolbarItems ?? []), animationToolbarItem],
+    [animationToolbarItem, toolbarItems],
+  )
   const toolbarShelfContext = useMemo(
     () => ({
       shelf: workspaceToolbar,
-      items: toolbarItems,
+      items: resolvedToolbarItems,
       onCustomize: openToolbarDialog,
       onShelfChange: setToolbarShelf,
     }),
-    [openToolbarDialog, setToolbarShelf, toolbarItems, workspaceToolbar],
+    [openToolbarDialog, setToolbarShelf, resolvedToolbarItems, workspaceToolbar],
   )
   /**
    * 当前工作区的工具栏上有哪几个 Preset 的入口。
@@ -2337,8 +2347,21 @@ export function ComposeEditor({
   // 读会话状态而不是那个 ref：ref 只在事件里才作数，而这个回调是当作 prop 交出去的。
   const animationActive = animationMode.active
   const toggleAnimationMode = useCallback(() => {
-    setEditorMode(animationActive ? 'design' : 'animation')
-  }, [animationActive, setEditorMode])
+    setAnimationEditing(!animationActive)
+  }, [animationActive, setAnimationEditing])
+  /*
+   * 对时间线的任何一次交互即进入动画编辑：用户在拖播放头，屏幕上就有播放头在动、画布跟着采样，
+   * 进入这一刻有完整的视觉解释。曾考虑关闭态把时间线渲染成只读——那要给 `animation-panel` 加
+   * 一个 `readOnly` 契约，且「鼠标动了没反应」正是本仓库明写要避免的状态。
+   */
+  const handleAnimationPanelValueChange = useCallback((next: ComposeAnimationPanelValue) => {
+    if (!animationModeRef.current.active) setAnimationEditing(true)
+    animationModeRef.current.onPanelValueChange(next)
+  }, [setAnimationEditing])
+  const handleAnimationPanelAction = useCallback((action: ComposeAnimationPanelAction) => {
+    if (!animationModeRef.current.active) setAnimationEditing(true)
+    animationModeRef.current.onPanelAction(action)
+  }, [setAnimationEditing])
 
   const stageCommands = useMemo(() => {
     // 与 `controller?.renderStage` 一样按可选消费：`ComposeEditorController` 是宿主可以自己
@@ -2358,11 +2381,12 @@ export function ComposeEditor({
        */
       saveDocument: () => { void activeDocumentChrome?.save?.() },
       canSaveDocument: canSaveActiveDocument,
-      // 没有页面 / 组件文档时整条省略，而不是列一个按下去没反应的条目；判据与标签条上那个
-      // 切换器的显示条件是同一个。
+      // 没有页面 / 组件文档时整条省略，而不是列一个按下去没反应的条目；判据与时间线 chrome 上
+      // 那颗开关的显示条件是同一个。布局里没有时间线时列出但不可用，并说明原因。
       toggleAnimationMode: activeDocumentChrome === undefined
         ? undefined
-        : () => { setEditorMode(animationModeRef.current.active ? 'design' : 'animation') },
+        : () => { setAnimationEditing(!animationModeRef.current.active) },
+      animationTimelineMissing: !timelinePanelPresent,
     })
   }, [
     actionContext,
@@ -2371,7 +2395,8 @@ export function ComposeEditor({
     hostI18n?.formatMessage,
     resolvedPreferences.locale,
     resolvedPreferences.shortcuts,
-    setEditorMode,
+    setAnimationEditing,
+    timelinePanelPresent,
     toggleSettings,
     workspaceActions,
   ])
@@ -2438,7 +2463,7 @@ export function ComposeEditor({
         ? slots.stageToolbar
         : addDefaultElementProps(controller?.stageToolbar, {
             shortcuts: resolvedPreferences.shortcuts,
-            toolbarItems,
+            toolbarItems: resolvedToolbarItems,
           }),
       children: slots?.stage !== undefined
         ? slots.stage
@@ -2508,8 +2533,8 @@ export function ComposeEditor({
       })(),
       // 空态触发条件是「镜像无动画」而不是「无轨道」：已绑定且零轨道显示正常时间线。
       animationEmpty: animationMode.animationId === null,
-      editorMode: animationMode.active ? 'animation' as const : 'design' as const,
-      onEditorModeChange: setEditorMode,
+      animationEditing: animationMode.active,
+      toggleAnimationEditing: activeDocumentChrome === undefined ? undefined : toggleAnimationMode,
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
@@ -2521,6 +2546,7 @@ export function ComposeEditor({
             onSaveDocument: saveActiveDocument,
             canSaveDocument: canSaveActiveDocument,
             onToggleAnimationMode: canSaveActiveDocument ? toggleAnimationMode : undefined,
+            animationTimelineMissing: !timelinePanelPresent,
           }),
       assetBrowserPanel: slots?.assetBrowser !== undefined
         ? slots.assetBrowser
@@ -2828,8 +2854,8 @@ export function ComposeEditor({
           {...(animationMode.panelValue
             ? {
                 value: animationMode.panelValue,
-                onValueChange: animationMode.onPanelValueChange,
-                onAction: animationMode.onPanelAction,
+                onValueChange: handleAnimationPanelValueChange,
+                onAction: handleAnimationPanelAction,
               }
             : {})}
         >

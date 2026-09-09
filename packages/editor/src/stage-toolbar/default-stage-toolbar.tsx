@@ -359,9 +359,9 @@ export function DefaultStageToolbar({
    * 不再写原生 `title`：两套提示会同时弹出来，而工具栏自己那套才是能立刻出现、键盘聚焦也
    * 出现的那一套。可访问名仍然只是名称，快捷键落在 `aria-describedby` 指向的提示里。
    */
-  const titled = (key: string, label: string, hint?: string) => ({
+  const titled = (key: string, label: string, hint?: string, role?: 'switch' | 'tool') => ({
     ...tooltip.trigger(key, label, hint),
-    'data-toolbar-role': TOOLBAR_SWITCH_KEYS.has(key) ? 'switch' : 'tool',
+    'data-toolbar-role': role ?? (TOOLBAR_SWITCH_KEYS.has(key) ? 'switch' : 'tool'),
   })
   const snapEnabled = document.canvas.grid.snapEnabled
     || document.canvas.smartSnap.nodes
@@ -705,18 +705,19 @@ export function DefaultStageToolbar({
       if (item.target.kind === 'command') startCommand(item.target.id)
       else runAction?.(item.target.id)
     }
+    // 命令目标读 Stage 上报的当前命令 id，与内建绘图命令按钮同一份事实；动作目标没有「正在
+    // 跑」这回事，除非注入方把它声明成开关并给出按下态（编辑器注入的「动画编辑」就是）。
+    const pressed = item.pressed ?? (item.target.kind === 'command' && activeCommandId === item.target.id)
     return {
       key: item.id,
       label: item.label,
       icon: item.icon,
-      // 命令目标读 Stage 上报的当前命令 id，与内建绘图命令按钮同一份事实；动作目标没有「正在
-      // 跑」这回事，恒不按下。
-      pressed: item.target.kind === 'command' && activeCommandId === item.target.id,
+      pressed,
       activate,
       render: () => (
         <button
-          {...titled(item.id, item.label)}
-          aria-pressed={item.target.kind === 'command' && activeCommandId === item.target.id}
+          {...titled(item.id, item.label, undefined, item.pressed !== undefined ? 'switch' : undefined)}
+          aria-pressed={pressed}
           data-toolbar-item={item.id}
           type="button"
           onClick={activate}

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clickCurveStroke, pointerDrop, drawContainer, openPageInspector } from './support/test-helpers'
+import { clickCurveStroke, pointerDrop, drawContainer, openPageInspector, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
   await page.goto('/')
@@ -16,8 +16,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
 
-  // 工具栏模式切换器切到「动画」= 进入动画模式；空态引导创建第一条动画（生成文件资产并绑定页面）。
-  await editor.getByRole('radio', { name: '动画' }).click()
+  // 切到动画工作区并打开动画编辑；空态引导创建第一条动画（生成文件资产并绑定页面）。
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -74,8 +74,8 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  // 进入动画模式：底部动态出现时间线标签并展开，空态提供创建入口。
-  await editor.getByRole('radio', { name: '动画' }).click()
+  // 动画工作区的底部就是展开的时间线，空态提供创建入口。
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
@@ -101,14 +101,15 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
 
-  // 切回设计模式：时间线标签移除，底部恢复 资源/命令/日志。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  // 切回页面工作区：时间线随布局离开，底部只剩 资源/命令/日志，动画编辑随之退出。
+  await editor.getByRole('radiogroup', { name: '工作区' }).getByRole('radio', { name: '页面' }).click()
   const bottom = page.getByTestId('dv-edge-group-compose-bottom-edge')
   await expect
     .poll(async () => bottom.locator('[data-workspace-tab]').evaluateAll(
       (tabs) => tabs.map((tab) => tab.getAttribute('data-workspace-tab')),
     ))
     .toEqual(['compose-assets', 'compose-command', 'compose-transaction-log'])
+  await expect(editor.locator('[data-workspace-panel="animation"]')).toHaveCount(0)
 
   // 资源浏览器的 Pages 目录出现动画文件资产。
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
@@ -116,8 +117,8 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   await assets.getByRole('grid').first().getByRole('gridcell', { name: /^Pages/ }).click()
   await expect(assets.getByRole('gridcell', { name: /^Home-场景\.animation\.json/ })).toBeVisible()
 
-  // 重新进入动画模式：绑定持久，时间线直接显示而不是创建引导。
-  await editor.getByRole('radio', { name: '动画' }).click()
+  // 重新进入动画编辑：绑定持久，时间线直接显示而不是创建引导。
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
   await expect(animationPanel.getByText('当前页面还没有动画')).toHaveCount(0)
 })
@@ -128,7 +129,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 时间线播放模式�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
@@ -142,8 +143,8 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 时间线播放模式�
   await animationPanel.getByRole('spinbutton', { name: '尾帧时长' }).press('Enter')
 
   // 写进的是文档：切出动画模式再回来仍然是 loop / 500。
-  await editor.getByRole('radio', { name: '设计' }).click()
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await exitAnimationEditing(editor)
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('radio', { name: '循环' }))
     .toHaveAttribute('aria-checked', 'true')
   await expect(animationPanel.getByRole('spinbutton', { name: '尾帧时长' })).toHaveValue('500')
@@ -156,7 +157,7 @@ test('OpenSpec: editor-workspace-layout / 自动记录把编辑改写为关键�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
@@ -182,7 +183,7 @@ test('OpenSpec: editor-workspace-layout / 自动记录把编辑改写为关键�
   await page.waitForTimeout(300)
   await expect(widthField).toHaveValue(resized)
   // 退出动画模式仍保持：写的是基础文档；模式切换保留选择，直接读尺寸字段。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   await expect(editor.getByRole('combobox', { name: '尺寸宽度' })).toHaveValue(resized)
   void inspector
 })
@@ -200,7 +201,7 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -276,7 +277,7 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -355,7 +356,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await expect(nodes).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(nodes.first())
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -452,7 +453,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
 
   // 嵌套子级打点：0 ms 菱形 + 200 ms 画布拖动自动记录。矩形默认空心，选中它要点那一圈描边。
   await clickCurveStroke(nested)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -513,7 +514,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
   await page.mouse.click(instanceBox.x + instanceBox.width / 2, instanceBox.y + instanceBox.height / 2)
   await expect(sceneTree.getByRole('row', { name: /Anim Card/ }))
     .toHaveAttribute('aria-selected', 'true')
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   // 创建是异步的 建文件→绑定→水合 流程：等时间线退出空态再取几何，避免拖拽落在重绑定窗口。
@@ -565,7 +566,7 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -624,7 +625,7 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
@@ -682,4 +683,42 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   await expect
     .poll(async () => Math.abs((await node.boundingBox())!.x - originalBox.x))
     .toBeLessThan(2)
+})
+
+test('OpenSpec: editor-workspace-layout / 动画编辑开关 / 切换工作区不进入，拖播放头进入，切走退出', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
+  await clickCurveStroke(node)
+
+  // 切到动画工作区只是换布局：时间线出现，开关没按下，画布仍是基础文档，事务日志没有新行。
+  const switcher = editor.getByRole('radiogroup', { name: '工作区' })
+  await switcher.getByRole('radio', { name: '动画' }).click()
+  const animationPanel = editor.locator('[data-workspace-panel="animation"]')
+  const toggle = animationPanel.getByRole('button', { name: '动画编辑' })
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await animationPanel.getByRole('button', { name: '创建动画' }).click()
+  // 创建是对动画本身的动作：紧接着就要打点，直接进入。
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
+  // 拖播放头即进入：屏幕上有播放头在动，进入这一刻有完整的视觉解释。取 160 而不是 150：
+  // 播放头吸附到标尺次刻度，宽时间线上是 4 ms 一档，原生 range 只收 step 的整数倍。
+  await animationPanel.getByRole('slider', { name: '当前时间' }).fill('160')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(stage.getByTestId('stage-transform-gizmo')).toHaveCount(1)
+
+  // 切到绘图：布局里没有时间线，动画编辑随它一起退出；切回动画不自动恢复。
+  await switcher.getByRole('radio', { name: '绘图' }).click()
+  await expect(animationPanel).toHaveCount(0)
+  await switcher.getByRole('radio', { name: '动画' }).click()
+  await expect(animationPanel.getByRole('button', { name: '动画编辑' })).toHaveAttribute('aria-pressed', 'false')
+  // 顶栏不再有「设计 / 动画」切换器。
+  await expect(editor.getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
 })

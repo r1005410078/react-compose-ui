@@ -156,8 +156,10 @@ export interface ComposeEditorActionContext {
   readonly saveDocument?: () => void
   /** 当前是否有可保存的文档；`false` 时动作带不可用原因而不是静默无反应。 */
   readonly canSaveDocument?: boolean
-  /** 切换设计 / 动画模式；宿主未启用页面系统时目录整条省略。 */
+  /** 翻转动画编辑开关；宿主未启用页面系统时目录整条省略。 */
   readonly toggleAnimationMode?: () => void
+  /** 当前布局里没有时间线面板：动作列出但不可用，并说明原因——动画编辑只有在时间线在时才谈得上。 */
+  readonly animationTimelineMissing?: boolean
   /** 工作区动作；未接入工作区时（纯插槽宿主）目录整条省略。 */
   readonly workspace?: ComposeEditorWorkspaceActions
   /** 打开“创建组件”命名流程；未配置 Component Store 时目录整条省略。 */
@@ -445,7 +447,7 @@ export function createComposeEditorActionHandlers(
       () => { context.saveDocument?.() },
     ),
     'document.toggleAnimationMode': handler(
-      undefined,
+      context.animationTimelineMissing ? 'noTimeline' : undefined,
       () => { context.toggleAnimationMode?.() },
     ),
     'workspace.next': handler(undefined, () => { context.workspace?.next() }),

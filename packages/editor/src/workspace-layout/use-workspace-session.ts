@@ -113,9 +113,6 @@ export interface UseWorkspaceSessionOptions {
   readonly historyEnabled: boolean
   /** 活动文档的 key；固定画布与没有文档时为 null，不参与按文档记忆。 */
   readonly activeDocumentKey: string | null
-  readonly animationActive: boolean
-  /** 布局换掉之后把时间线面板加回底部组并展开。 */
-  readonly restoreAnimationPanel: () => void
   readonly sessionPort: ComposeWorkspaceSessionPort | null
   /** 非阻断提示：自定义工作区的布局损坏被移除时说一句。 */
   readonly notify: (message: string) => void
@@ -124,7 +121,7 @@ export interface UseWorkspaceSessionOptions {
 /** 快照记入偏好的防抖：拖 sash 一次会发几十个布局事件。 */
 const RECORD_DEBOUNCE_MS = 300
 
-/** 所有面板都可能出现在布局里；签名自己会略过历史与时间线。 */
+/** 所有面板都可能出现在布局里；签名自己会略过历史。 */
 const ALL_PANEL_IDS: ReadonlySet<string> = new Set(Object.values(WORKSPACE_PANEL_IDS))
 
 function baselineSignature(workspace: ComposeEditorWorkspaceDefinition) {
@@ -165,7 +162,7 @@ function createCustomId() {
  * @internal
  */
 export function useWorkspaceSession(options: UseWorkspaceSessionOptions): ComposeWorkspaceSessionHandle {
-  // 只在回调里读的选项（会话端口、历史与动画开关、时间线回调）经 optionsRef 取此刻的值，
+  // 只在回调里读的选项（会话端口、历史开关）经 optionsRef 取此刻的值，
   // 不解构：解构出来只会被闭包捕获成过期的一份。
   const {
     activeDocumentKey,
@@ -291,7 +288,6 @@ export function useWorkspaceSession(options: UseWorkspaceSessionOptions): Compos
       getEditorMessages(currentLocale, fm).workspace.componentLibrary,
     ))
     optionsRef.current.sessionPort?.set(sessionMemory.current.get(id) ?? workspace.session)
-    if (optionsRef.current.animationActive) optionsRef.current.restoreAnimationPanel()
     const wantsCanvasOnly = canvasOnlyMemory.current.get(id) ?? false
     const canvasPanel = api.getPanel(WORKSPACE_PANEL_IDS.canvas)
     if (wantsCanvasOnly && canvasPanel && typeof api.maximizeGroup === 'function') api.maximizeGroup(canvasPanel)

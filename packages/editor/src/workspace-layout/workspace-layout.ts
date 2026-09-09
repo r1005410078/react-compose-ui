@@ -232,6 +232,8 @@ function panelDescriptor(
       return { component: WORKSPACE_COMPONENT_IDS.command, title: messages.command }
     case WORKSPACE_PANEL_IDS.transactionLog:
       return { component: WORKSPACE_COMPONENT_IDS.transactionLog, title: messages.transactionLog }
+    case WORKSPACE_PANEL_IDS.animation:
+      return { component: WORKSPACE_COMPONENT_IDS.animation, title: messages.animation }
     default:
       return null
   }
@@ -347,7 +349,7 @@ function sideGroupHeight(
 
 /**
  * 按 preset 在**一个** Dockview 实例里摆出布局：画布组在中央，左右两侧各一列上下堆叠的组，
- * 底部原生边缘组承载资源 / 命令 / 日志（时间线由动画模式动态加入）。
+ * 底部原生边缘组承载资源 / 命令 / 日志（动画工作区还有时间线——它与别的面板一样随布局走）。
  *
  * @remarks
  * 组的创建顺序就是网格的拓扑：画布先落地成根；左侧第一组放在它左边（根变成横向 [左, 画布]），
@@ -394,13 +396,19 @@ export function buildWorkspaceLayout(
 
   const bottomPanels = resolvePresetGroups([normalized.bottom], historyEnabled)[0] ?? []
   if (bottomPanels.length > 0) {
-    const bottomGroup =
-      api.getEdgeGroup('bottom') ??
-      api.addEdgeGroup('bottom', {
-        id: WORKSPACE_GROUP_IDS.bottom,
-        ...WORKSPACE_SIZES.bottom,
-        collapsed: normalized.bottomCollapsed,
-      })
+    const existing = api.getEdgeGroup('bottom')
+    const bottomGroup = existing ?? api.addEdgeGroup('bottom', {
+      id: WORKSPACE_GROUP_IDS.bottom,
+      ...WORKSPACE_SIZES.bottom,
+      collapsed: normalized.bottomCollapsed,
+    })
+    // 边缘组不随 `clear` 一起消失：换到另一个 preset 时它还是上一个布局留下的那一个，折叠状态
+    // 也是。preset 说的折叠与否要落到它身上，否则动画工作区的「底部展开」只在首次建组时成立。
+    // 只在状态真的不同的时候动它：对一个已折叠的组再 collapse 一次同样会发布局变化事件。
+    if (existing && typeof existing.isCollapsed === 'function' && existing.isCollapsed() !== normalized.bottomCollapsed) {
+      if (normalized.bottomCollapsed) existing.collapse()
+      else existing.expand()
+    }
     addPanelsToGroup(api, bottomGroup.id, bottomPanels, messages)
   }
 

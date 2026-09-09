@@ -151,11 +151,43 @@ export function InspectorPanel() {
   )
 }
 
-/** 底部动画时间线。右侧属性区不随动画标签切换，关键帧属性由宿主自行嵌入。 @internal */
+/**
+ * 时间线面板：一条 chrome 上的「动画编辑」开关加时间线本身。右侧属性区不随它切换，关键帧属性
+ * 由宿主自行嵌入。
+ *
+ * @remarks
+ * 开关住在编辑器这一层而不进 `animation-panel`：那个包只认识会话与动作，不认识「模式」。
+ * 它是 `aria-pressed` 的开关而不是单选——它回答「拖动会不会变成关键帧」这一个是非问题。
+ * 时间线在开关关着时照常渲染：屏幕上看得见要编辑的东西，第一次交互即进入。
+ * @internal
+ */
 export function AnimationPanel() {
-  const { animationEmpty, animationEmptyState } = useWorkspaceContent()
+  const {
+    animationEditing,
+    animationEmpty,
+    animationEmptyState,
+    toggleAnimationEditing,
+  } = useWorkspaceContent()
+  const messages = useEditorMessages()
   return (
     <div className="compose-editor__panel" data-workspace-panel="animation">
+      {toggleAnimationEditing ? (
+        <div className="compose-editor__animation-chrome">
+          <button
+            aria-pressed={animationEditing === true}
+            className="compose-editor__animation-toggle"
+            data-animation-editing={animationEditing === true || undefined}
+            type="button"
+            onClick={toggleAnimationEditing}
+          >
+            <span aria-hidden="true" className="compose-editor__animation-toggle-dot" />
+            {messages.workspace.animationEditing}
+          </button>
+          <span className="compose-editor__animation-chrome-hint">
+            {animationEditing ? messages.workspace.animationEditingOn : messages.workspace.animationEditingOff}
+          </span>
+        </div>
+      ) : null}
       <ComposeAnimationTimeline
         emptyState={animationEmptyState}
         {...(animationEmpty !== undefined ? { empty: animationEmpty } : {})}
@@ -341,16 +373,15 @@ const CONTENT_BY_HOST: Readonly<Record<WorkspaceHostKey, () => React.JSX.Element
  *
  * @remarks
  * 挂在编辑器根下、Dockview 之外，因此面板内容的 React 生命周期与 Dockview 面板无关：
- * 工作区切换经 `fromJSON` 重建面板时，内容一个组件都不重挂载。时间线只在动画模式下渲染——
- * 它的面板也只在那时存在，不在模式里时不必养着一份时间线。
+ * 工作区切换经 `fromJSON` 重建面板时，内容一个组件都不重挂载。时间线与别的面板一样常驻渲染：
+ * 它在不在屏幕上由布局决定，与动画编辑开关无关。
  * @internal
  */
 export function WorkspacePortals() {
-  const { editorMode, hosts } = useWorkspaceContent()
+  const { hosts } = useWorkspaceContent()
   return (
     <>
       {WORKSPACE_HOST_KEYS.map((key) => {
-        if (key === WORKSPACE_COMPONENT_IDS.animation && editorMode !== 'animation') return null
         const Content = CONTENT_BY_HOST[key]
         return createPortal(<Content />, hosts[key], key)
       })}

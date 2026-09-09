@@ -131,14 +131,12 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   expect(await pressedTool.evaluate((el) => getComputedStyle(el, '::before').backgroundColor))
     .toBe('rgb(27, 57, 95)')
   /*
-   * 模式切换器住**标签行**的行尾，不在工具栏行上：标签行说「这是哪个文档、在编它的哪一层」，
-   * 工具栏行说「用什么工具」。它在 `tablist` 之外，方向键在标签之间循环时走不进它。
+   * 「设计 / 动画」模式切换器已删：动画的布局那一半归了工作区（内建「动画」带时间线面板），
+   * 语义那一半是时间线 chrome 上的开关。标签行与工具栏行上都没有它。
    */
-  await expect(documentTabs.getByRole('radiogroup', { name: '编辑模式' })).toBeVisible()
-  await expect(editor.locator('.compose-editor__canvas-toolbar')
-    .getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
-  await expect(documentTabs.getByRole('tablist')
-    .getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
+  await expect(editor.getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
+  await expect(editor.getByRole('radiogroup', { name: '工作区' }).getByRole('radio', { name: '动画' }))
+    .toBeVisible()
   /*
    * 工具栏行 36px 且**上下都不画线**：卡内不画横线，分层交给色阶——这一行取画布那一档
    * （`surface-sunken`），因为它服务的是画布而不是卡头。断计算值而不是 class：样式靠层叠

@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { EditorBrandMenu } from './editor-brand-menu'
-import { EditorModeSwitcher } from './editor-mode-switcher'
 import { useWorkspaceContent } from './workspace-context'
 import type { ComposeWorkspaceDocumentSession } from './workspace-context'
 import type { ComposeWorkspaceSide } from './use-side-collapse'
@@ -307,8 +306,6 @@ export function WorkspaceDocumentTabs() {
     activateDocument,
     activeDocumentPanelId,
     documents,
-    editorMode,
-    onEditorModeChange,
     requestDocumentClose,
     stageHostPanelId,
   } = useWorkspaceContent()
@@ -343,11 +340,6 @@ export function WorkspaceDocumentTabs() {
     activateDocument(target.panelId)
     focusTab(target.panelId)
   }
-
-  const activeSession = entries.find((entry) => entry.panelId === activeDocumentPanelId)?.session
-  // 模式只对页面与组件文档成立：资源文件文档没有场景，也就没有「在编哪一层」这个问题。
-  const showMode = (activeSession?.kind === 'page' || activeSession?.kind === 'component')
-    && editorMode !== undefined && onEditorModeChange !== undefined
 
   return (
     <div className="compose-editor__document-tabs">
@@ -402,11 +394,6 @@ export function WorkspaceDocumentTabs() {
         })}
       </div>
       </div>
-      {showMode ? (
-        <div className="compose-editor__document-tabs-mode">
-          <EditorModeSwitcher mode={editorMode} onModeChange={onEditorModeChange} />
-        </div>
-      ) : null}
     </div>
   )
 }

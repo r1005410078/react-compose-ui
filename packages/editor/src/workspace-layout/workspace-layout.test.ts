@@ -1,9 +1,11 @@
 import type { DockviewApi } from 'dockview-react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  buildWorkspaceLayout,
   computeToolsHeight,
   initializeWorkspace,
   syncWorkspaceHistoryPanel,
+  WORKSPACE_COMPONENT_IDS,
   WORKSPACE_GROUP_IDS,
   WORKSPACE_PANEL_IDS,
   WORKSPACE_SIZES,
@@ -121,7 +123,7 @@ describe('initializeWorkspace', () => {
       .toEqual({ referenceGroup: WORKSPACE_GROUP_IDS.inspector })
   })
 
-  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 底部默认只有资源、命令、日志', () => {
+  it('OpenSpec: editor-workspace-layout / 时间线是可摆放的工作区面板 / 页面的底部只有资源、命令、日志', () => {
     const { api, spies } = createWorkspaceApi()
 
     initializeWorkspace(api)
@@ -134,10 +136,30 @@ describe('initializeWorkspace', () => {
       WORKSPACE_PANEL_IDS.command,
       WORKSPACE_PANEL_IDS.transactionLog,
     ])
-    // 时间线面板不在初始化时注册：它由动画模式切换器动态加入。
+    // 没有摆时间线的布局里就没有时间线：它不再由任何模式动态加入。
     expect(spies.addPanel).not.toHaveBeenCalledWith(
       expect.objectContaining({ id: WORKSPACE_PANEL_IDS.animation }),
     )
+  })
+
+  it('OpenSpec: editor-workspace-layout / 时间线是可摆放的工作区面板 / preset 里的 timeline 落成时间线面板', () => {
+    const { api, spies } = createWorkspaceApi()
+
+    buildWorkspaceLayout(api, {
+      kind: 'preset',
+      bottom: ['timeline', 'assetBrowser'],
+      bottomCollapsed: false,
+    })
+
+    const bottomPanels = spies.addPanel.mock.calls
+      .filter(([options]) => options.position?.referenceGroup === WORKSPACE_GROUP_IDS.bottom)
+      .map(([options]) => options.id)
+    expect(bottomPanels).toEqual([WORKSPACE_PANEL_IDS.animation, WORKSPACE_PANEL_IDS.assetBrowser])
+    expect(spies.addPanel).toHaveBeenCalledWith(expect.objectContaining({
+      id: WORKSPACE_PANEL_IDS.animation,
+      component: WORKSPACE_COMPONENT_IDS.animation,
+      inactive: false,
+    }))
   })
 
   it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 使用默认历史面板', () => {

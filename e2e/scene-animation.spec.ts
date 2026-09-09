@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { clickCurveStroke, emptyWorkspaceRect, openPageInspector } from './support/test-helpers'
+import { clickCurveStroke, emptyWorkspaceRect, openPageInspector, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
 
 /** 在所有场景之外画一个容器，得到第二块场景并返回它的 Entity id。 */
 async function createSecondScene(page: Page, editor: Locator, minBlank?: number) {
@@ -28,13 +28,13 @@ async function createSecondScene(page: Page, editor: Locator, minBlank?: number)
 /** 在当前作用域场景创建一条动画并打一个关键帧。 */
 async function createAnimationWithKeyframe(editor: Locator) {
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
 }
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景内的对象切换作用域', async ({ page }) => {
@@ -56,14 +56,14 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景�
   // 第二块场景还没有动画：选中它就应当看到空态，而不是场景 1 的时间线。
   const sceneTwoId = await createSecondScene(page, editor)
   await editor.getByTestId(`stage-container-label-${sceneTwoId}`).click()
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
 
   // 选回场景 1 的对象，时间线切回场景 1 的动画。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(sceneOneRect)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 })
 
@@ -81,6 +81,14 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(sceneOneRect)
   await createAnimationWithKeyframe(editor)
+  /*
+   * 进入动画编辑时变换指示器自动打开，退出不自动关（它是视图状态，关掉是正当选择）。动画工作区
+   * 的时间线常驻展开，图面比页面工作区矮，选中对象的旋转环因此正好压在小场景那个矩形的下边线
+   * 上——点描边之前先把指示器关掉。
+   */
+  const gizmoToggle = editor.getByRole('button', { name: '变换指示器' })
+  await gizmoToggle.click()
+  await expect(gizmoToggle).toHaveAttribute('aria-pressed', 'false')
 
   // 第二块场景里也放一个矩形并建自己的动画。
   const sceneTwoId = await createSecondScene(page, editor)
@@ -93,18 +101,21 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   // 它的标题标签正压在矩形上边线那一带。
   await clickCurveStroke(sceneTwoRect, { edge: 'bottom' })
   await createAnimationWithKeyframe(editor)
+  // 第二次进入又把指示器打开了：与上面同一条理由。
+  await gizmoToggle.click()
+  await expect(gizmoToggle).toHaveAttribute('aria-pressed', 'false')
 
   // 两块场景各有一条动画，互不覆盖：来回切换都看得到自己的关键帧。
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(sceneOneRect)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
 
   // 保存把两块场景的清单各自回写进自己绑定的文件，保存后不再有未保存标记。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   await stage.focus()
   await page.keyboard.press('Control+s')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
@@ -142,13 +153,13 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到�
   // 建第二块场景并选中它——作用域跟着走，看到空态。
   const sceneTwoId = await createSecondScene(page, editor)
   await editor.getByTestId(`stage-container-label-${sceneTwoId}`).click()
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByText('当前页面还没有动画')).toBeVisible()
 
   // 清空选择：回退到激活场景（仍是第一块），时间线回到它的动画。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   await openPageInspector(page, editor)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
 })
 
@@ -191,7 +202,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
 
   // 场景 1 的副本刻一条动画。矩形默认空心，选中它要点那一圈描边。
   await clickCurveStroke(inScene1)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
   await inspector.getByRole('button', { name: '为 位置 添加关键帧' }).click()
@@ -223,9 +234,9 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
 
   // 场景 1 的动画不受影响：仍只有副本自己的一条对象轨道与 0 ms 关键帧。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   await clickCurveStroke(inScene1)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('button', { name: /^选择对象轨道/ })).toHaveCount(1)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(0)
@@ -251,7 +262,7 @@ test('OpenSpec: editor-workspace-layout / 运动路径以物体中心为锚 / �
   await expect(rect).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(rect)
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await expect(animationPanel.getByRole('slider', { name: '当前时间' })).toBeVisible()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
@@ -303,7 +314,7 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚�
   )
   await createAnimationWithKeyframe(editor)
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
   // 激活场景不因为建动画而改变。
   await expect(editor.getByTestId('stage-scene-tag-frame-root')).toHaveClass(/is-active/)

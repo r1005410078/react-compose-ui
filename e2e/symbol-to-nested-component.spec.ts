@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { pointerDrop } from './support/test-helpers'
+import { pointerDrop, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
 
 /**
  * 从基础图形到嵌套组件动画的完整纵向流程。
@@ -150,7 +150,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await openPanel(editor, 'compose-scene-content-panel', sceneTree)
   await sceneTree.getByRole('row', { name: /间隔单元/ }).first().click()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
 
@@ -173,7 +173,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await page.mouse.up()
 
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toBeVisible()
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
 
   // 结构一动没动：打关键帧写的是轨道，两个实例连同各自嵌套的刀闸都还在。
   await expect(instances).toHaveCount(4)

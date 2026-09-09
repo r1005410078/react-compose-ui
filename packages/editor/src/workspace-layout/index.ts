@@ -90,5 +90,3 @@ export {
   type ComposeWorkspaceSideCollapse,
   type ComposeWorkspaceSideCollapsed,
 } from './use-side-collapse'
-export { EditorModeSwitcher } from './editor-mode-switcher'
-export type { ComposeEditorMode, EditorModeSwitcherProps } from './editor-mode-switcher'

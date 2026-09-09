@@ -16,11 +16,6 @@ import { WORKSPACE_PANEL_IDS } from './workspace-ids'
  */
 export const COMPOSE_WORKSPACE_SNAPSHOT_FORMAT = 'dockview@7'
 
-/**
- * 不进快照的面板：时间线由动画模式叠加在任一布局上，切模式时加回。
- */
-const TRANSIENT_PANEL_IDS: ReadonlySet<string> = new Set([WORKSPACE_PANEL_IDS.animation])
-
 /** 快照里允许出现的面板 id。 */
 const KNOWN_PANEL_IDS: ReadonlySet<string> = new Set(Object.values(WORKSPACE_PANEL_IDS))
 
@@ -77,23 +72,6 @@ function isSerializedLayout(value: unknown): value is SerializedLayoutLike {
     && isRecord(value.panels)
 }
 
-/** 从一棵序列化网格里去掉一批面板；空掉的组连同只剩一个子节点的分支一起收拢。 */
-function pruneNode(node: SerializedNode, drop: ReadonlySet<string>): SerializedNode | null {
-  if (node.type === 'leaf') {
-    const views = node.data.views.filter((view) => !drop.has(view))
-    if (views.length === 0) return null
-    const activeView = node.data.activeView !== undefined && views.includes(node.data.activeView)
-      ? node.data.activeView
-      : views[0]
-    return { ...node, data: { ...node.data, views, activeView } }
-  }
-  const children = node.data
-    .map((child) => pruneNode(child, drop))
-    .filter((child): child is SerializedNode => child !== null)
-  if (children.length === 0) return null
-  return { ...node, data: children }
-}
-
 function collectViews(node: SerializedNode, into: string[]) {
   if (node.type === 'leaf') into.push(...node.data.views)
   else node.data.forEach((child) => collectViews(child, into))
@@ -103,7 +81,7 @@ function collectViews(node: SerializedNode, into: string[]) {
  * 把 Dockview 当前布局收成一份快照。
  *
  * @remarks
- * 时间线面板在这里被剥掉：它是动画模式叠加的，不属于任何一份布局。
+ * 每一个面板都进快照，时间线也不例外：它是布局的一部分，用户把它拖到哪儿就记到哪儿。
  * @internal
  */
 export function captureWorkspaceSnapshot(api: DockviewApi): ComposeWorkspaceLayoutSnapshot | null {
@@ -111,27 +89,9 @@ export function captureWorkspaceSnapshot(api: DockviewApi): ComposeWorkspaceLayo
   if (typeof (api as Partial<DockviewApi>).toJSON !== 'function') return null
   const raw: unknown = api.toJSON()
   if (!isSerializedLayout(raw)) return null
-  const root = pruneNode(raw.grid.root, TRANSIENT_PANEL_IDS)
-  if (!root) return null
-  const panels = Object.fromEntries(
-    Object.entries(raw.panels).filter(([id]) => !TRANSIENT_PANEL_IDS.has(id)),
-  )
-  const edgeGroups = raw.edgeGroups
-    ? Object.fromEntries(Object.entries(raw.edgeGroups).map(([position, entry]) => {
-        if (!entry.group) return [position, entry]
-        const views = entry.group.views.filter((view) => !TRANSIENT_PANEL_IDS.has(view))
-        const activeView = entry.group.activeView !== undefined && views.includes(entry.group.activeView)
-          ? entry.group.activeView
-          : views[0]
-        return [position, { ...entry, group: { ...entry.group, views, activeView } }]
-      }))
-    : undefined
   // 浮动组与弹出窗口本来就关着；快照里也不留它们的位置。
   const data: SerializedLayoutLike = {
     ...raw,
-    grid: { ...raw.grid, root },
-    panels,
-    ...(edgeGroups ? { edgeGroups } : {}),
     floatingGroups: [],
     popoutGroups: [],
   }
@@ -182,14 +142,14 @@ export function listWorkspaceSnapshotPanels(snapshot: ComposeWorkspaceLayoutSnap
  *
  * @remarks
  * 修改点读它：面板挪位后点亮，调分栏、折叠、换活动标签不点亮——后三样太频繁，点只回答
- * 「面板挪过位没有」。历史与时间线面板不计：前者随宿主配置出现或消失，后者随动画模式。
+ * 「面板挪过位没有」。历史面板不计：它随宿主配置出现或消失，不是用户挪的。时间线**计**——
+ * 它是布局的一部分，把它拖去右栏就是一次修改。
  */
 type SignatureNode =
   | { readonly t: 'leaf'; readonly v: readonly string[] }
   | { readonly t: 'branch'; readonly c: readonly SignatureNode[] }
 
 const IGNORED_IN_SIGNATURE: ReadonlySet<string> = new Set([
-  WORKSPACE_PANEL_IDS.animation,
   WORKSPACE_PANEL_IDS.history,
 ])
 

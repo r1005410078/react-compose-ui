@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { enterAnimationEditing } from './support/test-helpers'
 
 /**
  * 「画 → 动 → 脚本驱动」这条纵向流程的闭环用例。
@@ -38,7 +39,7 @@ test('OpenSpec: compose-document / 旋转基点 / 画线、设基点、刻角度
   await inspector.getByRole('combobox', { name: '旋转基点' }).selectOption('middle-left')
 
   // 4. 动画模式：0 ms 刻 0°，200 ms 刻 90°。
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await inspector.getByRole('button', { name: '为 旋转 添加关键帧' }).click()

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { enterAnimationEditing } from './support/test-helpers'
 
 test('OpenSpec: stage / 绘图能力恒开 / L↵ 画线、捕捉端点、画出的是普通 Entity', async ({ page }) => {
   await page.goto('/')
@@ -242,7 +243,7 @@ test('OpenSpec: stage / 绘图能力恒开 / 动画开关打开时仍能画线',
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await expect(editor.locator('[data-workspace-panel="animation"]')).toBeVisible()
 
   const commandInput = stage.getByRole('textbox', { name: '命令行' })
@@ -258,8 +259,10 @@ test('OpenSpec: stage / 绘图能力恒开 / 动画开关打开时仍能画线',
   await commandInput.press('Escape')
 
   await expect(stage.getByTestId('compose-material-curve-stroke')).toHaveCount(1)
-  // 动画开关没有被画线这件事关掉——两根轴各自独立。
-  await expect(editor.getByRole('radio', { name: '动画' })).toHaveAttribute('aria-checked', 'true')
+  // 动画编辑没有被画线这件事关掉——两根轴各自独立。
+  await expect(
+    editor.locator('[data-workspace-panel="animation"]').getByRole('button', { name: '动画编辑' }),
+  ).toHaveAttribute('aria-pressed', 'true')
 })
 
 /**

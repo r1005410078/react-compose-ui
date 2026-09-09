@@ -257,14 +257,6 @@
   display: none;
 }
 
-/* 模式切换器：标签行的行尾，`tablist` 之外。 */
-.compose-editor__document-tabs-mode {
-  display: flex;
-  flex: none;
-  align-items: center;
-  padding-inline-start: 8px;
-}
-
 .compose-editor__document-tablist {
   display: flex;
   align-items: center;
@@ -1827,52 +1819,6 @@
   margin-inline-end: 8px;
 }
 
-/* 设计/动画模式切换器：靠右紧贴保存按钮的两段式 radiogroup。 */
-/*
- * 模式切换器住标签行的行尾，因此改用**头部行的画法**：柔和的圆角底加更亮的文字，没有外框盒、
- * 没有竖线。「从 N 个里挑一个」与工作区 pill 同形不是撞车，那正是它该长的样子。
- * 工具按钮的按下态不跟着改——工具回答「哪个开着」，模式回答「你在编哪一层」。
- */
-.compose-editor__mode-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-/* 切换器已把保存按钮推到右侧，保存按钮不再需要自己的 auto 外边距。 */
-.compose-editor__mode-switcher ~ .compose-editor__page-save {
-  margin-inline-start: 8px;
-}
-
-.compose-editor__mode-switcher-option {
-  display: flex;
-  height: 22px;
-  align-items: center;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--compose-text-subtle);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.compose-editor__mode-switcher-option:hover {
-  color: var(--compose-text);
-}
-
-.compose-editor__mode-switcher-option:focus-visible {
-  outline: 2px solid var(--compose-focus);
-  outline-offset: -1px;
-}
-
-.compose-editor__mode-switcher-option[aria-checked='true'] {
-  background: var(--compose-surface-hover);
-  color: var(--compose-text-strong);
-}
-
 /* 页面条目图标：外框加内部组装块，表达「由组件组装成的一屏」。 */
 .compose-editor__page-entry-icon {
   color: var(--compose-accent);
@@ -2084,7 +2030,72 @@
   line-height: 1.5;
 }
 
-/* —— 动画模式 —— */
+/* —— 动画编辑 —— */
+/*
+ * 时间线面板 chrome：一行 24px 的开关加一句状态说明。开关是 `aria-pressed` 的开关而不是单选；
+ * 按下时点亮一个圆点——它回答的是「拖动会不会变成关键帧」，与工具栏上同名那一格读同一份事实。
+ */
+[data-workspace-panel='animation'] {
+  display: flex;
+  flex-direction: column;
+}
+[data-workspace-panel='animation'] > .compose-animation-timeline {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.compose-editor__animation-chrome {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--compose-border);
+  background: var(--compose-panel-bg);
+}
+.compose-editor__animation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--compose-text);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.compose-editor__animation-toggle:hover {
+  background: var(--compose-surface-hover);
+}
+.compose-editor__animation-toggle:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -1px;
+}
+.compose-editor__animation-toggle[aria-pressed='true'] {
+  border-color: var(--compose-accent);
+  background: color-mix(in srgb, var(--compose-accent) 18%, transparent);
+  color: var(--compose-text-strong);
+}
+.compose-editor__animation-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--compose-text-muted);
+}
+.compose-editor__animation-toggle[aria-pressed='true'] .compose-editor__animation-toggle-dot {
+  background: var(--compose-accent);
+}
+.compose-editor__animation-chrome-hint {
+  overflow: hidden;
+  color: var(--compose-text-subtle);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .compose-editor__animation-empty {
   display: grid;
   gap: 8px;

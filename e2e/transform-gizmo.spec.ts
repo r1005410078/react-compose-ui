@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { clickCurveStroke, curveStrokeGrip } from './support/test-helpers'
+import { clickCurveStroke, curveStrokeGrip, enterAnimationEditing } from './support/test-helpers'
 
 /**
  * Rive 式变换指示器。
@@ -142,7 +142,7 @@ test('OpenSpec: stage / Rive 式变换指示器 / 拖轴只写位置，拖环只
   await inspector.getByRole('combobox', { name: '旋转基点' }).selectOption('middle-left')
 
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   // 进入动画模式自动打开：那里误拖的代价最高——往时间线塞一条没打算要的轨道。
   await expect(stage.getByTestId('stage-transform-gizmo')).toHaveCount(1)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()

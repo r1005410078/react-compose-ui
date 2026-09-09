@@ -21,6 +21,7 @@ type ActionContextInput = Omit<
   | 'saveDocument'
   | 'canSaveDocument'
   | 'toggleAnimationMode'
+  | 'animationTimelineMissing'
 >
 
 interface CommandPanelWithActionsProps {
@@ -46,6 +47,8 @@ interface CommandPanelWithActionsProps {
   readonly onSaveDocument?: () => void
   readonly canSaveDocument?: boolean
   readonly onToggleAnimationMode?: () => void
+  /** 当前布局里没有时间线：「动画编辑」列出但不可用。 */
+  readonly animationTimelineMissing?: boolean
 }
 
 /**
@@ -64,6 +67,7 @@ export function CommandPanelWithActions({
   onSaveDocument,
   canSaveDocument,
   onToggleAnimationMode,
+  animationTimelineMissing,
 }: CommandPanelWithActionsProps) {
   const i18n = useComposeI18nContext()
   const locale = i18n?.locale ?? 'zh-CN'
@@ -79,9 +83,11 @@ export function CommandPanelWithActions({
       saveDocument: onSaveDocument,
       canSaveDocument,
       toggleAnimationMode: onToggleAnimationMode,
+      animationTimelineMissing,
     }),
     [
       actionContext,
+      animationTimelineMissing,
       canSaveDocument,
       formatMessage,
       locale,

@@ -14,7 +14,6 @@ import type {
   ComposeHistoryNavigationController,
   ComposeHistoryShortcuts,
 } from '@compose-ui/history'
-import type { ComposeEditorMode } from './editor-mode-switcher'
 import type { ComposeWorkspaceSide, ComposeWorkspaceSideCollapsed } from './use-side-collapse'
 import type { ComposeWorkspaceSessionHandle } from './use-workspace-session'
 import type { WorkspaceHostElements } from './workspace-hosts'
@@ -32,10 +31,16 @@ export interface WorkspaceContent {
   animationEmptyState?: ReactNode
   /** 受控的时间线空态：会话镜像没有动画即为 true；缺省回退面板自身的轨道判定。 */
   animationEmpty?: boolean
-  /** 当前编辑模式；驱动页面文档工具栏的 设计/动画 切换器。 */
-  editorMode?: ComposeEditorMode
-  /** 模式切换回调；由 compose-editor 集中完成会话与底部 Dockview 重组。 */
-  onEditorModeChange?: (mode: ComposeEditorMode) => void
+  /**
+   * 动画编辑开关此刻是否开着。
+   *
+   * @remarks
+   * 它承载动画模式的语义那一半（采样显示、自动记录、父级锁定），是编辑器会话状态；时间线面板
+   * 只是它的可见依据。面板 chrome 上的开关读它，`toggleAnimationEditing` 翻转它。
+   */
+  animationEditing?: boolean
+  /** 翻转动画编辑开关；没有页面 / 组件文档时缺席，chrome 上就没有那颗按钮。 */
+  toggleAnimationEditing?: () => void
   transactionLogPanel?: ReactNode
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode

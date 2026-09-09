@@ -89,6 +89,12 @@ const dockviewMock = vi.hoisted(() => {
     }),
     getPanel: vi.fn((id: string) => panels.get(id)),
     removePanel: vi.fn((panel: { id: string }) => { panels.delete(panel.id) }),
+    // 工作区切换走 `clear` + 重建：清空之后 preset 里没有的面板（如时间线）就不会再回来。
+    clear: vi.fn(() => {
+      panels.clear()
+      groups.clear()
+      bottomAdded = false
+    }),
     onDidActivePanelChange: vi.fn(() => ({ dispose: () => undefined })),
   }
   return {
@@ -415,36 +421,53 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
   })
 })
 
-describe('OpenSpec: editor-workspace-layout / 设计与动画模式切换器', () => {
-  it('切到动画加入并激活时间线面板且展开底部组；切回设计移除面板并恢复折叠', async () => {
+describe('OpenSpec: editor-workspace-layout / 动画编辑开关', () => {
+  const workspaceRadio = (name: string) => (
+    within(screen.getByRole('radiogroup', { name: '工作区' })).getByRole('radio', { name })
+  )
+  const animationToggle = () => screen.getByRole('button', { name: '动画编辑' })
+
+  it('切到动画工作区只换布局；开关、时间线交互进入；换到没有时间线的布局退出', async () => {
     renderEditor(createProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
     await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
 
-    const designRadio = screen.getByRole('radio', { name: '设计' })
-    expect(designRadio).toHaveAttribute('aria-checked', 'true')
+    // 顶栏没有「设计 / 动画」切换器；页面工作区的布局里没有时间线。
+    expect(screen.queryByRole('radiogroup', { name: '编辑模式' })).toBeNull()
     expect(dockviewMock.panels.has('compose-animation')).toBe(false)
 
-    fireEvent.click(screen.getByRole('radio', { name: '动画' }))
+    fireEvent.click(workspaceRadio('动画'))
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: '动画' })).toHaveAttribute('aria-checked', 'true')
+      expect(workspaceRadio('动画')).toHaveAttribute('aria-checked', 'true')
     })
+    // 时间线随 preset 落进底部组、活动；切换本身不打开动画编辑。
     expect(dockviewMock.api.addPanel).toHaveBeenCalledWith(expect.objectContaining({
       id: 'compose-animation',
       position: { referenceGroup: 'compose-bottom-edge' },
     }))
-    expect(dockviewMock.bottomGroup.expand).toHaveBeenCalledTimes(1)
     expect(dockviewMock.panels.get('compose-animation')?.api.isActive).toBe(true)
+    expect(animationToggle()).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(screen.getByRole('radio', { name: '设计' }))
+    // 按开关进入：时间线被亮出来（设为活动、底部展开）。
+    fireEvent.click(animationToggle())
+    await waitFor(() => { expect(animationToggle()).toHaveAttribute('aria-pressed', 'true') })
+    expect(dockviewMock.bottomGroup.expand).toHaveBeenCalled()
+    fireEvent.click(animationToggle())
+    await waitFor(() => { expect(animationToggle()).toHaveAttribute('aria-pressed', 'false') })
+
+    // 换到没有时间线的布局：面板随 `clear` + 重建消失，动画编辑跟着退出。
+    fireEvent.click(animationToggle())
+    await waitFor(() => { expect(animationToggle()).toHaveAttribute('aria-pressed', 'true') })
+    fireEvent.click(workspaceRadio('页面'))
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: '设计' })).toHaveAttribute('aria-checked', 'true')
+      expect(workspaceRadio('页面')).toHaveAttribute('aria-checked', 'true')
+      expect(dockviewMock.panels.has('compose-animation')).toBe(false)
     })
-    expect(dockviewMock.api.removePanel).toHaveBeenCalledTimes(1)
-    expect(dockviewMock.panels.has('compose-animation')).toBe(false)
-    // 进入动画模式前底部处于折叠状态：切换器退出后恢复折叠。
-    expect(dockviewMock.bottomGroup.collapse).toHaveBeenCalledTimes(1)
+    await waitFor(() => { expect(animationToggle()).toHaveAttribute('aria-pressed', 'false') })
+    // 从没有时间线的工作区里跑「动画编辑」动作不会进入：它唯一的可见依据不在。
+    expect(dockviewMock.api.removePanel).not.toHaveBeenCalled()
   })
+
 })
 
 describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写', () => {

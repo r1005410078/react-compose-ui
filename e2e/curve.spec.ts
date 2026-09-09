@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { enterAnimationEditing } from './support/test-helpers'
 
 test('OpenSpec: compose-document / 曲线 Entity 纵向流程 / 添加、按距离命中、编辑端点、移动与撤销', async ({ page }) => {
   await page.goto('/')
@@ -86,7 +87,7 @@ test('OpenSpec: compose-document / 曲线 Entity / 位置关键帧零改动可�
   await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
 
   // 曲线是普通页面 Entity，因此既有动画能力不需要任何曲线专用代码。
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
 
@@ -136,7 +137,7 @@ test('OpenSpec: basic-materials / 曲线的虚线偏移 / 打两个关键帧让�
   // 没设过偏移的曲线不写这个属性，与引入本能力之前逐字一致。
   await expect(stroke).not.toHaveAttribute('stroke-dashoffset', /.*/u)
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
 

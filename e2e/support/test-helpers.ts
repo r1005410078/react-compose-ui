@@ -282,3 +282,34 @@ export async function switchToDrawingWorkspace(page: Page) {
   await drawing.click()
   await expect(drawing).toHaveAttribute('aria-checked', 'true')
 }
+
+/**
+ * 切到「动画」工作区并打开动画编辑。
+ *
+ * @remarks
+ * 「设计 / 动画」切换器已删：时间线是动画工作区里的一块面板，动画编辑是时间线 chrome 上的
+ * 显式开关。切换工作区**永不**打开它，因此用例要两步——这正是那条设计的可执行形式。
+ * 开关已经开着时不再点（点一下就是关掉）。
+ */
+export async function enterAnimationEditing(editor: Locator) {
+  const switcher = editor.getByRole('radiogroup', { name: '工作区' })
+  const animation = switcher.getByRole('radio', { name: '动画' })
+  if ((await animation.getAttribute('aria-checked')) !== 'true') {
+    await animation.click()
+    await expect(animation).toHaveAttribute('aria-checked', 'true')
+  }
+  const timeline = editor.locator('[data-workspace-panel="animation"]')
+  await expect(timeline).toBeVisible()
+  const toggle = timeline.getByRole('button', { name: '动画编辑' })
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') {
+    await toggle.click()
+  }
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+}
+
+/** 关掉动画编辑，留在动画工作区：画布回到基础文档，时间线仍在。 */
+export async function exitAnimationEditing(editor: Locator) {
+  const toggle = editor.locator('[data-workspace-panel="animation"]').getByRole('button', { name: '动画编辑' })
+  if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+}

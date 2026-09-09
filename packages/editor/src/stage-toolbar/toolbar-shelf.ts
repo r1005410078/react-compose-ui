@@ -48,6 +48,14 @@ export interface ComposeToolbarItem {
   readonly target:
     | { readonly kind: 'action'; readonly id: ComposeEditorActionId }
     | { readonly kind: 'command'; readonly id: string }
+  /**
+   * 这一格是**开关**时的按下态；给了就按开关画（`aria-pressed`），不给就是工具或一次性动作。
+   *
+   * @remarks
+   * 动作目标本来没有「正在跑」这回事，因此按下态只能由注入方给：编辑器把「动画编辑」注入成一格，
+   * 读的就是那个开关本身。
+   */
+  readonly pressed?: boolean
 }
 
 /**
@@ -83,6 +91,22 @@ export const PAGE_TOOLBAR_SHELF: ComposeToolbarShelf = [
   COMPOSE_TOOLBAR_SEPARATOR,
   'RECTANGLE',
   'ARROW',
+]
+
+/** 编辑器注入的「动画编辑」那一格的目录 id；它指向 `document.toggleAnimationMode` 动作。 @public */
+export const COMPOSE_TOOLBAR_ANIMATION_ID = 'animation'
+
+/**
+ * 动画工作区的默认货架：页面那条加一格「动画编辑」。
+ *
+ * @remarks
+ * 那一格有动作目录与快捷键做第二条入口，进货架合规；它同时也在时间线面板的 chrome 上——
+ * 工具栏上的这一格是给「眼睛在画布上」的那一刻用的。
+ */
+export const ANIMATION_TOOLBAR_SHELF: ComposeToolbarShelf = [
+  ...PAGE_TOOLBAR_SHELF,
+  COMPOSE_TOOLBAR_SEPARATOR,
+  COMPOSE_TOOLBAR_ANIMATION_ID,
 ]
 
 /**

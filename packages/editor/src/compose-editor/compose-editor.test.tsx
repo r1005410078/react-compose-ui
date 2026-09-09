@@ -904,8 +904,10 @@ describe('ComposeEditor', () => {
     expect(screen.getByText('组件属性内容')).toBeInTheDocument()
     expect(screen.getByText('事务日志内容')).toBeInTheDocument()
     expect(screen.getByText('命令内容')).toBeInTheDocument()
-    // 时间线只在动画模式下渲染：它的面板也只在那时存在，设计模式不养着一份时间线。
-    expect(screen.queryByRole('region', { name: '动画编辑器' })).not.toBeInTheDocument()
+    // 时间线与别的面板一样常驻渲染（在不在屏幕上由布局决定）；纯插槽宿主没有文档，chrome 上
+    // 也就没有「动画编辑」开关。
+    expect(screen.getByRole('region', { name: '动画编辑器' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '动画编辑' })).not.toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 插槽与场景树内容更新', () => {

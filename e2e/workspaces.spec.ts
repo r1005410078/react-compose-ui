@@ -126,7 +126,7 @@ test('OpenSpec: editor-workspace-layout / 工作区管理 / 另存为、内建�
 
   await saveAs(page, editor, '变电站')
   // 两个内建（页面 / 绘图）加上另存出来的这一个。
-  await expect(switcher.getByRole('radio')).toHaveCount(3)
+  await expect(switcher.getByRole('radio')).toHaveCount(4)
   await expect(switcher.getByRole('radio', { name: '变电站' })).toHaveAttribute('aria-checked', 'true')
   // 显示名重复不拒绝，自动加序号。
   await saveAs(page, editor, '变电站')
@@ -146,7 +146,7 @@ test('OpenSpec: editor-workspace-layout / 工作区管理 / 另存为、内建�
   const confirm = page.getByRole('dialog', { name: '删除工作区「储能」？' })
   await expect(confirm).toContainText('记着它的 1 个文档下次打开时回到「页面」')
   await confirm.getByRole('button', { name: '删除' }).click()
-  await expect(switcher.getByRole('radio')).toHaveCount(3)
+  await expect(switcher.getByRole('radio')).toHaveCount(4)
   await expect(switcher.getByRole('radio', { name: '页面' })).toHaveAttribute('aria-checked', 'true')
   // 记着储能的文档（Home）改指页面：切走再切回 Home，仍在页面。
   await switcher.getByRole('radio', { name: '变电站' }).click()

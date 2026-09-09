@@ -48,7 +48,8 @@ async function crosshairReach(page: Page) {
 
 test('OpenSpec: editor-workspace-layout / 内建工作区 / 绘图的初始布局与命令可用性不变', async ({ page }) => {
   const { editor, stage, switcher } = await openEditor(page)
-  await expect(switcher.getByRole('radio')).toHaveCount(2)
+  // 内建恰好三个：页面、绘图、动画。
+  await expect(switcher.getByRole('radio')).toHaveCount(3)
   await expect(switcher.getByRole('radio', { name: '页面' })).toHaveAttribute('aria-checked', 'true')
 
   const pageLibrary = (await libraryPanel(editor).boundingBox())!

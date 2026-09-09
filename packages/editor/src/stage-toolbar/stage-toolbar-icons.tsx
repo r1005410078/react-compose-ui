@@ -19,6 +19,7 @@ export type StageToolbarIconName =
   | 'polyline'
   | 'rectangle'
   | 'transform-gizmo'
+  | 'animation'
   | 'save'
   | 'scale'
   | 'select'
@@ -296,6 +297,14 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="M10 3.2v13.6M3.2 10h13.6" />
         <path d="M7.9 5.3 10 3.2l2.1 2.1M7.9 14.7 10 16.8l2.1-2.1M5.3 7.9 3.2 10l2.1 2.1M14.7 7.9 16.8 10l-2.1 2.1" />
         {gripMark(10, 10)}
+      </>
+    ),
+    // 动画编辑：一条时间轴上一个关键帧菱形——按下去之后拖动写的就是它。
+    animation: (
+      <>
+        <path d="M3.2 14.5h13.6" />
+        <path d="M10 5.2 13.4 8.6 10 12 6.6 8.6z" />
+        <path d="M10 12v2.5" />
       </>
     ),
     // 软盘轮廓：右上角切角表示写入介质，内部上下两块分别是滑片与标签。

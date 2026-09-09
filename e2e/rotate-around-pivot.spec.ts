@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clickCurveStroke } from './support/test-helpers'
+import { clickCurveStroke, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
 
 /**
  * 画布旋转手势绕 Entity 自己的旋转基点。
@@ -37,7 +37,7 @@ test('OpenSpec: stage-engine / 旋转工具插件 / 非中心基点下只刻角�
 
   // 动画模式下拖着转：自动记录会把这次编辑改写成播放头处的关键帧。
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
 
@@ -73,6 +73,6 @@ test('OpenSpec: stage-engine / 旋转工具插件 / 非中心基点下只刻角�
   await expect(animationPanel.getByRole('button', { name: /关键帧 \d+ ms：位置/ })).toHaveCount(0)
 
   // 位置字段一个字没动。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   expect(await position()).toEqual(before)
 })

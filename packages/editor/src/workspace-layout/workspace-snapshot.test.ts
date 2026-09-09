@@ -73,18 +73,21 @@ describe('工作区布局快照', () => {
     expect(validateWorkspaceSnapshot(snapshot({ nope: true }), ALL)).toBe('shape')
   })
 
-  it('OpenSpec: editor-workspace-layout / 工作区布局快照 / 时间线面板不进快照', () => {
+  it('OpenSpec: editor-workspace-layout / 时间线是可摆放的工作区面板 / 时间线随快照走', () => {
     const api = {
       toJSON: () => serialized({
-        bottomViews: [WORKSPACE_PANEL_IDS.assetBrowser, WORKSPACE_PANEL_IDS.animation],
+        bottomViews: [WORKSPACE_PANEL_IDS.assetBrowser],
         leftViews: [WORKSPACE_PANEL_IDS.animation],
       }),
     } as unknown as DockviewApi
     const captured = captureWorkspaceSnapshot(api)!
-    expect(JSON.stringify(captured.data)).not.toContain(WORKSPACE_PANEL_IDS.animation)
-    // 只装着时间线的组随它一起收掉，不留一个空组给 fromJSON。
-    expect(JSON.stringify(captured.data)).not.toContain('compose-left-1')
+    // 用户把时间线拖到左栏：快照记住它在那儿，切走再切回仍在左栏。
+    expect(JSON.stringify(captured.data)).toContain(WORKSPACE_PANEL_IDS.animation)
     expect(captured.format).toBe(COMPOSE_WORKSPACE_SNAPSHOT_FORMAT)
+    expect(validateWorkspaceSnapshot(captured, ALL)).toBeNull()
+    // 时间线挪位算修改：它是布局的一部分，不再是某个模式叠加的东西。
+    const base = workspaceSnapshotSignature(snapshot(serialized()))
+    expect(workspaceSnapshotSignature(captured)).not.toBe(base)
   })
 
   it('OpenSpec: editor-workspace-layout / 工作区管理 / 修改点与重置：签名只看面板在哪个组', () => {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
 import type { Locator } from '@playwright/test'
 
 /** 属性面板的 Dockview 标签：对象名住在这里（`属性 · Rectangle`）。 */
@@ -70,7 +71,7 @@ test('OpenSpec: scene-animation / 组件文档的动画 / 打点存成组件后�
   await expect(assetRows.first()).toBeVisible()
   const assetsBefore = await assetRows.count()
 
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await inspector.getByRole('button', { name: '为 旋转 添加关键帧' }).click()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：旋转' })).toBeVisible()
@@ -83,7 +84,7 @@ test('OpenSpec: scene-animation / 组件文档的动画 / 打点存成组件后�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：旋转' })).toBeVisible()
 
   // 组件的动画内嵌在资产里：不得在用户的资源目录里落一个动画文件。
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   await expect(assetRows).toHaveCount(assetsBefore)
 
@@ -170,7 +171,7 @@ test('OpenSpec: stage-engine / 组件提取搬运动画清单 / 页面上打的�
     if (await toggle.count()) await toggle.click()
   }
   await sceneTree.getByRole('row', { name: /Rectangle/ }).click()
-  await editor.getByRole('radio', { name: '动画' }).click()
+  await enterAnimationEditing(editor)
   await animationPanel.getByRole('button', { name: '创建动画' }).click()
   await inspector.getByRole('button', { name: '为 旋转 添加关键帧' }).click()
   await animationPanel.getByRole('slider', { name: '当前时间' }).fill('200')
@@ -178,7 +179,7 @@ test('OpenSpec: stage-engine / 组件提取搬运动画清单 / 页面上打的�
   await rotation.fill('60')
   await rotation.press('Enter')
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：旋转' })).toBeVisible()
-  await editor.getByRole('radio', { name: '设计' }).click()
+  await exitAnimationEditing(editor)
 
   // 把装着它的容器存成组件。
   const source = sceneTree.getByRole('row', { name: /Container/ })
