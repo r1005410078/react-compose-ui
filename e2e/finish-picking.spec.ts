@@ -91,7 +91,7 @@ test('OpenSpec: stage / 从工具栏启动命令后焦点落在命令行', async
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
 
   await editor.getByRole('button', { name: '多段线', exact: true }).click()
-  await expect(stage.getByRole('textbox', { name: '命令行' })).toBeFocused()
+  await expect(stage.getByRole('combobox', { name: '命令行' })).toBeFocused()
 
   // 判别点：焦点留在按钮上时，`Enter` 就是再点一次按钮，提示会停在「指定第一点」不动——
   // 连续取点的命令因此永远结束不了。

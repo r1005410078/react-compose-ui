@@ -17,7 +17,7 @@ test('OpenSpec: compose-document / 旋转基点 / 画线、设基点、刻角度
   await expect(stage).toBeVisible()
 
   // 1. 绘图模式画一条水平线。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
   const surface = stage.getByTestId('stage-surface')

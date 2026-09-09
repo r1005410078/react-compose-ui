@@ -56,7 +56,7 @@ function setup(page: Page) {
     editor,
     stage,
     surface: stage.getByTestId('stage-surface'),
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
     prompt: stage.getByTestId('stage-drafting-command-prompt'),
     editablePath: stage.getByTestId('stage-editable-path'),
   }

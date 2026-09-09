@@ -43,7 +43,7 @@ test('OpenSpec: stage / 端口在取点时按符号整组显现 / 取点时显�
   await page.mouse.move(box.x, box.y)
   await expect(ports).toHaveCount(0)
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('WIRE')
   await commandInput.press('Enter')
   await page.mouse.move(box.x, box.y)
@@ -83,7 +83,7 @@ test('OpenSpec: stage / 导线两端的接线状态画在图面上 / 失效不�
   const box = (await rectangle.boundingBox())!
 
   // 起点绑到端口，终点落在空白处。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('WIRE')
   await commandInput.press('Enter')
   await page.mouse.click(box.x, box.y)
@@ -136,7 +136,7 @@ test('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 直角导线的拐�
    * 起点吸到端口，中间取一个拐点，终点落在空白处，回车结束这一条。三个点因此攒成**一个**
    * Entity——逐段落地会得到两条线加一个假接头，而假接头不是绑定，符号一挪就裂开。
    */
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('WIRE')
   await commandInput.press('Enter')
   await page.mouse.click(box.x, box.y)

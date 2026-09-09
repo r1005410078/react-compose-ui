@@ -24,7 +24,7 @@ test('OpenSpec: stage / 正在键入时预览跟着键入的值走 / 回车前�
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
 

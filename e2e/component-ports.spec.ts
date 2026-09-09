@@ -37,7 +37,7 @@ test('OpenSpec: stage-engine / 端口捕捉 / 端口压过更近的曲线端点'
   const corner = { x: rectBox.x, y: rectBox.y }
 
   // 2) 画一条线，终点落在离那个角只有几像素的地方——它比端口更靠近接下来的光标。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
   await page.mouse.click(corner.x - 120, corner.y - 60)

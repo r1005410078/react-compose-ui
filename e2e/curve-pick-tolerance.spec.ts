@@ -16,7 +16,7 @@ async function drawLine(
 ) {
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('LINE')
   await commandInput.press('Enter')

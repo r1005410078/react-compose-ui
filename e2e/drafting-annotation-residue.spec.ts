@@ -27,7 +27,7 @@ test('OpenSpec: stage / 取点过程中的动态输入 / 连续取点不留下�
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
 

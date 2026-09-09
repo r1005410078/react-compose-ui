@@ -30,7 +30,7 @@ function libraryPanel(editor: Locator) {
 
 /** 从命令行启动一条命令；与点工具栏上那颗按钮等价，但不依赖它在不在货架上。 */
 async function startCommand(page: Page, stage: Locator, name: string) {
-  const input = stage.getByRole('textbox', { name: '命令行' })
+  const input = stage.getByRole('combobox', { name: '命令行' })
   await input.click()
   await input.fill(name)
   await page.keyboard.press('Enter')

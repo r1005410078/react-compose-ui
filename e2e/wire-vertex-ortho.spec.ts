@@ -40,7 +40,7 @@ function setup(page: Page) {
   return {
     stage,
     surface: stage.getByTestId('stage-surface'),
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
   }
 }
 

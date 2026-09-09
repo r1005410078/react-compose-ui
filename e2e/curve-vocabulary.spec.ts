@@ -16,7 +16,7 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、闭合多段线、
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
@@ -67,7 +67,7 @@ test('OpenSpec: stage-engine / 连续取点命令的闭合关键字 / LINE 的 C
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
@@ -95,7 +95,7 @@ test('OpenSpec: stage-engine / 绘图命令 / PLINE 攒成一个 Entity 且可�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
   const box = (await surface.boundingBox())!
@@ -134,7 +134,7 @@ test('OpenSpec: stage-engine / 特征点捕捉 / 圆心可捕捉', async ({ page
   // 命中与捕捉的断言必须在非 100% 缩放下做：`world = (屏幕 − 视口) / zoom`。
   await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
@@ -186,7 +186,7 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
   const surface = (await surfaceLocator.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   const selectedRows = sceneTree.getByRole('row').and(page.locator('[aria-selected="true"]'))
 

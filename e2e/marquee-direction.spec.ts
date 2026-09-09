@@ -33,7 +33,7 @@ function setup(page: Page) {
     editor,
     stage,
     surface: stage.getByTestId('stage-surface'),
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
     marquee: stage.locator('.compose-stage__marquee'),
     /*
      * 选中呈现按对象类型分流：曲线画几何轮廓、其余画包围盒。本用例关心的是**框选选中了

@@ -1,6 +1,7 @@
-import { Fragment, useCallback, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { ComposeCommandPrompt } from '@compose-ui/commands'
+import type { ComposeCommandDescriptor, ComposeCommandPrompt } from '@compose-ui/commands'
+import { matchComposeCommandCompletions } from './command-line-completion'
 import type { ComposeCommandLineMessages, ComposeCommandLineProps } from './command-line-types'
 
 /**
@@ -41,6 +42,10 @@ const HISTORY_LIMIT = 50
  * Esc 有两级语义（有活动命令时中止命令、没有时清空选择），**两级都由宿主判定**：组件不知道
  * 宿主有没有选择集这个概念。
  *
+ * 给出 `completions` 时输入框是 WAI-ARIA Combobox with List Autocomplete：列表是 listbox，
+ * 高亮项经 `aria-activedescendant` 关联而不移动焦点，焦点全程留在输入框——它同时还是
+ * 命令进行中键入坐标的地方，焦点一旦离开，下一步的坐标就打不进去了。
+ *
  * @public
  */
 export function ComposeCommandLine({
@@ -48,6 +53,7 @@ export function ComposeCommandLine({
   notice,
   messages,
   status,
+  completions,
   onSubmit,
   onCancel,
   onTextChange,
@@ -70,6 +76,35 @@ export function ComposeCommandLine({
   const historyRef = useRef<readonly string[]>([])
   /** 当前召回到第几行；`-1` 表示正在编辑一行新的。同样不参与渲染。 */
   const historyIndexRef = useRef(-1)
+  /**
+   * 补全列表里的高亮下标。
+   *
+   * @remarks
+   * 每次渲染都夹紧到有效范围而不是在每次列表变化时改写：词汇表会随宿主的选择集变化换成
+   * 新的一份，残留的旧下标可能指向一条已经不在列表里的命令。
+   */
+  const [storedIndex, setStoredIndex] = useState(0)
+  const baseId = useId()
+  const listboxId = `${baseId}-listbox`
+
+  /*
+   * 只在空闲时提示：命令进行中缓冲里是坐标与关键字，拿它们去匹配命令名只会弹出一串无关的
+   * 命令，还抢走方向键的召回含义。
+   */
+  const completion = completions && prompt === null
+    ? matchComposeCommandCompletions(completions, text)
+    : null
+  const completionItems = completion?.items ?? []
+  const expanded = completion !== null && completionItems.length > 0
+  const activeIndex = Math.min(storedIndex, Math.max(completionItems.length - 1, 0))
+  const activeCompletion = expanded ? completionItems[activeIndex] ?? null : null
+  const optionId = (index: number) => `${baseId}-option-${index}`
+
+  // 高亮项跟着方向键滚进视野；jsdom 没有 scrollIntoView，因此按可选调用。
+  useEffect(() => {
+    if (!activeCompletion) return
+    window.document.getElementById(`${baseId}-option-${activeIndex}`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [activeCompletion, activeIndex, baseId])
 
   /** 召回一行：`step` 为正往更早走，为负往更近走。走回 `-1` 时回到空输入。 */
   const recall = useCallback((step: number) => {
@@ -83,8 +118,30 @@ export function ComposeCommandLine({
   /** 写缓冲的唯一入口：上报与置位必须成对，分开写必然有一处漏掉。 */
   const writeText = useCallback((next: string) => {
     setText(next)
+    setStoredIndex(0)
     onTextChange?.(next)
   }, [onTextChange])
+
+  /** 提交一行：记历史、清缓冲、上报。补全与亲手敲出的全名走同一条路。 */
+  const submit = useCallback((value: string) => {
+    if (value.trim().length > 0) {
+      historyRef.current = [value, ...historyRef.current].slice(0, HISTORY_LIMIT)
+    }
+    writeText('')
+    historyIndexRef.current = -1
+    onSubmit(value)
+  }, [onSubmit, writeText])
+
+  /**
+   * 选中一条补全。
+   *
+   * @remarks
+   * 提交的是命令的 `id` 而不是缓冲里的半个词：宿主收到的与用户亲手敲出全名完全一致，它
+   * 不需要知道这个词是补全出来的。
+   */
+  const pickCompletion = useCallback((descriptor: ComposeCommandDescriptor) => {
+    submit(descriptor.id)
+  }, [submit])
 
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
     // 只在调用方要接管时才吃掉 `Tab`：其余时候它是焦点导航键。
@@ -93,6 +150,33 @@ export function ComposeCommandLine({
       onFieldAdvance(text)
       writeText('')
       return
+    }
+    if (expanded) {
+      // 列表开着时方向键在列表里走，召回历史让位——缓冲非空时本来也没有在召回。
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        setStoredIndex(event.key === 'ArrowDown'
+          ? Math.min(activeIndex + 1, completionItems.length - 1)
+          : Math.max(activeIndex - 1, 0))
+        return
+      }
+      // `Tab` 只把高亮那条填进缓冲，不提交：用户还能接着看、接着改。
+      if (event.key === 'Tab' && activeCompletion) {
+        event.preventDefault()
+        writeText(activeCompletion.id)
+        return
+      }
+      if (event.key === 'Enter' && activeCompletion) {
+        event.preventDefault()
+        pickCompletion(activeCompletion)
+        return
+      }
+      // 第一级 Escape 只收起列表：用户是想放弃正在打的这个词，不是想清空选择集。
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        writeText('')
+        return
+      }
     }
     // 方向键默认把光标移到行首/行尾；召回要覆盖它，这是终端的既有约定。
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -109,14 +193,20 @@ export function ComposeCommandLine({
     }
     if (event.key !== 'Enter') return
     event.preventDefault()
-    const value = text
-    if (value.trim().length > 0) {
-      historyRef.current = [value, ...historyRef.current].slice(0, HISTORY_LIMIT)
-    }
-    writeText('')
-    historyIndexRef.current = -1
-    onSubmit(value)
-  }, [onCancel, onFieldAdvance, onSubmit, recall, text, writeText])
+    submit(text)
+  }, [
+    activeCompletion,
+    activeIndex,
+    completionItems.length,
+    expanded,
+    onCancel,
+    onFieldAdvance,
+    pickCompletion,
+    recall,
+    submit,
+    text,
+    writeText,
+  ])
 
   const parts = promptParts(prompt, messages)
 
@@ -147,6 +237,8 @@ export function ComposeCommandLine({
           </>
         )}
       </span>
+      {/* 输入框与列表共用一个定位盒：列表贴着这一行的上沿弹出，宿主怎么摆命令行本身与它无关。 */}
+      <div className="compose-command-line__field">
       <input
         ref={inputRef}
         aria-label={messages.inputLabel}
@@ -156,9 +248,56 @@ export function ComposeCommandLine({
         spellCheck={false}
         type="text"
         value={text}
+        // 没有词汇表就没有列表，那时它只是一个 textbox；combobox 的语义随 `completions` 一起来。
+        {...(completions ? {
+          role: 'combobox' as const,
+          'aria-autocomplete': 'list' as const,
+          'aria-expanded': expanded,
+          'aria-controls': expanded ? listboxId : undefined,
+          'aria-activedescendant': activeCompletion ? optionId(activeIndex) : undefined,
+        } : {})}
         onChange={(event) => { writeText(event.target.value) }}
         onKeyDown={handleKeyDown}
       />
+      {expanded ? (
+        <ul
+          aria-label={messages.completionsLabel}
+          className="compose-command-line__completions"
+          data-testid={`${testIdPrefix}-command-completions`}
+          id={listboxId}
+          role="listbox"
+        >
+          {completionItems.map((descriptor, index) => {
+            const disabled = descriptor.disabledReason !== undefined && descriptor.disabledReason.length > 0
+            const aliases = descriptor.aliases ?? []
+            return (
+              <li
+                aria-disabled={disabled || undefined}
+                aria-selected={index === activeIndex}
+                className="compose-command-line__completion"
+                data-testid={`${testIdPrefix}-command-completion-${descriptor.id}`}
+                id={optionId(index)}
+                key={descriptor.id}
+                role="option"
+                // 保持焦点留在输入框：失焦会让 combobox 收起，点击就落空了。
+                onMouseDown={(event) => { event.preventDefault() }}
+                // 不可用的也提交：宿主会把不可用原因显示在命令行，与键入那个词得到的一致。
+                onClick={() => { pickCompletion(descriptor) }}
+              >
+                <span className="compose-command-line__completion-name">{descriptor.id}</span>
+                {aliases.length > 0 ? (
+                  <span className="compose-command-line__completion-alias">{`(${aliases.join('/')})`}</span>
+                ) : null}
+                <span className="compose-command-line__completion-title">{descriptor.title}</span>
+                {disabled ? (
+                  <span className="compose-command-line__completion-reason">{descriptor.disabledReason}</span>
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+      </div>
       {(status ?? []).map((item) => (
         <span
           className="compose-command-line__status"

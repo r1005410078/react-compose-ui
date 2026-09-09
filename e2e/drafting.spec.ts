@@ -9,7 +9,7 @@ test('OpenSpec: stage / 绘图能力恒开 / L↵ 画线、捕捉端点、画出
   await expect(stage).toBeVisible()
 
   // 命令行常驻：不进模式就看不见命令行，正是「能力不可发现」那条毛病。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(commandInput).toBeVisible()
   await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('命令：')
 
@@ -68,7 +68,7 @@ test('OpenSpec: stage-engine / 取点接管排在画布平移之下 / 命令进�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
 
@@ -103,7 +103,7 @@ const LINES: readonly (readonly [readonly [number, number], readonly [number, nu
  * 挪动最多半格，而线状节点的命中区只有十几个屏幕像素，按落笔坐标点会时中时不中。
  */
 async function drawTwoLines(page: import('@playwright/test').Page, stage: import('@playwright/test').Locator) {
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = (await stage.getByTestId('stage-surface').boundingBox())!
   for (const [from, to] of LINES) {
@@ -161,7 +161,7 @@ test('OpenSpec: stage / 编辑命令 / MOVE 一步撤销、ERASE 先选后执行
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const { strokes, centers } = await drawTwoLines(page, stage)
 
@@ -246,7 +246,7 @@ test('OpenSpec: stage / 绘图能力恒开 / 动画开关打开时仍能画线',
   await enterAnimationEditing(editor)
   await expect(editor.locator('[data-workspace-panel="animation"]')).toBeVisible()
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(commandInput).toBeVisible()
   await commandInput.fill('L')
   await commandInput.press('Enter')
@@ -279,7 +279,7 @@ test('OpenSpec: stage / 命令词汇表合并 / 命令行键入 UNDO 撤销上�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
 
@@ -316,7 +316,7 @@ test('OpenSpec: stage / 命令词汇表合并 / 不可用的命令给出原因�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
 
   // 词不在词汇表里。
@@ -358,7 +358,7 @@ test('OpenSpec: stage / Stage 十字光标 / 三形态与系统光标隐藏', as
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const lines = stage.locator('[data-stage-crosshair-line]')
   const pickbox = stage.getByTestId('stage-pickbox')
@@ -400,4 +400,53 @@ test('OpenSpec: stage / Stage 十字光标 / 三形态与系统光标隐藏', as
   await expect(lines).toHaveCount(0)
   await expect(pickbox).toHaveCount(1)
   await expect(surface).toHaveCSS('cursor', 'none')
+})
+
+/**
+ * 命令行补全：`/` 列出全部、前缀提示、回车启动高亮那条。
+ *
+ * @remarks
+ * 组件测试已经覆盖键盘语义；这里钉的是宿主接线——列表里的是**编辑器注入之后**的整份词汇表
+ * （内建绘图命令与宿主动作同列），且点一条与敲全名走的是同一条启动路径。
+ */
+test('OpenSpec: stage / 命令行补全读合并后的词汇表', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  const completions = stage.getByTestId('stage-drafting-command-completions')
+
+  // 空闲不弹。
+  await expect(completions).toHaveCount(0)
+
+  // `/` 列出全部：内建绘图命令与宿主注入的动作同在一份列表里。
+  await commandInput.fill('/')
+  await expect(completions).toBeVisible()
+  await expect(stage.getByTestId('stage-drafting-command-completion-LINE')).toBeVisible()
+  // 宿主动作的 id 是 `edit.group`，`GROUP` 只是别名；列表按 id 标识。
+  const group = stage.getByTestId('stage-drafting-command-completion-edit.group')
+  await expect(group).toHaveCount(1)
+  // 不可用的照样列出并标明原因，而不是藏起来。
+  await expect(group).toContainText('请至少选中两个对象')
+
+  // 第一级 Escape 只收起列表。
+  await commandInput.press('Escape')
+  await expect(completions).toHaveCount(0)
+  await expect(prompt).toContainText('命令：')
+
+  // 前缀提示 + 回车：启动的是补全出来的那条。
+  await commandInput.fill('CIR')
+  await expect(stage.getByTestId('stage-drafting-command-completion-CIRCLE')).toHaveAttribute('aria-selected', 'true')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('指定圆心')
+  await commandInput.press('Escape')
+
+  // 点一条与敲全名等价。
+  await commandInput.fill('/li')
+  await stage.getByTestId('stage-drafting-command-completion-LINE').click()
+  await expect(prompt).toContainText('指定第一点')
 })

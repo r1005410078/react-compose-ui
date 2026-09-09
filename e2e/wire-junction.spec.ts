@@ -21,7 +21,7 @@ test('OpenSpec: stage-engine / 取点落在导线上即接入节点 / 接上之�
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
   const frameBox = (await frame.boundingBox())!
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   // 1) 一条水平导线。
   const left = { x: Math.round(frameBox.x + 80), y: Math.round(frameBox.y + 160) }

@@ -19,7 +19,7 @@ async function openStage(page: Page) {
   return {
     stage,
     strokes: stage.getByTestId('compose-material-curve-stroke'),
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
     /*
      * 走 `page.mouse` 而不是 `locator.click({ position })`：后者要过可操作性检查，而 dockview
      * 的面板浮在图面之上，检查会认为落点被拦住。每次重新量一次盒——布局在首帧之后还会动一下。

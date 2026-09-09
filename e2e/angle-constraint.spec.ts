@@ -49,7 +49,7 @@ test('OpenSpec: stage / 角度约束的持有、切换与呈现 / 靠近射线�
   const box = (await surface.boundingBox())!
   const ray = stage.getByTestId('stage-drafting-tracking-ray')
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
   await page.mouse.click(box.x + 120, box.y + 200)

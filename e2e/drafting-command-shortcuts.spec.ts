@@ -46,7 +46,7 @@ test('OpenSpec: stage / 绘图命令的单键快捷键 / 焦点在命令行时�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   await commandInput.click()
   await commandInput.press('r')

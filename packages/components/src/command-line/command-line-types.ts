@@ -1,4 +1,4 @@
-import type { ComposeCommandPrompt } from '@compose-ui/commands'
+import type { ComposeCommandDescriptor, ComposeCommandPrompt } from '@compose-ui/commands'
 import type { ReactNode, RefObject } from 'react'
 
 /**
@@ -42,6 +42,13 @@ export interface ComposeCommandLineMessages {
    * 一个中文连词，而它夹在提示与关键字之间，很难被注意到。
    */
   readonly keywordsPrefix: string
+  /**
+   * 补全列表的可访问名称，例如「命令列表」。
+   *
+   * @remarks
+   * 列表是一个 listbox，读屏软件需要一个名字才能说清它是什么；只在传入 `completions` 时用到。
+   */
+  readonly completionsLabel: string
 }
 
 /** {@link ComposeCommandLine} 的属性。 @public */
@@ -50,6 +57,23 @@ export interface ComposeCommandLineProps {
   readonly prompt: ComposeCommandPrompt | null
   /** 上一次操作的反馈，例如「未知命令」；存在时取代提示显示。 */
   readonly notice?: string | null
+  /**
+   * 可补全的命令词汇表。
+   *
+   * @remarks
+   * 给出时输入框成为 WAI-ARIA combobox：空闲（没有活动提示）且缓冲非空时按名称、别名、
+   * 显示名与检索词提示匹配的命令，缓冲以 `/` 开头时列出**全部**。方向键在列表里移动，
+   * `Enter` 提交高亮那条的 `id`（与用户亲手敲出全名一致），`Tab` 把它填进缓冲，`Escape`
+   * 先收起列表再谈取消。
+   *
+   * 命令进行中（有活动提示）不提示：那时缓冲里是坐标与关键字，不是命令名。
+   *
+   * 本组件仍然不认识任何具体命令：它只读描述符上可呈现的那半边。列表顺序即词汇表顺序，
+   * 匹配规则见 {@link matchComposeCommandCompletions}。
+   *
+   * 不给出时输入框是普通 textbox，没有列表。
+   */
+  readonly completions?: readonly ComposeCommandDescriptor[]
   readonly messages: ComposeCommandLineMessages
   /** 右侧状态标记，按给出的顺序渲染。 */
   readonly status?: readonly ComposeCommandLineStatus[]
@@ -85,7 +109,8 @@ export interface ComposeCommandLineProps {
    * 定位，共享组件不替它们决定命名。
    *
    * 提示与输入框的 testid 是 `<前缀>-command-prompt` / `<前缀>-command-input`，状态标记是
-   * `<前缀>-<状态 id>`。
+   * `<前缀>-<状态 id>`，补全列表是 `<前缀>-command-completions`、每一项是
+   * `<前缀>-command-completion-<命令 id>`。
    *
    * @defaultValue `compose`
    */

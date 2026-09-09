@@ -14,7 +14,7 @@ import type { Page } from '@playwright/test'
 async function drawLine(page: Page, from: { x: number, y: number }, to: { x: number, y: number }) {
   const stage = page.getByRole('region', { name: 'Compose editor' })
     .getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('LINE')
   await commandInput.press('Enter')
@@ -118,7 +118,7 @@ test('OpenSpec: stage / 闭合曲线的选中呈现走盒那一套 / 只差闭�
   await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
@@ -209,7 +209,7 @@ test('OpenSpec: stage / 选中的空心图形盒内部起手即移动 / 拖动�
   await page.goto('/?no-auto-fit')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const s = (await stage.getByTestId('stage-surface').boundingBox())!
 

@@ -36,7 +36,7 @@ test('OpenSpec: stage / Stage 十字光标 / 拖夹点期间十字线不断且�
 
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const lines = stage.locator('[data-stage-crosshair-line]')
   const cursorHidden = async () => (await surface.evaluate(
     (element) => getComputedStyle(element).cursor,
@@ -88,7 +88,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 悬停期画线加框，拖�
 
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const lines = stage.locator('[data-stage-crosshair-line]')
   const pickbox = stage.getByTestId('stage-pickbox')
 
@@ -133,7 +133,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 悬停在夹点上改变它�
 
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   await drawLine(page, commandInput, at(240, 160), at(440, 260))
 
@@ -173,7 +173,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / Shift 累加退出会话并�
 
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   await drawLine(page, commandInput, at(240, 150), at(440, 190))
   await drawLine(page, commandInput, at(240, 360), at(440, 400))

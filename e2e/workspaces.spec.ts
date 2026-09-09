@@ -93,7 +93,7 @@ test('OpenSpec: editor-workspace-layout / 切换不打断画布 / 命令会话�
    * 它此前点的是按钮，能绿是因为一处缺陷：偏好归一化漏抄了 `toolbar`，另存来的工作区因此退回
    * **目录全集**，而全集里有 `LINE`。缺陷修好之后这条用例跟着红了——它当时钉住的是那个缺陷。
    */
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('LINE')
   await page.keyboard.press('Enter')
@@ -196,7 +196,7 @@ test('OpenSpec: editor-workspace-layout / 只看画布 / 画布组占满', async
   await expect(editor.locator('[data-workspace-panel="inspector"]')).toBeHidden()
   // 工具栏行与命令行仍可见。
   await expect(editor.getByRole('toolbar', { name: 'Stage 工具栏' })).toBeVisible()
-  await expect(stage.getByRole('textbox', { name: '命令行' })).toBeVisible()
+  await expect(stage.getByRole('combobox', { name: '命令行' })).toBeVisible()
   const canvasBox = (await editor.locator('[data-workspace-panel="canvas"]').boundingBox())!
   const editorBox = (await editor.boundingBox())!
   expect(canvasBox.width).toBeGreaterThan(editorBox.width - 20)

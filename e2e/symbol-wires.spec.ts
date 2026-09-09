@@ -41,7 +41,7 @@ test('OpenSpec: compose-document / 符号导线 / 绑定端跟着符号走，符
   // 这里用 `LINE` 而不是 `WIRE` 正是这一刀的验收点——绑定跟着**取点的来源**走，与命令是哪
   // 一条无关。`LINE` 连续画线，因此取完两点还要回车结束，否则下一步拖符号的按下会被取点
   // 插件吃掉。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('LINE')
   await commandInput.press('Enter')
   await page.mouse.click(beforeRect.x, beforeRect.y)
@@ -139,7 +139,7 @@ test('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 跨父级�
   const rect = (await stage.getByTestId(rectangleId).boundingBox())!
 
   // LINE：起点捕捉到端口（容器内），终点远在容器之外，因此线段落地在场景上。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('LINE')
   await commandInput.press('Enter')
   await page.mouse.click(rect.x, rect.y)

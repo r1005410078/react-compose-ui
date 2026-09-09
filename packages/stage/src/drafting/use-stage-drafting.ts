@@ -1549,6 +1549,15 @@ export function useStageDrafting(options: StageDraftingOptions) {
     gripTarget,
     resolvedPointer,
     activeCommandId: enabled ? activeCommandId : null,
+    /**
+     * 命令行补全读的词汇表：内建与宿主注入的合成**同一份**，与提交时解析的是同一批定义。
+     *
+     * @remarks
+     * 每次渲染现拼而不记忆化，理由与注册表在提交那一刻才建相同：宿主注入的定义携带跟着
+     * 选择集走的可用性，引用不可能稳定，记忆化在这里挡不住任何东西。列表只在用户打字时
+     * 才渲染，拼一次的代价是几十个引用的展开。
+     */
+    commandDescriptors: enabled ? [...builtInCommands, ...(hostCommands ?? [])] : null,
     acceptCommand,
     cancel,
     /** 修饰键滚轮的拦截谓词；交给画布滚轮 Hook 的 `interceptWheel`。 */

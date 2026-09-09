@@ -16,7 +16,7 @@ async function openStage(page: Page) {
   return {
     editor,
     stage,
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
     /*
      * 落点走 `hover` / `click` 的 `position` 而不是先量一次 `boundingBox()` 再算绝对坐标：
      * 编辑器的面板布局在首帧之后还会动一下，并行跑满时那一下可能晚于测量，绝对坐标于是落到

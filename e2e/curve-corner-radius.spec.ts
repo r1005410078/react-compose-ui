@@ -21,7 +21,7 @@ test('OpenSpec: stage / 多段线的圆角手柄 / 选中即出，拖一个四�
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('R')
   await commandInput.press('Enter')
   await page.mouse.click(at(240, 200).x, at(240, 200).y)
@@ -69,7 +69,7 @@ test('OpenSpec: stage / 多段线的圆角手柄 / 只有矩形出手柄', async
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const handles = stage.locator('[data-testid^="stage-curve-corner-"]:not([data-testid*="hit"])')
 
   // 六边形：选中之后不该多出六个点。「选中即出」那条理由是「改圆角是最常做的调整之一」，

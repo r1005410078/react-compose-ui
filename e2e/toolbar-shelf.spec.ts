@@ -120,7 +120,7 @@ test('OpenSpec: editor-workspace-layout / 工具栏货架 / 页面里被收走�
   const { editor, stage } = await openEditor(page)
   expect(await itemIds(editor)).not.toContain('CIRCLE')
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   // 1) 命令行敲全名。
   await commandInput.click()
@@ -199,7 +199,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 拖出即移除�
 
   // 收走按钮不收走能力：`RECTANGLE` 照样敲得动。
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('RECTANGLE')
   await page.keyboard.press('Enter')
@@ -296,7 +296,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 右键工具栏�
   expect(await itemIds(editor)).not.toContain('RECTANGLE')
 
   // 收走的是入口不是能力：这条命令照样敲得动。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('RECTANGLE')
   await page.keyboard.press('Enter')

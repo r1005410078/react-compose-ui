@@ -9,7 +9,15 @@ const messages = {
   inputLabel: '命令行',
   placeholder: '键入命令',
   keywordsPrefix: '或',
+  completionsLabel: '命令列表',
 }
+
+const vocabulary = [
+  { id: 'LINE', aliases: ['L'], title: '直线' },
+  { id: 'CIRCLE', aliases: ['C'], title: '圆' },
+  { id: 'COPY', aliases: ['CO'], title: '复制' },
+  { id: 'GROUP', title: '编组', disabledReason: '请至少选中两个对象' },
+] as const
 
 function renderLine(props: Partial<Parameters<typeof ComposeCommandLine>[0]> = {}) {
   const onSubmit = vi.fn()
@@ -214,6 +222,98 @@ describe('ComposeCommandLine', () => {
 
       fireEvent.keyDown(input, { key: 'ArrowUp' })
       expect(input).toHaveValue('ARC')
+    })
+  })
+
+  describe('OpenSpec: components / 命令行提示可键入的命令', () => {
+    it('没有词汇表时输入框是普通 textbox，没有列表', () => {
+      renderLine()
+      fireEvent.change(screen.getByRole('textbox', { name: '命令行' }), { target: { value: '/' } })
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
+
+    it('敲 / 列出全部命令，不可用的照样列出并标明原因', () => {
+      renderLine({ completions: vocabulary })
+      const input = screen.getByRole('combobox', { name: '命令行' })
+      expect(input).toHaveAttribute('aria-expanded', 'false')
+      fireEvent.change(input, { target: { value: '/' } })
+      expect(input).toHaveAttribute('aria-expanded', 'true')
+      const options = screen.getAllByRole('option')
+      expect(options.map((option) => option.textContent)).toEqual([
+        'LINE(L)直线',
+        'CIRCLE(C)圆',
+        'COPY(CO)复制',
+        'GROUP编组请至少选中两个对象',
+      ])
+      expect(screen.getByTestId('compose-command-completion-GROUP')).toHaveAttribute('aria-disabled', 'true')
+      // 第一条高亮，且经 activedescendant 关联而不是移动焦点。
+      expect(options[0]).toHaveAttribute('aria-selected', 'true')
+      expect(input).toHaveAttribute('aria-activedescendant', options[0]!.id)
+    })
+
+    it('键入前缀提示匹配的命令，Enter 提交高亮那条的全名', () => {
+      const { onSubmit } = renderLine({ completions: vocabulary })
+      const input = screen.getByRole('combobox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'co' } })
+      expect(screen.getAllByRole('option').map((option) => option.id.length > 0)).toEqual([true])
+      expect(screen.getByTestId('compose-command-completion-COPY')).toBeInTheDocument()
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(onSubmit).toHaveBeenCalledWith('COPY')
+      expect(input).toHaveValue('')
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
+
+    it('方向键在列表里移动，Tab 把高亮项填进缓冲而不提交', () => {
+      const { onSubmit } = renderLine({ completions: vocabulary })
+      const input = screen.getByRole('combobox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: '/' } })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(screen.getByTestId('compose-command-completion-COPY')).toHaveAttribute('aria-selected', 'true')
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(screen.getByTestId('compose-command-completion-CIRCLE')).toHaveAttribute('aria-selected', 'true')
+      const tab = createEvent.keyDown(input, { key: 'Tab' })
+      fireEvent(input, tab)
+      expect(tab.defaultPrevented).toBe(true)
+      expect(input).toHaveValue('CIRCLE')
+      expect(onSubmit).not.toHaveBeenCalled()
+    })
+
+    it('整词别名仍解析成原来那条：敲 C 回车得到 CIRCLE 而不是 COPY', () => {
+      const { onSubmit } = renderLine({ completions: vocabulary })
+      const input = screen.getByRole('combobox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'C' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(onSubmit).toHaveBeenCalledWith('CIRCLE')
+    })
+
+    it('点一条补全与键入它的全名等价', () => {
+      const { onSubmit } = renderLine({ completions: vocabulary })
+      fireEvent.change(screen.getByRole('combobox', { name: '命令行' }), { target: { value: '/' } })
+      fireEvent.click(screen.getByTestId('compose-command-completion-LINE'))
+      expect(onSubmit).toHaveBeenCalledWith('LINE')
+    })
+
+    it('列表开着时第一级 Escape 只收起列表，不上报取消', () => {
+      const { onCancel } = renderLine({ completions: vocabulary })
+      const input = screen.getByRole('combobox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: '/li' } })
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(input).toHaveValue('')
+      expect(screen.queryByRole('listbox')).toBeNull()
+      expect(onCancel).not.toHaveBeenCalled()
+      fireEvent.keyDown(input, { key: 'Escape' })
+      expect(onCancel).toHaveBeenCalledTimes(1)
+    })
+
+    it('命令进行中不提示：缓冲里是坐标与关键字', () => {
+      renderLine({
+        completions: vocabulary,
+        prompt: { message: '指定下一点', accepts: ['point', 'keyword'] as const, keywords: [{ key: 'C', label: '闭合' }] },
+      })
+      const input = screen.getByRole('combobox', { name: '命令行' })
+      fireEvent.change(input, { target: { value: 'C' } })
+      expect(screen.queryByRole('listbox')).toBeNull()
     })
   })
 })

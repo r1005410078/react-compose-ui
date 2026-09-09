@@ -86,7 +86,7 @@ test('OpenSpec: stage-engine / path 曲线的顶点与控制手柄 / 会话里�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const rows = editor.getByRole('treegrid', { name: '场景树' }).locator('[data-scene-node-id]')
   await rows.filter({ hasText: 'arcmark' }).first().click()
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('VERTEX')
   await commandInput.press('Enter')
 
@@ -122,7 +122,7 @@ test('OpenSpec: stage-engine / path 曲线的顶点与控制手柄 / 对称与 A
   const stage = editor.getByRole('application', { name: 'Stage' })
   const rows = editor.getByRole('treegrid', { name: '场景树' }).locator('[data-scene-node-id]')
   await rows.filter({ hasText: 'flex' }).first().click()
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('VERTEX')
   await commandInput.press('Enter')
 

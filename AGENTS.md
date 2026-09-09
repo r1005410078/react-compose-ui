@@ -1225,6 +1225,15 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   同一个序列——文本行里混着坐标与关键字，共用会让空确认把上一次键入的坐标拿去当命令解析。
   它们与 `operation-log` 的事务日志也是两件事：一个记「我敲了什么」，一个记「文档变了什么」，
   一条命令可能产生零条或多条事务。
+  **命令行提示可键入的命令，读的是同一份词汇表。**空闲时缓冲非空即按名称/别名前缀、显示名
+  与检索词包含提示，`/` 列出全部；命令进行中不提示（缓冲里是坐标与关键字）。**整词命中排在
+  前缀之前**——这一档决定 Enter 的含义，少了它敲 `C` 回车会得到按序排在 `CIRCLE` 前面的某个
+  `C` 开头的命令，等于加上补全改掉了每一个别名的解析结果。Enter 提交高亮那条的 `id`，与亲手
+  敲出全名走同一条提交路径；不可用的命令照样列出并标明原因，藏起来与「这个词不存在」无法
+  区分。列表是 WAI-ARIA combobox（高亮经 `aria-activedescendant`，焦点不离开输入框——它还是
+  键入坐标的地方），因此 Stage 的命令行输入框角色是 `combobox` 而不是 `textbox`；组件不传
+  `completions` 时仍是 textbox。匹配住在 `components` 的纯函数里，组件与 Stage 都不认识任何
+  具体命令。
 - `@compose-ui/stage` 是 DOM Scene 与 SVG Overlay 组合的无限编辑舞台适配层，可以依赖 `core`、
   `assets`、`canvas-kit`、`script-runtime`、`stage-engine`、`component-registry`、`components` 和 `ui-context`，不得依赖 `editor`、`property-panel`
   或 `operation-log`。

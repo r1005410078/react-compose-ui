@@ -11,7 +11,7 @@ import type { Page } from '@playwright/test'
 async function drawLine(page: Page, from: { x: number, y: number }, to: { x: number, y: number }) {
   const stage = page.getByRole('region', { name: 'Compose editor' })
     .getByRole('application', { name: 'Stage' })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('LINE')
   await commandInput.press('Enter')
@@ -64,7 +64,7 @@ test('OpenSpec: stage / Stage 十字光标 / 位置只来自本次跟踪开始�
   await page.mouse.move(at(80, 420).x, at(80, 420).y)
 
   // 从命令行启动新命令且不移动指针：拿不到指针位置，因此什么都不该画。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.click()
   await commandInput.fill('LINE')
   await commandInput.press('Enter')

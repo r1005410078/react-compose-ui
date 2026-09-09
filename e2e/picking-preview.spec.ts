@@ -103,7 +103,7 @@ test('OpenSpec: stage / 预览几何 / 给不出几何的命令仍画橡皮筋',
   await stage.press('Escape')
   await page.mouse.click(at(280, 430).x, at(280, 430).y)
 
-  const input = stage.getByRole('textbox', { name: '命令行' })
+  const input = stage.getByRole('combobox', { name: '命令行' })
   await input.fill('M')
   await input.press('Enter')
   await page.mouse.click(at(200, 400).x, at(200, 400).y)

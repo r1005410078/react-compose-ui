@@ -24,7 +24,7 @@ test('OpenSpec: stage / 几何编辑模式 / 双击曲线显形夹点，拖端�
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   // 画一条**水平**线：这正是 8b 之后改不了方向的那种线。
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('L')
   await commandInput.press('Enter')
   await page.mouse.click(at(260, 240).x, at(260, 240).y)
@@ -101,7 +101,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 拖中点夹点把整条线�
 
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   // 线 A：水平，之后拖它的中点。
   await commandInput.fill('L')

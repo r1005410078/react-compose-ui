@@ -2012,7 +2012,7 @@ describe('绘图模式', () => {
   }
 
   function startLine() {
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: 'L' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     return input
@@ -2039,7 +2039,7 @@ describe('绘图模式', () => {
 
     function startWire() {
       // 端口显现只看「命令正在取点」，与是哪条命令无关；`WIRE` 已并入 `LINE`。
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: 'L' } })
       fireEvent.keyDown(input, { key: 'Enter' })
     }
@@ -2200,7 +2200,7 @@ describe('绘图模式', () => {
 
   describe('OpenSpec: stage / 会重开的命令与两级 Escape', () => {
     function startCommand(name: string) {
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: name } })
       fireEvent.keyDown(input, { key: 'Enter' })
       return input
@@ -2375,6 +2375,26 @@ describe('绘图模式', () => {
     expect(screen.getByTestId('stage-drafting-overlay')).toBeInTheDocument()
   })
 
+  it('OpenSpec: stage / 命令行补全读合并后的词汇表 / 敲 / 列出全部，前缀补全后回车即启动', () => {
+    renderStage(document())
+    const input = screen.getByRole('combobox', { name: '命令行' })
+    // 空闲什么都不弹：那时 Enter 是「重复上一条」，方向键是召回历史。
+    expect(screen.queryByTestId('stage-drafting-command-completions')).toBeNull()
+
+    fireEvent.change(input, { target: { value: '/' } })
+    const list = screen.getByTestId('stage-drafting-command-completions')
+    expect(list).toBeInTheDocument()
+    // 内建绘图与编辑命令都在同一份列表里。
+    expect(screen.getByTestId('stage-drafting-command-completion-LINE')).toBeInTheDocument()
+    expect(screen.getByTestId('stage-drafting-command-completion-ERASE')).toBeInTheDocument()
+
+    // 敲半个词回车：启动的是补全出来的那条，而不是「未知命令」。
+    fireEvent.change(input, { target: { value: 'LI' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('指定第一点')
+    expect(screen.queryByTestId('stage-drafting-command-completions')).toBeNull()
+  })
+
   it('OpenSpec: stage / Stage 十字光标 / 三形态与隐藏系统光标的标记', () => {
     measureSurfaceAs(1000, 800)
     const { container } = renderStage(document(), { selectedIds: ['a'] })
@@ -2406,7 +2426,7 @@ describe('绘图模式', () => {
   it('OpenSpec: stage / Stage 十字光标 / 等待选择对象时只有拾取框', () => {
     measureSurfaceAs(1000, 800)
     renderStage(document())
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: 'ERASE' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('选择对象')
@@ -2683,7 +2703,7 @@ describe('绘图模式', () => {
     it('矩形显示宽高且不画角度弧', () => {
       measureSurface()
       renderStage(document())
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: 'R' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
@@ -2723,7 +2743,7 @@ describe('绘图模式', () => {
     function lineFrom(options: Parameters<typeof renderStage>[1] = {}) {
       measureSurface()
       const rendered = renderStage(document(), options)
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: 'L' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
@@ -2765,7 +2785,7 @@ describe('绘图模式', () => {
     it('增量角 90 时 45° 方向不再被吸', () => {
       measureSurface()
       renderStage(document(), { polarIncrement: 90 })
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: 'L' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
@@ -2808,7 +2828,7 @@ describe('绘图模式', () => {
     function circleFromCenter() {
       measureSurface()
       renderStage(document())
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: 'C' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
@@ -2849,7 +2869,7 @@ describe('绘图模式', () => {
       const { runtime } = (() => {
         measureSurface()
         const rendered = renderStage(document())
-        const input = screen.getByRole('textbox', { name: '命令行' })
+        const input = screen.getByRole('combobox', { name: '命令行' })
         fireEvent.change(input, { target: { value: 'C' } })
         fireEvent.keyDown(input, { key: 'Enter' })
         fireEvent.pointerDown(screen.getByTestId('stage-surface'), surfacePoint(200, 200))
@@ -3177,7 +3197,7 @@ describe('绘图模式', () => {
     /** 启动 RECTANGLE 并取两个对角点；返回文档里新出现的那个 Entity。 */
     function drawRectangle(runtime: ReturnType<typeof createTransactionRuntime>) {
       const before = new Set(Object.keys(runtime.document.entities))
-      const input = screen.getByRole('textbox', { name: '命令行' })
+      const input = screen.getByRole('combobox', { name: '命令行' })
       fireEvent.change(input, { target: { value: 'R' } })
       fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -3260,7 +3280,7 @@ describe('绘图模式', () => {
       renderStage(document())
       // 事件冒泡到 Stage 根节点，由 `isEditableTarget` 守卫挡下——用户敲命令名的过程中
       // 每一个字母都会经过这条路径。
-      fireEvent.keyDown(screen.getByRole('textbox', { name: '命令行' }), { code: 'KeyR', key: 'r' })
+      fireEvent.keyDown(screen.getByRole('combobox', { name: '命令行' }), { code: 'KeyR', key: 'r' })
       expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('命令：')
     })
 
@@ -3321,7 +3341,7 @@ describe('绘图模式', () => {
 
   it('未知命令给出提示且不开始会话', () => {
     renderStage(document())
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: 'NOPE' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(screen.getByTestId('stage-drafting-command-prompt')).toHaveTextContent('未知命令')
@@ -3375,7 +3395,7 @@ describe('绘图模式', () => {
   })
 
   function runCommand(name: string) {
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: name } })
     fireEvent.keyDown(input, { key: 'Enter' })
     return input
@@ -3477,7 +3497,7 @@ describe('命令词汇表合并', () => {
   afterEach(cleanup)
 
   function typeCommand(text: string) {
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: text } })
     fireEvent.keyDown(input, { key: 'Enter' })
     return input
@@ -3574,7 +3594,7 @@ describe('命令词汇表合并', () => {
 
   it('OpenSpec: stage / 命令行历史与重复上一条 / 取过点之后重复的仍是命令', () => {
     const { runtime } = renderStage(document())
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
 
     fireEvent.change(input, { target: { value: 'L' } })
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -3614,7 +3634,7 @@ describe('POLYGON 的边数输入', () => {
   afterEach(cleanup)
 
   function typeCommand(text: string) {
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: text } })
     fireEvent.keyDown(input, { key: 'Enter' })
     return input
@@ -3671,7 +3691,7 @@ describe('POLYGON 的边数输入', () => {
     typeCommand('POL')
     typeCommand('12')
     // 换一条命令再回来：默认值跟着上一次走，而它印在尖括号里，因此这份记忆是看得见的。
-    fireEvent.keyDown(screen.getByRole('textbox', { name: '命令行' }), { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('combobox', { name: '命令行' }), { key: 'Escape' })
     typeCommand('POL')
     expect(prompt()).toHaveTextContent('输入边数或指定中心点 <12>')
   })
@@ -3692,7 +3712,7 @@ describe('POLYGON 的档位胶囊', () => {
   }
 
   function typeCommand(text: string) {
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: text } })
     fireEvent.keyDown(input, { key: 'Enter' })
     return input
@@ -3823,7 +3843,7 @@ describe('修饰键滚轮增减边数', () => {
   afterEach(cleanup)
 
   function typeCommand(text: string) {
-    const input = screen.getByRole('textbox', { name: '命令行' })
+    const input = screen.getByRole('combobox', { name: '命令行' })
     fireEvent.change(input, { target: { value: text } })
     fireEvent.keyDown(input, { key: 'Enter' })
     return input

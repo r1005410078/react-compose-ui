@@ -22,7 +22,7 @@ async function draw(
   command: string,
   points: readonly { x: number; y: number }[],
 ) {
-  const input = stage.getByRole('textbox', { name: '命令行' })
+  const input = stage.getByRole('combobox', { name: '命令行' })
   await input.fill(command)
   await input.press('Enter')
   for (const point of points) {
@@ -109,7 +109,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
 
   // ── 2. 框选四个图形编成一个 Group，它就是这个元件的单根。
   await marquee(page, at(180, 100), at(360, 400))
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('GROUP')
   await commandInput.press('Enter')
   await openPanel(editor, 'compose-scene-content-panel', sceneTree)

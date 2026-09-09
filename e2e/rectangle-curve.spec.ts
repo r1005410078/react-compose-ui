@@ -22,7 +22,7 @@ test('OpenSpec: stage / 矩形命令落地成可几何编辑的闭合曲线 / R 
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('R')
   await commandInput.press('Enter')
   await expect(prompt).toContainText('指定第一个角点')
@@ -89,7 +89,7 @@ test('OpenSpec: stage / 矩形命令落地成可几何编辑的闭合曲线 / �
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await commandInput.fill('R')
   await commandInput.press('Enter')
   await page.mouse.click(at(240, 200).x, at(240, 200).y)

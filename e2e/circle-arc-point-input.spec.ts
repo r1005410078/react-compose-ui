@@ -21,7 +21,7 @@ async function openStage(page: Page) {
   const box = (await surface.boundingBox())!
   return {
     stage,
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
     prompt: stage.getByTestId('stage-drafting-command-prompt'),
     click: (x: number, y: number) => page.mouse.click(box.x + x, box.y + y),
     move: (x: number, y: number) => page.mouse.move(box.x + x, box.y + y),

@@ -13,8 +13,9 @@ export { ComposeAnglePicker, normalizeComposeAngle } from './angle-picker'
 export type { ComposeAnglePickerProps } from './angle-picker'
 export { ComposeButton } from './button'
 export type { ComposeButtonProps } from './button'
-export { ComposeCommandLine } from './command-line'
+export { ComposeCommandLine, matchComposeCommandCompletions } from './command-line'
 export type {
+  ComposeCommandCompletionMatch,
   ComposeCommandLineMessages,
   ComposeCommandLineProps,
   ComposeCommandLineStatus,

@@ -93,7 +93,7 @@ test('OpenSpec: stage-engine / 特征点捕捉 / 命令取点在各方位角都�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const marker = stage.getByTestId('stage-drafting-snap')
 
   const targets = await drawFan(page, commandInput)
@@ -128,7 +128,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 拖夹点在各方位角都�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const marker = stage.getByTestId('stage-drafting-snap')
 
   const targets = await drawFan(page, commandInput)
@@ -180,7 +180,7 @@ test('OpenSpec: stage-engine / 特征点捕捉 / 靶区随网格步长放大，�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const marker = stage.getByTestId('stage-drafting-snap')
 
   // 端点刻意**不落在网格上**（步长 8）：落在网格上时网格与捕捉给出同一个答案，这条就没有
@@ -225,7 +225,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 同一个形状的其他顶�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const marker = stage.getByTestId('stage-drafting-snap')
 
   // 闭合多段线 = 一个 Entity 上的四个顶点。坐标刻意**都不在网格上**（步长 8）：落在网格上时

@@ -20,7 +20,7 @@ async function openStage(page: Page) {
   return {
     editor,
     stage,
-    commandInput: stage.getByRole('textbox', { name: '命令行' }),
+    commandInput: stage.getByRole('combobox', { name: '命令行' }),
     prompt: stage.getByTestId('stage-drafting-command-prompt'),
     stroke: stage.getByTestId('compose-material-curve-stroke'),
     click: (x: number, y: number) => page.mouse.click(box.x + x, box.y + y),

@@ -1425,7 +1425,10 @@ function ComposeStageReady({
           inputLabel: messages.draftingCommandLineLabel,
           placeholder: messages.draftingCommandPlaceholder,
           keywordsPrefix: messages.draftingKeywordsPrefix,
+          completionsLabel: messages.draftingCommandCompletions,
         }}
+        // 补全读的与提交时解析的是同一份词汇表：不存在「列表里有、敲出来却是未知命令」。
+        completions={draftingSession.commandDescriptors ?? undefined}
         notice={draftingSession.notice}
         onFieldAdvance={draftingSession.advanceField ?? undefined}
         onTextChange={draftingSession.setFieldText}

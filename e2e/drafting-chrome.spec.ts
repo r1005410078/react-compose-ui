@@ -37,7 +37,7 @@ async function enterDrafting(page: import('@playwright/test').Page) {
 test('OpenSpec: stage / 绘图模式 / 手在画布上时 Enter 结束命令', async ({ page }) => {
   const { stage } = await enterDrafting(page)
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = await boxOf(stage.getByTestId('stage-surface'))
@@ -83,7 +83,7 @@ test('OpenSpec: stage / 绘图模式 / 命令行不被标尺与图面压住', as
 test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变', async ({ page }) => {
   const { stage } = await enterDrafting(page)
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = await boxOf(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
@@ -142,7 +142,7 @@ test('OpenSpec: materials / 曲线线宽 / 放大后描边的实际触达不变'
 test('OpenSpec: materials / 曲线的盒不裁描边 / 水平线在容差内点得中', async ({ page }) => {
   const { stage } = await enterDrafting(page)
 
-  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
   const box = await boxOf(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
