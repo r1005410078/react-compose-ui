@@ -16,7 +16,14 @@ import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { useWorkspaceContent } from './workspace-context'
 import { getEditorMessages } from '../editor-i18n'
 import { COMPOSE_TOOLBAR_CATALOG, useComposeToolbarShelf } from '../stage-toolbar/toolbar-shelf'
+import type { ComposeToolbarCatalogEntry } from '../stage-toolbar/toolbar-shelf'
+import { StageToolbarIcon } from '../stage-toolbar/stage-toolbar-icons'
+import {
+  formatComposeEditorKeybinding,
+  type ComposeEditorPreferences,
+} from '../editor-preferences'
 import { ToolbarShelfDialog } from './toolbar-shelf-dialog'
+import type { ToolbarShelfCatalogEntry } from './toolbar-shelf-dialog'
 import { PaletteShelfDialog } from './palette-shelf-dialog'
 import { COMPOSE_DEFAULT_COMPONENT_SHELF } from '@compose-ui/component-library'
 
@@ -34,7 +41,11 @@ export function WorkspaceDialogs() {
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
   const { workspace, paletteCatalog } = useWorkspaceContent()
   const { dialog, current } = workspace
-  const { items: injectedToolbarItems } = useComposeToolbarShelf()
+  const {
+    items: injectedToolbarItems,
+    overflowFrom: toolbarOverflowFrom,
+    shortcuts: toolbarShortcuts,
+  } = useComposeToolbarShelf()
   if (dialog === null) return null
 
   const close = () => workspace.closeDialog()
@@ -68,14 +79,29 @@ export function WorkspaceDialogs() {
 
   if (dialog === 'toolbar') {
     const stageToolbar = messages.stageToolbar as unknown as Record<string, string>
-    const catalog = [
-      ...COMPOSE_TOOLBAR_CATALOG.map(([id, key]) => ({ id, label: stageToolbar[key] ?? id })),
-      // 宿主注入的目录项一并列出：它们同样能上下架，只是来源不同。
-      ...(injectedToolbarItems ?? []).map((item) => ({ id: item.id, label: item.label })),
+    const catalog: readonly ToolbarShelfCatalogEntry[] = [
+      ...COMPOSE_TOOLBAR_CATALOG.map((entry) => ({
+        id: entry.id,
+        label: stageToolbar[entry.messageKey] ?? entry.id,
+        icon: <StageToolbarIcon name={entry.icon} />,
+        via: entranceLabel(entry, toolbarShortcuts, t.shelfViaPalette),
+      })),
+      /*
+       * 宿主注入的目录项一并列出：它们同样能上下架，只是来源不同。第二条入口就是它指向的
+       * 那个 id——宿主注入的项按定义是「指向一条已有的命令或动作」，那个词本身就是入口。
+       */
+      ...(injectedToolbarItems ?? []).map((item) => ({
+        id: item.id,
+        label: item.label,
+        icon: item.icon,
+        via: item.target.id,
+        injected: true,
+      })),
     ]
     return (
       <ToolbarShelfDialog
         catalog={catalog}
+        overflowFrom={toolbarOverflowFrom}
         shelf={workspace.toolbar ?? catalog.map((entry) => entry.id)}
         onClose={close}
         onReset={() => workspace.reset()}
@@ -164,5 +190,29 @@ function WorkspaceNameDialog({
         </ComposeDialogViewport>
       </ComposeDialogPortal>
     </ComposeDialog>
+  )
+}
+
+/**
+ * 一格的第二条入口，印在来源列上。
+ *
+ * @remarks
+ * 三种都是真话：绘图命令印它自己的词（命令行敲得出来），Stage 功能键印那个键，动作印它绑着
+ * 的键位——**没绑键的印「命令面板」**，因为动作目录里的每一条都在那里搜得到。这一档不是兜底
+ * 文案：`stage.canvasSettings` 与 `stage.toggleTransformGizmo` 默认就不绑键，而它们进目录的
+ * 理由正是「命令面板搜得到」。
+ */
+function entranceLabel(
+  entry: ComposeToolbarCatalogEntry,
+  shortcuts: ComposeEditorPreferences['shortcuts'] | undefined,
+  palette: string,
+): string {
+  if (entry.entrance.kind === 'command') return entry.id
+  if (entry.entrance.kind === 'stageKey') return entry.entrance.key
+  const binding = shortcuts?.[entry.entrance.id]?.[0]
+  if (!binding) return palette
+  return formatComposeEditorKeybinding(
+    binding,
+    typeof navigator === 'undefined' ? '' : navigator.platform,
   )
 }

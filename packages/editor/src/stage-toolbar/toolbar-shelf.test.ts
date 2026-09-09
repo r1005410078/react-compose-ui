@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMPOSE_TOOLBAR_CATALOG,
   COMPOSE_TOOLBAR_SEPARATOR,
   addToolbarShelfItem,
   insertToolbarSeparator,
   moveToolbarShelfItem,
   removeToolbarShelfItem,
+  reorderToolbarShelfItem,
+  insertToolbarShelfItemAt,
   DRAWING_TOOLBAR_SHELF,
   PAGE_TOOLBAR_SHELF,
   normalizeToolbarShelf,
@@ -75,46 +78,21 @@ describe('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏', (
 })
 
 describe('OpenSpec: editor-workspace-layout / 工具栏货架 / 目录准入', () => {
-  /**
-   * 每一格的第二条入口，逐项**声明**。
-   *
-   * @remarks
-   * 刻意不写成一张「这些都算通过」的白名单——那种写法在加进新一格时永远绿，而这条规则要防的
-   * 正是「有人加了一格只有按钮的功能」。逐项声明会让加格的人被迫回答「它还能从哪儿到达」，
-   * 而下面的断言把这个回答真的验一遍。
-   *
-   * 三种入口对应三处事实来源：
-   * - `command`——绘图命令，能在命令行敲、能按单键。它们**不在动作目录里**（那会为已经能敲
-   *   `CIRCLE` 的东西造第二个词）。
-   * - `action`——编辑器动作，命令面板搜得到，也可以绑键。
-   * - `stageKey`——Stage 自己硬接的功能键，不经编辑器的键位表。
+  /*
+   * 声明住在 `COMPOSE_TOOLBAR_CATALOG` 上而不是这里——对话框的来源列**把它印出来**，因此
+   * 它与 UI 的承诺不会分家。这条用例的职责因此从「维护一张表」变成「验那张表是真的」：
+   * 每一格都要有声明，且声明为动作的那一条真的在动作目录里。
    */
-  const SECOND_ENTRANCE: Readonly<Record<string, { readonly kind: 'command' } | { readonly kind: 'action'; readonly id: string } | { readonly kind: 'stageKey'; readonly key: string }>> = {
-    select: { kind: 'action', id: 'stage.selectTool' },
-    'transform-gizmo': { kind: 'action', id: 'stage.toggleTransformGizmo' },
-    snap: { kind: 'action', id: 'stage.toggleGridSnap' },
-    // 画布设置是网格 ▾ 菜单里唯一的入口，因此这一条是为本规则补的动作。
-    grid: { kind: 'action', id: 'stage.canvasSettings' },
-    ortho: { kind: 'stageKey', key: 'F8' },
-    polar: { kind: 'stageKey', key: 'F10' },
-    'draw-container': { kind: 'action', id: 'stage.drawContainerTool' },
-    'draw-text': { kind: 'action', id: 'stage.drawTextTool' },
-    LINE: { kind: 'command' },
-    PLINE: { kind: 'command' },
-    RECTANGLE: { kind: 'command' },
-    POLYGON: { kind: 'command' },
-    CIRCLE: { kind: 'command' },
-    ARC: { kind: 'command' },
-    ARROW: { kind: 'command' },
-    WIRE: { kind: 'command' },
-  }
+  const SECOND_ENTRANCE = new Map(
+    COMPOSE_TOOLBAR_CATALOG.map((entry) => [entry.id, entry.entrance] as const),
+  )
 
   it('两条内建货架上的每一格都声明了第二条入口，且那条入口真的在', () => {
     const actionIds = new Set<string>(COMPOSE_EDITOR_SHORTCUT_ACTIONS)
     const ids = [...PAGE_TOOLBAR_SHELF, ...DRAWING_TOOLBAR_SHELF]
       .filter((id) => id !== COMPOSE_TOOLBAR_SEPARATOR)
     for (const id of ids) {
-      const entrance = SECOND_ENTRANCE[id]
+      const entrance = SECOND_ENTRANCE.get(id)
       expect(entrance, `${id} 没有声明第二条入口`).toBeDefined()
       if (entrance?.kind === 'action') {
         // 声明了就得真的在动作目录里：写错 id 的症状是这条规则形同虚设。
@@ -152,5 +130,36 @@ describe('OpenSpec: editor-workspace-layout / 自定义工具栏 / 货架编辑'
     expect(addToolbarShelfItem(shelf, 'grid')).toBe(shelf)
     expect(addToolbarShelfItem(shelf, 'ARC')).toEqual(['select', 'grid', 'LINE', 'ARC'])
     expect(addToolbarShelfItem(shelf, COMPOSE_TOOLBAR_SEPARATOR)).toHaveLength(4)
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 按下标重排', () => {
+  const shelf = ['select', 'grid', 'LINE', 'ARC']
+
+  it('按最终下标挪，前后两个方向都对', () => {
+    expect(reorderToolbarShelfItem(shelf, 3, 1)).toEqual(['select', 'ARC', 'grid', 'LINE'])
+    expect(reorderToolbarShelfItem(shelf, 1, 3)).toEqual(['select', 'LINE', 'ARC', 'grid'])
+  })
+
+  it('谁都不能挪到「选择」之前，「选择」自己也挪不动', () => {
+    // 钳到 1 而不是拒绝：拖到最左边是一次正当手势，落在「选择」之后是它唯一说得通的结果。
+    expect(reorderToolbarShelfItem(shelf, 2, 0)).toEqual(['select', 'LINE', 'grid', 'ARC'])
+    expect(reorderToolbarShelfItem(shelf, 0, 2)).toBe(shelf)
+  })
+
+  it('落回原位与越界都原样返回', () => {
+    expect(reorderToolbarShelfItem(shelf, 2, 2)).toBe(shelf)
+    expect(reorderToolbarShelfItem(shelf, 9, 1)).toBe(shelf)
+  })
+
+  it('按下标插入；已经在货架上的原样返回，分隔线例外', () => {
+    expect(insertToolbarShelfItemAt(shelf, 'CIRCLE', 2)).toEqual(['select', 'grid', 'CIRCLE', 'LINE', 'ARC'])
+    expect(insertToolbarShelfItemAt(shelf, 'LINE', 1)).toBe(shelf)
+    expect(insertToolbarShelfItemAt(shelf, COMPOSE_TOOLBAR_SEPARATOR, 1))
+      .toEqual(['select', COMPOSE_TOOLBAR_SEPARATOR, 'grid', 'LINE', 'ARC'])
+  })
+
+  it('插不到「选择」之前', () => {
+    expect(insertToolbarShelfItemAt(shelf, 'CIRCLE', 0)).toEqual(['select', 'CIRCLE', 'grid', 'LINE', 'ARC'])
   })
 })

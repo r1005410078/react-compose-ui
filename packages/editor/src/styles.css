@@ -570,61 +570,429 @@
 }
 
 /*
- * 自定义工具栏对话框：两列等宽，各自一份可滚的列表加一组移动按钮。列表限高而不是让对话框
- * 长到屏幕外——目录有十几项，加上宿主注入的会更多。
+ * 两个货架对话框共用的骨架：左编排、右来源。
+ *
+ * 编排区的**朝向**由被编排的东西决定（`data-shelf-orientation`）——工具栏是一条横栏，物料
+ * 面板是一列段卡。两边限高而不是让对话框长到屏幕外：目录有十几项，加上宿主注入的会更多。
  */
-.compose-editor__shelf-dialog {
+.compose-editor__shelf-cols {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) 312px;
   gap: 16px;
-  margin-bottom: 12px;
+  align-items: stretch;
+  margin-top: 22px;
 }
 
-.compose-editor__shelf-column h3 {
-  margin: 0 0 6px;
+.compose-editor__shelf-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.compose-editor__shelf-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+  margin-bottom: 8px;
+}
+
+.compose-editor__shelf-pane-title {
   color: var(--compose-text-subtle);
   font-size: 12px;
   font-weight: 500;
 }
 
-.compose-editor__shelf-list {
-  margin: 0 0 8px;
-  padding: 0;
-  max-height: 240px;
-  overflow-y: auto;
-  border: 1px solid var(--compose-border);
-  border-radius: 4px;
-  list-style: none;
-}
-
-.compose-editor__shelf-list > li > button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  padding: 4px 8px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.compose-editor__shelf-list > li > button[aria-selected='true'] {
-  background: var(--compose-surface-active, rgb(255 255 255 / 8%));
-}
-
-.compose-editor__shelf-fixed {
-  color: var(--compose-text-subtle);
+.compose-editor__shelf-pane-note {
+  color: var(--compose-text-muted);
   font-size: 11px;
 }
 
-.compose-editor__shelf-actions {
+/* 面板级字段排在编排区之外：层级由位置表达，见 `ShelfDialogShell` 的 `meta`。 */
+.compose-editor__shelf-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.compose-editor__shelf-box {
+  position: relative;
+  flex: 1;
+  min-height: 300px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--compose-surface-sunken);
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+}
+
+.compose-editor__shelf-box:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--compose-focus);
+}
+
+.compose-editor__shelf-box[data-shelf-orientation='wrap'] {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: center;
+  gap: 4px;
+}
+
+.compose-editor__shelf-box[data-shelf-orientation='vertical'],
+.compose-editor__shelf-box--list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
+}
+
+.compose-editor__shelf-box--list {
+  gap: 2px;
+}
+
+/* 落区高亮回答「这里能放」；「松手会怎样」由光标处那件东西上的徽标回答，两个问题分两处答。 */
+.compose-editor__shelf-box[data-shelf-drop] {
+  border-color: var(--compose-accent);
+  background: color-mix(in srgb, var(--compose-accent) 9%, var(--compose-surface-sunken));
+  box-shadow: inset 0 0 0 1px var(--compose-accent);
+}
+
+/* 一格：30px 高、4px 圆角、20px 图标——与工具栏按钮逐项相同，排出来的就是画出来的。 */
+.compose-editor__shelf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--compose-border);
+  border-radius: 4px;
+  background: var(--compose-surface-control);
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: grab;
+}
+
+.compose-editor__shelf-chip svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compose-editor__shelf-chip[aria-selected='true'],
+.compose-editor__shelf-card[aria-selected='true'] {
+  border-color: var(--compose-accent);
+  background: var(--compose-surface-selected);
+  color: var(--compose-text-strong);
+}
+
+/* 「选择」抓不起来：取点命令结束之后用户回到的就是它。 */
+.compose-editor__shelf-chip[data-shelf-fixed] {
+  border-style: dashed;
+  background: var(--compose-surface-sunken);
+  color: var(--compose-text-muted);
+  cursor: default;
+}
+
+/* 收在「更多」里，不是不在货架上——因此淡下去而不是移走，它仍可拖动。 */
+.compose-editor__shelf-chip[data-shelf-overflowed],
+.compose-editor__shelf-sep[data-shelf-overflowed] {
+  opacity: 0.42;
+}
+
+/* 抓走的那一件原位留影子：松手落回原处因此是可预期的。 */
+.compose-editor__shelf-chip[data-shelf-ghost],
+.compose-editor__shelf-card[data-shelf-ghost],
+.compose-editor__shelf-source[data-shelf-ghost],
+.compose-editor__shelf-sep[data-shelf-ghost] {
+  opacity: 0.34;
+  border-style: dashed;
+}
+
+/* 分隔线是货架上的一格，因此画成一格；它自己就是自己的图标。 */
+.compose-editor__shelf-sep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--compose-surface-raised);
+  cursor: grab;
+}
+
+.compose-editor__shelf-sep::after {
+  content: '';
+  width: 1px;
+  height: 14px;
+  background: var(--compose-border-strong);
+}
+
+.compose-editor__shelf-tag {
+  padding: 2px 4px;
+  border: 1px solid var(--compose-border);
+  border-radius: 3px;
+  color: var(--compose-text-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* 溢出切口：它之后的格此刻收在「更多」里。量不到宽度时这一格根本不渲染。 */
+.compose-editor__shelf-cut {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px dashed var(--compose-border-strong);
+  border-radius: 4px;
+  color: var(--compose-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 落点画在**两格之间**：高亮被压住的那一格说的是「替换它」，而这里从不替换。 */
+.compose-editor__shelf-caret {
+  flex: none;
+  width: 2px;
+  align-self: stretch;
+  min-height: 30px;
+  border-radius: 1px;
+  background: var(--compose-accent);
+}
+
+.compose-editor__shelf-box[data-shelf-orientation='vertical'] .compose-editor__shelf-caret {
+  width: auto;
+  min-height: 0;
+  height: 2px;
+}
+
+/* 跟着光标的那一件；键盘抓起时没有光标位置，因此那一档不画它。 */
+.compose-editor__shelf-drag {
+  position: fixed;
+  z-index: 20001;
+  transform: translate(10px, -6px) rotate(-1.5deg);
+  pointer-events: none;
+  box-shadow: 0 10px 22px -8px var(--compose-shadow);
+}
+
+.compose-editor__shelf-drag .compose-editor__shelf-chip {
+  border-color: var(--compose-accent);
+  background: var(--compose-surface-raised);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__shelf-drag::after {
+  content: '+';
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--compose-accent);
+  color: var(--compose-surface-sunken);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.compose-editor__shelf-drag[data-shelf-badge='remove']::after {
+  content: '×';
+}
+
+.compose-editor__shelf-hint {
+  margin: 8px 0 0;
+  color: var(--compose-text-muted);
+  font-size: 11px;
+  line-height: 1.75;
+}
+
+.compose-editor__shelf-search {
+  width: 168px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--compose-border);
+  border-radius: 4px;
+  background: var(--compose-surface-sunken);
+  color: var(--compose-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* live region 只播报，不占版面。 */
+.compose-editor__shelf-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 来源列的一条：两个对话框逐像素相同。 */
+.compose-editor__shelf-source {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 8px 0 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--compose-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: start;
+  cursor: grab;
+}
+
+.compose-editor__shelf-source:hover {
+  border-color: var(--compose-border-strong);
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__shelf-source svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compose-editor__shelf-source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 第二条入口：说明文案里那句承诺，在这里变成可核对的。 */
+.compose-editor__shelf-via {
+  padding: 3px 4px;
+  border: 1px solid var(--compose-border);
+  border-radius: 3px;
+  background: var(--compose-surface-sunken);
+  color: var(--compose-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* 拖拽把手：2×3 点阵，与画布图标里的「点」同一套词汇。 */
+.compose-editor__shelf-grip {
+  flex: none;
+  width: 10px;
+  height: 16px;
+  background-image: radial-gradient(circle, var(--compose-border-strong) 1px, transparent 1px);
+  background-size: 4px 4px;
+  background-position: 1px 3px;
+  background-repeat: repeat;
+}
+
+.compose-editor__shelf-empty {
+  margin: 0;
+  padding: 10px 2px;
+  color: var(--compose-text-muted);
+  font-size: 12px;
+}
+
+/* 物料面板：编排区排的是段，因此段的选项直接长在卡上。 */
+.compose-editor__shelf-card {
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+  background: var(--compose-surface-raised);
+  cursor: grab;
+}
+
+.compose-editor__shelf-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 4px;
+}
+
+.compose-editor__shelf-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.compose-editor__shelf-crumb {
+  color: var(--compose-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.compose-editor__shelf-card-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 16px;
+  padding: 0 10px 10px 25px;
+  cursor: default;
+}
+
+.compose-editor__shelf-field,
+.compose-editor__shelf-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  /* 标签压折行会把「面板标题」断成两行——这一行的宽度由输入框让，不由标签让。 */
+  white-space: nowrap;
+}
+
+.compose-editor__shelf-check {
+  color: var(--compose-text-muted);
+  font-size: 11px;
+}
+
+.compose-editor__shelf-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.compose-editor__shelf-presets > legend {
+  padding: 0 0 4px;
+  color: var(--compose-text-muted);
+  font-size: 11px;
+}
+
+/* 「重置为默认」退到左端：它是还原不是提交，与「完成」并排会招误点。 */
+.compose-editor__shelf-footer {
+  justify-content: space-between;
+}
+
+.compose-editor__shelf-footer-end {
+  display: flex;
+  gap: 8px;
 }
 
 .compose-editor__workspace-copies {

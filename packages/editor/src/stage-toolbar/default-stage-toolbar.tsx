@@ -4,7 +4,7 @@ import type {
   ComposeStageDispatch,
   ComposeStageTool,
 } from '@compose-ui/stage'
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Dispatch, KeyboardEvent, ReactNode, RefObject, SetStateAction } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import {
@@ -746,6 +746,15 @@ export function DefaultStageToolbar({
   const overflowFrom = useToolbarOverflow(toolbarRef, flatItems.length)
   const overflowed = overflowFrom === null ? [] : flatItems.slice(overflowFrom)
   const isHidden = (item: ToolbarItem) => overflowFrom !== null && flatItems.indexOf(item) >= overflowFrom
+  /*
+   * 上报**第一个被收走那一格的 id** 而不是下标：自定义对话框拿到之后要在自己的草稿里定位，
+   * 而草稿一旦被重排，下标指向的就是另一格了。
+   */
+  const firstOverflowId = overflowFrom === null ? null : flatItems[overflowFrom]?.key ?? null
+  const reportOverflow = injected.onOverflowChange
+  useEffect(() => {
+    reportOverflow?.(firstOverflowId)
+  }, [firstOverflowId, reportOverflow])
 
   // prop 压过 Context，与 `shelf` 同一条规则：宿主自己渲染这颗工具栏时 prop 是唯一入口。
   const customize = onCustomize ?? injected.onCustomize

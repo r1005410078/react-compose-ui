@@ -41,6 +41,37 @@ function shelfIds(editor: Locator) {
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-toolbar-item')))
 }
 
+
+/** 打开「自定义工具栏」：管理菜单那条路。 */
+async function openToolbarDialog(editor: Locator) {
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义工具栏…' })
+    .click()
+  const dialog = editor.page().getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: '自定义工具栏' })).toBeVisible()
+  return dialog
+}
+
+/**
+ * 用真实指针把一件东西拖到目标上。
+ *
+ * @remarks
+ * 走 `page.mouse` 而不是 Playwright 的 `dragTo`：后者派发的是 HTML5 拖放事件，而这两个对话框
+ * 刻意走 Pointer Events 与指针捕获。中间必须**分两步移动**——第一步让「指针离开过按下点」成立
+ * 从而开始拖动，第二步才落到目标上。
+ */
+async function dragTo(page: Page, from: Locator, to: Locator, edge: 'center' | 'before' = 'center') {
+  const source = (await from.boundingBox())!
+  const target = (await to.boundingBox())!
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(source.x + source.width / 2 + 12, source.y + source.height / 2)
+  const x = edge === 'before' ? target.x + 2 : target.x + target.width / 2
+  await page.mouse.move(x, target.y + target.height / 2, { steps: 6 })
+  await page.mouse.up()
+}
+
 test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 两个内建的默认货架不同', async ({ page }) => {
   const { editor, switcher } = await openEditor(page)
 
@@ -137,22 +168,18 @@ test('OpenSpec: component-library / 混合组件目录 / 圆的瓦片跟着货�
   await expect(library.getByRole('button', { name: 'Wire' })).toBeHidden()
 })
 
-test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 移除、重排与重置', async ({ page }) => {
+test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 拖出即移除，重置拿回来', async ({ page }) => {
   const { editor, switcher } = await openEditor(page)
-  const openDialog = async () => {
-    // 管理菜单的按钮在切换器**外面**（它管的是当前工作区，不是列表里的某一段）。
-    await editor.getByRole('button', { name: '管理工作区' }).click()
-    await editor.getByRole('menu', { name: '管理工作区' })
-      .getByRole('menuitem', { name: '自定义工具栏…' })
-      .click()
-    return page.getByRole('dialog')
-  }
+  const dialog = await openToolbarDialog(editor)
 
-  const dialog = await openDialog()
-  await expect(dialog).toBeVisible()
-  // 「选择」标为固定，且没有移除入口。
-  await dialog.getByRole('option', { name: /矩形/ }).first().click()
-  await dialog.getByRole('button', { name: '从货架移除' }).click()
+  const arrange = dialog.getByTestId('compose-shelf-arrange')
+  const source = dialog.getByTestId('compose-shelf-source')
+  await expect(arrange.locator('[data-shelf-id="RECTANGLE"]')).toBeVisible()
+
+  await dragTo(page, arrange.locator('[data-shelf-id="RECTANGLE"]'), source)
+  // 拖回来源列即移出：那一格出现在右边，编排区里没有了。
+  await expect(arrange.locator('[data-shelf-id="RECTANGLE"]')).toHaveCount(0)
+  await expect(source.locator('[data-shelf-available="RECTANGLE"]')).toBeVisible()
   await dialog.getByRole('button', { name: '完成' }).click()
 
   expect(await itemIds(editor)).not.toContain('RECTANGLE')
@@ -170,11 +197,69 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 移除、重排�
   await page.keyboard.press('Escape')
 
   // 重置把它拿回来，修改点熄灭。
-  const again = await openDialog()
+  const again = await openToolbarDialog(editor)
   await again.getByRole('button', { name: '重置为默认' }).click()
   expect(await itemIds(editor)).toContain('RECTANGLE')
   await expect(switcher.getByRole('radio', { name: '页面' }).getByRole('img', { name: '布局已改动' }))
     .toHaveCount(0)
+})
+
+test('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 拖动重排并跨工作区留住', async ({ page }) => {
+  const { editor, switcher } = await openEditor(page)
+  const dialog = await openToolbarDialog(editor)
+  const arrange = dialog.getByTestId('compose-shelf-arrange')
+
+  /*
+   * 判别性：把「文字」拖到「吸附」之前。只断「顺序变了」会在一个把它拖到别处的实现上同样绿，
+   * 因此断的是**落在哪两格之间**——插入线画的就是这个位置。
+   */
+  await dragTo(page, arrange.locator('[data-shelf-id="draw-text"]'), arrange.locator('[data-shelf-id="snap"]'), 'before')
+  await dialog.getByRole('button', { name: '完成' }).click()
+
+  const after = await shelfIds(editor)
+  expect(after.indexOf('draw-text')).toBeLessThan(after.indexOf('snap'))
+
+  // 切走再切回：顺序随工作区记着。
+  await switcher.getByRole('radio', { name: '绘图' }).click()
+  await switcher.getByRole('radio', { name: '页面' }).click()
+  const back = await shelfIds(editor)
+  expect(back.indexOf('draw-text')).toBeLessThan(back.indexOf('snap'))
+})
+
+test('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 按下不动仍是选中', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const dialog = await openToolbarDialog(editor)
+  const arrange = dialog.getByTestId('compose-shelf-arrange')
+  const before = await arrange.locator('[data-shelf-item]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-shelf-id')))
+
+  /*
+   * 原地按一下松开：浏览器在 `pointerup` 之前会补发一次原地 `pointermove`，因此「收没收到
+   * move」当不了判据——这条用例钉的正是那一点。
+   */
+  const box = (await arrange.locator('[data-shelf-id="draw-text"]').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.up()
+
+  await expect(dialog.getByTestId('compose-shelf-caret')).toHaveCount(0)
+  const after = await arrange.locator('[data-shelf-item]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-shelf-id')))
+  expect(after).toEqual(before)
+})
+
+test('OpenSpec: editor-workspace-layout / 自定义物料面板 / 右键组件面板标签', async ({ page }) => {
+  const { editor } = await openEditor(page)
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '自定义物料面板…' }).click()
+
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: '自定义物料面板' })).toBeVisible()
+  // 与工具栏那份共用骨架：同一列来源、同一条页脚。
+  await expect(dialog.getByTestId('compose-shelf-source')).toBeVisible()
+  await expect(dialog.getByTestId('compose-shelf-arrange'))
+    .toHaveAttribute('data-shelf-orientation', 'vertical')
 })
 
 test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 下拉菜单不被工具栏行裁掉', async ({ page }) => {

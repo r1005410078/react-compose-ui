@@ -305,6 +305,54 @@ export function removeComponentShelfSection(
 }
 
 /**
+ * 把某一段挪到第 `to` 位（重排落地之后的最终下标）。
+ *
+ * @remarks
+ * 与 `moveComponentShelfSection` 的差别只是**参数形状**：那一条服务「上一段 / 下一段」这种
+ * 相对移动，这一条服务拖动与键盘抓放算出来的绝对下标。两条各自留着而不是合并，理由与工具栏
+ * 那一对逐字相同——相对移动到头要静默不动，绝对下标到头本来就无事可做。
+ *
+ * @internal
+ */
+export function reorderComponentShelfSection(
+  shelf: ComposeComponentShelf,
+  id: string,
+  to: number,
+): ComposeComponentShelf {
+  const index = sectionIndex(shelf, id)
+  if (index < 0) return shelf
+  const target = Math.max(0, Math.min(to, shelf.sections.length - 1))
+  if (target === index) return shelf
+  const next = [...shelf.sections]
+  const [section] = next.splice(index, 1)
+  next.splice(target, 0, section!)
+  return withSections(shelf, next)
+}
+
+/**
+ * 把一段插在第 `at` 段**之前**；同 id 的段已经在货架上时原样返回。
+ *
+ * @remarks
+ * 与 `addComponentShelfSection` 的差别只是落点：拖进来的那一段要落在插入线的位置，而不是
+ * 一律追加到末尾——用户拖到哪儿就该落在哪儿，否则那条插入线是在说谎。
+ *
+ * @internal
+ */
+export function insertComponentShelfSectionAt(
+  shelf: ComposeComponentShelf,
+  section: ComposeComponentShelfSection,
+  at: number,
+): ComposeComponentShelf {
+  if (sectionIndex(shelf, section.id) >= 0) return shelf
+  const index = Math.max(0, Math.min(at, shelf.sections.length))
+  return withSections(shelf, [
+    ...shelf.sections.slice(0, index),
+    section,
+    ...shelf.sections.slice(index),
+  ])
+}
+
+/**
  * 「只看这一组」：把货架收成只剩这一段。
  *
  * @remarks

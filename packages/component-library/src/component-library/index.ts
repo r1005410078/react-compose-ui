@@ -10,9 +10,11 @@ export type {
 export {
   COMPOSE_DEFAULT_COMPONENT_SHELF,
   addComponentShelfSection,
+  insertComponentShelfSectionAt,
   keepOnlyComponentShelfSection,
   moveComponentShelfSection,
   removeComponentShelfSection,
+  reorderComponentShelfSection,
   setComponentShelfPresetVisible,
   updateComponentShelfSection,
 } from './component-shelf'
