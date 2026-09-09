@@ -182,10 +182,16 @@
   .property-panel__search {
     display: flex;
     min-width: 0;
+    height: 24px;
     flex: 1 1 auto;
     align-items: center;
     gap: 6px;
-    margin: 5px 4px 5px 6px;
+    /*
+     * 24px 与场景树那条 chrome 上的搜索框同高——它们是同一条规则的两个实例，一高一矮会让两块
+     * 面板的头看起来不是一套。高度写死而不靠上下外边距撑：这一行是 flex + `align-items:
+     * center`，不写高度它就缩成内容高（18px），比旁边那两颗 22px 的按钮还矮。
+     */
+    margin: 0 4px 0 6px;
     padding: 0 7px;
     border: 1px solid #343535;
     border-radius: 3px;
