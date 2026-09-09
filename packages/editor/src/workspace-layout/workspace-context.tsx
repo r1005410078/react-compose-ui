@@ -14,8 +14,10 @@ import type {
   ComposeHistoryNavigationController,
   ComposeHistoryShortcuts,
 } from '@compose-ui/history'
-import type { DockviewReadyEvent } from 'dockview-react'
 import type { ComposeEditorMode } from './editor-mode-switcher'
+import type { ComposeWorkspaceSide, ComposeWorkspaceSideCollapsed } from './use-side-collapse'
+import type { ComposeWorkspaceSessionHandle } from './use-workspace-session'
+import type { WorkspaceHostElements } from './workspace-hosts'
 
 export interface WorkspaceContent {
   sceneGraphPanel?: ReactNode
@@ -38,24 +40,35 @@ export interface WorkspaceContent {
   commandPanel?: ReactNode
   assetBrowserPanel?: ReactNode
   /**
-   * 外层工作区唯一中央面板挂载内层 scene/canvas/inspector Dockview 时调用。
-   *
-   * @remarks
-   * 内层 Dockview 是通过外层 `core` 面板组件渲染的，不能直接从 `ComposeEditor` 拿到它的
-   * `onReady` 事件；这里把回调经 Context 往下传，内层组件就绪后再往上转发。
-   */
-  onCoreDockviewReady: (event: DockviewReadyEvent) => void
-  /**
-   * 唯一允许渲染 Stage 的面板 ID。
+   * 唯一允许渲染 Stage 的文档 key。
    *
    * @remarks
    * Stage 持有 interaction controller 的独占 surface，同时渲染两份会抛
-   * 「already has a connected surface」。Dockview 会保留同组内非活动面板的挂载，因此不能
-   * 依赖「只有活动面板才渲染」，必须由这里显式指定单一宿主。
+   * 「already has a connected surface」。画布面板按它决定给哪个文档表面渲染 Stage；未启用
+   * 页面系统时它是固定画布自己的 id。
    */
   stageHostPanelId: string
-  /** 当前打开的文档会话，按 Dockview panel ID 索引。 */
+  /** 当前打开的文档会话，按文档 key 索引；Map 的插入顺序就是标签条的顺序。 */
   documents: ReadonlyMap<string, ComposeWorkspaceDocumentSession>
+  /** 活动文档的 key；没有打开文档时为 null。 */
+  activeDocumentPanelId: string | null
+  /** 激活一个已打开的文档；标签条与重复打开都走它。 */
+  activateDocument: (panelId: string) => void
+  /** 左右两侧此刻收没收起；把手与面板头上的折叠按钮都读它。 */
+  sideCollapsed: ComposeWorkspaceSideCollapsed
+  /** 收起或展开一侧。 */
+  toggleSide: (side: ComposeWorkspaceSide) => void
+  /**
+   * 各面板内容的稳定宿主元素。
+   *
+   * @remarks
+   * 面板内容不直接挂在 Dockview 面板里，而是各自渲染进一个在编辑器实例生命周期内一直存在的
+   * 元素（经 portal）；Dockview 面板挂载时只把这个元素搬进自己的盒子。`fromJSON` 重建面板之后
+   * 同一个元素被搬进新盒子，一个 React 组件都不重挂载——正在取点的命令继续等它的点。
+   */
+  hosts: WorkspaceHostElements
+  /** 工作区会话；纯插槽宿主没有画布会话开关时也有（只是不换开关）。 */
+  workspace: ComposeWorkspaceSessionHandle
   registerDocumentSave: (
     panelId: string,
     save: (() => Promise<boolean>) | null,
@@ -65,6 +78,14 @@ export interface WorkspaceContent {
   requestDocumentClose: (panelId: string) => void
   /** 保存指定文档；页面标签据此提供显式保存入口。 */
   saveDocument: (panelId: string) => void
+  /**
+   * 打开底部的命令面板：展开底栏并把它设为活动面板。
+   *
+   * @remarks
+   * 应用菜单里那一项走它。命令面板是 Dockview 的一个面板，底栏收起时 `setActive` 到不了它，
+   * 因此这两步必须一起做——只做后一步的症状是「点了菜单什么都没发生」。
+   */
+  openCommandPanel: () => void
   settingsOpen: boolean
   settingsPanelId: string
   setSettingsButton: (element: HTMLButtonElement | null) => void

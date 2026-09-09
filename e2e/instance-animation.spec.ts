@@ -1,4 +1,11 @@
 import { expect, test } from '@playwright/test'
+import type { Locator } from '@playwright/test'
+
+/** 属性面板的 Dockview 标签：对象名住在这里（`属性 · Rectangle`）。 */
+function inspectorTabTitle(editor: Locator) {
+  return editor.locator('[data-workspace-tab="compose-inspector"]')
+}
+
 
 /**
  * 刀闸故事的整条纵向流程：画 → 打点 → 存成组件 → 放两个实例 → 脚本驱动各自的姿态。
@@ -53,7 +60,8 @@ test('OpenSpec: scene-animation / 组件文档的动画 / 打点存成组件后�
     if (await toggle.count()) await toggle.click()
   }
   await componentTree.getByRole('row', { name: /Rectangle/ }).click()
-  await expect(inspector).toContainText('Rectangle')
+  // 对象名住在属性面板的**标签**上（`属性 · Rectangle`），面板里不再写第二遍。
+  await expect(inspectorTabTitle(editor)).toContainText('Rectangle')
 
   // 基线必须在资源面板**打开着**的时候量：面板没渲染时行数是 0，之后那条断言就成了
   // 「现在有 8 行，期望 0 行」——看起来像功能坏了，其实是量具没接上。
@@ -79,7 +87,8 @@ test('OpenSpec: scene-animation / 组件文档的动画 / 打点存成组件后�
   await editor.locator('[data-workspace-tab="compose-assets"]').click()
   await expect(assetRows).toHaveCount(assetsBefore)
 
-  await editor.getByRole('button', { name: /^保存(主组件|变体)/ }).click()
+  // 保存按钮已从标签条删掉；`document.save` 的默认键位仍是 Cmd/Ctrl+S，由编辑器根节点捕获。
+  await stage.press('Control+S')
 
   // 3. 回到页面，再放一个同组件的实例。
   await editor.locator('[data-workspace-tab]').filter({ hasText: 'Home' }).click()

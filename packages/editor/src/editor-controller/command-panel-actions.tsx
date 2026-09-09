@@ -14,7 +14,13 @@ const DEFAULT_SHORTCUTS = createDefaultComposeEditorPreferences().shortcuts
 /** 由控制器提供的部分；语言与键位在挂载处补齐。 */
 type ActionContextInput = Omit<
   ComposeEditorActionContext,
-  'locale' | 'formatMessage' | 'shortcuts' | 'openSettings'
+  | 'locale'
+  | 'formatMessage'
+  | 'shortcuts'
+  | 'openSettings'
+  | 'saveDocument'
+  | 'canSaveDocument'
+  | 'toggleAnimationMode'
 >
 
 interface CommandPanelWithActionsProps {
@@ -30,6 +36,16 @@ interface CommandPanelWithActionsProps {
   readonly shortcuts?: ComposeEditorPreferences['shortcuts']
   /** 由 ComposeEditor 注入的设置入口；缺省时目录不产出该动作。 */
   readonly onOpenSettings?: () => void
+  /**
+   * 由 ComposeEditor 注入的文档级动作；控制器不认识文档会话。
+   *
+   * @remarks
+   * 保存与模式切换住在编辑器那一层（页面 / 组件 / 资源三种标签是它的东西），与 `openSettings`
+   * 是同一条理由。缺省时目录整条省略它们，而不是列出按下去没反应的条目。
+   */
+  readonly onSaveDocument?: () => void
+  readonly canSaveDocument?: boolean
+  readonly onToggleAnimationMode?: () => void
 }
 
 /**
@@ -45,6 +61,9 @@ export function CommandPanelWithActions({
   runtime,
   shortcuts,
   onOpenSettings,
+  onSaveDocument,
+  canSaveDocument,
+  onToggleAnimationMode,
 }: CommandPanelWithActionsProps) {
   const i18n = useComposeI18nContext()
   const locale = i18n?.locale ?? 'zh-CN'
@@ -57,8 +76,20 @@ export function CommandPanelWithActions({
       locale,
       openSettings: onOpenSettings,
       shortcuts: resolvedShortcuts,
+      saveDocument: onSaveDocument,
+      canSaveDocument,
+      toggleAnimationMode: onToggleAnimationMode,
     }),
-    [actionContext, formatMessage, locale, onOpenSettings, resolvedShortcuts],
+    [
+      actionContext,
+      canSaveDocument,
+      formatMessage,
+      locale,
+      onOpenSettings,
+      onSaveDocument,
+      onToggleAnimationMode,
+      resolvedShortcuts,
+    ],
   )
   return <ComposeCommandPanel actions={actions} presets={presets} runtime={runtime} />
 }

@@ -3,15 +3,18 @@ export {
   COMPOSE_EDITOR_SHORTCUT_ACTIONS,
   COMPOSE_EDITOR_SHORTCUT_SCOPES,
   createDefaultComposeEditorPreferences,
+  createDefaultComposeEditorWorkspacePreferences,
   findComposeEditorShortcutConflict,
   formatComposeEditorKeybinding,
   isComposeEditorKeybindingMatch,
   isEditableKeyboardTarget,
   normalizeComposeEditorKeybinding,
   normalizeComposeEditorPreferences,
+  normalizeComposeEditorWorkspacePreferences,
   type ComposeEditorKeybinding,
   type ComposeEditorPreferences,
   type ComposeEditorShortcutAction,
   type ComposeEditorShortcutScope,
+  type ComposeEditorWorkspacePreferences,
 } from './preferences'
 export { SettingsDialog } from './settings-panel'

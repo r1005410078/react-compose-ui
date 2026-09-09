@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import type { Locator } from '@playwright/test'
 import {
   pointerDrop,
   drawContainer,
@@ -9,6 +10,12 @@ import {
   selectChildInSceneTree,
   selectContainer,
 } from './support/test-helpers'
+
+/** 属性面板的 Dockview 标签：对象名住在这里（`属性 · Rectangle`）。 */
+function inspectorTabTitle(editor: Locator) {
+  return editor.locator('[data-workspace-tab="compose-inspector"]')
+}
+
 
 test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输入并提交为一条事务', async ({ page }) => {
   await page.goto('/')
@@ -270,8 +277,11 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const frameBoundary = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frameBoundary).toBeVisible()
+  // 可见之后布局还会动一下，中间那一刻量到的可能是 null：轮询到量得出来为止。
+  await expect.poll(() => frameBoundary.boundingBox()).not.toBeNull()
+  const outputBox = await frameBoundary.boundingBox()
 
   // 1) 容器内放两个矩形，再启用 Auto Layout 把它们转成 Flow。
   await drawContainer(page, editor)
@@ -452,8 +462,11 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const frameBoundary = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(frameBoundary).toBeVisible()
+  // 可见之后布局还会动一下，中间那一刻量到的可能是 null：轮询到量得出来为止。
+  await expect.poll(() => frameBoundary.boundingBox()).not.toBeNull()
+  const outputBox = await frameBoundary.boundingBox()
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
@@ -728,7 +741,8 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
 
   // Inspector 路由到内部实体：编辑写入实例覆盖，宿主文档不新增实体。
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expect(inspector).toContainText('Rectangle')
+  // 对象名住在属性面板的**标签**上（`属性 · Rectangle`），面板里不再写第二遍。
+  await expect(inspectorTabTitle(editor)).toContainText('Rectangle')
   const positionX = inspector.getByLabel('位置 X')
   await expect(positionX).toHaveValue('40')
   await positionX.fill('120')
@@ -755,8 +769,12 @@ test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落�
   const inScene1 = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
   await expect(inScene1).toHaveCount(1)
 
-  // 在场景 1 之外画出第二块场景。
-  const region = await emptyWorkspaceRect(page, editor)
+  /*
+   * 在场景 1 之外画出第二块场景。要一块**装得下那个矩形**的空白：下面按「矩形中心落到场景 2
+   * 中心」摆落点，场景 2 比矩形矮时那个落点会落到它上边线之外，于是拖过去了却没换父级。
+   * 空白不够时 `emptyWorkspaceRect` 会先缩小视图，矩形跟着一起变小。
+   */
+  const region = await emptyWorkspaceRect(page, editor, 200)
   const width = Math.min(400, region.width - 16)
   const height = Math.min(260, region.height - 16)
   const start = {

@@ -85,10 +85,18 @@ export async function drawContainer(page: Page, editor: Locator) {
   await expect.poll(() => output.boundingBox()).not.toBeNull()
   const outputBox = await output.boundingBox()
 
+  /*
+   * 落点是屏幕像素，因为**下游用例也用屏幕像素**往这个容器里丢子级；换成场景框的比例会让容器
+   * 的屏幕尺寸随缩放变，那些固定落点就会落到容器外面。
+   *
+   * 这几个数不圆是有原因的：容器画得比场景框还大，而**紧包围盒中心一旦落到场景之外，它就被
+   * 升格成一块新场景**（症状是「stage-container 找不到」而不是「容器画小了」）。因此纵向留了
+   * 余量——视口适配的缩放随 chrome 高度变，chrome 每长高一点，场景框在屏幕上就小一点。
+   */
   await editor.getByRole('button', { name: '创建容器' }).click()
-  await page.mouse.move(outputBox!.x + 48, outputBox!.y + 64)
+  await page.mouse.move(outputBox!.x + 48, outputBox!.y + 24)
   await page.mouse.down()
-  await page.mouse.move(outputBox!.x + 696, outputBox!.y + 424, { steps: 4 })
+  await page.mouse.move(outputBox!.x + 696, outputBox!.y + 384, { steps: 4 })
   await page.mouse.up()
   await expect(stage.getByTestId('stage-container')).toBeVisible()
   await editor.getByRole('button', { name: '选择', exact: true }).click()
@@ -164,18 +172,25 @@ const MIN_CLICKABLE_BLANK = 24
 /** 场景填满视口时最多缩小几次腾出空白区。 */
 const MAX_ZOOM_OUT = 6
 
-/** 标尺占据上/左边缘，四个方向各留安全距后取面积最大的一块空白。 */
+/**
+ * 在**图面**（`.compose-stage__surface`）里取面积最大的一块空白。
+ *
+ * 传进来的必须是图面而不是整个 stage：标尺、滚动条与命令行都在 stage 里、都不在图面里，
+ * 而它们各自的厚度不一样，靠一个统一的安全距去躲会在某一侧留下缺口——症状是取点命令的
+ * 第二个点落在命令行上，第一个点已经取了、第二个没有，于是"画了但什么都没创建"。
+ */
 function largestBlankRegion(
-  stageBox: { x: number; y: number; width: number; height: number },
+  surfaceBox: { x: number; y: number; width: number; height: number },
   occupied: readonly { x: number; y: number; width: number; height: number }[],
   minSize: number,
 ) {
-  const RULER = 28
+  // 只避开图面自己的边：贴边落点会被相邻 chrome 的命中带抢走。
+  const EDGE = 4
   const viewport = {
-    left: stageBox.x + RULER,
-    top: stageBox.y + RULER,
-    right: stageBox.x + stageBox.width - RULER,
-    bottom: stageBox.y + stageBox.height - RULER,
+    left: surfaceBox.x + EDGE,
+    top: surfaceBox.y + EDGE,
+    right: surfaceBox.x + surfaceBox.width - EDGE,
+    bottom: surfaceBox.y + surfaceBox.height - EDGE,
   }
   const left = Math.min(...occupied.map((box) => box.x))
   const top = Math.min(...occupied.map((box) => box.y))
@@ -204,12 +219,17 @@ async function frameScreenBoxes(stage: Locator) {
  * 场景边界盒是未裁剪的世界矩形，可能远大于 stage 视口，因此不能直接拿它的外侧算落点。
  * 场景多了以后可能把视口填满，此时先缩小视图再找——多场景用例不该因为"看不见空地"而失败。
  */
-export async function emptyWorkspaceRect(page: Page, editor: Locator) {
+export async function emptyWorkspaceRect(
+  page: Page,
+  editor: Locator,
+  minSize: number = MIN_DRAWABLE_BLANK,
+) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
+  const surface = stage.locator('.compose-stage__surface')
   for (let attempt = 0; attempt <= MAX_ZOOM_OUT; attempt += 1) {
-    const stageBox = (await stage.boundingBox())!
-    const region = largestBlankRegion(stageBox, await frameScreenBoxes(stage), MIN_DRAWABLE_BLANK)
+    const surfaceBox = (await surface.boundingBox())!
+    const region = largestBlankRegion(surfaceBox, await frameScreenBoxes(stage), minSize)
     if (region) return region
     await stage.focus()
     await stage.press('Control+-')
@@ -231,10 +251,34 @@ export async function openPageInspector(page: Page, editor: Locator) {
    * 尤其如此。断言可见的那一刻它有盒，量的时候可能已经没有了，`boundingBox()` 于是回 `null`，
    * 症状是一句与本用例毫无关系的 `Cannot read properties of null`。轮询到量得着为止。
    */
-  await expect.poll(() => stage.boundingBox()).not.toBeNull()
-  const stageBox = (await stage.boundingBox())!
-  const region = largestBlankRegion(stageBox, await frameScreenBoxes(stage), MIN_CLICKABLE_BLANK)
+  const surface = stage.locator('.compose-stage__surface')
+  await expect.poll(() => surface.boundingBox()).not.toBeNull()
+  const surfaceBox = (await surface.boundingBox())!
+  const region = largestBlankRegion(surfaceBox, await frameScreenBoxes(stage), MIN_CLICKABLE_BLANK)
   expect(region, 'stage 视口里找不到场景之外的空白处').toBeTruthy()
   await page.mouse.click(region!.x + region!.width / 2, region!.y + region!.height / 2)
   await expect(editor.getByRole('region', { name: '页面属性' })).toBeVisible()
+}
+
+/**
+ * 切到「绘图」工作区。
+ *
+ * @remarks
+ * 制图相关的用例要用到八条绘图命令与正交 / 极轴的按钮，而**页面工作区的货架上没有它们**——
+ * 货架按工作区不同是有意的：页面画的是分区框与指示，接线图才需要整套制图工具。
+ *
+ * 用例因此显式说明自己站在哪个工作区里，与「依赖确定性取景的用例必须关掉自动适配」是同一条
+ * 纪律：跟着默认值走的用例会在默认变化时莫名其妙地红。
+ *
+ * 偏好不持久化（示例应用不接 `onPreferencesChange`），因此这次切换不会漏到别的用例里。
+ *
+ * 名字**刻意不叫 `useDrawingWorkspace`**：`use` 前缀会让 ESLint 的 rules-of-hooks 把它当成
+ * React Hook，而它被普通 `openEditor` 辅助函数调用时那条规则会报错。
+ */
+export async function switchToDrawingWorkspace(page: Page) {
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const switcher = editor.getByRole('radiogroup', { name: '工作区' })
+  const drawing = switcher.getByRole('radio', { name: '绘图' })
+  await drawing.click()
+  await expect(drawing).toHaveAttribute('aria-checked', 'true')
 }

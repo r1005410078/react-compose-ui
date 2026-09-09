@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { switchToDrawingWorkspace } from './support/test-helpers'
 
 /**
  * 弧与多段线的纵向流程。
@@ -263,6 +264,8 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
 test('OpenSpec: basic-materials / 物料统一 / 箭头与圆是曲线，填充跟着形状而不是盒', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/?no-auto-fit')
+  // 圆与箭头的按钮在绘图工作区的货架上。
+  await switchToDrawingWorkspace(page)
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })

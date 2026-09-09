@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { switchToDrawingWorkspace } from './support/test-helpers'
 
 /**
  * 工具栏上的绘图命令组。
@@ -9,6 +10,13 @@ import type { Locator, Page } from '@playwright/test'
  * 「点按钮启动的与敲名字启动的是**同一条**会话」。组件测试里两个包各自 mock 掉对方，恰好
  * 把要证明的那件事假设掉了。
  */
+
+/*
+ * 这几条用例要证明的是「点按钮启动的与敲名字启动的是同一条会话」，与放不放得下无关，因此把
+ * 窗口开宽，免得哪天货架又多一格时它们跟着红；溢出本身有它自己的用例
+ * （editor-workspace 的「窄窗口收进更多」）。
+ */
+test.use({ viewport: { width: 1680, height: 900 } })
 
 async function boxOf(locator: Locator) {
   let box: Awaited<ReturnType<Locator['boundingBox']>> = null
@@ -25,6 +33,8 @@ async function openEditor(page: Page) {
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  // 制图命令与角度约束的按钮只在绘图工作区的货架上；用例显式说明自己站在哪里。
+  await switchToDrawingWorkspace(page)
   const box = await boxOf(stage.getByTestId('stage-surface'))
   return { editor, stage, at: (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy }) }
 }

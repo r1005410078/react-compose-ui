@@ -82,16 +82,17 @@ describe('Basic ECS materials', () => {
     // 既有文档照旧渲染。
     expect(paletteVisible)
       .toEqual(['container', 'widget-switcher', 'curve', 'rect'])
-    expect(materials.registry.getPreset('rectangle')).toMatchObject({ paletteHidden: true })
+    // 退役是它自己的理由（新建入口归 `rect`），与哪个工作区的工具栏货架无关，因此是 `'always'`。
+    expect(materials.registry.getPreset('rectangle')).toMatchObject({ paletteHidden: 'always' })
     // 隐藏只影响 Palette 呈现，Registry 仍然注册全部 Preset。
     expect(materials.registry.getPreset('text')).toBeDefined()
     expect(materials.registry.getPreset('circle')).toBeDefined()
     expect(materials.registry.getPreset('component-instance')).toMatchObject({
-      paletteHidden: true,
+      paletteHidden: 'always',
     })
     expect(materials.registry.getPreset('group')).toMatchObject({
       id: 'group',
-      paletteHidden: true,
+      paletteHidden: 'always',
     })
   })
 
@@ -99,7 +100,7 @@ describe('Basic ECS materials', () => {
     const materials = createComposeBasicMaterials()
     const frame = materials.registry.getPreset('frame')
     const container = materials.registry.getPreset('container')
-    expect(frame).toMatchObject({ id: 'frame', paletteHidden: true })
+    expect(frame).toMatchObject({ id: 'frame', paletteHidden: 'always' })
     // 图标必须是同一个元素类型：场景就是放在顶层的容器，两者在场景树里不该有视觉差异。
     expect((frame?.icon as { type?: unknown } | undefined)?.type)
       .toBe((container?.icon as { type?: unknown } | undefined)?.type)

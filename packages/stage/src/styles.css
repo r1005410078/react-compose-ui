@@ -99,11 +99,15 @@
   background: var(--compose-surface-control);
 }
 
-.compose-stage[data-compose-theme='light'] .compose-canvas__ruler,
-.compose-stage[data-compose-theme='light'] .compose-canvas__ruler-corner,
 .compose-stage[data-compose-theme='light'] .compose-stage__scrollbar {
   border-color: var(--compose-border-strong);
   background: var(--compose-surface-raised);
+  color: var(--compose-text-subtle);
+}
+
+.compose-stage[data-compose-theme='light'] .compose-canvas__ruler,
+.compose-stage[data-compose-theme='light'] .compose-canvas__ruler-corner {
+  background: var(--compose-surface-control);
   color: var(--compose-text-subtle);
 }
 
@@ -716,15 +720,19 @@
  * 不加根选择器时两边的定位规则特异度相同，后加载的那份会静默覆盖另一份——表现是标尺退回
  * canvas 的 intrinsic 300×150，一条刻度都画不出来。
  */
+/*
+ * 标尺不带底色与边框：底与图面同色，只有刻度与数字压在上面。带框时它是画面上两条额外的边，
+ * 与两侧面板一起把 chrome 切成一串竖线；去掉之后它是坐标参照而不是框。刻度、游标线与吸附
+ * 一个像素不改——只改这里的底与边。
+ */
 .compose-stage .compose-canvas__ruler-corner,
 .compose-stage .compose-canvas__ruler {
   position: absolute;
   z-index: 5;
   box-sizing: border-box;
   overflow: hidden;
-  border-color: #17191d;
   color: #aeb7c4;
-  background: #303338;
+  background: var(--compose-surface-sunken, #25282d);
   font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -735,8 +743,6 @@
   width: var(--compose-stage-ruler-size);
   height: var(--compose-stage-ruler-size);
   place-items: center;
-  border-right: 1px solid #17191d;
-  border-bottom: 1px solid #17191d;
   color: #7f8997;
   cursor: crosshair;
 }
@@ -746,7 +752,6 @@
   right: var(--compose-stage-scrollbar-size);
   left: var(--compose-stage-ruler-size);
   height: var(--compose-stage-ruler-size);
-  border-bottom: 1px solid #17191d;
   cursor: ns-resize;
 }
 
@@ -755,7 +760,6 @@
   bottom: calc(var(--compose-stage-scrollbar-size) + var(--compose-stage-command-size));
   left: 0;
   width: var(--compose-stage-ruler-size);
-  border-right: 1px solid #17191d;
   cursor: ew-resize;
 }
 

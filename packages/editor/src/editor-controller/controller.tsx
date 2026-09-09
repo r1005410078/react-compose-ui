@@ -1,5 +1,6 @@
 import { CommandPanelWithActions } from './command-panel-actions'
 import { createComposeEditorActionHandlers } from './action-catalog'
+import type { ComposeEditorActionId } from './action-catalog'
 import type { ComposeEditorActionHandler, ComposeEditorActionHandlerContext } from './action-catalog'
 import { ComposeComponentPalette } from '@compose-ui/stage'
 import {
@@ -1007,6 +1008,18 @@ export interface ComposeEditorController {
    * 它），之后仍可手动关。
    */
   readonly transformGizmo: boolean
+  /**
+   * 画布的会话开关：网格显示、角度约束与增量角、十字光标臂长。
+   *
+   * @remarks
+   * 它们是会话级视图状态（不进文档、不进撤销历史），由 controller 持有而不是 Stage：工具栏要
+   * 画按下态，工作区切换时要整组换入换出，事实来源只能有一份。
+   */
+  readonly gridVisible: boolean
+  readonly angleConstraint: ComposeAngleConstraint
+  readonly polarIncrement: number
+  /** 十字光标臂长，图面短边的百分比；5 是 AutoCAD `CURSORSIZE` 的默认值。 */
+  readonly crosshairSize: number
   /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
   readonly interactionController: StageInteractionController
   /** 替换当前选择。 */
@@ -1018,6 +1031,10 @@ export interface ComposeEditorController {
   /** 替换 Stage 工具。 */
   readonly setTool: (tool: ComposeStageTool) => void
   readonly setTransformGizmo: (visible: boolean) => void
+  readonly setGridVisible: (visible: boolean) => void
+  readonly setAngleConstraint: (constraint: ComposeAngleConstraint) => void
+  readonly setPolarIncrement: (degrees: number) => void
+  readonly setCrosshairSize: (size: number) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   /** 安装或卸载 dispatch 改写层（传 `null` 卸载）；同一时刻只有一个改写层生效。 */
@@ -1210,6 +1227,8 @@ export function useComposeEditorController({
   // 网格显示是 Stage 会话偏好；只影响视觉，不进入文档与撤销历史。
   const [gridVisible, setGridVisible] = useState(true)
   const [transformGizmo, setTransformGizmo] = useState(false)
+  // 十字光标臂长：AutoCAD `CURSORSIZE` 的默认值；绘图类工作区会把它拉到贯穿图面。
+  const [crosshairSize, setCrosshairSize] = useState(5)
   const [snapRestore, setSnapRestore] = useState({
     grid: document.canvas.grid.snapEnabled,
     nodes: document.canvas.smartSnap.nodes,
@@ -1602,6 +1621,22 @@ export function useComposeEditorController({
     return true
   }, [])
 
+  /**
+   * 按 id 跑一个编辑器动作；工具栏上宿主注入的 `action` 目标走它。
+   *
+   * @remarks
+   * 与 {@link runShortcutAction} 共用同一条「按下时才构建执行层」的做法：在渲染期构建会拿到
+   * 上一帧的选区与文档，而工具栏按钮按下的那一刻用户看的是这一帧。
+   *
+   * 目录里没有的 id 什么都不做——货架里引用了宿主关掉的动作时，那一格本来就不会被渲染出来，
+   * 这里只是兜住「渲染之后目录又变了」那一帧。
+   */
+  const runAction = useCallback((actionId: ComposeEditorActionId) => {
+    const context = actionContextRef.current
+    if (!context) return
+    createComposeEditorActionHandlers(context)[actionId]?.run()
+  }, [])
+
   // 端口与策略各自记忆化，而不是跟着 stageProps 每次文档编辑重建：Stage 虽然按字段消费
   // 二者，但分开构建让「端口变了」与「模式变了」在依赖数组上就是两件事，宿主自己也更难
   // 把一个模式开关误挂到端口上。
@@ -1646,6 +1681,7 @@ export function useComposeEditorController({
     angleConstraint,
     onAngleConstraintChange: setAngleConstraint,
     polarIncrement,
+    crosshairSize,
     onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
@@ -1672,6 +1708,7 @@ export function useComposeEditorController({
     autoFitActiveFrame,
     angleConstraint,
     polarIncrement,
+    crosshairSize,
     tool,
     setTool,
     selectedIds,
@@ -1846,6 +1883,8 @@ export function useComposeEditorController({
     selectedIds,
     setSelectedIds,
     setTool,
+    openCanvasSettings: () => { setCanvasSettingsOpen(true) },
+    toggleTransformGizmo: () => { setTransformGizmo((visible) => !visible) },
     toggleGridSnap: () => configureCanvas(
       !document.canvas.grid.snapEnabled,
       smartSnapEnabled,
@@ -2017,12 +2056,20 @@ export function useComposeEditorController({
     subscribeViewport: viewportStore.subscribe,
     tool,
     transformGizmo,
+    gridVisible,
+    angleConstraint,
+    polarIncrement,
+    crosshairSize,
     interactionController,
     setSelectedIds,
     setExpandedIds,
     setViewport,
     setTool,
     setTransformGizmo,
+    setGridVisible,
+    setAngleConstraint,
+    setPolarIncrement,
+    setCrosshairSize,
     dispatch,
     setCommandRewrite,
     createComponentFromSelection,
@@ -2087,6 +2134,7 @@ export function useComposeEditorController({
         setGridVisible={setGridVisible}
         setTool={setTool}
         setTransformGizmo={setTransformGizmo}
+        runAction={runAction}
         startCommand={startCommand}
         transformGizmo={transformGizmo}
         toggleSnap={toggleSnap}

@@ -47,7 +47,7 @@ function createRegistry() {
       id: 'component-instance',
       label: 'Component',
       defaultName: 'Component',
-      paletteHidden: true,
+      paletteHidden: 'always',
       createComponents: () => ({
         Transform: { rotation: 0 },
         LayoutItem: {
@@ -82,7 +82,7 @@ describe('OpenSpec: component-library / 关联实例实体', () => {
         id: 'component-instance',
         label: 'Component',
         defaultName: 'Component',
-        paletteHidden: true,
+        paletteHidden: 'always',
         createComponents: () => ({
           Transform: { rotation: 0 },
           LayoutItem: {

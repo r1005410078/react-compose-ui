@@ -114,8 +114,9 @@ export function createTextMaterial(
       label: options.label ?? 'Text',
       defaultName: options.name ?? 'Text',
       icon: <ComposeTextMaterialIcon />,
-      // Stage 工具栏已提供文本绘制工具，Palette 不再重复同一个入口。
-      paletteHidden: true,
+      // 工具栏已提供文字绘制入口，Palette 不再重复同一个。这一档按**当前工作区的货架**求值：
+      // 用户把文字从货架上拿掉时，瓦片会回到面板上。
+      paletteHidden: 'toolbar',
       createComponents: () => textPresetComponents({
         props,
         size,

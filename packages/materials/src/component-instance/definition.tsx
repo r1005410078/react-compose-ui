@@ -95,7 +95,7 @@ export function createComponentInstanceMaterial(
           <path d="M12 11.6V20.2" stroke="#8aa6c8" strokeOpacity="0.7" strokeWidth="1" />
         </svg>
       ),
-      paletteHidden: true,
+      paletteHidden: 'always',
       createComponents: () => ({
         ...rendererPresetComponents({
           type: 'component-instance',

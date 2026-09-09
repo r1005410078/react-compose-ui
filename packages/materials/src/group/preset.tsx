@@ -9,7 +9,7 @@ export function createGroupPreset(): ComposeEntityPreset {
     label: 'Group',
     defaultName: 'Group',
     icon: <ComposeGroupMaterialIcon />,
-    paletteHidden: true,
+    paletteHidden: 'always',
     createComponents: () => {
       const seed = createComposeGroupEntitySeed({ id: '__group_preset__' })
       return Object.fromEntries(

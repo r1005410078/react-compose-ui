@@ -487,6 +487,43 @@ export function EntityInspector({
     </>
   )
 
+  /*
+   * 面板头收成「Dockview 标签 + 一条 chrome」：对象名住在标签上（`属性 · <对象>`），这一簇
+   * 动作并进搜索那一行。此前它们各占一条 44px 的标题行，而标题在标签上已经写着一遍了。
+   */
+  const toolbarActions = (
+    <>
+      {headerLeading}
+      {headerTrailing}
+      <label
+        className="compose-editor__entity-inspector-add-capability"
+        title={zh ? '添加能力' : 'Add capability'}
+      >
+        <span aria-hidden="true">＋</span>
+        <select
+          aria-label={zh ? '添加能力' : 'Add capability'}
+          disabled={locked}
+          value=""
+          onChange={(event) => {
+            if (event.target.value) addCapability(event.target.value)
+          }}
+        >
+          <option value="">{zh ? '选择能力…' : 'Choose capability…'}</option>
+          {availability.filter((item) => !item.attached).map((item) => (
+            <option
+              disabled={item.disabled}
+              key={item.capabilityId}
+              title={item.issue?.message}
+              value={item.capabilityId}
+            >
+              {item.definition?.label ?? item.capabilityId}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  )
+
   if (chrome === 'sections') {
     return sections
   }
@@ -497,48 +534,6 @@ export function EntityInspector({
       className="compose-editor__entity-inspector"
       role="region"
     >
-      <header className="compose-editor__entity-inspector-header">
-        <div className="compose-editor__entity-inspector-identity">
-          {headerLeading}
-          <div className="compose-editor__entity-inspector-title-block">
-            <strong>{entity.name}</strong>
-            {headerSubtitle ? (
-              <div className="compose-editor__entity-inspector-subtitle">
-                {headerSubtitle}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="compose-editor__entity-inspector-header-end">
-          {headerTrailing}
-          <label
-            className="compose-editor__entity-inspector-add-capability"
-            title={zh ? '添加能力' : 'Add capability'}
-          >
-            <span aria-hidden="true">＋</span>
-            <select
-              aria-label={zh ? '添加能力' : 'Add capability'}
-              disabled={locked}
-              value=""
-              onChange={(event) => {
-                if (event.target.value) addCapability(event.target.value)
-              }}
-            >
-              <option value="">{zh ? '选择能力…' : 'Choose capability…'}</option>
-              {availability.filter((item) => !item.attached).map((item) => (
-                <option
-                  disabled={item.disabled}
-                  key={item.capabilityId}
-                  title={item.issue?.message}
-                  value={item.capabilityId}
-                >
-                  {item.definition?.label ?? item.capabilityId}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </header>
 
       {banner}
 
@@ -576,7 +571,8 @@ export function EntityInspector({
 
       <ComposePropertyPanelRoot
         aria-label={zh ? `${entity.name} 属性字段` : `${entity.name} property fields`}
-        statusSlot={statusSlot}
+        statusSlot={headerSubtitle ?? statusSlot}
+        toolbarActions={toolbarActions}
       >
         {sections}
       </ComposePropertyPanelRoot>

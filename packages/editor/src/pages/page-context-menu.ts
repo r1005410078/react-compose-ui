@@ -3,11 +3,13 @@ import type { ComposeAssetEntry, ComposeAssetProvider } from '@compose-ui/assets
 import {
   composePageDisplayName,
   composePageFileName,
+  createEmptyComposePageFile,
   isComposePageMediaType,
   type ComposePageSetupReference,
 } from '@compose-ui/core'
 import type { ComposePageDescriptor, ComposePageStore } from '@compose-ui/pages'
 import type { EditorMessages } from '../editor-i18n'
+import type { ComposeWorkspaceSeeds } from '../workspace-layout/workspace-definition'
 
 /** 页面上下文菜单项的稳定 ID。 @internal */
 export const PAGE_CONTEXT_MENU_ITEM_IDS = {
@@ -33,6 +35,29 @@ export const DEFAULT_PAGE_SETUP_SCRIPT = `export function setup(ctx) {
 `
 
 /**
+ * 按工作区的种子造一份空白页面。
+ *
+ * @remarks
+ * 种子只在**新建**时落地：切换工作区不改任何已有文档的网格与吸附设置（那会在用户没动手的
+ * 时候往撤销历史里塞一条）。网格与对齐吸附在**同一次**落地里写完，因此新建只产生一份文档，
+ * 而不是一份文档加一条改吸附的事务。
+ */
+function seedPageFile(seeds: ComposeWorkspaceSeeds) {
+  const page = createEmptyComposePageFile()
+  return {
+    ...page,
+    document: {
+      ...page.document,
+      canvas: {
+        ...page.document.canvas,
+        grid: { ...page.document.canvas.grid, ...seeds.grid },
+        smartSnap: { ...page.document.canvas.smartSnap, ...seeds.smartSnap },
+      },
+    },
+  }
+}
+
+/**
  * 构建注入资源浏览器的页面上下文菜单项。
  *
  * @remarks
@@ -50,6 +75,7 @@ export function createPageContextMenuItems({
   onPageSetupChanged,
   onPageSetupError,
   provider,
+  resolveSeeds,
   store,
 }: {
   /** 当前首页的稳定 key；未设置时为 null。 */
@@ -75,6 +101,14 @@ export function createPageContextMenuItems({
   readonly onPageSetupError: (message: string) => void
   readonly provider: ComposeAssetProvider | undefined
   readonly store: ComposePageStore | undefined
+  /**
+   * 取当前工作区的新建种子。
+   *
+   * @remarks
+   * 是**函数**而不是值：菜单项在挂载时构造一次，而工作区随时会换，捕获住的那份会过期——
+   * 症状是「切到绘图之后新建的页面网格还是 8」。
+   */
+  readonly resolveSeeds: () => ComposeWorkspaceSeeds
 }): readonly ComposeAssetContextMenuItem[] {
   if (!store || !provider) return []
   const canCreate = typeof provider.createFile === 'function'
@@ -97,6 +131,7 @@ export function createPageContextMenuItems({
           parentId: context.parentId,
           // 无论用户输入 Home 还是 Home.page.json 都归一化为同一文件名。
           fileName: composePageFileName(name),
+          page: seedPageFile(resolveSeeds()),
         })
         context.refresh()
         onPageCreated(created)

@@ -45,7 +45,7 @@ export function createRectangleMaterial(
       label: options.label ?? 'Panel',
       defaultName: options.name ?? 'Panel',
       icon: <ComposeRectangleMaterialIcon />,
-      paletteHidden: true,
+      paletteHidden: 'always',
       createComponents: () => rendererPresetComponents({
         type: 'rectangle',
         props,

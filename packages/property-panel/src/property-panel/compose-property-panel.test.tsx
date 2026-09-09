@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import * as v from 'valibot'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -1002,11 +1002,15 @@ describe('OpenSpec: property-panel / 自定义类型 Renderer Registry / 使用�
 })
 
 describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两条分隔线', () => {
-  it('宿主收窄时重新 clamp 列宽并保留最小编辑器宽度', () => {
+  it('宿主收窄时重新 clamp 用户调过的列宽并保留最小编辑器宽度', () => {
+    let notify: ((width: number) => void) | null = null
     class ResizeObserverFixture {
       constructor(private readonly callback: ResizeObserverCallback) {}
       observe() {
-        this.callback([{ contentRect: { width: 260 } } as ResizeObserverEntry], this)
+        notify = (width) => this.callback(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        )
       }
       disconnect() {}
       unobserve() {}
@@ -1014,9 +1018,16 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     vi.stubGlobal('ResizeObserver', ResizeObserverFixture)
     render(<ComposePropertyPanel schema={panelSchema} style={{ width: 500 }} value={panelValue} />)
 
+    // 先拖宽：clamp 只对**用户调过**的宽度成立，自动那一档本来就跟着宽度走。
+    const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
+    fireEvent.pointerDown(labelSeparator, { clientX: 148, pointerId: 1 })
+    fireEvent.pointerMove(labelSeparator, { clientX: 328, pointerId: 1 })
+    fireEvent.pointerUp(labelSeparator, { pointerId: 1 })
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '328')
+
     // 38px 操作列比旧的 76px 更窄，宿主要收到 260px 才会重新压缩属性名列。
-    expect(screen.getByRole('separator', { name: '调整属性名列宽' }))
-      .toHaveAttribute('aria-valuenow', '102')
+    act(() => notify?.(260))
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '102')
     expect(screen.getByRole('separator', { name: '调整操作列宽' }))
       .toHaveAttribute('aria-valuenow', '38')
   })
@@ -1062,25 +1073,55 @@ describe('OpenSpec: property-panel / 搜索筛选与默认值重置 / 重置属�
 })
 
 describe('OpenSpec: property-panel / 双分隔线三列布局 / 键盘调整分隔线', () => {
-  // OpenSpec: property-panel / 双分隔线三列布局 / 默认布局优先编辑列
+  // OpenSpec: property-panel / 双分隔线三列布局 / 默认布局按比例分列
   // OpenSpec: property-panel / 双分隔线三列布局 / 恢复默认列宽
-  it('默认优先给编辑列分配空间，并可调整和恢复两条分隔线', () => {
-    render(<ComposePropertyPanel schema={panelSchema} style={{ width: 365 }} value={panelValue} />)
+  it('默认按比例分列，并可调整和恢复两条分隔线', () => {
+    // 288 是 Inspector 的默认宽度，扣掉沟槽后内容区约 284：标签列 284 × 0.38 ≈ 108。
+    render(<ComposePropertyPanel schema={panelSchema} style={{ width: 284 }} value={panelValue} />)
 
     const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
     const actionSeparator = screen.getByRole('separator', { name: '调整操作列宽' })
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '120')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '108')
     expect(actionSeparator).toHaveAttribute('aria-valuenow', '38')
 
     fireEvent.keyDown(labelSeparator, { key: 'ArrowRight' })
     fireEvent.keyDown(actionSeparator, { key: 'ArrowLeft', shiftKey: true })
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '128')
-    expect(actionSeparator).toHaveAttribute('aria-valuenow', '62')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '116')
+    // 操作列的上限是「剩下的宽度减去编辑列最小值」：284 − 116 − 120 = 48，够不到 shift 的 24 步。
+    expect(actionSeparator).toHaveAttribute('aria-valuenow', '48')
 
     fireEvent.click(screen.getByRole('button', { name: '属性面板设置' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '恢复默认列宽' }))
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '120')
+    // 恢复回到**比例**而不是某个像素数。
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '108')
     expect(actionSeparator).toHaveAttribute('aria-valuenow', '38')
+  })
+
+  // OpenSpec: property-panel / 双分隔线三列布局 / 面板变宽时两列一起长
+  it('面板变宽时标签列跟着长，到 148 封顶', () => {
+    let notify: ((width: number) => void) | null = null
+    class ResizeObserverFixture {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe() {
+        notify = (width) => this.callback(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        )
+      }
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverFixture)
+    render(<ComposePropertyPanel schema={panelSchema} style={{ width: 284 }} value={panelValue} />)
+    const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '108')
+
+    act(() => notify?.(360))
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '137')
+
+    // 上限 148：再宽的富余全部落进编辑列——标签涨过它只是一条空白。
+    act(() => notify?.(500))
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '148')
   })
 })
 
@@ -1090,10 +1131,11 @@ describe('OpenSpec: property-panel / 双分隔线三列布局 / 指针调整两�
     const labelSeparator = screen.getByRole('separator', { name: '调整属性名列宽' })
     const actionSeparator = screen.getByRole('separator', { name: '调整操作列宽' })
 
+    // 500 宽下自动值已到上限 148，拖 +40 得 188。
     fireEvent.pointerDown(labelSeparator, { clientX: 128, pointerId: 1 })
     fireEvent.pointerMove(labelSeparator, { clientX: 168, pointerId: 1 })
     fireEvent.pointerUp(labelSeparator, { pointerId: 1 })
-    expect(labelSeparator).toHaveAttribute('aria-valuenow', '160')
+    expect(labelSeparator).toHaveAttribute('aria-valuenow', '188')
 
     fireEvent.pointerDown(actionSeparator, { clientX: 464, pointerId: 2 })
     fireEvent.pointerMove(actionSeparator, { clientX: 444, pointerId: 2 })
@@ -2004,5 +2046,24 @@ describe('OpenSpec: property-panel / 结构 Part 样式契约', () => {
       .toHaveAttribute('data-property-part', 'control')
     expect(container.querySelector('.property-panel__toolbar'))
       .toHaveAttribute('data-property-part', 'toolbar')
+  })
+})
+
+describe('OpenSpec: property-panel / 搜索工具带的宿主动作槽', () => {
+  it('不传时不多出一行，传了就与搜索同行', () => {
+    const { rerender } = render(
+      <ComposePropertyPanelRoot><div /></ComposePropertyPanelRoot>,
+    )
+    expect(document.querySelector('[data-property-part="toolbar-actions"]')).toBeNull()
+
+    rerender(
+      <ComposePropertyPanelRoot toolbarActions={<button type="button">应用</button>}>
+        <div />
+      </ComposePropertyPanelRoot>,
+    )
+    const actions = document.querySelector('[data-property-part="toolbar-actions"]')
+    expect(actions).not.toBeNull()
+    // 同一行：它是工具带的子元素，而不是 chrome 里的第二个块。
+    expect(actions?.parentElement).toHaveAttribute('data-property-part', 'toolbar')
   })
 })

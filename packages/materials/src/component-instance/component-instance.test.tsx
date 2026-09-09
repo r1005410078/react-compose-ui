@@ -103,7 +103,7 @@ describe('OpenSpec: basic-materials / 关联组件实例物料', () => {
     const materials = createComposeBasicMaterials()
     const preset = materials.registry.getPreset('component-instance')
 
-    expect(preset).toMatchObject({ id: 'component-instance', paletteHidden: true })
+    expect(preset).toMatchObject({ id: 'component-instance', paletteHidden: 'always' })
     expect(preset?.assetDrop?.accepts({
       mediaType: COMPOSE_COMPONENT_MEDIA_TYPE,
       name: 'Card.component.json',

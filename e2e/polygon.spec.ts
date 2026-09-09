@@ -231,8 +231,10 @@ test('OpenSpec: stage-engine / POLYGON 命令画正多边形 / 第一步点一�
   const box = (await stroke.boundingBox())!
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
   // 中心落在第一下点的地方：包围盒的中心就是它。判别点在这里，而不是「进到了下一步」。
-  expect(box.x + box.width / 2 - surface.x).toBeCloseTo(250, 0)
-  expect(box.y + box.height / 2 - surface.y).toBeCloseTo(250, 0)
+  // 容差放到半个网格步长之上：落点先在世界坐标里吸到网格，再按非 100% 的缩放投影回屏幕，
+  // 中心离点击处最多差 zoom × 步长 / 2 像素，而这个数随图面尺寸（自动取景的缩放）变。
+  expect(Math.abs(box.x + box.width / 2 - surface.x - 250)).toBeLessThan(4)
+  expect(Math.abs(box.y + box.height / 2 - surface.y - 250)).toBeLessThan(4)
 })
 
 test('OpenSpec: stage / 修饰键滚轮在命令进行中增减数值 / Alt 加滚轮改边数，裸滚轮仍平移', async ({ page }) => {

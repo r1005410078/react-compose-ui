@@ -416,8 +416,23 @@ export interface ComposeEntityPreset {
   readonly defaultName?: string
   /** Palette 可选图标；不会写入 ComposeDocument。 */
   readonly icon?: ReactNode
-  /** 隐藏 Palette 项，但保留资源创建能力。 */
-  readonly paletteHidden?: boolean
+  /**
+   * 为什么这一项不出现在物料面板上；缺席即出现。资源创建能力不受影响。
+   *
+   * @remarks
+   * 判据分两种，因为它们的**作用范围**不同：
+   *
+   * - `'toolbar'`——工具栏上已经有这条命令的按钮，面板不必再给一块瓦片。工具栏货架按工作区
+   *   不同，因此这一档 MUST 按**当前工作区的货架**求值：货架里没有那颗按钮时这一项要出现，
+   *   否则用户既没有按钮也没有瓦片，那条命令只剩键盘一条路——收走一个入口是意图，收走全部
+   *   可见入口不是。
+   * - `'always'`——物料自身的理由，与任何货架无关。例如 Wire：从面板拖出来的导线不连着任何
+   *   端口，而那条粗线正在宣称自己是主回路。
+   *
+   * 曾经是一个布尔，两种理由混在一起。工具栏货架按工作区不同之后，那个布尔答不出「在这个
+   * 工作区里该不该藏」。
+   */
+  readonly paletteHidden?: 'toolbar' | 'always'
   /** 创建不含 Composition 的基础 Component 组合。 */
   readonly createComponents: () => Readonly<Record<string, JsonObject>>
   /** 可选资源 drop 匹配与 seed factory。 */

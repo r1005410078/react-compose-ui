@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test'
 import { pointerDrop } from './support/test-helpers'
 
+/** 属性面板的 Dockview 标签：对象名住在这里（`属性 · Rectangle`）。 */
+function inspectorTabTitle(editor: Locator) {
+  return editor.locator('[data-workspace-tab="compose-inspector"]')
+}
+
+
 test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 / 场景树导出、Revert、Apply 与统一图标', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
@@ -81,9 +87,12 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
   await expect(variantChild).toBeVisible()
   await variantChild.click({ modifiers: ['Meta'] })
   await stage.press('ArrowRight')
-  const saveVariant = editor.getByRole('button', { name: '保存变体 Dragged Card Focused' })
-  await expect(saveVariant).toBeEnabled()
-  await saveVariant.click()
+  /*
+   * 保存按钮已从标签条删掉；`document.save` 的默认键位仍是 Cmd/Ctrl+S。键位由编辑器根节点
+   * 捕获，因此要先把焦点放回编辑器里——刚点过编辑器外面那些开关时，焦点还留在那儿。
+   */
+  const saveDocument = () => stage.press('Control+S')
+  await saveDocument()
   await expect(editor.getByText('1 项本层覆盖', { exact: true })).toBeVisible()
   await editor.getByRole('button', { name: 'Revert 全部变体覆盖' }).click()
   await expect(editor.getByText('与父源同步 · 无本地覆盖', { exact: true })).toBeVisible()
@@ -91,8 +100,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
 
   await variantChild.click({ modifiers: ['Meta'] })
   await stage.press('Shift+ArrowRight')
-  await expect(saveVariant).toBeEnabled()
-  await saveVariant.click()
+  await saveDocument()
   await expect(editor.getByText('1 项本层覆盖', { exact: true })).toBeVisible()
   await editor.getByRole('button', { name: 'Apply 全部变体覆盖' }).click()
   await expect(editor.getByText('与父源同步 · 无本地覆盖', { exact: true })).toBeVisible()
@@ -176,19 +184,17 @@ test('OpenSpec: component-library / 离线快照与 revision 冲突 / 保留旧�
   const componentChild = stage.locator('.compose-stage__scene .compose-stage__node').first()
   await componentChild.click({ modifiers: ['Meta'] })
   await stage.press('ArrowRight')
-  const saveComponent = editor.getByRole('button', { name: '保存主组件 Resilient Card' })
-  await expect(saveComponent).toBeEnabled()
+  // 焦点此刻可能在编辑器外的模拟开关上，因此按在 Stage 上：键位由编辑器根节点捕获。
+  const saveComponent = () => stage.press('Control+S')
 
   // 先模拟另一个客户端推进 revision。取消冲突对话框即保留旧会话，显式覆盖才提交。
   await failureControls.getByRole('button', { name: '模拟组件源 revision 更新' }).click()
-  await saveComponent.click()
+  await saveComponent()
   const conflictDialog = page.getByRole('dialog', { name: '组件源已在外部更新' })
   await expect(conflictDialog).toBeVisible()
   await conflictDialog.getByRole('button', { name: '取消' }).click()
-  await expect(saveComponent).toBeEnabled()
-  await saveComponent.click()
+  await saveComponent()
   await conflictDialog.getByRole('button', { name: '覆盖保存' }).click()
-  await expect(saveComponent).toBeDisabled()
 
   await editor.getByRole('button', { name: '关闭 Resilient Card' }).click()
   await expect(stage.getByTestId('compose-component-instance-content')).toBeVisible()
@@ -334,13 +340,14 @@ test('OpenSpec: component-library / Apply、Revert 与显式更新 / 组件源�
   }
   await componentTree.getByRole('row', { name: /Rectangle/ }).click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  await expect(inspector).toContainText('Rectangle')
+  // 对象名住在属性面板的**标签**上（`属性 · Rectangle`），面板里不再写第二遍。
+  await expect(inspectorTabTitle(editor)).toContainText('Rectangle')
   const width = inspector.getByLabel('尺寸宽度')
   await width.fill('400')
   await width.press('Enter')
 
   // 保存后无需任何确认，页面里的实例直接跟随
-  await editor.getByRole('button', { name: /保存|Save/ }).first().click()
+  await stage.press('Control+S')
   await editor.locator('[data-workspace-tab]').filter({ hasText: 'Home' }).click()
   await expect.poll(async () => (await instanceContent.boundingBox())?.width).toBe(400)
 })

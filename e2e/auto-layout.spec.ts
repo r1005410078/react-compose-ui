@@ -118,8 +118,12 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
   expect(wrappingBox!.x - (directionBox!.x + directionBox!.width)).toBeLessThanOrEqual(10)
   expect(gapBox!.y).toBeGreaterThan(directionBox!.y)
   expect(contentBox!.x).toBeGreaterThan(gapBox!.x)
-  expect(directionBox!.width).toBeGreaterThan(140)
-  expect(contentBox!.width).toBeGreaterThan(140)
+  /*
+   * Inspector 从 400 收到 288 之后编辑列约 138px，两个下拉仍然铺满它而不是被挤成图标宽度。
+   * 阈值跟着编辑列走，不是一个凭手感的数。
+   */
+  expect(directionBox!.width).toBeGreaterThan(110)
+  expect(contentBox!.width).toBeGreaterThan(110)
 
   const padding = layoutSection.getByRole('spinbutton', { name: '内边距' })
   const expandPadding = layoutSection.getByRole('button', { name: '展开内边距' })

@@ -3,9 +3,9 @@ import type { Locator, Page } from '@playwright/test'
 import { clickCurveStroke, emptyWorkspaceRect, openPageInspector } from './support/test-helpers'
 
 /** 在所有场景之外画一个容器，得到第二块场景并返回它的 Entity id。 */
-async function createSecondScene(page: Page, editor: Locator) {
+async function createSecondScene(page: Page, editor: Locator, minBlank?: number) {
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const region = await emptyWorkspaceRect(page, editor)
+  const region = await emptyWorkspaceRect(page, editor, minBlank)
   const width = Math.min(240, region.width - 16)
   const height = Math.min(180, region.height - 16)
   const start = {
@@ -239,8 +239,12 @@ test('OpenSpec: editor-workspace-layout / 运动路径以物体中心为锚 / �
   await expect(stage).toBeVisible()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
 
-  // 第二块场景（不在世界原点）里放一个矩形并打两个位置关键帧。
-  const sceneTwoId = await createSecondScene(page, editor)
+  /*
+   * 第二块场景（不在世界原点）里放一个矩形并打两个位置关键帧。这里要一块**装得开**的空白：
+   * 场景太矮时里面的矩形会顶到场景的标题标签上，而标签在场景顶边之外、压着矩形的上描边——
+   * 症状是「点不中那条描边」，看起来像命中坏了。
+   */
+  const sceneTwoId = await createSecondScene(page, editor, 200)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
   const rect = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
@@ -285,8 +289,11 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚�
   await expect(stage).toBeVisible()
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
 
-  // 画出第二块场景后**不保存**，直接在它里面放对象、建动画。
-  const sceneTwoId = await createSecondScene(page, editor)
+  /*
+   * 画出第二块场景后**不保存**，直接在它里面放对象、建动画。要一块装得开的空白：场景太矮时
+   * 里面的矩形会顶到场景的标题标签上，而标签压着矩形的上描边，下面那一下就点不中了。
+   */
+  const sceneTwoId = await createSecondScene(page, editor, 200)
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(1)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()

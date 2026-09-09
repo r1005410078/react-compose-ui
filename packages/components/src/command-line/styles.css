@@ -4,8 +4,11 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.375rem 0.75rem;
-  border-top: 1px solid var(--compose-border, #1e2733);
-  background: var(--compose-panel-bg, #141a23);
+  /*
+   * 不画上边框：它与图面之间的分界由色阶表达——图面是 sunken，命令行是 raised。一条线加一次
+   * 色阶是同一句话说两遍，而线还会在卡片化的编辑器里横穿整张卡。
+   */
+  background: var(--compose-surface-raised, #181b20);
   font-size: 0.8125rem;
 }
 

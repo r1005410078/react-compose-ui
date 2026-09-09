@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { switchToDrawingWorkspace } from './support/test-helpers'
 
 /**
  * 取点命令怎么结束。
@@ -23,6 +24,8 @@ async function openEditor(page: Page) {
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
+  // 制图命令与角度约束的按钮只在绘图工作区的货架上；用例显式说明自己站在哪里。
+  await switchToDrawingWorkspace(page)
   const box = await boxOf(stage.getByTestId('stage-surface'))
   return {
     editor,

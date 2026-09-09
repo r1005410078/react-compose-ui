@@ -22,36 +22,62 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeEditorController } from '../editor-controller'
 
-// dockviewMock 代表内层 scene/canvas/inspector Dockview（页面/资源文档都挂在这个实例上）；
-// 外层只有 core 面板 + bottom Edge Group，本文件不关心它的结构，两个 init 函数都整体 mock 掉。
-const initializeCoreWorkspaceMock = vi.hoisted(() => vi.fn())
-const initializeOuterWorkspaceMock = vi.hoisted(() => vi.fn())
 /**
- * 外层 Dockview 替身：initializeOuterWorkspace 被 mock，因此初始没有任何面板；
- * 只实现模式切换器需要的 bottom Edge Group 与面板增删，供动画模式重组断言。
+ * 单一 Dockview 的替身。
+ *
+ * @remarks
+ * `initializeWorkspace` 不 mock：它会对这个假 api 真的建组、建面板，因此形状要跟
+ * workspace-layout.test.ts 里的 createWorkspaceApi 一致，并多实现动画模式重组需要的底部边缘组
+ * 与面板增删。文档不是 Dockview 面板——页面与资源标签由编辑器自己的标签条渲染，测试按
+ * `role="tab"` 查。
  */
-const outerDockviewMock = vi.hoisted(() => {
-  interface OuterFakePanel {
+const dockviewMock = vi.hoisted(() => {
+  interface FakePanel {
     id: string
-    api: { id: string; isActive: boolean; setActive: () => void; setTitle: ReturnType<typeof vi.fn> }
+    api: {
+      id: string
+      isActive: boolean
+      close: ReturnType<typeof vi.fn>
+      setActive: () => void
+      setTitle: ReturnType<typeof vi.fn>
+    }
   }
-  const panels = new Map<string, OuterFakePanel>()
+  interface FakeGroup {
+    id: string
+    locked: string | undefined
+    api: { setVisible: ReturnType<typeof vi.fn> }
+  }
+  const groups = new Map<string, FakeGroup>()
+  const panels = new Map<string, FakePanel>()
   let collapsed = true
+  let bottomAdded = false
   const bottomGroup = {
     id: 'compose-bottom-edge',
+    locked: undefined as string | undefined,
     isCollapsed: () => collapsed,
     expand: vi.fn(() => { collapsed = false }),
     collapse: vi.fn(() => { collapsed = true }),
   }
   const api = {
-    getEdgeGroup: vi.fn((position: string) => (position === 'bottom' ? bottomGroup : undefined)),
-    getPanel: vi.fn((id: string) => panels.get(id)),
+    height: 600,
+    addGroup: vi.fn((options: { id: string }) => {
+      const group: FakeGroup = { id: options.id, locked: undefined, api: { setVisible: vi.fn() } }
+      groups.set(options.id, group)
+      return group
+    }),
+    getGroup: vi.fn((id: string) => groups.get(id)),
+    addEdgeGroup: vi.fn(() => {
+      bottomAdded = true
+      return bottomGroup
+    }),
+    getEdgeGroup: vi.fn((position: string) => (position === 'bottom' && bottomAdded ? bottomGroup : undefined)),
     addPanel: vi.fn((options: { id: string }) => {
-      const panel: OuterFakePanel = {
+      const panel: FakePanel = {
         id: options.id,
         api: {
           id: options.id,
           isActive: false,
+          close: vi.fn(() => { panels.delete(options.id) }),
           setActive: () => {
             panels.forEach((item) => { item.api.isActive = item.id === options.id })
           },
@@ -61,19 +87,24 @@ const outerDockviewMock = vi.hoisted(() => {
       panels.set(options.id, panel)
       return panel
     }),
+    getPanel: vi.fn((id: string) => panels.get(id)),
     removePanel: vi.fn((panel: { id: string }) => { panels.delete(panel.id) }),
     onDidActivePanelChange: vi.fn(() => ({ dispose: () => undefined })),
   }
   return {
     api,
     panels,
+    groups,
     bottomGroup,
     get collapsed() { return collapsed },
     reset() {
       panels.clear()
+      groups.clear()
       collapsed = true
+      bottomAdded = false
       bottomGroup.expand.mockClear()
       bottomGroup.collapse.mockClear()
+      api.addGroup.mockClear()
       api.addPanel.mockClear()
       api.removePanel.mockClear()
     },
@@ -81,132 +112,24 @@ const outerDockviewMock = vi.hoisted(() => {
 })
 const assetPreviewPropsMock = vi.hoisted(() => vi.fn())
 
-/**
- * 记录已创建面板并支持切换活动面板的 Dockview 替身。
- *
- * @remarks
- * 页面工作区的行为完全依赖面板 ID 与活动面板事件，因此替身必须把 `api.id` 传给面板组件，
- * 并能触发 `onDidActivePanelChange`。
- */
-const dockviewMock = vi.hoisted(() => {
-  interface FakePanel {
-    id: string
-    component: string
-    title: string
-    api: {
-      id: string
-      title: string
-      isActive: boolean
-      close: ReturnType<typeof vi.fn>
-      setActive: () => void
-      setTitle: ReturnType<typeof vi.fn>
-    }
-  }
-  const panels = new Map<string, FakePanel>()
-  const activeListeners = new Set<(change: { panel: FakePanel | undefined }) => void>()
-  let activeId: string | null = null
-  const setActive = (id: string) => {
-    activeId = id
-    panels.forEach((panel) => { panel.api.isActive = panel.id === id })
-    activeListeners.forEach((listener) => { listener({ panel: panels.get(id) }) })
-  }
-  return {
-    panels,
-    reset() {
-      panels.clear()
-      activeListeners.clear()
-      activeId = null
-    },
-    activate: setActive,
-    get activeId() { return activeId },
-    api: {
-      addPanel: vi.fn((options: { id: string; component: string; title: string }) => {
-        const panel: FakePanel = {
-          id: options.id,
-          component: options.component,
-          title: options.title,
-          api: {
-            id: options.id,
-            title: options.title,
-            isActive: false,
-            close: vi.fn(() => { panels.delete(options.id) }),
-            setActive: () => setActive(options.id),
-            setTitle: vi.fn(),
-          },
-        }
-        panels.set(options.id, panel)
-        setActive(options.id)
-        return panel
-      }),
-      getPanel: vi.fn((id: string) => panels.get(id)),
-      onDidActivePanelChange: (listener: (change: { panel: FakePanel | undefined }) => void) => {
-        activeListeners.add(listener)
-        return { dispose: () => activeListeners.delete(listener) }
-      },
-    },
-  }
-})
-
-vi.mock('../workspace-layout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../workspace-layout')>()
-  return {
-    ...actual,
-    initializeCoreWorkspace: initializeCoreWorkspaceMock,
-    initializeOuterWorkspace: initializeOuterWorkspaceMock,
-  }
-})
-
 vi.mock('dockview-react', async () => {
   const React = await import('react')
   return {
     themeAbyss: { name: 'abyss', className: 'dockview-theme-abyss' },
     DockviewDefaultTab: () => null,
-    DockviewReact: ({ className, components, tabComponents, onReady }: {
-      className?: string
-      components: Record<string, React.FunctionComponent<{ api?: unknown }>>
-      tabComponents?: Record<string, React.FunctionComponent<{ api?: unknown }>>
+    DockviewReact: ({ components, onReady }: {
+      components: Record<string, React.FunctionComponent>
       onReady: (event: { api: unknown }) => void
     }) => {
-      const nested = className === 'compose-editor__scene-history-dockview'
-      // 页面/资源文档都挂在内层 core Dockview 上（initializedApi.current 由它的 onReady 设置），
-      // 外层只是宿主，用一个静态假 api 打发 handleOuterReady 的幂等判断即可。
-      const isCore = className === 'compose-editor__core-dockview'
-      const [, force] = React.useState(0)
       React.useEffect(() => {
-        if (nested) return
-        onReady({ api: isCore ? dockviewMock.api : outerDockviewMock.api })
-        if (!isCore) return
-        // 面板集合的变化不经过 React，测试里靠订阅活动面板变化触发重渲染。
-        const subscription = dockviewMock.api.onDidActivePanelChange(() => { force((n) => n + 1) })
-        return () => { subscription.dispose() }
-      }, [isCore, nested, onReady])
-      if (nested) return React.createElement('div', { 'data-testid': 'scene-history-dockview' })
-      if (!isCore) {
-        // 外层只有 core 宿主面板 + bottom Edge Group 的四个工具标签，静态渲染一次即可。
-        return React.createElement(
-          'div',
-          { 'data-testid': 'dockview' },
-          Object.entries(components).map(([name, Component]) =>
-            React.createElement(Component, { key: `static-${name}` })),
-        )
-      }
-      const Tab = tabComponents?.workspaceTab
+        onReady({ api: dockviewMock.api })
+      }, [onReady])
+      // 面板组件各渲染一次；文档不是面板，它们的标签与表面由编辑器自己渲染。
       return React.createElement(
         'div',
-        { 'data-testid': 'core-dockview' },
-        // initializeCoreWorkspace 被 mock，因此基础面板不会进入面板表；固定面板（资源浏览器等）
-        // 无条件渲染一次，动态面板另外按其 api 渲染。
+        { 'data-testid': 'dockview' },
         Object.entries(components).map(([name, Component]) =>
-          React.createElement(Component, { key: `static-${name}` })),
-        [...dockviewMock.panels.values()].map((panel) => React.createElement(
-          'div',
-          { key: panel.id, 'data-panel-id': panel.id },
-          Tab ? React.createElement(Tab, { api: panel.api }) : null,
-          React.createElement(
-            components[panel.component] ?? (() => null),
-            { api: panel.api },
-          ),
-        )),
+          React.createElement(Component, { key: name })),
       )
     },
   }
@@ -366,20 +289,41 @@ function renderEditor(provider: ComposeAssetProvider, onActiveSessionChange = vi
   return { onActiveSessionChange }
 }
 
+/**
+ * 保存活动文档。
+ *
+ * @remarks
+ * 标签条上那颗保存按钮已经删掉——「改没改过」标签上的脏点已经在回答了。保存现在是
+ * `document.save` 动作，默认键位仍是 `Cmd/Ctrl+S`，因此这里敲它而不是点按钮。
+ */
+function saveActiveDocument() {
+  const editor = document.querySelector('.compose-editor')
+  if (!editor) throw new Error('编辑器未渲染')
+  fireEvent.keyDown(editor, { key: 's', code: 'KeyS', metaKey: true })
+}
+
 /** 取最近一次活动页面回调的参数；本包 lib target 不含 Array.prototype.at。 */
 function lastSession(spy: ReturnType<typeof vi.fn>) {
   const calls = spy.mock.calls
   return calls.length === 0 ? undefined : calls[calls.length - 1]?.[0]
 }
 
-function pageDocumentPanels() {
-  return [...dockviewMock.panels.values()].filter((panel) => panel.component === 'pageDocument')
+/** 标签条上带某个前缀的文档标签；文档不是 Dockview 面板，标签条是编辑器自己的 tablist。 */
+function documentTabs(prefix: string) {
+  return screen.queryAllByRole('tab')
+    .filter((tab) => tab.getAttribute('data-workspace-tab')?.startsWith(prefix) ?? false)
+}
+
+function pageTabs() {
+  return documentTabs('compose-page-document:')
+}
+
+function assetTabs() {
+  return documentTabs('compose-asset-document:')
 }
 
 beforeEach(() => {
   dockviewMock.reset()
-  dockviewMock.api.addPanel.mockClear()
-  outerDockviewMock.reset()
 })
 
 afterEach(() => {
@@ -393,10 +337,9 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
 
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
 
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
-    expect(pageDocumentPanels()[0]?.title).toBe('Home')
-    expect([...dockviewMock.panels.values()].some((p) => p.component === 'assetDocument'))
-      .toBe(false)
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
+    expect(pageTabs()[0]).toHaveAttribute('title', 'Home')
+    expect(assetTabs()).toHaveLength(0)
   })
 
   it('非页面文件仍打开为资源标签', async () => {
@@ -404,11 +347,8 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
 
     fireEvent.click(screen.getByRole('button', { name: 'open-script' }))
 
-    await waitFor(() => {
-      expect([...dockviewMock.panels.values()].some((p) => p.component === 'assetDocument'))
-        .toBe(true)
-    })
-    expect(pageDocumentPanels()).toHaveLength(0)
+    await waitFor(() => { expect(assetTabs()).toHaveLength(1) })
+    expect(pageTabs()).toHaveLength(0)
   })
 
   it('页面能力启用时只为 *.setup.js 资源会话注入 Setup Profile', async () => {
@@ -430,8 +370,8 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
       }))
     })
     fireEvent.click(screen.getByRole('button', { name: 'open-setup' }))
-    expect([...dockviewMock.panels.values()]
-      .filter(({ title }) => title === 'Counter.setup.js')).toHaveLength(1)
+    expect(assetTabs().filter((tab) => tab.getAttribute('title') === 'Counter.setup.js'))
+      .toHaveLength(1)
   })
 
   it('页面能力未启用时 setup 文件保持普通 JavaScript 会话', async () => {
@@ -449,12 +389,12 @@ describe('OpenSpec: editor-workspace-layout / 页面文档标签与按页面事�
   it('重复打开同一页面激活既有标签而不新建运行时', async () => {
     const { onActiveSessionChange } = renderEditor(createProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const firstRuntime = lastSession(onActiveSessionChange)?.runtime
 
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
 
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const latestRuntime = lastSession(onActiveSessionChange)?.runtime
     expect(latestRuntime).toBe(firstRuntime)
   })
@@ -479,31 +419,31 @@ describe('OpenSpec: editor-workspace-layout / 设计与动画模式切换器', (
   it('切到动画加入并激活时间线面板且展开底部组；切回设计移除面板并恢复折叠', async () => {
     renderEditor(createProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
 
     const designRadio = screen.getByRole('radio', { name: '设计' })
     expect(designRadio).toHaveAttribute('aria-checked', 'true')
-    expect(outerDockviewMock.panels.has('compose-animation')).toBe(false)
+    expect(dockviewMock.panels.has('compose-animation')).toBe(false)
 
     fireEvent.click(screen.getByRole('radio', { name: '动画' }))
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: '动画' })).toHaveAttribute('aria-checked', 'true')
     })
-    expect(outerDockviewMock.api.addPanel).toHaveBeenCalledWith(expect.objectContaining({
+    expect(dockviewMock.api.addPanel).toHaveBeenCalledWith(expect.objectContaining({
       id: 'compose-animation',
       position: { referenceGroup: 'compose-bottom-edge' },
     }))
-    expect(outerDockviewMock.bottomGroup.expand).toHaveBeenCalledTimes(1)
-    expect(outerDockviewMock.panels.get('compose-animation')?.api.isActive).toBe(true)
+    expect(dockviewMock.bottomGroup.expand).toHaveBeenCalledTimes(1)
+    expect(dockviewMock.panels.get('compose-animation')?.api.isActive).toBe(true)
 
     fireEvent.click(screen.getByRole('radio', { name: '设计' }))
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: '设计' })).toHaveAttribute('aria-checked', 'true')
     })
-    expect(outerDockviewMock.api.removePanel).toHaveBeenCalledTimes(1)
-    expect(outerDockviewMock.panels.has('compose-animation')).toBe(false)
+    expect(dockviewMock.api.removePanel).toHaveBeenCalledTimes(1)
+    expect(dockviewMock.panels.has('compose-animation')).toBe(false)
     // 进入动画模式前底部处于折叠状态：切换器退出后恢复折叠。
-    expect(outerDockviewMock.bottomGroup.collapse).toHaveBeenCalledTimes(1)
+    expect(dockviewMock.bottomGroup.collapse).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -568,7 +508,7 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
   it('打开页面时把绑定动画文件的清单水合进文档镜像', async () => {
     const { onActiveSessionChange } = renderEditor(createBoundProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     // 清单归属 Frame：水合写进默认 Frame 的 Animations.items。
     const frameId = session.runtime.document.rootIds[0]!
@@ -589,7 +529,7 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     })
     const { onActiveSessionChange } = renderEditor(provider)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     expect(session?.runtime.document.animations ?? []).toEqual([])
     warn.mockRestore()
@@ -599,7 +539,7 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     const provider = createBoundProvider()
     const { onActiveSessionChange } = renderEditor(provider)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     // 无 controller 场景下动画 handler 不会被编辑器注册；镜像编辑仍走同一命令协议。
     for (const handler of createComposeAnimationCommandHandlers()) {
@@ -617,7 +557,7 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     }))
     await screen.findByRole('img', { name: '有未保存改动' })
 
-    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+    saveActiveDocument()
 
     await waitFor(() => {
       expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({
@@ -640,7 +580,7 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     const provider = createBoundProvider()
     const { onActiveSessionChange } = renderEditor(provider)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     act(() => session.runtime.dispatch({
       id: 'configure',
@@ -652,7 +592,7 @@ describe('OpenSpec: pages / 页面动画关联写入 / 编辑器水合与回写'
     }))
     await screen.findByRole('img', { name: '有未保存改动' })
 
-    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+    saveActiveDocument()
 
     await waitFor(() => { expect(provider.writeFile).toHaveBeenCalled() })
     const animationWrites = (provider.writeFile as ReturnType<typeof vi.fn>).mock.calls
@@ -745,7 +685,7 @@ describe('OpenSpec: editor-workspace-layout / 多场景动画会话 / 按绑定�
     const onActiveSessionChange = vi.fn()
     renderEditor(provider, onActiveSessionChange)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     for (const handler of createComposeAnimationCommandHandlers()) {
       try { session.runtime.registerHandler(handler) }
@@ -769,7 +709,7 @@ describe('OpenSpec: editor-workspace-layout / 多场景动画会话 / 按绑定�
     const provider = createTwoSceneProvider()
     await openAndTouchBothScenes(provider)
 
-    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+    saveActiveDocument()
 
     await waitFor(() => {
       expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-a' }))
@@ -824,7 +764,7 @@ describe('OpenSpec: editor-workspace-layout / 多场景动画会话 / 按绑定�
     })
     await openAndTouchBothScenes(provider)
 
-    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+    saveActiveDocument()
 
     await waitFor(() => {
       expect(provider.writeFile).toHaveBeenCalledWith(expect.objectContaining({ fileId: 'anim-a' }))
@@ -849,7 +789,7 @@ describe('OpenSpec: editor-workspace-layout / 多场景动画会话 / 按绑定�
     })
     await openAndTouchBothScenes(provider)
 
-    fireEvent.click(screen.getByRole('button', { name: '保存页面' }))
+    saveActiveDocument()
 
     // 页面本体与场景 A 的文件照常写入；失败的只有 B。
     await waitFor(() => {
@@ -871,7 +811,7 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
     const provider = createProvider()
     const { onActiveSessionChange } = renderEditor(provider)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
 
     act(() => session.runtime.dispatch({
@@ -886,7 +826,7 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
     const dirty = await screen.findByRole('img', { name: '有未保存改动' })
     expect(dirty).toBeInTheDocument()
 
-    const panelId = pageDocumentPanels()[0]!.id
+    const panelId = pageTabs()[0]!.getAttribute('data-workspace-tab')
     fireEvent.click(screen.getByRole('button', { name: '关闭页面 Home' }))
     // 关闭会先弹确认；这里改为直接走保存路径验证脏状态清除。
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
@@ -895,7 +835,7 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
       expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
     })
     expect(provider.writeFile).toHaveBeenCalled()
-    expect(dockviewMock.panels.has(panelId)).toBe(false)
+    expect(pageTabs().some((tab) => tab.getAttribute('data-workspace-tab') === panelId)).toBe(false)
   })
 
   it('写入冲突时呈现覆盖确认，覆盖后写入成功', async () => {
@@ -911,7 +851,7 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
     })
     const { onActiveSessionChange } = renderEditor(provider)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     act(() => session.runtime.dispatch({
       id: 'configure',
@@ -937,7 +877,7 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
   it('关闭存在未保存改动的页面标签时呈现关闭确认', async () => {
     const { onActiveSessionChange } = renderEditor(createProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
     const session = lastSession(onActiveSessionChange)
     act(() => session.runtime.dispatch({
       id: 'configure',
@@ -953,7 +893,7 @@ describe('OpenSpec: editor-workspace-layout / 页面保存与写入冲突', () =
 
     expect(await screen.findByText('页面尚未保存')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
   })
 })
 
@@ -1024,7 +964,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
       }))
     })
     await waitFor(() => {
-      expect(pageDocumentPanels().some((panel) => panel.title === 'Detail')).toBe(true)
+      expect(pageTabs().some((tab) => tab.getAttribute('title') === 'Detail')).toBe(true)
     })
   })
 
@@ -1042,7 +982,7 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     const provider = createProvider()
     const { onActiveSessionChange } = renderEditor(provider)
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
 
     fireEvent.click(screen.getByRole('button', { name: '创建页面脚本' }))
 
@@ -1140,15 +1080,12 @@ describe('OpenSpec: editor-workspace-layout / 资源面板页面操作', () => {
     fireEvent.click(await screen.findByRole('button', { name: '重新加载脚本' }))
     await waitFor(() => { expect(scriptModuleLoader.load).toHaveBeenCalledTimes(2) })
     fireEvent.click(screen.getByRole('button', { name: 'open-script' }))
-    await waitFor(() => {
-      expect([...dockviewMock.panels.values()].some((panel) => panel.component === 'assetDocument'))
-        .toBe(true)
-    })
+    await waitFor(() => { expect(assetTabs()).toHaveLength(1) })
     await act(async () => {
       resolveReload?.({ module: { setup: setupWithValue(10) }, revision: '2' })
       await Promise.resolve()
     })
-    dockviewMock.activate(pageDocumentPanels()[0]!.id)
+    fireEvent.click(pageTabs()[0]!)
 
     await waitFor(() => {
       expect(lastSession(onActiveSessionChange)?.scriptScope?.getExport('count'))
@@ -1222,15 +1159,11 @@ describe('OpenSpec: editor-workspace-layout / 首页标记与清单对账', () =
       })),
     }))
 
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
-    expect(pageDocumentPanels()[0]).toMatchObject({ title: 'Home' })
-    expect(dockviewMock.activeId).toBe(pageDocumentPanels()[0]?.id)
-    expect(initializeCoreWorkspaceMock).toHaveBeenCalledWith(
-      dockviewMock.api,
-      'zh-CN',
-      undefined,
-      { includeCanvas: false },
-    )
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
+    expect(pageTabs()[0]).toHaveAttribute('title', 'Home')
+    expect(pageTabs()[0]).toHaveAttribute('aria-selected', 'true')
+    // 中央画布组只承载画布：页面模式下不再有无文件的固定 Canvas，画布表面跟随活动页面。
+    expect(document.querySelector('[data-workspace-panel="canvas-document"]')).toBeNull()
   })
 
   it('设为首页后标记在树与网格双处渲染', async () => {
@@ -1365,20 +1298,16 @@ describe('OpenSpec: editor-workspace-layout / 只读页面 JSON 标签', () => {
   it('打开页面 JSON 以只读资源标签呈现，且与页面标签并存', async () => {
     renderEditor(createProvider())
     fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
-    await waitFor(() => { expect(pageDocumentPanels()).toHaveLength(1) })
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
 
     fireEvent.click(await screen.findByRole('button', { name: '打开页面 JSON' }))
 
-    await waitFor(() => {
-      expect([...dockviewMock.panels.values()]
-        .filter((panel) => panel.component === 'assetDocument')).toHaveLength(1)
-    })
+    await waitFor(() => { expect(assetTabs()).toHaveLength(1) })
     // 前缀不同，因此同一页面的两个标签互不覆盖。
-    expect(pageDocumentPanels()).toHaveLength(1)
-    const readOnlyPanel = [...dockviewMock.panels.values()]
-      .find((panel) => panel.component === 'assetDocument')
-    expect(readOnlyPanel?.id).toContain(':readonly')
-    expect(readOnlyPanel?.title).toBe('Home.page.json（只读）')
+    expect(pageTabs()).toHaveLength(1)
+    const readOnlyTab = assetTabs()[0]
+    expect(readOnlyTab?.getAttribute('data-workspace-tab')).toContain(':readonly')
+    expect(readOnlyTab).toHaveAttribute('title', 'Home.page.json（只读）')
   })
 
   it('只读标签不显示未保存指示', async () => {
@@ -1386,10 +1315,7 @@ describe('OpenSpec: editor-workspace-layout / 只读页面 JSON 标签', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '打开页面 JSON' }))
 
-    await waitFor(() => {
-      expect([...dockviewMock.panels.values()]
-        .some((panel) => panel.component === 'assetDocument')).toBe(true)
-    })
+    await waitFor(() => { expect(assetTabs()).toHaveLength(1) })
     expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
   })
 })

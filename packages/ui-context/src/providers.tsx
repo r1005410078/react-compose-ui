@@ -24,7 +24,12 @@ import './styles.css'
 
 const DEFAULT_THEME_TOKENS: Readonly<Record<ComposeResolvedTheme, ComposeThemeTokens>> = {
   dark: {
-    workspaceBackground: '#101216',
+    /*
+     * 桌面比面板暗一档：面板是浮在它上面的卡片，两者同值时卡片只剩边框在说话。
+     * 深色主题此前两个值都是 `#101216`——看不出问题，因为那时没有任何地方露出桌面。
+     * 只动这一个值，面板、卡头与画布保持原样，既有的每一处对比度都不用重新验算。
+     */
+    workspaceBackground: '#0a0c0f',
     panelBackground: '#101216',
     surfaceRaised: '#181b20',
     surfaceSunken: '#15181d',

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clickCurveStroke, openPageInspector, pointerDrop, drawContainer, drawText, selectContainer } from './support/test-helpers'
+import { clickCurveStroke, openPageInspector, pointerDrop, drawContainer, drawText, selectContainer, switchToDrawingWorkspace } from './support/test-helpers'
 
 
 /**
@@ -336,6 +336,8 @@ test('OpenSpec: stage / 线段命中 / 透明外接矩形不选中，线身仍�
 
   const start = { x: outputBox!.x + 180, y: outputBox!.y + 420 }
   const end = { x: start.x + 360, y: start.y - 240 }
+  // `LINE` 的按钮只在绘图工作区的货架上。
+  await switchToDrawingWorkspace(page)
   await editor.getByRole('button', { name: '直线', exact: true }).click()
   await page.mouse.click(start.x, start.y)
   await page.mouse.click(end.x, end.y)

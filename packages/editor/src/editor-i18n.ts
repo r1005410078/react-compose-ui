@@ -13,6 +13,8 @@ type FormatMessage = (
 const messages = {
   'zh-CN': {
     settings: '设置',
+    appMenu: '应用菜单',
+    commandPanel: '命令面板',
     user: '用户',
     close: '关闭设置',
     search: '搜索设置',
@@ -33,6 +35,13 @@ const messages = {
     save: '保存',
     discard: '放弃',
     closeAsset: (name: string) => `关闭资源 ${name}`,
+    collapsePanel: (title: string) => `收起${title}`,
+    expandPanel: (title: string) => `展开${title}`,
+    workspaceSwitchTo: (title: string) => `切换到工作区「${title}」`,
+    workspaceDeleteTitle: (title: string) => `删除工作区「${title}」？`,
+    workspaceDeleteImpact: (count: number, fallback: string) =>
+      `记着它的 ${count} 个文档下次打开时回到「${fallback}」。`,
+    workspaceRemoved: (title: string) => `工作区「${title}」的布局已损坏，已从列表移除。`,
     unsavedAssetTitle: '资源尚未保存',
     unsavedAssetQuestion: (name: string) => `关闭“${name}”前要保存吗？`,
     readonly: '固定手势',
@@ -46,10 +55,14 @@ const messages = {
       sceneGraph: '场景图',
       componentLibrary: '基础组件',
       canvas: '画布',
-      /** 外层唯一中央面板（内层 scene/canvas/inspector Dockview 的宿主）标题；隐藏了标签条，
-          但底层 Dockview group 仍会生成 landmark，必须和内层真正的“画布” aria-label 区分开，
-          否则两层同名 landmark 会触发无障碍检测的 landmark-unique 违规。 */
-      workspaceCore: '工作区',
+      /** 文档标签条的可访问名称。 */
+      documentTabs: '文档',
+      /** 左右两侧的折叠按钮与把手用的名字：左栏装着场景图与工具组，右栏是属性。 */
+      leftPane: '左侧面板',
+      rightPane: '右侧面板',
+      bottomPane: '底部面板',
+      /** 页面模式下没有打开任何文档时画布组里的提示。 */
+      noDocumentOpen: '从资源面板打开一个页面',
       inspector: '属性',
       transactionLog: '日志',
       command: '命令',
@@ -67,6 +80,44 @@ const messages = {
       modeSwitcher: '编辑模式',
       modeDesign: '设计',
       modeAnimation: '动画',
+    },
+    workspaces: {
+      switcher: '工作区',
+      menu: '管理工作区',
+      saveAs: '另存为工作区…',
+      rename: '重命名…',
+      reset: '重置',
+      remove: '删除',
+      customizeToolbar: '自定义工具栏…',
+      toolbarTitle: '自定义工具栏',
+      toolbarDescription: '排的是顺序与有无。从货架上拿掉一格不会拿掉那项能力——它还能从命令行、快捷键或命令面板到达。',
+      toolbarShelf: '工具栏货架',
+      toolbarAvailable: '未放入',
+      toolbarSeparator: '分隔线',
+      toolbarFixed: '固定',
+      toolbarMoveUp: '上移',
+      toolbarMoveDown: '下移',
+      toolbarInsertSeparator: '插入分隔',
+      toolbarAdd: '加入货架',
+      toolbarRemoveItem: '从货架移除',
+      toolbarResetShelf: '重置为默认',
+      toolbarDone: '完成',
+      canvasOnly: '只看画布',
+      builtin: '内建',
+      builtinHint: '内建工作区不可删除或重命名',
+      newWorkspace: '新建工作区',
+      modified: '布局已改动',
+      hint: '面板布局与画布默认值',
+      saveAsTitle: '另存为工作区',
+      saveAsDescription: '复制当前工作区此刻的样子：',
+      copiesLayout: '面板布局（含你拖过的）',
+      copiesSession: '画布默认值：角度约束、网格显示、十字光标',
+      nameLabel: '名称',
+      create: '创建',
+      renameTitle: '重命名工作区',
+      confirm: '确定',
+      cancel: '取消',
+      deleteDescription: '它的布局与默认值会一起删除。',
     },
     animationMode: {
       emptyTimeline: '当前页面还没有动画',
@@ -140,6 +191,8 @@ const messages = {
       drawArc: '圆弧',
       drawArrow: '箭头',
       drawWire: '导线',
+      more: '更多',
+      moreTools: '更多工具',
       centerView: '居中视图',
       containerTools: '容器工具',
       createContainer: '创建容器',
@@ -158,6 +211,9 @@ const messages = {
       resetZoom: '还原到 100%',
       zoomIn: '放大',
       toggleSnapTransaction: '切换画布吸附',
+      removeFromToolbar: '从工具栏移除',
+      insertSeparatorHere: '在此处插入分隔',
+      customizeToolbar: '自定义工具栏…',
     },
     dxf: {
       importAsPage: '导入为页面',
@@ -246,6 +302,8 @@ const messages = {
   },
   'en-US': {
     settings: 'Settings',
+    appMenu: 'Application menu',
+    commandPanel: 'Command panel',
     user: 'User',
     close: 'Close settings',
     search: 'Search settings',
@@ -266,6 +324,13 @@ const messages = {
     save: 'Save',
     discard: 'Discard',
     closeAsset: (name: string) => `Close ${name}`,
+    collapsePanel: (title: string) => `Collapse ${title}`,
+    expandPanel: (title: string) => `Expand ${title}`,
+    workspaceSwitchTo: (title: string) => `Switch to workspace “${title}”`,
+    workspaceDeleteTitle: (title: string) => `Delete workspace “${title}”?`,
+    workspaceDeleteImpact: (count: number, fallback: string) =>
+      `${count} document(s) remember it; they will reopen in “${fallback}”.`,
+    workspaceRemoved: (title: string) => `The layout of workspace “${title}” could not be restored; it was removed.`,
     unsavedAssetTitle: 'Unsaved resource',
     unsavedAssetQuestion: (name: string) => `Save “${name}” before closing?`,
     readonly: 'Fixed gestures',
@@ -279,7 +344,11 @@ const messages = {
       sceneGraph: 'Scene Graph',
       componentLibrary: 'Components',
       canvas: 'Canvas',
-      workspaceCore: 'Workspace',
+      documentTabs: 'Documents',
+      leftPane: 'left panels',
+      rightPane: 'right panel',
+      bottomPane: 'bottom panel',
+      noDocumentOpen: 'Open a page from the Assets panel',
       inspector: 'Properties',
       transactionLog: 'Log',
       command: 'Command',
@@ -297,6 +366,44 @@ const messages = {
       modeSwitcher: 'Editor mode',
       modeDesign: 'Design',
       modeAnimation: 'Animation',
+    },
+    workspaces: {
+      switcher: 'Workspace',
+      menu: 'Manage workspaces',
+      saveAs: 'Save as workspace…',
+      rename: 'Rename…',
+      reset: 'Reset',
+      customizeToolbar: 'Customize toolbar…',
+      toolbarTitle: 'Customize toolbar',
+      toolbarDescription: 'You arrange order and presence, not behavior. Removing an item never removes the capability — it stays reachable from the command line, a shortcut, or the command palette.',
+      toolbarShelf: 'Toolbar',
+      toolbarAvailable: 'Not on the toolbar',
+      toolbarSeparator: 'Separator',
+      toolbarFixed: 'Fixed',
+      toolbarMoveUp: 'Move up',
+      toolbarMoveDown: 'Move down',
+      toolbarInsertSeparator: 'Insert separator',
+      toolbarAdd: 'Add to toolbar',
+      toolbarRemoveItem: 'Remove from toolbar',
+      toolbarResetShelf: 'Reset to default',
+      toolbarDone: 'Done',
+      remove: 'Delete',
+      canvasOnly: 'Canvas only',
+      builtin: 'Built-in',
+      builtinHint: 'Built-in workspaces cannot be deleted or renamed',
+      newWorkspace: 'New workspace',
+      modified: 'Layout modified',
+      hint: 'Panel layout and canvas defaults',
+      saveAsTitle: 'Save as workspace',
+      saveAsDescription: 'Copies the current workspace as it is now:',
+      copiesLayout: 'Panel layout (including what you dragged)',
+      copiesSession: 'Canvas defaults: angle constraint, grid, crosshair',
+      nameLabel: 'Name',
+      create: 'Create',
+      renameTitle: 'Rename workspace',
+      confirm: 'OK',
+      cancel: 'Cancel',
+      deleteDescription: 'Its layout and defaults will be deleted.',
     },
     animationMode: {
       emptyTimeline: 'No animation on this page yet',
@@ -371,6 +478,8 @@ const messages = {
       drawArc: 'Arc',
       drawArrow: 'Arrow',
       drawWire: 'Wire',
+      more: 'More',
+      moreTools: 'More tools',
       centerView: 'Center view',
       containerTools: 'Container tools',
       createContainer: 'Create Container',
@@ -389,6 +498,9 @@ const messages = {
       resetZoom: 'Reset to 100%',
       zoomIn: 'Zoom in',
       toggleSnapTransaction: 'Toggle canvas snapping',
+      removeFromToolbar: 'Remove from toolbar',
+      insertSeparatorHere: 'Insert separator here',
+      customizeToolbar: 'Customize toolbar…',
     },
     dxf: {
       importAsPage: 'Import as page',
@@ -483,6 +595,8 @@ const actionLabels: Record<
 > = {
   'zh-CN': {
     'editor.settings': '打开设置',
+    'document.save': '保存文档',
+    'document.toggleAnimationMode': '切换动画模式',
     'stage.temporaryPan': '临时平移',
     'stage.selectTool': '选择工具',
     'stage.drawContainerTool': '容器工具',
@@ -493,6 +607,8 @@ const actionLabels: Record<
     'stage.zoomIn': '放大',
     'stage.zoomOut': '缩小',
     'stage.toggleGridSnap': '切换网格吸附',
+    'stage.canvasSettings': '画布设置',
+    'stage.toggleTransformGizmo': '切换变换指示器',
     'stage.toggleSmartSnap': '切换智能吸附',
     'edit.duplicate': '复制节点',
     'edit.copy': '复制',
@@ -509,9 +625,16 @@ const actionLabels: Record<
     'edit.delete': '删除',
     'history.undo': '撤销',
     'history.redo': '重做',
+    'workspace.next': '下一个工作区',
+    'workspace.previous': '上一个工作区',
+    'workspace.focusCanvas': '只看画布',
+    'workspace.saveAs': '另存为工作区…',
+    'workspace.reset': '重置工作区布局',
   },
   'en-US': {
     'editor.settings': 'Open settings',
+    'document.save': 'Save document',
+    'document.toggleAnimationMode': 'Toggle animation mode',
     'stage.temporaryPan': 'Temporary pan',
     'stage.selectTool': 'Select tool',
     'stage.drawContainerTool': 'Container tool',
@@ -522,6 +645,8 @@ const actionLabels: Record<
     'stage.zoomIn': 'Zoom in',
     'stage.zoomOut': 'Zoom out',
     'stage.toggleGridSnap': 'Toggle grid snap',
+    'stage.canvasSettings': 'Canvas settings',
+    'stage.toggleTransformGizmo': 'Toggle transform gizmo',
     'stage.toggleSmartSnap': 'Toggle smart snap',
     'edit.duplicate': 'Duplicate nodes',
     'edit.copy': 'Copy',
@@ -538,6 +663,11 @@ const actionLabels: Record<
     'edit.delete': 'Delete',
     'history.undo': 'Undo',
     'history.redo': 'Redo',
+    'workspace.next': 'Next workspace',
+    'workspace.previous': 'Previous workspace',
+    'workspace.focusCanvas': 'Canvas only',
+    'workspace.saveAs': 'Save as workspace…',
+    'workspace.reset': 'Reset workspace layout',
   },
 }
 
@@ -562,6 +692,7 @@ const actionReasons = {
     flowGroup: '自动布局 Flow 子项不能参与编组；请先转为 Absolute',
     flowUngroup: '自动布局 Flow 子项不能参与解组；请先转为 Absolute',
     emptyClipboard: '剪贴板为空',
+    noDocument: '没有打开的文档',
   },
   'en-US': {
     noSelection: 'Select an object first',
@@ -574,6 +705,7 @@ const actionReasons = {
     flowGroup: 'Auto layout flow children cannot be grouped; convert them to absolute first',
     flowUngroup: 'Auto layout flow children cannot be ungrouped; convert them to absolute first',
     emptyClipboard: 'Clipboard is empty',
+    noDocument: 'No document is open',
   },
 } as const
 
@@ -597,6 +729,7 @@ export interface EditorActionReasons {
   readonly flowGroup: string
   readonly flowUngroup: string
   readonly emptyClipboard: string
+  readonly noDocument: string
 }
 
 /**
@@ -647,6 +780,7 @@ export function getEditorActionReasons(
     flowGroup: formatMessage('editor.actionReason.flowGroup', current.flowGroup),
     flowUngroup: formatMessage('editor.actionReason.flowUngroup', current.flowUngroup),
     emptyClipboard: formatMessage('editor.actionReason.emptyClipboard', current.emptyClipboard),
+    noDocument: formatMessage('editor.actionReason.noDocument', current.noDocument),
   }
 }
 
@@ -667,6 +801,8 @@ export function getEditorMessages(
   ) => formatMessage(`editor.${id}`, fallback, variables)
   return {
     settings: format('settings', current.settings),
+    appMenu: format('appMenu', current.appMenu),
+    commandPanel: format('commandPanel', current.commandPanel),
     user: format('user', current.user),
     close: format('close', current.close),
     search: format('search', current.search),
@@ -699,6 +835,36 @@ export function getEditorMessages(
       current.closeAsset(name),
       { name },
     ),
+    collapsePanel: (title: string) => withVariables(
+      'collapsePanel',
+      current.collapsePanel(title),
+      { title },
+    ),
+    workspaceSwitchTo: (title: string) => withVariables(
+      'workspaceSwitchTo',
+      current.workspaceSwitchTo(title),
+      { title },
+    ),
+    workspaceDeleteTitle: (title: string) => withVariables(
+      'workspaceDeleteTitle',
+      current.workspaceDeleteTitle(title),
+      { title },
+    ),
+    workspaceDeleteImpact: (count: number, fallback: string) => withVariables(
+      'workspaceDeleteImpact',
+      current.workspaceDeleteImpact(count, fallback),
+      { count, fallback },
+    ),
+    workspaceRemoved: (title: string) => withVariables(
+      'workspaceRemoved',
+      current.workspaceRemoved(title),
+      { title },
+    ),
+    expandPanel: (title: string) => withVariables(
+      'expandPanel',
+      current.expandPanel(title),
+      { title },
+    ),
     unsavedAssetTitle: format('unsavedAssetTitle', current.unsavedAssetTitle),
     unsavedAssetQuestion: (name: string) => withVariables(
       'unsavedAssetQuestion',
@@ -716,6 +882,12 @@ export function getEditorMessages(
         format(`workspace.${key}`, fallback),
       ]),
     ) as Record<keyof typeof current.workspace, string>,
+    workspaces: Object.fromEntries(
+      Object.entries(current.workspaces).map(([key, fallback]) => [
+        key,
+        format(`workspaces.${key}`, fallback),
+      ]),
+    ) as Record<keyof typeof current.workspaces, string>,
     animationMode: {
       emptyTimeline: format('animationMode.emptyTimeline', current.animationMode.emptyTimeline),
       loadAnimation: format('animationMode.loadAnimation', current.animationMode.loadAnimation),
@@ -931,6 +1103,18 @@ export function getRequiredEditorMessage(
     throw new Error(`Missing editor translation: ${locale}.${key}`)
   }
   return dictionary[key]
+}
+
+export function getEditorWorkspaceSwitchLabel(
+  locale: ComposeLocale,
+  title: string,
+  formatMessage: FormatMessage = (_id, fallback) => fallback,
+) {
+  return formatMessage(
+    'editor.workspaceSwitchTo',
+    messages[locale].workspaceSwitchTo(title),
+    { title },
+  )
 }
 
 export function getEditorShortcutActionLabel(

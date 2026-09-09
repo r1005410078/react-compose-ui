@@ -90,7 +90,6 @@ export function PageInspector({
     <ComposePropertyPanelRoot
       aria-label={messages.pageInspector.label}
       className="compose-editor__page-inspector"
-      header={{ title: messages.pageInspector.title }}
     >
       <ComposePropertyPanelSection defaultExpanded title={messages.pageInspector.scene}>
         <ComposePropertyPanel

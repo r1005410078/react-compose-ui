@@ -48,6 +48,7 @@ const descriptor: ComposeComponentDescriptor = {
   kind: 'base',
   revision: '1',
   reference,
+  folderPath: [],
 }
 
 function componentStore(conflict = false): ComposeComponentStore {
@@ -60,7 +61,7 @@ function componentStore(conflict = false): ComposeComponentStore {
   return {
     providerId: 'project',
     createReference: () => reference,
-    listComponents: async () => ({ components: [descriptor], issues: [] }),
+    listComponents: async () => ({ components: [descriptor], issues: [], folders: [] }),
     readComponent: async () => structuredClone(current),
     createComponent: async () => { throw new Error('unused') },
     saveComponent: vi.fn(async (_assetKey, asset, _revision, force) => {

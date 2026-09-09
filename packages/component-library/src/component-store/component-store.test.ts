@@ -17,7 +17,12 @@ import * as libraryApi from '../index'
 interface StoreApi {
   readonly createComposeComponentStore?: (input: { readonly provider: ComposeAssetProvider }) => {
     listComponents(signal?: AbortSignal): Promise<{
-      readonly components: readonly { readonly assetKey: string; readonly kind: string }[]
+      readonly components: readonly {
+        readonly assetKey: string
+        readonly kind: string
+        readonly folderPath: readonly string[]
+      }[]
+      readonly folders: readonly (readonly string[])[]
     }>
     readComponent(assetKey: string): Promise<{ readonly asset: { readonly kind: string }; readonly revision: string }>
     createComponent(input: {
@@ -250,6 +255,42 @@ describe('ComposeComponentStore', () => {
     })
   })
 
+  it('第一个调用方取消不牵连共用同一次列举的第二个', async () => {
+    /*
+     * React StrictMode 的挂载→清理→再挂载：第一次挂载在清理时 abort，第二次挂载几乎同时再问
+     * 一次。共享的那次列举若绑在第一个调用方的 signal 上，第二次拿到的就是同一个注定以
+     * 「操作已取消」失败的 promise，而它自己的 signal 还活着——错误于是被当成真的读取失败显示
+     * 出来，目录整个退化成空。端到端跑生产构建，StrictMode 双调用在那里不发生，只有这条挡得住。
+     */
+    const fake = fakeProvider()
+    const originalList = fake.provider.list.bind(fake.provider)
+    let release!: () => void
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let hold = true
+    vi.spyOn(fake.provider, 'list').mockImplementation(async (input) => {
+      const result = await originalList(input)
+      if (input.folderId === 'Components' && hold) {
+        hold = false
+        markStarted()
+        await gate
+      }
+      return result
+    })
+    const store = api.createComposeComponentStore!({ provider: fake.provider })
+    const first = new AbortController()
+    const firstRequest = store.listComponents(first.signal)
+    await started
+    const secondRequest = store.listComponents(new AbortController().signal)
+    first.abort('strict-mode cleanup')
+    release()
+
+    // 取消的那个仍然按取消失败——取消是调用方自己的事。
+    await expect(firstRequest).rejects.toMatchObject({ code: 'io' })
+    await expect(secondRequest).resolves.toMatchObject({ components: [{ kind: 'base' }] })
+  })
+
   it('OpenSpec: component-library / 项目组件 Store / 在 Provider 调用前响应取消', async () => {
     const fake = fakeProvider()
     const store = api.createComposeComponentStore!({ provider: fake.provider })
@@ -257,5 +298,68 @@ describe('ComposeComponentStore', () => {
     abort.abort('cancelled')
     await expect(store.listComponents(abort.signal)).rejects.toMatchObject({ code: 'io' })
     expect(fake.calls.list).toBe(0)
+  })
+  it('OpenSpec: component-library / 混合组件目录 / 描述符带上文件夹路径', async () => {
+    // 两层树：根 / Symbols / {Switchgear（有一个组件）, Signs（空）}。
+    const tree: Record<string, ComposeAssetEntry[]> = {
+      root: [{ id: 'Symbols', parentId: 'root', name: 'Symbols', kind: 'folder' }],
+      Symbols: [
+        { id: 'Symbols/Switchgear', parentId: 'Symbols', name: 'Switchgear', kind: 'folder' },
+        { id: 'Symbols/Signs', parentId: 'Symbols', name: 'Signs', kind: 'folder' },
+        {
+          id: 'Symbols/Note.component.json',
+          parentId: 'Symbols',
+          name: 'Note.component.json',
+          kind: 'file',
+          mediaType: COMPOSE_COMPONENT_MEDIA_TYPE,
+          assetKey: 'Symbols/Note.component.json',
+          revision: '1',
+        },
+      ],
+      'Symbols/Switchgear': [{
+        id: 'Symbols/Switchgear/Breaker.component.json',
+        parentId: 'Symbols/Switchgear',
+        name: 'Breaker.component.json',
+        kind: 'file',
+        mediaType: COMPOSE_COMPONENT_MEDIA_TYPE,
+        assetKey: 'Symbols/Switchgear/Breaker.component.json',
+        revision: '1',
+      }],
+      'Symbols/Signs': [],
+    }
+    const provider: ComposeAssetProvider = {
+      id: 'project',
+      label: 'Project',
+      root: { id: 'root', parentId: null, name: 'Project', kind: 'folder' },
+      capabilities: {
+        createFile: false,
+        createFolder: false,
+        rename: false,
+        move: false,
+        delete: false,
+        write: false,
+        reference: true,
+      },
+      referenceScope: 'persistent',
+      async list({ folderId }) { return tree[folderId] ?? [] },
+      async read() {
+        return {
+          blob: new Blob([serializeComposeComponentAsset(baseAsset())], { type: COMPOSE_COMPONENT_MEDIA_TYPE }),
+          revision: '1',
+        }
+      },
+    }
+    const store = api.createComposeComponentStore!({ provider })
+    const catalog = await store.listComponents()
+    expect(catalog.components.map((component) => component.folderPath)).toEqual([
+      ['Symbols', 'Switchgear'],
+      ['Symbols'],
+    ])
+    // 空文件夹也要列出来：货架靠它区分「这个分类是空的」与「这个分类没了」。
+    expect(catalog.folders).toEqual(expect.arrayContaining([
+      ['Symbols'],
+      ['Symbols', 'Switchgear'],
+      ['Symbols', 'Signs'],
+    ]))
   })
 })

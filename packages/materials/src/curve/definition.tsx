@@ -69,7 +69,7 @@ function curvePreset(
   fallbackProps: JsonObject,
   geometry: (size: { readonly width: number; readonly height: number }) => ComposeCurve,
   icon: ReactNode,
-  paletteHidden: boolean,
+  paletteHidden: 'toolbar' | 'always' | null,
   options: ComposeBasicMaterialOptions = {},
   extra: {
     readonly fallbackSize?: { readonly width: number; readonly height: number }
@@ -89,7 +89,7 @@ function curvePreset(
     label: options.label ?? fallbackLabel,
     defaultName: options.name ?? fallbackLabel,
     icon,
-    ...(paletteHidden ? { paletteHidden: true } : {}),
+    ...(paletteHidden ? { paletteHidden } : {}),
     createComponents: () => ({
       ...rendererPresetComponents({ type: 'curve', props, size, appearance }),
       Curve: geometry(size) as unknown as JsonObject,
@@ -108,9 +108,10 @@ function curvePreset(
  * 定」。**现在定了**：盒自由，几何按 `viewBox` 与盒的比例呈现，因此手柄回来，走的是所有
  * Entity 共用的那一条缩放路径。
  *
- * `paletteHidden` 的判据是「工具栏是否已提供入口」，与物料本身无关：Arrow、Circle 与 Wire 各有
- * 一条绘图命令，Curve 没有。Wire 还有一条自己的理由——从 Palette 拖出来的导线**没有任何端口
- * 绑定**，而那条粗线正在宣称它是主回路。
+ * `paletteHidden` 分两档。`'toolbar'` 是「工具栏已提供入口」，与物料本身无关：Arrow 与 Circle
+ * 各有一条绘图命令，Curve 没有——这一档**按当前工作区的货架**求值，因此页面工作区（默认货架
+ * 不含 `CIRCLE`）里圆的瓦片会出现。Wire 是 `'always'`：它有一条自己的理由——从 Palette 拖出来
+ * 的导线**没有任何端口绑定**，而那条粗线正在宣称它是主回路，这与谁的货架上有没有按钮无关。
  *
  * @internal
  */
@@ -161,7 +162,7 @@ export function createCurveMaterial(
         DEFAULT_CURVE_PROPS,
         (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
         <ComposeLineMaterialIcon />,
-        false,
+        null,
         options.curve,
       ),
       curvePreset(
@@ -170,7 +171,7 @@ export function createCurveMaterial(
         DEFAULT_ARROW_PROPS,
         (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
         <ComposeArrowMaterialIcon />,
-        true,
+        'toolbar',
         options.arrow,
       ),
       curvePreset(
@@ -179,7 +180,7 @@ export function createCurveMaterial(
         DEFAULT_CURVE_PROPS,
         () => DEFAULT_CIRCLE_GEOMETRY,
         <ComposeCircleMaterialIcon />,
-        true,
+        'toolbar',
         options.circle,
       ),
       /*
@@ -198,7 +199,7 @@ export function createCurveMaterial(
         DEFAULT_CURVE_PROPS,
         composeRectangleGeometry,
         <ComposeRectMaterialIcon />,
-        false,
+        null,
         options.rect,
       ),
       curvePreset(
@@ -207,7 +208,7 @@ export function createCurveMaterial(
         DEFAULT_WIRE_PROPS,
         (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
         <ComposeLineMaterialIcon />,
-        true,
+        'always',
         options.wire,
       ),
       /*
@@ -224,7 +225,7 @@ export function createCurveMaterial(
         DEFAULT_JUNCTION_PROPS,
         composeJunctionGeometry,
         <ComposeCircleMaterialIcon />,
-        true,
+        'always',
         options.junction,
         {
           fallbackSize: composeJunctionSize(COMPOSE_WIRE_STROKE_WIDTH),

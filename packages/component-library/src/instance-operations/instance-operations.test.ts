@@ -89,7 +89,7 @@ function store(asset: ComposeBaseComponentAsset) {
   const api: ComposeComponentStore = {
     providerId: 'project',
     createReference: (assetKey) => ({ ...reference, assetKey }),
-    listComponents: async () => ({ components: [], issues: [] }),
+    listComponents: async () => ({ components: [], issues: [], folders: [] }),
     readComponent: async () => structuredClone(current),
     createComponent: async () => { throw new Error('unused') },
     saveComponent: async (_key, next) => {

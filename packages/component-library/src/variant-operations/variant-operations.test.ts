@@ -122,7 +122,7 @@ function store(options: { readonly failVariantWrite?: boolean; readonly parent?:
   const api: ComposeComponentStore = {
     providerId: 'project',
     createReference: (assetKey) => ({ ...baseRef, assetKey }),
-    listComponents: async () => ({ components: [], issues: [] }),
+    listComponents: async () => ({ components: [], issues: [], folders: [] }),
     async readComponent(assetKey) {
       const value = assets.get(assetKey)
       if (!value) throw new Error(`missing ${assetKey}`)

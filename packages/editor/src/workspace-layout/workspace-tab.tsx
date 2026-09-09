@@ -1,17 +1,8 @@
-import type {
-  IDockviewHeaderActionsProps,
-  IDockviewPanelHeaderProps,
-} from 'dockview-react'
+import type { IDockviewPanelHeaderProps } from 'dockview-react'
+import { useEffect, useReducer } from 'react'
 import type { PointerEventHandler } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import {
-  isPageDocumentPanelId,
-  isComponentDocumentPanelId,
-  isWorkspaceDocumentPanelId,
-  WORKSPACE_GROUP_IDS,
-  WORKSPACE_PANEL_IDS,
-} from './workspace-layout'
-import { useWorkspaceContent } from './workspace-context'
+import { WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { getEditorMessages } from '../editor-i18n'
 
 type WorkspaceTabProps = IDockviewPanelHeaderProps & {
@@ -20,147 +11,39 @@ type WorkspaceTabProps = IDockviewPanelHeaderProps & {
   onPointerUp?: PointerEventHandler<HTMLDivElement>
 }
 
-function SceneGraphIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="m12 2.75 8 4.5v9.5l-8 4.5-8-4.5v-9.5l8-4.5Z" />
-      <path d="m4.35 7.45 7.65 4.3 7.65-4.3M12 11.75v9.5" />
-    </svg>
-  )
-}
-
-function InspectorIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M4 6h6M14 6h6M10 3v6M4 12h11M19 12h1M15 9v6M4 18h3M11 18h9M7 15v6" />
-    </svg>
-  )
-}
-
-function SettingsIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
-    </svg>
-  )
-}
-
-export function WorkspaceHeaderActions(props: IDockviewHeaderActionsProps) {
-  const i18n = useComposeI18nContext()
-  const {
-    settingsOpen,
-    settingsPanelId,
-    setSettingsButton,
-    toggleSettings,
-  } = useWorkspaceContent()
-  if (props.group.id !== WORKSPACE_GROUP_IDS.scene) {
-    return null
-  }
-  const t = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
-
-  return (
-    <button
-      aria-controls={settingsPanelId}
-      aria-expanded={settingsOpen}
-      aria-haspopup="dialog"
-      aria-label={t.settings}
-      className="compose-editor__settings-icon"
-      onClick={toggleSettings}
-      ref={setSettingsButton}
-      title={t.settings}
-      type="button"
-    >
-      <SettingsIcon />
-    </button>
-  )
-}
-
+/** Dockview 组里的文字标签；文档不再是 Dockview 面板，它们的标签在 `WorkspaceDocumentTabs`。 */
 export function WorkspaceTab(props: WorkspaceTabProps) {
   const i18n = useComposeI18nContext()
-  const editorMessages = getEditorMessages(
+  const messages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
-  )
-  const messages = editorMessages.workspace
-  const { documents, requestDocumentClose } = useWorkspaceContent()
+  ).workspace
   const titles: Record<string, string> = {
     [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
+    [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
+    [WORKSPACE_PANEL_IDS.history]: messages.history,
     [WORKSPACE_PANEL_IDS.canvas]: messages.canvas,
     [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
     [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
     [WORKSPACE_PANEL_IDS.command]: messages.command,
     [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
     [WORKSPACE_PANEL_IDS.animation]: messages.animation,
-    [WORKSPACE_PANEL_IDS.core]: messages.workspaceCore,
-    'compose-scene-content-panel': messages.sceneGraph,
-    'compose-component-library-panel': messages.componentLibrary,
-    'compose-history-panel': messages.history,
   }
-  const title = titles[props.api.id] ?? props.api.title
-  const isDocumentTab = isWorkspaceDocumentPanelId(props.api.id)
-  const session = documents.get(props.api.id)
-  const closeLabel = isPageDocumentPanelId(props.api.id)
-    ? editorMessages.pages.closePage(title)
-    : isComponentDocumentPanelId(props.api.id)
-      ? `关闭 ${title}`
-    : editorMessages.closeAsset(title)
-  const icon =
-    props.api.id === WORKSPACE_PANEL_IDS.scene ? (
-      <SceneGraphIcon />
-    ) : props.api.id === WORKSPACE_PANEL_IDS.inspector ? (
-      <InspectorIcon />
-    ) : null
-
-  if (icon) {
-    return (
-      <div
-        className="compose-editor__icon-tab"
-        data-workspace-tab={props.api.id}
-        onPointerDown={props.onPointerDown}
-        onPointerLeave={props.onPointerLeave}
-        onPointerUp={props.onPointerUp}
-        title={title}
-      >
-        {icon}
-        <span className="compose-editor__visually-hidden">{title}</span>
-      </div>
-    )
-  }
-
-  if (isDocumentTab) {
-    return (
-      <div
-        className="compose-editor__text-tab compose-editor__asset-document-tab"
-        data-workspace-tab={props.api.id}
-        onPointerDown={props.onPointerDown}
-        onPointerLeave={props.onPointerLeave}
-        onPointerUp={props.onPointerUp}
-        title={title}
-      >
-        <span>{title}</span>
-        {session?.dirty === true ? (
-          <span
-            aria-label={editorMessages.pages.dirtyIndicator}
-            className="compose-editor__document-dirty"
-            role="img"
-          />
-        ) : null}
-        <button
-          aria-label={closeLabel}
-          className="compose-editor__asset-document-close"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            requestDocumentClose(props.api.id)
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          ×
-        </button>
-      </div>
-    )
-  }
+  // 物料面板的标签名由**工作区**给（页面「基础组件」/ 绘图「符号库」），属性面板的由**选区**
+  // 给（`属性 · 矩形`），因此这两个读面板自己的标题而不是这张按 id 查的表；其余面板的名字只
+  // 随语言变。标题是从外面 `setTitle` 改的，
+  // React 不会因此重渲染：订阅到变化就催一帧，标题本身仍在渲染期从 api 上现读——把它复制进
+  // state 会多出一份可能过期的事实。
+  const [, repaint] = useReducer((count: number) => count + 1, 0)
+  useEffect(() => {
+    const subscription = props.api.onDidTitleChange?.(() => { repaint() })
+    return () => { subscription?.dispose() }
+  }, [props.api])
+  const dynamicTitle = props.api.id === WORKSPACE_PANEL_IDS.componentLibrary
+    || props.api.id === WORKSPACE_PANEL_IDS.inspector
+  const title = dynamicTitle
+    ? props.api.title ?? titles[props.api.id]
+    : titles[props.api.id] ?? props.api.title
 
   return (
     <div

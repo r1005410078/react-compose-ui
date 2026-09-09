@@ -34,10 +34,31 @@ export type {
   ComposeEditorActiveComponentSession,
   ComposeEditorComponentsConfig,
 } from './component-workspace'
-export { createDefaultComposeEditorPreferences } from './editor-preferences'
+export {
+  createDefaultComposeEditorPreferences,
+  createDefaultComposeEditorWorkspacePreferences,
+} from './editor-preferences'
 export type {
   ComposeEditorKeybinding,
   ComposeEditorPreferences,
   ComposeEditorShortcutAction,
   ComposeEditorShortcutScope,
+  ComposeEditorWorkspacePreferences,
 } from './editor-preferences'
+export { COMPOSE_DEFAULT_WORKSPACES, COMPOSE_PAGE_WORKSPACE_ID } from './workspace-layout'
+export type {
+  ComposeEditorCustomWorkspace,
+  ComposeEditorWorkspaceDefinition,
+  ComposeWorkspaceLayout,
+  ComposeWorkspaceLayoutPreset,
+  ComposeWorkspaceLayoutSnapshot,
+  ComposeWorkspacePanelName,
+  ComposeWorkspaceSession,
+} from './workspace-layout'
+export {
+  COMPOSE_TOOLBAR_SELECT_ID,
+  COMPOSE_TOOLBAR_SEPARATOR,
+  DRAWING_TOOLBAR_SHELF,
+  PAGE_TOOLBAR_SHELF,
+} from './stage-toolbar'
+export type { ComposeToolbarItem, ComposeToolbarShelf } from './stage-toolbar'

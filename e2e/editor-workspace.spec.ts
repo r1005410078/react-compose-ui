@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, expandInspectorSection } from './support/test-helpers'
+import type { Locator } from '@playwright/test'
+import { pointerDrop, drawContainer, drawText, expandInspectorSection, switchToDrawingWorkspace } from './support/test-helpers'
 
 
 /**
@@ -25,10 +26,13 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   await expect(editor.locator('[data-workspace-tab="compose-component-library"]')).toHaveCount(0)
   const componentLibrary = editor.locator('[data-workspace-panel="component-library"]')
   await expect(componentLibrary).toBeVisible()
-  // Palette 只保留没有专用创建入口的 Preset：Text/Line/Arrow/Circle 走工具栏绘制工具，
-  // Page Slot 走资源面板的页面拖入；Widget Switcher 与 Curve 物料加入后计数为 5。矩形是
-  // 一处有意偏离——面板是新手唯一的发现面，它与 `RECTANGLE` 命令落地同一个 Preset，计数 6。
-  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (5)' })).toBeVisible()
+  /*
+   * Palette 只保留在**当前工作区**没有工具栏入口的 Preset。页面工作区的货架上没有 `CIRCLE`，
+   * 因此圆的瓦片在这里**出现**——`paletteHidden` 的判据按货架求值，不然页面里既没有按钮也
+   * 没有瓦片。Text 与箭头的入口都在页面货架上，因此仍不出现；Wire 是自己的理由，恒不出现。
+   */
+  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (6)' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 Circle' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Widget Switcher' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
@@ -44,8 +48,9 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
     height: viewport!.height,
   })
 
-  const left = page.getByTestId('dv-edge-group-compose-scene-edge')
-  const right = page.getByTestId('dv-edge-group-compose-inspector-edge')
+  // 左右两侧是普通组而不是边缘组：只有底部一个边缘组，它因此横跨整个编辑器宽度。
+  const left = editor.locator('[data-workspace-panel="scene-graph"]')
+  const right = editor.locator('[data-workspace-panel="inspector"]')
   const bottom = page.getByTestId('dv-edge-group-compose-bottom-edge')
   const homeDocument = page.locator(
     '[data-workspace-panel="page-document"][data-page-key="demo-home-page"]',
@@ -58,13 +63,112 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   expect(rightBox).not.toBeNull()
   expect(bottomBox).not.toBeNull()
   expect(homeDocumentBox).not.toBeNull()
-  await expect(editor.locator('[data-workspace-panel="canvas"]')).toHaveCount(0)
+  // 页面模式下没有无文件的固定画布；画布组只承载画布，文档表面跟随活动页面。
+  await expect(editor.locator('[data-workspace-panel="canvas-document"]')).toHaveCount(0)
   await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]')
     .filter({ hasText: 'Home' })).toBeVisible()
   expect(leftBox!.x).toBeLessThan(homeDocumentBox!.x)
   expect(rightBox!.x).toBeGreaterThanOrEqual(homeDocumentBox!.x + homeDocumentBox!.width)
   expect(bottomBox!.y).toBeGreaterThan(homeDocumentBox!.y)
   expect(bottomBox!.height).toBeLessThan(80)
+  // 底部横跨全宽：它不被左右两栏夹着（两端各让出一条 6px 沟槽）。
+  expect(Math.round(bottomBox!.width)).toBe(Math.round(editorBox!.width) - 12)
+  // 单一 Dockview：整个编辑器只有一个 Dockview 根，左右没有竖向图标轨。
+  await expect(editor.locator('.dv-dockview')).toHaveCount(1)
+  await expect(editor.locator('.compose-editor__icon-tab')).toHaveCount(0)
+  /*
+   * 应用顶栏：标志 ▾ ｜ 工作区 ｜ 三个布局开关。它横贯全宽、在 Dockview 之外，**只**承载应用
+   * 与视图作用域——文档标签、保存按钮与模式切换器都不在这里。
+   */
+  const topBar = editor.locator('.compose-editor__top-bar')
+  const topBarBox = await topBar.boundingBox()
+  expect(Math.round(topBarBox!.width)).toBe(Math.round(editorBox!.width))
+  expect(Math.round(topBarBox!.height)).toBe(30)
+  await expect(topBar.getByRole('button', { name: '应用菜单' })).toBeVisible()
+  await expect(topBar.getByRole('radiogroup', { name: '工作区' })).toBeVisible()
+  await expect(topBar.getByRole('button', { name: '新建工作区' })).toBeVisible()
+  await expect(topBar.locator('.compose-editor__layout-toggles').getByRole('button')).toHaveCount(3)
+  await expect(topBar.getByRole('tab')).toHaveCount(0)
+  await expect(topBar.getByRole('button', { name: /保存/ })).toHaveCount(0)
+  await expect(topBar.getByRole('button', { name: '设置', exact: true })).toHaveCount(0)
+  await expect(topBar.getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
+
+  /*
+   * 文档标签条下沉到**画布列自己的头**上：它只占画布那一列，且与左右两栏的面板头顶边同 y、
+   * 同高 30px——三列因此读成一行。
+   */
+  const documentTabs = editor.locator('.compose-editor__document-tabs')
+  await expect(documentTabs.getByRole('tablist', { name: '文档' })).toBeVisible()
+  const documentTabsBox = await documentTabs.boundingBox()
+  expect(documentTabsBox!.width).toBeLessThan(editorBox!.width - 300)
+  const sceneTab = editor.locator('[data-workspace-tab="compose-scene-content-panel"]').locator('xpath=ancestor::*[contains(@class, "dv-tabs-and-actions-container")][1]')
+  const sceneHeadBox = await sceneTab.boundingBox()
+  expect(Math.round(documentTabsBox!.y)).toBe(Math.round(sceneHeadBox!.y))
+  expect(Math.round(documentTabsBox!.height)).toBe(30)
+  expect(Math.round(sceneHeadBox!.height)).toBe(30)
+  await expect(editor.locator('[data-workspace-tab="compose-canvas"]')).toBeHidden()
+  await expect(documentTabs.getByRole('button', { name: /保存/ })).toHaveCount(0)
+  await expect(documentTabs.getByRole('radiogroup', { name: '工作区' })).toHaveCount(0)
+  await expect(editor.locator('.compose-editor__collapse-side')).toHaveCount(0)
+  await expect(editor.locator('.compose-editor__side-handle')).toHaveCount(0)
+
+  /*
+   * 一种「被选中」的画法：顶栏、文档标签与面板头三处都是同一块柔和的圆角底，而画布工具栏的
+   * 按下态**保持蓝底**——导航与状态是两个问题。断的是**计算后的颜色**：本仓库有过样式被一条
+   * 无层规则静默压掉的先例（`@layer components` 输给无层的 `button { color: inherit }`），
+   * 只断 class 的用例挡不住那一类。
+   */
+  const chromeSelectedBg = 'rgb(41, 46, 54)'
+  const bg = (locator: Locator) => locator.evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(await bg(documentTabs.locator('[data-active="true"]').first())).toBe(chromeSelectedBg)
+  expect(await bg(topBar.locator('[aria-checked="true"]').first())).toBe(chromeSelectedBg)
+  expect(await bg(editor.locator('.dv-tab.dv-active-tab').first())).toBe(chromeSelectedBg)
+  // 活动标签靠底而不是下划线：`box-shadow` 上没有任何东西。
+  expect(await documentTabs.locator('[data-active="true"]').first()
+    .evaluate((el) => getComputedStyle(el).boxShadow)).toBe('none')
+  const pressedTool = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
+    .getByRole('button', { name: '选择' })
+  expect(await pressedTool.evaluate((el) => getComputedStyle(el, '::before').backgroundColor))
+    .toBe('rgb(27, 57, 95)')
+  /*
+   * 模式切换器住**标签行**的行尾，不在工具栏行上：标签行说「这是哪个文档、在编它的哪一层」，
+   * 工具栏行说「用什么工具」。它在 `tablist` 之外，方向键在标签之间循环时走不进它。
+   */
+  await expect(documentTabs.getByRole('radiogroup', { name: '编辑模式' })).toBeVisible()
+  await expect(editor.locator('.compose-editor__canvas-toolbar')
+    .getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
+  await expect(documentTabs.getByRole('tablist')
+    .getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
+  /*
+   * 工具栏行 36px 且**上下都不画线**：卡内不画横线，分层交给色阶——这一行取画布那一档
+   * （`surface-sunken`），因为它服务的是画布而不是卡头。断计算值而不是 class：样式靠层叠
+   * 生效，只断 class 挡不住被压掉的那一类。
+   */
+  const toolbarRow = editor.locator('.compose-editor__canvas-toolbar').first()
+  expect(Math.round((await toolbarRow.boundingBox())!.height)).toBe(36)
+  expect(await bg(toolbarRow)).toBe('rgb(21, 24, 29)')
+  expect(await toolbarRow.evaluate((el) => {
+    const style = getComputedStyle(el)
+    return `${style.borderTopWidth}/${style.borderBottomWidth}`
+  })).toBe('0px/0px')
+  // 画布上方一共 102px：顶栏 30 + 沟槽 6 + 头部行 30 + 工具栏 36。卡的边框是 inset 阴影，不占布局。
+  const canvasContentBox = await editor.locator('.compose-editor__canvas-content').first().boundingBox()
+  expect(Math.round(canvasContentBox!.y - editorBox!.y)).toBe(102)
+  /*
+   * 两行的填充块左边落在同一个数上：活动标签的灰底与选中工具的蓝底是两块相距 30px 的实心
+   * 矩形。此前一个在 5、一个在 6——看得出不对，但指不出哪里。
+   */
+  const activeTabBox = await documentTabs.locator('[data-active="true"]').first().boundingBox()
+  const pressedToolBox = await pressedTool.boundingBox()
+  expect(Math.round(activeTabBox!.x)).toBe(Math.round(pressedToolBox!.x))
+  // 默认三栏下页面工作区那条货架放得下：没有「更多」。导线不在页面的货架上（接线是绘图的活儿），
+  // 矩形在——它是大屏页面真会画的那一个。
+  const toolbar = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
+  // 按钮尺寸与命中区一个像素不改——省的只是留白。
+  expect(Math.round((await toolbar.getByRole('button', { name: '选择' }).boundingBox())!.height)).toBe(30)
+  await expect(toolbar.getByRole('button', { name: '更多', exact: true })).toHaveCount(0)
+  await expect(toolbar.locator('[data-command-id="WIRE"]')).toHaveCount(0)
+  await expect(toolbar.locator('[data-command-id="RECTANGLE"]')).toBeVisible()
   expect(await bottom.locator('[data-workspace-tab]').evaluateAll(
     (tabs) => tabs.map((tab) => tab.getAttribute('data-workspace-tab')),
   )).toEqual(['compose-assets', 'compose-command', 'compose-transaction-log'])
@@ -73,6 +177,241 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
+})
+
+
+test('OpenSpec: editor-workspace-layout / 面板卡片化 / 四张卡浮在更暗的桌面上', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await expect(editor.getByRole('application', { name: 'Stage' })).toBeVisible()
+  const box = async (locator: Locator) => (await locator.boundingBox())!
+  const editorBox = await box(editor)
+  const bg = (locator: Locator) => locator.evaluate((el) => getComputedStyle(el).backgroundColor)
+
+  /*
+   * 一张卡 = 顶栏一颗折叠开关管的那一块，加上画布——因此恰好四张，而不是五个 Dockview 组：
+   * 左边那颗开关一按收走两个组，画成两张卡等于让一颗按钮同时抓走两个看起来各自独立的对象。
+   */
+  const cards = editor.locator([
+    '.dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container',
+    '> .dv-view > .dv-branch-node',
+  ].join(' ')).or(editor.locator([
+    '.dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container',
+    '> .dv-view > .dv-groupview',
+  ].join(' '))).or(editor.locator('.dv-groupview.dv-edge-group'))
+  await expect(cards).toHaveCount(4)
+
+  /*
+   * 桌面比卡片更暗。断**计算后的值**：两个 token 此前是同一个 `#101216`，看不出问题只是因为
+   * 那时没有任何地方露出桌面；只断 class 的用例挡不住它退回同值。
+   */
+  const desk = await bg(editor)
+  expect(desk).toBe('rgb(10, 12, 15)')
+  const cardBoxes: { x: number, y: number, width: number, height: number }[] = []
+  for (const card of await cards.all()) {
+    expect(await bg(card)).toBe('rgb(16, 18, 22)')
+    expect(await card.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('8px')
+    cardBoxes.push(await box(card))
+  }
+
+  // 编辑器四边各留一条 6px 沟槽。
+  const left = cardBoxes.reduce((a, b) => (a.x <= b.x ? a : b))
+  const right = cardBoxes.reduce((a, b) => (a.x + a.width >= b.x + b.width ? a : b))
+  expect(Math.round(left.x - editorBox.x)).toBe(6)
+  expect(Math.round(editorBox.x + editorBox.width - right.x - right.width)).toBe(6)
+
+  /*
+   * 沟槽就是 sash：可见的 6px 与拖得到的 6px 是同一条。此前看得见 1px、拖得到 4px 且不可见,
+   * 而在贴边布局里这个问题修不了——把 1px 线加粗到 6px，那 6px 就是一条粗黑线。
+   */
+  const canvasCard = editor.locator([
+    '.dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container',
+    '> .dv-view > .dv-groupview',
+  ].join(' ')).first()
+  const canvasCardBox = await box(canvasCard)
+  const gutter = Math.round(canvasCardBox.x - left.x - left.width)
+  expect(gutter).toBe(6)
+  const sash = editor.locator('.dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash').first()
+  const sashBox = await box(sash)
+  expect(Math.round(sashBox.width)).toBe(6)
+  expect(Math.round(sashBox.x)).toBe(Math.round(left.x + left.width))
+  // 沟槽里不再画线：它本身就是那条边界。
+  await expect(editor.locator('.dv-splitview-has-margin > .dv-view-container > .dv-view')
+    .first()).toHaveCSS('border-top-width', '0px')
+
+  /*
+   * 左区是**一张**卡：两段之间既不是沟槽也不是线，接缝处露出的仍是卡片自己的底。
+   * 两个组本身不着色、不圆角——卡面画在它们上面那一层。
+   */
+  const leftGroups = editor.locator([
+    '.dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container',
+    '> .dv-view > .dv-branch-node .dv-groupview',
+  ].join(' '))
+  await expect(leftGroups).toHaveCount(2)
+  for (const group of await leftGroups.all()) {
+    expect(await bg(group)).toBe('rgba(0, 0, 0, 0)')
+    expect(await group.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('0px')
+  }
+  const sceneBox = await box(editor.locator('[data-workspace-panel="scene-graph"]'))
+  const seamColor = await page.evaluate(([x, y]) => {
+    const element = document.elementFromPoint(x, y)
+    return element ? getComputedStyle(element).backgroundColor : null
+  }, [Math.round(sceneBox.x + sceneBox.width / 2), Math.round(sceneBox.y + sceneBox.height + 3)])
+  expect(seamColor).not.toBe(desk)
+})
+
+test('OpenSpec: property-panel / 属性面板视觉与样式隔离 / 拖窄到最小宽度不溢出', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await expect(editor.getByRole('application', { name: 'Stage' })).toBeVisible()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  const panel = inspector.locator('[data-compose-ui="property-panel"]')
+  await expect(panel).toBeVisible()
+
+  // 默认 288：标签列按比例算出来约 109（视图扣掉沟槽后约 284 × 0.38）。
+  const labelWidth = () => panel.evaluate(
+    (el) => getComputedStyle(el).getPropertyValue('--pp-label-width').trim(),
+  )
+  expect(Number.parseInt(await labelWidth(), 10)).toBeGreaterThanOrEqual(100)
+  expect(Number.parseInt(await labelWidth(), 10)).toBeLessThanOrEqual(116)
+
+  /*
+   * 拖到最小宽度：面板自己的 `min-width` 必须跟着降到 264，否则面板会溢出到卡片外面被裁掉
+   * ——那正是此前把右区拖窄时的样子。
+   */
+  const gutter = editor
+    .locator('.dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash').nth(1)
+  const gutterBox = (await gutter.boundingBox())!
+  await page.mouse.move(gutterBox.x + 3, gutterBox.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(gutterBox.x + 300, gutterBox.y + 200, { steps: 8 })
+  await page.mouse.up()
+  const inspectorBox = (await inspector.boundingBox())!
+  expect(Math.round(inspectorBox.width)).toBeLessThanOrEqual(266)
+  const panelBox = (await panel.boundingBox())!
+  expect(Math.round(panelBox.width)).toBeLessThanOrEqual(Math.round(inspectorBox.width))
+})
+
+test('OpenSpec: editor-workspace-layout / 边缘工具区 / 收起再展开', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await expect(stage).toBeVisible()
+  const inspector = editor.locator('[data-workspace-panel="inspector"]')
+  const scene = editor.locator('[data-workspace-panel="scene-graph"]')
+  const canvasBefore = await editor.locator('[data-workspace-panel="canvas"]').boundingBox()
+  const inspectorBefore = await inspector.boundingBox()
+
+  /*
+   * 折叠的入口只有顶栏那三颗开关一处：组头上的折叠按钮与收起后留在编辑器边缘的 8px 把手
+   * 都删了——那两样是同一个动作的两个入口，而且不在同一个地方（收起用组头、展开用把手）。
+   * 开关**位置不随面板存亡而移动**，因此这里收起与展开点的是同一颗。
+   */
+  const toggles = editor.locator('.compose-editor__layout-toggles')
+  const rightToggle = toggles.getByRole('button', { name: /右侧面板$/ })
+  await rightToggle.click()
+  await expect(inspector).toBeHidden()
+  await expect(rightToggle).toHaveAttribute('aria-pressed', 'false')
+  await expect(editor.locator('.compose-editor__side-handle')).toHaveCount(0)
+  const canvasCollapsed = await editor.locator('[data-workspace-panel="canvas"]').boundingBox()
+  // 收起让出的是右卡连同它那条沟槽：按实测宽度比，避免把 Inspector 的默认宽度写死在这里。
+  expect(canvasCollapsed!.width).toBeGreaterThan(canvasBefore!.width + inspectorBefore!.width - 8)
+
+  // 展开：恢复收起前的尺寸；面板内容没有重新挂载（同一个 Stage 元素还在）。
+  const stageHandle = await stage.elementHandle()
+  await rightToggle.click()
+  await expect(inspector).toBeVisible()
+  const inspectorBox = await inspector.boundingBox()
+  // 网格的 sash 会把 1–2px 算进相邻的组，宽度按 ±4px 比较。
+  expect(Math.abs(inspectorBox!.width - inspectorBefore!.width)).toBeLessThanOrEqual(4)
+  expect(await stage.elementHandle().then((element) => element?.evaluate((el, prev) => el === prev, stageHandle))).toBe(true)
+
+  // 左栏是两个组：一个按钮收起场景图与工具组两个。
+  const leftToggle = toggles.getByRole('button', { name: /左侧面板$/ })
+  await leftToggle.click()
+  await expect(scene).toBeHidden()
+  await expect(editor.locator('[data-workspace-panel="component-library"]')).toBeHidden()
+  await leftToggle.click()
+  await expect(scene).toBeVisible()
+  expect(Math.abs((await scene.boundingBox())!.width - 280)).toBeLessThanOrEqual(4)
+})
+
+
+test('OpenSpec: editor-workspace-layout / 文档标签条 / 键盘在文档间移动', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-assets"]').click()
+  const assets = editor.locator('[data-workspace-panel="asset-browser"]')
+  await assets.getByRole('grid', { name: 'Demo Assets' })
+    .getByRole('gridcell', { name: /^Pages/ }).click()
+  await assets.getByRole('grid', { name: 'Pages' })
+    .getByRole('gridcell', { name: 'Counter', exact: true }).dblclick()
+
+  const tablist = editor.getByRole('tablist', { name: '文档' })
+  const tabs = tablist.getByRole('tab')
+  await expect(tabs).toHaveCount(2)
+  const counterTab = tabs.filter({ hasText: 'Counter' })
+  const homeTab = tabs.filter({ hasText: 'Home' })
+  await expect(counterTab).toHaveAttribute('aria-selected', 'true')
+  await expect(editor.locator('[data-workspace-panel="page-document"][data-page-key="demo-counter-page"]'))
+    .toBeVisible()
+
+  // 只有活动标签在 Tab 序里；方向键在文档间移动并激活，画布跟随。
+  await counterTab.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(homeTab).toHaveAttribute('aria-selected', 'true')
+  await expect(homeTab).toBeFocused()
+  await expect(editor.locator('[data-workspace-panel="page-document"][data-page-key="demo-home-page"]'))
+    .toBeVisible()
+  await expect(counterTab).toHaveAttribute('tabindex', '-1')
+  // Delete 不关闭。
+  await page.keyboard.press('Delete')
+  await expect(tabs).toHaveCount(2)
+  await page.keyboard.press('End')
+  await expect(counterTab).toHaveAttribute('aria-selected', 'true')
+})
+
+
+test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 窄窗口收进更多', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 720 })
+  await page.goto('/?no-auto-fit')
+  // 溢出要在**装得最满**的那条货架上验：绘图有 15 格，页面只有 10 格，后者怎么都放得下。
+  await switchToDrawingWorkspace(page)
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const toolbar = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
+  await expect(toolbar).toBeVisible()
+  /*
+   * 画布列由**拖沟槽**收窄，不靠改窗口：示例应用把编辑器钉在 `max(1180px, 100%)` 上，窗口再窄
+   * 编辑器也不跟着窄，而 Inspector 收到 288 之后画布列比从前宽了一百多像素。这里顺带验了那条
+   * 6px 沟槽真的是拖得到的。
+   */
+  const gutter = editor
+    .locator('.dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash').nth(1)
+  const gutterBox = (await gutter.boundingBox())!
+  await page.mouse.move(gutterBox.x + 3, gutterBox.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(gutterBox.x - 220, gutterBox.y + 200, { steps: 8 })
+  await page.mouse.up()
+  // 画布列放不下整条工具栏：尾部的绘图命令进「更多」，前面的照常。
+  const more = toolbar.getByRole('button', { name: '更多', exact: true })
+  await expect(more).toBeVisible()
+  await expect(toolbar.locator('[data-command-id="ARROW"]')).toBeHidden()
+  await expect(toolbar.getByRole('button', { name: '选择', exact: true })).toBeVisible()
+  await more.click()
+  const menu = toolbar.getByRole('menu', { name: '更多工具' })
+  await expect(menu).toBeVisible()
+  const arrowItem = menu.getByRole('menuitem', { name: '箭头' })
+  await expect(arrowItem).toBeVisible()
+  await expect(arrowItem.locator('svg')).toHaveCount(1)
+  await arrowItem.click()
+  // 菜单里的项就是那颗按钮：按下去启动同一条命令，命令行进入取点提示。
+  await expect(editor.getByText(/指定/).first()).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // 收起右栏之后画布变宽，整条工具栏放得下，「更多」消失。
+  await editor.getByRole('button', { name: '收起右侧面板' }).click()
+  await expect(more).toBeHidden()
+  await expect(toolbar.locator('[data-command-id="ARROW"]')).toBeVisible()
 })
 
 
@@ -334,7 +673,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   ).toHaveAttribute('title', '基础组件')
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  // Text 已改由工具栏文字工具提供入口，不再出现在 Palette。
+  // Text 与箭头在页面货架上有工具栏入口，因此不出现在 Palette；圆没有，因此出现。
   await expect(editor.getByRole('button').filter({ hasText: /Container|Rectangle|ECharts/ }))
     .toHaveCount(3)
   await editor.getByRole('button', { name: '添加 Rectangle' }).click()
@@ -344,6 +683,9 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const stageBox = await stage.boundingBox()
   expect(stageBox).not.toBeNull()
   const containerTile = editor.getByRole('button', { name: '添加 Container' })
+  // 先滚进视口再读盒：物料面板是可滚动的，前一步新建 Entity 会让场景树长一行、把面板整体推走，
+  // 而读到的旧坐标此时落在瓦片之外——按下去打在面板底板上，拖拽根本不会开始。
+  await containerTile.scrollIntoViewIfNeeded()
   const containerTileBox = await containerTile.boundingBox()
   expect(containerTileBox).not.toBeNull()
   const containerDropTarget = {
@@ -616,8 +958,10 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const settingsButton = editor.getByRole('button', { name: '设置', exact: true })
-  await settingsButton.click()
+  // 设置的入口是应用菜单里的一项：顶栏右端那颗齿轮已经删掉。
+  const appMenuButton = editor.getByRole('button', { name: '应用菜单' })
+  await appMenuButton.click()
+  await editor.getByRole('menuitem', { name: '设置' }).click()
   const settingsDialog = page.getByRole('dialog', { name: '设置' })
   await expect(settingsDialog).toBeVisible()
   await expect(settingsDialog.getByRole('searchbox', { name: '搜索设置' })).toBeFocused()
@@ -631,14 +975,16 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   await settingsDialog.getByRole('radio', { name: '浅色' }).click()
   await expect(editor).toHaveAttribute('data-compose-theme', 'light')
   await settingsDialog.getByRole('button', { name: '关闭设置' }).click()
-  await expect(settingsButton).toBeFocused()
+  // 关掉之后焦点回到标志：它现在是设置的入口，也是它唯一的锚点。
+  await expect(appMenuButton).toBeFocused()
   await expect(editor).toHaveScreenshot('editor-workspace-light.png', {
     animations: 'disabled',
     caret: 'hide',
     maxDiffPixelRatio: 0.01,
   })
 
-  await editor.getByRole('button', { name: '设置', exact: true }).click()
+  await editor.getByRole('button', { name: '应用菜单' }).click()
+  await editor.getByRole('menuitem', { name: '设置' }).click()
   await page.getByRole('button', { name: '语言', exact: true }).click()
   await page.getByRole('radio', { name: 'English' }).click()
   await expect(editor).toHaveAttribute('lang', 'en-US')
@@ -653,7 +999,8 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
     maxDiffPixelRatio: 0.01,
   })
 
-  await editor.getByRole('button', { name: 'Settings', exact: true }).click()
+  await editor.getByRole('button', { name: 'Application menu' }).click()
+  await editor.getByRole('menuitem', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
   const temporaryPanBinding = page.getByRole('button', {
     name: 'Change Temporary pan shortcut',
@@ -687,7 +1034,8 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
   await expect.poll(async () => Number(await origin.getAttribute('x1')))
     .toBeCloseTo(beforeCustomPan + 64, 0)
 
-  await editor.getByRole('button', { name: 'Settings', exact: true }).click()
+  await editor.getByRole('button', { name: 'Application menu' }).click()
+  await editor.getByRole('menuitem', { name: 'Settings' }).click()
   await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
   await page.getByRole('button', {
@@ -721,7 +1069,9 @@ test('OpenSpec: editor-preferences / 设置中心纵向流程 / 切换主题语�
 
   await page.goto('/?message-overrides')
   const overriddenEditor = page.getByRole('region', { name: 'Compose editor' })
-  await overriddenEditor.getByRole('button', { name: '偏好设置' }).click()
+  // 宿主注入的 `editor.settings` 文案落在应用菜单那一项上——设置的入口现在在那里。
+  await overriddenEditor.getByRole('button', { name: '应用菜单' }).click()
+  await overriddenEditor.getByRole('menuitem', { name: '偏好设置' }).click()
   await expect(
     page.getByRole('dialog', { name: '偏好设置' }),
   ).toBeVisible()
@@ -948,7 +1298,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 页面面板占�
   // 内容区依赖 flex-1 撑开；页面面板若用 grid 布局会塌陷成零高度并在工具栏下留出空隙。
   expect(pageContent?.height).toBeGreaterThan(100)
   expect(Math.round(pageStage?.height ?? 0)).toBe(Math.round(pageContent?.height ?? -1))
-  await expect(editor.locator('[data-workspace-panel="canvas"]')).toHaveCount(0)
+  await expect(editor.locator('[data-workspace-panel="canvas-document"]')).toHaveCount(0)
 })
 
 
@@ -992,17 +1342,22 @@ test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可�
 
   const tab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
   const dirty = tab.getByRole('img', { name: '有未保存改动' })
-  const pagePanel = editor.locator('[data-workspace-panel="page-document"]')
-
-  // 无改动时保存按钮禁用
-  await expect(pagePanel.getByRole('button', { name: '保存页面' })).toBeDisabled()
+  /*
+   * 标签条右端那颗保存按钮已经删掉：「改没改过」标签上的脏点已经在回答，同一个问题不该在两处
+   * 回答，而那颗按钮多数时候是禁用的、占的却是常驻位置。保存现在是 `document.save` 动作——
+   * 键位（默认仍是 Cmd/Ctrl+S）与命令面板两条入口。
+   */
+  await expect(editor.locator('.compose-editor__document-tabs')
+    .getByRole('button', { name: /保存/ })).toHaveCount(0)
 
   await drawContainer(page, editor)
   await expect(dirty).toBeVisible()
-  await expect(pagePanel.getByRole('button', { name: '保存页面' })).toBeEnabled()
 
-  // 显式按钮保存：不关闭标签也能落盘
-  await pagePanel.getByRole('button', { name: '保存页面' }).click()
+  // 命令面板保存：不关闭标签也能落盘
+  await editor.locator('[data-workspace-tab="compose-command"]').click()
+  const commandPanel = editor.getByRole('region', { name: '命令调试台' })
+  await commandPanel.getByRole('combobox', { name: '检索命令' }).fill('保存文档')
+  await commandPanel.getByRole('option', { name: /保存文档/ }).first().click()
   await expect(dirty).toHaveCount(0)
 
   // 快捷键保存

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposeComponentStore } from '../component-store'
+import type { ComposeComponentShelf } from './component-shelf'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as libraryApi from '../index'
 
@@ -8,6 +9,7 @@ interface PanelApi {
   readonly ComposeComponentLibraryPanel?: React.ComponentType<{
     readonly registry: ReturnType<typeof createComposeEntityRegistry>
     readonly store?: ComposeComponentStore
+    readonly shelf?: ComposeComponentShelf
     readonly onCreateIntent?: (item: unknown) => void
     readonly onOpenIntent?: (descriptor: unknown) => void
     readonly onCreateVariantIntent?: (descriptor: unknown) => void
@@ -58,6 +60,7 @@ function componentStore(): ComposeComponentStore {
           kind: 'base' as const,
           revision: '1',
           reference: { kind: 'component' as const, providerId: 'project', assetKey: 'button', scope: 'persistent' as const },
+          folderPath: [] as readonly string[],
         },
         {
           entryId: 'danger',
@@ -67,9 +70,11 @@ function componentStore(): ComposeComponentStore {
           kind: 'variant' as const,
           revision: '1',
           reference: { kind: 'component' as const, providerId: 'project', assetKey: 'danger', scope: 'persistent' as const },
+          folderPath: [] as readonly string[],
         },
       ],
       issues: [],
+      folders: [],
     })),
     readComponent: vi.fn(),
     createComponent: vi.fn(),
@@ -104,6 +109,46 @@ describe('ComposeComponentLibraryPanel', () => {
       kind: 'component',
       descriptor: expect.objectContaining({ assetKey: 'button' }),
     }))
+  })
+
+  it('OpenSpec: component-library / 混合组件目录 / 按货架分段、搜索跨段、找不到的文件夹可去掉', async () => {
+    const Panel = api.ComposeComponentLibraryPanel!
+    render(
+      <Panel
+        registry={registry}
+        shelf={{
+          title: '符号库',
+          search: true,
+          sections: [
+            { kind: 'folder', id: 'symbols', folderPath: ['Symbols'], groupBy: 'subfolder' },
+            { kind: 'folder', id: 'components', folderPath: [] },
+            { kind: 'presets', id: 'basics', collapsed: true },
+          ],
+        }}
+        store={componentStore()}
+      />,
+    )
+    // 标题就是面板的可访问名：标签上已经写着它，面板内部不再画第二遍。
+    expect(screen.getByRole('region', { name: '符号库' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '项目组件 (2)' })).toBeInTheDocument()
+    })
+    // 折叠的段只剩标题，展开后瓦片出现。
+    expect(screen.queryByRole('button', { name: '添加 Container' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '基础组件 (1)' }))
+    expect(screen.getByRole('button', { name: '添加 Container' })).toBeInTheDocument()
+    // 搜索跨段：段标题保留，不匹配的瓦片消失。
+    fireEvent.change(screen.getByTestId('component-library-search'), { target: { value: 'danger' } })
+    expect(screen.getByRole('heading', { name: '项目组件 (1)' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '添加主组件 Button' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加变体 Button Danger' })).toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('component-library-search'), { target: { value: '' } })
+    // 引用的文件夹不在资源里：那一段说找不到并可去掉，其余段照常。
+    expect(screen.getByRole('heading', { name: 'Symbols' })).toBeInTheDocument()
+    expect(screen.getByText('找不到这个文件夹')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '去掉' }))
+    expect(screen.queryByRole('heading', { name: 'Symbols' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '项目组件 (2)' })).toBeInTheDocument()
   })
 
   it('OpenSpec: component-library / 混合组件目录 / 无 Store 保持兼容', () => {

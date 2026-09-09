@@ -7,7 +7,9 @@ import {
   isEditableKeyboardTarget,
   normalizeComposeEditorKeybinding,
   normalizeComposeEditorPreferences,
+  normalizeComposeEditorWorkspacePreferences,
 } from './preferences'
+import type { ComposeEditorPreferences } from './preferences'
 
 describe('editor preferences', () => {
   it('OpenSpec: editor-preferences / 实例级编辑器偏好 / 使用实例内默认偏好', () => {
@@ -30,6 +32,39 @@ describe('editor preferences', () => {
     expect(first.shortcuts).not.toBe(second.shortcuts)
     expect(first.shortcuts['stage.temporaryPan'])
       .not.toBe(second.shortcuts['stage.temporaryPan'])
+  })
+
+  it('OpenSpec: editor-preferences / 实例级编辑器偏好 / 旧形状的偏好按默认补齐', () => {
+    const defaults = createDefaultComposeEditorPreferences()
+    expect(defaults.workspace).toEqual({
+      lastUsed: 'page',
+      byDocument: {},
+      layouts: {},
+      toolbars: {},
+      palettes: {},
+      custom: [],
+    })
+    // 工作区动作默认不绑键。
+    expect(defaults.shortcuts['workspace.next']).toEqual([])
+    expect(defaults.shortcuts['workspace.saveAs']).toEqual([])
+
+    const legacy = { theme: 'dark', locale: 'zh-CN', shortcuts: defaults.shortcuts } as unknown as ComposeEditorPreferences
+    expect(normalizeComposeEditorPreferences(legacy).workspace).toEqual(defaults.workspace)
+
+    // 引用了不存在工作区的条目保留、形状不对的条目丢掉。
+    const normalized = normalizeComposeEditorWorkspacePreferences({
+      lastUsed: 'gone',
+      byDocument: { 'memory:a': 'gone', 'memory:b': 42 },
+      layouts: { gone: { kind: 'snapshot', format: 'dockview@7', data: {} }, bad: { nope: true } },
+      custom: [
+        { id: 'c1', title: '变电站', layout: { kind: 'snapshot', format: 'dockview@7', data: {} }, session: {} },
+        { id: '', title: 'x' },
+      ],
+    })
+    expect(normalized.lastUsed).toBe('gone')
+    expect(normalized.byDocument).toEqual({ 'memory:a': 'gone' })
+    expect(Object.keys(normalized.layouts)).toEqual(['gone'])
+    expect(normalized.custom.map((workspace) => workspace.id)).toEqual(['c1'])
   })
 
   it('OpenSpec: editor-preferences / 可配置单次快捷键 / 重新绑定动作', () => {

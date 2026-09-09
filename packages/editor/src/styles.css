@@ -20,31 +20,68 @@
   background: var(--compose-workspace-bg);
   color: var(--compose-text);
   color-scheme: dark;
+  /*
+   * 工具栏开关按下时图标的颜色。它不是主题 token 的直接引用而是自己一档：开关的按下态只剩
+   * 颜色一个通道（没有底、没有记号），因此点亮色与静息色之间要**同时**有色相差与明度差——
+   * accent 本身与静息灰几乎一样暗，只有色相差，色觉障碍的用户会读成同一枚图标。
+   */
+  --compose-toolbar-switch-on: #8cc0ff;
+  /*
+   * 沟槽：卡与卡之间、以及编辑器四边的留白。卡之间那一份由 Dockview 的 `theme.gap` 给出
+   * （见 `WORKSPACE_CARD_GAP`），这里这一份只管四边，两者取同一个数。
+   */
+  --compose-workspace-gap: 6px;
+  /* 卡的圆角。内部各层跟着它圆，圆角只作用在外框上。 */
+  --compose-workspace-card-radius: 8px;
+}
+
+.compose-editor[data-compose-theme='light'] {
+  /* 浅色底上反过来：比静息灰更**深**的一档蓝，明度差的方向随主题翻转。 */
+  --compose-toolbar-switch-on: #1257b0;
 }
 
 .compose-editor[data-compose-theme='light'] {
   color-scheme: light;
 }
 
-.compose-editor__workspace,
-.compose-editor__dockview {
-  @apply ct:h-full ct:w-full ct:min-h-[inherit];
+/* 工作区 = 顶部通栏文档标签条 + 主体；主体 = [左把手?][Dockview][右把手?] 一行。 */
+.compose-editor__workspace {
+  @apply ct:flex ct:h-full ct:w-full ct:min-h-[inherit] ct:flex-col;
 }
 
+.compose-editor__body {
+  @apply ct:flex ct:min-h-0 ct:min-w-0 ct:flex-1 ct:items-stretch;
+  padding: var(--compose-workspace-gap);
+}
+
+/* 高度由 flex 行拉伸给出，不写 height: 100%——百分比高度在 flex 列里会解析成上一次布局的值。 */
 .compose-editor__dockview {
+  @apply ct:min-h-0 ct:min-w-0 ct:flex-1 ct:self-stretch ct:overflow-hidden;
+  /* 面板头 30px：与文档标签条同高，折叠后的底部条也取它（见 compose-editor 的主题）。 */
+  --dv-tabs-and-actions-container-height: 30px;
   --dv-background-color: var(--compose-workspace-bg);
-  --dv-group-view-background-color: var(--compose-workspace-bg);
+  /* 组自己不着色：卡面画在「区」那一层（见文件末尾的卡片规则），组要透出它下面的卡。 */
+  --dv-group-view-background-color: transparent;
   --dv-tabs-and-actions-container-background-color: var(--compose-surface-raised);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--compose-surface-active);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--compose-surface-raised);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--compose-surface-raised);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--compose-surface-sunken);
+  /*
+   * 面板头的标签走 chrome 唯一的那一种选中画法：活动的一格是一块柔和的圆角底，其余透明。
+   * 这里改的是 Dockview 自己的变量而不是加选择器——它内部那几条规则带着 group 状态的前缀，
+   * 权重比外面写得出的高，靠加选择器压它只会赢一半（圆角进去了、底色没进去）。
+   *
+   * 组有没有焦点**不改变**这个画法：底回答的是「这一组里在看哪一个」，而不是「焦点在哪一组」。
+   */
+  --dv-activegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
   --dv-activegroup-visiblepanel-tab-color: var(--compose-text-strong);
-  --dv-activegroup-hiddenpanel-tab-color: var(--compose-text-subtle);
-  --dv-inactivegroup-visiblepanel-tab-color: var(--compose-text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--compose-text-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--compose-text-strong);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--compose-text-muted);
-  --dv-tab-divider-color: var(--compose-border);
-  --dv-separator-border: 1px solid var(--compose-border);
+  /* 贴满整格与竖线是同一个决定的两半：标签成了圆角底，分隔线就没有存在理由。 */
+  --dv-tab-divider-color: transparent;
+  /* 沟槽本身就是那条边界，里面不再画线。 */
+  --dv-separator-border: transparent;
   --dv-active-sash-color: var(--compose-accent);
 }
 
@@ -62,19 +99,554 @@
   background: var(--compose-panel-bg);
 }
 
-.compose-editor__scene-history-dockview,
-.compose-editor__core-dockview {
+/*
+ * 应用顶栏：标志 ▾ ｜ 工作区 ｜ 三个布局开关，横贯全宽、在 Dockview 之外。
+ *
+ * 三段之间**只有间距**：标志钉在最左、开关钉在最右，位置本身已经分好段，而竖线是把「我数得清
+ * 有几段」画出来，那件事本来不需要用户去数。
+ */
+.compose-editor__top-bar {
+  display: flex;
+  height: 30px;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 6px;
+  background: var(--compose-surface-raised);
+  /*
+   * 12px 与文档标签、模式切换器同档：三处都是 22px 的圆角格、走同一种选中画法，字号不一致会让
+   * 它们读成三种控件。此前这一行没声明字号、直接继承根上的 16px——顶栏因此比它下面每一行都大
+   * 一号，而两个下拉菜单里的项自己声明了 12px，同一颗按钮点开前后字还会变。
+   */
+  font-size: 12px;
+}
+
+.compose-editor__top-bar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+/* 标志：实心图形 + `▾`，整体是一颗按钮（应用菜单的把手）。 */
+.compose-editor__brand-anchor {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.compose-editor__brand {
+  display: flex;
+  height: 22px;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--compose-text-strong);
+  cursor: pointer;
+}
+
+.compose-editor__brand:hover,
+.compose-editor__brand[aria-expanded='true'] {
+  background: var(--compose-surface-hover);
+}
+
+.compose-editor__brand:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -2px;
+}
+
+.compose-editor__brand-mark {
+  width: 19px;
+  height: 19px;
+  flex: none;
+}
+
+/* 导线是标志上唯一的彩色部分——「把东西连起来」正是这个产品做的事。 */
+.compose-editor__brand-wire {
+  stroke: var(--compose-accent);
+}
+
+.compose-editor__brand-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--compose-text-muted);
+}
+
+.compose-editor__brand-chevron svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+/* 应用菜单：与工作区管理菜单同一副面孔，挂在标志下方、向右展开。 */
+.compose-editor__brand-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 10rem;
+  padding: 4px;
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+  background: var(--compose-surface-raised);
+  box-shadow: 0 10px 28px var(--compose-shadow), inset 0 1px rgb(255 255 255 / 3%);
+}
+
+.compose-editor__brand-menu > button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--compose-text-subtle);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.compose-editor__brand-menu > button:hover,
+.compose-editor__brand-menu > button:focus-visible {
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+  outline: none;
+}
+
+/*
+ * 文档标签条：画布列自己的头，30px，与左右两栏的 Dockview 组头落在同一条线上。
+ *
+ * 标签遵循 chrome 唯一的那一种选中画法——**一块柔和的圆角底**。不用下划线（它只在活动那一格
+ * 出现，另一态屏幕上没有任何东西可看，而且与「文字下的强调线」同形）、不贴满整格（贴满就需要
+ * 竖线来分隔）、格与格之间因此也不画竖线。
+ */
+/*
+ * 内边距 8 与工具行同值：活动标签的填充与选中工具的填充是两块相距 30px 的实心矩形，
+ * 它们的左边必须落在同一个数上。文字 17 与图标 13 不必对齐——那是两种控件各自的内衬，
+ * 眼睛对齐的是填充块的边。
+ *
+ * 横向滚动收进内层：模式切换器钉在滚动区之外，标签再多也不会把它推走。
+ */
+.compose-editor__document-tabs {
+  display: flex;
+  height: 30px;
+  flex: none;
+  align-items: center;
+  padding-inline: 8px;
+  overflow: hidden;
+  background: var(--compose-surface-raised);
+}
+
+.compose-editor__document-tabs-scroll {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.compose-editor__document-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* 模式切换器：标签行的行尾，`tablist` 之外。 */
+.compose-editor__document-tabs-mode {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding-inline-start: 8px;
+}
+
+.compose-editor__document-tablist {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compose-editor__document-tab {
+  display: flex;
+  min-width: 0;
+  max-width: 220px;
+  height: 22px;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 8px;
+  border-radius: 6px;
+  color: var(--compose-text-muted);
+  cursor: default;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* hover 只改文字颜色：底是「选中」的专用通道，两者可以同时成立。 */
+.compose-editor__document-tab:hover {
+  color: var(--compose-text-subtle);
+}
+
+.compose-editor__document-tab[data-active='true'] {
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__document-tab:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -2px;
+}
+
+.compose-editor__document-tab-icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.compose-editor__document-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 布局开关：折叠与展开的唯一入口，位置不随面板存亡而移动——那正是它取代 8px 边缘把手的
+ * 全部理由。两种状态都画：实心的那一条边表示该侧展开着，描边表示收起。
+ */
+.compose-editor__layout-toggles {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.compose-editor__layout-toggle {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--compose-text-muted);
+  cursor: pointer;
+}
+
+.compose-editor__layout-toggle:hover {
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__layout-toggle:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -2px;
+}
+
+.compose-editor__layout-toggle[aria-pressed='true'] {
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__layout-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.3;
+}
+
+/* 被点亮的那一条边：展开时填实，收起时只留外框。 */
+.compose-editor__layout-toggle .compose-editor__layout-toggle-fill {
+  fill: none;
+  stroke: none;
+}
+
+.compose-editor__layout-toggle[aria-pressed='true'] .compose-editor__layout-toggle-fill {
+  fill: currentColor;
+  opacity: 0.9;
+}
+
+/*
+ * 工作区切换器：一组安静的圆角 pill。没有外框盒、没有竖线、没有下划线——活动的一格只是一块
+ * 柔和的圆角底，一组里恰好一个有底已经把话说完了。格上的点是修改点——「这份布局与基线不同」，
+ * 不是未保存（松手即记入，没有未保存这一态）。
+ */
+.compose-editor__workspace-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/*
+ * `display: contents` 让各 radio 直接成为上面那个 flex 行的项，`▾` 因此能用 `order` 贴到
+ * **活动段**之后。DOM 上 `▾` 仍在 radiogroup 之外——那个模式的子元素只能是 radio，塞一颗
+ * 菜单按钮进去会让方向键序列与可访问语义一起失真。
+ */
+.compose-editor__workspace-switcher {
+  display: contents;
+}
+
+.compose-editor__workspace-option {
+  display: inline-flex;
+  height: 22px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--compose-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* hover 只提亮文字，不上底：底是「选中」的专用通道。 */
+.compose-editor__workspace-option:hover {
+  color: var(--compose-text-subtle);
+}
+
+.compose-editor__workspace-option:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -2px;
+}
+
+.compose-editor__workspace-option[aria-checked='true'] {
+  /* `▾` 紧贴在活动格右边并共用同一块底，因此这一侧收成直角、内边距让给它。 */
+  padding-inline-end: 4px;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__workspace-modified {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--compose-accent);
+}
+
+.compose-editor__workspace-menu-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * 贴着活动格并共用它那块底：它管的永远是当前那个工作区，读起来必须是那一格的一部分而不是
+ * 旁边一颗独立按钮。`order` 保证它永远排在活动格之后，因此这块底可以无条件给。
+ */
+.compose-editor__workspace-menu-trigger {
+  display: grid;
+  width: 20px;
+  height: 22px;
+  /* 抵消 pill 之间那 2px 间距：它与活动格是同一块底，中间不能有缝。 */
+  margin-inline-start: -2px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-muted);
+  cursor: pointer;
+}
+
+/* `＋`：新建工作区，与管理菜单的「另存为」是同一条流程。 */
+.compose-editor__workspace-add {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin-inline-start: 2px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--compose-text-muted);
+  cursor: pointer;
+}
+
+.compose-editor__workspace-add:hover {
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__workspace-add:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -2px;
+}
+
+.compose-editor__workspace-add svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.compose-editor__workspace-menu-trigger:hover,
+.compose-editor__workspace-menu-trigger[aria-expanded='true'] {
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__workspace-menu-trigger:focus-visible {
+  outline: 2px solid var(--compose-focus);
+  outline-offset: -2px;
+}
+
+.compose-editor__workspace-menu-trigger svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+/* 管理菜单：与工具栏菜单同一副面孔，挂在标签条右端、向左展开。 */
+.compose-editor__workspace-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 2px);
+  right: 0;
+  min-width: 11rem;
+  padding: 4px;
+  border: 1px solid var(--compose-border);
+  border-radius: 8px;
+  background: var(--compose-surface-raised);
+  box-shadow: 0 10px 28px var(--compose-shadow), inset 0 1px rgb(255 255 255 / 3%);
+}
+
+.compose-editor__workspace-menu button {
+  display: flex;
+  width: 100%;
+  height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compose-editor__workspace-menu button:hover,
+.compose-editor__workspace-menu button[aria-checked='true'] {
+  background: var(--compose-surface-hover);
+  color: var(--compose-text-strong);
+}
+
+.compose-editor__workspace-menu button[aria-disabled='true'] {
+  color: var(--compose-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.compose-editor__workspace-menu button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--compose-focus);
+}
+
+/*
+ * 自定义工具栏对话框：两列等宽，各自一份可滚的列表加一组移动按钮。列表限高而不是让对话框
+ * 长到屏幕外——目录有十几项，加上宿主注入的会更多。
+ */
+.compose-editor__shelf-dialog {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.compose-editor__shelf-column h3 {
+  margin: 0 0 6px;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.compose-editor__shelf-list {
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--compose-border);
+  border-radius: 4px;
+  list-style: none;
+}
+
+.compose-editor__shelf-list > li > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.compose-editor__shelf-list > li > button[aria-selected='true'] {
+  background: var(--compose-surface-active, rgb(255 255 255 / 8%));
+}
+
+.compose-editor__shelf-fixed {
+  color: var(--compose-text-subtle);
+  font-size: 11px;
+}
+
+.compose-editor__shelf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.compose-editor__workspace-copies {
+  margin: 0 0 12px;
+  padding-inline-start: 18px;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 面板内容的稳定宿主元素与它在 Dockview 面板里的挂载点都要撑满盒子。 */
+.compose-editor__host-mount,
+.compose-editor__host {
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
 }
 
-.compose-editor__scene-history-dockview-host,
-.compose-editor__core-dockview-host {
-  min-height: 0;
-  height: 100%;
+/* 画布面板里非活动的文档表面用 hidden 藏起来；它们自带 display，属性必须压得过。 */
+.compose-editor__canvas-panel > [hidden] {
+  display: none;
 }
 
 .compose-editor__scene-content,
@@ -103,11 +675,18 @@
   @apply ct:flex ct:flex-col;
 }
 
+/*
+ * 行高 36px = 30px 按钮 + 上下各 3px。此前是 `min-h-12`（48）加 1px 下边框，装 30px 的按钮
+ * 上下各空 9px——19px 纯留白横贯整个画布宽度。按钮尺寸、间距与命中区一个像素不改，省下来的
+ * 13px 全部给画布。
+ *
+ * 底取**画布那一档**而不是卡头那一档：这一行服务的是画布，底色说的就是这句话。上下都不画线
+ * ——卡内不画横线，而画布真正的顶边是标尺，网格点在标尺内沿才停住，那条边有它自己的理由。
+ */
 .compose-editor__canvas-toolbar {
-  @apply ct:flex ct:min-h-12 ct:shrink-0 ct:items-center ct:border-b;
-  border-color: var(--compose-border);
-  background: var(--compose-surface-raised);
-  box-shadow: inset 0 1px rgb(255 255 255 / 2%);
+  @apply ct:flex ct:shrink-0 ct:items-center;
+  min-height: 36px;
+  background: var(--compose-surface-sunken);
 }
 
 .compose-editor__component-kind-label {
@@ -116,12 +695,32 @@
   max-width: 14rem;
 }
 
+/*
+ * 工具栏是行里会被压缩的那一个：min-width 0 让它把「放不下」如实交给 ResizeObserver，
+ * 溢出的按钮由 JS 收进「更多」菜单。
+ *
+ * 裁剪**只作用于横轴**：`overflow: hidden` 会连纵轴一起裁，而网格 ▾、极轴 ▾ 与「更多」三个
+ * 下拉都是挂在栏内锚点上的绝对定位元素、从 48px 的行底伸出去——一律裁掉的症状是菜单只露出
+ * 第一项，后面的被行的下边缘切掉。横轴那一档留着：它是 JS 没跑起来（没有 ResizeObserver、
+ * 或量宽还没完成的第一帧）时按钮不至于溢出到相邻布局里的兜底。
+ *
+ * `overflow-x: clip` 而不是 `hidden`：`hidden` 会把另一轴的 `visible` 强制解析成 `auto`
+ * （即产生滚动容器，照样裁），`clip` 不会——这正是这条规则唯一能成立的写法。
+ */
 .compose-editor__stage-toolbar {
-  @apply ct:flex ct:min-h-12 ct:items-center ct:gap-2 ct:px-3;
+  @apply ct:flex ct:min-w-0 ct:flex-1 ct:items-center ct:gap-1 ct:px-2;
+  min-height: 36px;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
+/*
+ * 30px 按钮、组内 1px、组间 4px、两端 8px：默认三栏在 1280 宽下画布列 600px，整条十六格
+ * 工具栏要在它里面放下（放不下的那一档由「更多」接住，但默认窗口不该一上来就在那一档）。
+ * `MORE_BUTTON_WIDTH` 与这里的按钮宽度、组间距是一对。
+ */
 .compose-editor__toolbar-group {
-  @apply ct:flex ct:items-center ct:gap-0.5;
+  @apply ct:flex ct:items-center ct:gap-px;
 }
 
 .compose-editor__toolbar-menu-anchor {
@@ -131,27 +730,83 @@
 .compose-editor__toolbar-group > button,
 .compose-editor__toolbar-menu-anchor > button,
 .compose-editor__canvas-toolbar > button {
-  @apply ct:grid ct:size-8 ct:shrink-0 ct:cursor-pointer ct:place-items-center ct:rounded-[4px] ct:border ct:border-transparent ct:p-0;
+  @apply ct:relative ct:grid ct:size-[30px] ct:shrink-0 ct:cursor-pointer ct:place-items-center ct:rounded-[4px] ct:border ct:border-transparent ct:p-0;
   background: transparent;
-  color: var(--compose-text-subtle);
+  /*
+   * 静息态压到 `text-muted`：开关的按下态只剩颜色一个通道（没有底、没有记号），因此点亮色
+   * 与静息色之间必须**同时**有色相差与明度差，否则色觉障碍的用户读成同一枚图标。
+   */
+  color: var(--compose-text-muted);
   transition:
     border-color 120ms ease,
     background-color 120ms ease,
     color 120ms ease;
 }
 
+/*
+ * 底**内缩 2px**（26×26 于 30×30 的格子里），因此相邻两个按下态之间有 5px 而不是 1px
+ * （组内间距 1 + 两边各 2）。命中区一个像素不变——缩的只是那块底。
+ *
+ * 不走「把组内间距调大」那一刀：绘图货架 15 格、组内 11 处间距，1 → 3px 要 22px，而那一行
+ * 放进模式切换器之后余量已经是负的。内缩不花任何宽度。
+ */
+.compose-editor__toolbar-group > button::before,
+.compose-editor__toolbar-menu-anchor > button::before,
+.compose-editor__canvas-toolbar > button::before {
+  content: '';
+  position: absolute;
+  /*
+   * 按钮是 30px 的 border-box 且有 1px 透明边框，因此定位包含块是 28px 的 padding box：
+   * `inset: 1px` 得到 26×26 的底，图标 20px 两边各留 3px。取 2px 会缩到 24——只剩 2px，
+   * 底贴着图标，读起来是一个方框而不是一块底。
+   */
+  inset: 1px;
+  border-radius: 5px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+/* 图标压在那块底之上：底是绝对定位的伪元素。 */
+.compose-editor__toolbar-group > button svg,
+.compose-editor__toolbar-menu-anchor > button svg,
+.compose-editor__canvas-toolbar > button svg {
+  position: relative;
+}
+
+.compose-editor__toolbar-group > button:hover:not(:disabled)::before,
+.compose-editor__toolbar-menu-anchor > button:hover:not(:disabled)::before,
+.compose-editor__canvas-toolbar > button:hover:not(:disabled)::before {
+  background: var(--compose-surface-hover);
+}
+
 .compose-editor__toolbar-group > button:hover:not(:disabled),
 .compose-editor__toolbar-menu-anchor > button:hover:not(:disabled),
 .compose-editor__canvas-toolbar > button:hover:not(:disabled) {
-  background: var(--compose-surface-hover);
   color: var(--compose-text-strong);
 }
 
-.compose-editor__toolbar-group > button[aria-pressed='true'],
-.compose-editor__toolbar-menu-anchor > button[aria-pressed='true'] {
-  border-color: transparent;
+/*
+ * 工具（单选，恒有且只有一个按下）：保留底，形状与 hover 相同，只差一档明度。
+ */
+.compose-editor__toolbar-group > button[data-toolbar-role='tool'][aria-pressed='true']::before,
+.compose-editor__toolbar-menu-anchor > button[data-toolbar-role='tool'][aria-pressed='true']::before {
   background: var(--compose-surface-selected);
+}
+
+.compose-editor__toolbar-group > button[data-toolbar-role='tool'][aria-pressed='true'],
+.compose-editor__toolbar-menu-anchor > button[data-toolbar-role='tool'][aria-pressed='true'] {
+  border-color: transparent;
   color: var(--compose-text-strong);
+}
+
+/*
+ * 开关（多选，可以同时按下五个）：**不给底**，只把图标点亮。点亮色是 accent 往当前主题的
+ * 墨色推一档——深色里因此更亮、浅色里因此更深，两边都同时拉开色相差与明度差。
+ */
+.compose-editor__toolbar-group > button[data-toolbar-role='switch'][aria-pressed='true'],
+.compose-editor__toolbar-menu-anchor > button[data-toolbar-role='switch'][aria-pressed='true'] {
+  border-color: transparent;
+  color: var(--compose-toolbar-switch-on);
 }
 
 .compose-editor__toolbar-group > button:disabled,
@@ -245,11 +900,22 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/*
+ * 分隔线比按钮的图标矮一截（18px 对 20px 图标 / 30px 按钮）并稍微提亮：与按钮等高的竖线读
+ * 起来像**又一颗按钮**。它从货架可编辑起是用户能插能删的真实一项，必须看得见，否则用户插了
+ * 一条却什么都没发生。
+ */
 .compose-editor__toolbar-divider {
-  @apply ct:h-6 ct:w-px ct:shrink-0 ct:mx-1;
-  background: var(--compose-border);
+  @apply ct:w-px ct:shrink-0;
+  height: 18px;
+  background: var(--compose-border-strong);
 }
 
+/*
+ * 工具栏行尾钉死的模式切换器：推到最右，与货架之间一条竖线。它在工具栏元素**之外**，因此
+ * 溢出（只在工具栏内部从尾部收）永远够不到它；工具栏自己是行里被压缩的那一个，这块占的宽度
+ * 自动从它的可用宽度里扣掉，不需要第二处测量。
+ */
 .compose-editor__toolbar-menu-trigger {
   width: 16px !important;
   margin-left: -2px;
@@ -265,6 +931,17 @@
   border-color: var(--compose-border);
   background: var(--compose-surface-raised);
   box-shadow: 0 10px 28px var(--compose-shadow), inset 0 1px rgb(255 255 255 / 3%);
+}
+
+/* 「更多」菜单挂在工具栏尾端，向左展开，否则会伸出可视区。 */
+.compose-editor__toolbar-menu--end {
+  left: auto;
+  right: 0;
+}
+
+/* 溢出量宽用 hidden 藏格；分组与分割线自带 display，属性必须压得过。 */
+.compose-editor__stage-toolbar [hidden] {
+  display: none;
 }
 
 .compose-editor__toolbar-menu button {
@@ -469,19 +1146,6 @@
   box-sizing: border-box;
 }
 
-.compose-editor__asset-document-tab {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 5px;
-}
-
-.compose-editor__asset-document-tab > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .compose-editor__asset-document-close {
   display: grid;
   width: 18px;
@@ -531,60 +1195,8 @@
   overflow: visible;
 }
 
-.compose-editor__entity-inspector-header {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 10px 4px 12px;
-  border-bottom: 1px solid var(--compose-border);
-  border-color: var(--compose-border);
-  background:
-    linear-gradient(105deg, rgb(255 255 255 / 2.5%), transparent 42%),
-    var(--compose-panel-bg);
-  box-shadow: inset 0 -1px rgb(0 0 0 / 28%);
-}
-
-.compose-editor__entity-inspector-identity {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.compose-editor__entity-inspector-title-block {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.compose-editor__entity-inspector-title-block > strong {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--compose-text-strong);
-  font-size: 15px;
-  font-weight: 620;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compose-editor__entity-inspector-subtitle {
-  min-width: 0;
-  line-height: 1.25;
-}
-
-.compose-editor__entity-inspector-header-end {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-}
-
-/* 实例工具栏嵌在头部时去掉独立 dock 的顶边。 */
-.compose-editor__entity-inspector-header-end .compose-instance-overrides__actions {
+/* 实例工具栏嵌在 chrome 那一行里时去掉独立 dock 的顶边。 */
+.property-panel__toolbar-actions .compose-instance-overrides__actions {
   flex: 0 0 auto;
 }
 
@@ -692,50 +1304,8 @@
   color: var(--compose-text-muted);
 }
 
-.compose-editor__icon-tab {
-  @apply ct:grid ct:h-full ct:w-full ct:cursor-default ct:place-items-center ct:text-current;
-}
-
 .compose-editor__text-tab {
   @apply ct:flex ct:h-full ct:min-w-0 ct:cursor-default ct:items-center ct:overflow-hidden ct:px-2 ct:text-xs ct:text-ellipsis ct:whitespace-nowrap ct:text-current;
-}
-
-.compose-editor__icon-tab svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.compose-editor__settings-icon {
-  @apply ct:grid ct:shrink-0 ct:cursor-pointer ct:place-items-center ct:border-0 ct:bg-transparent ct:p-0;
-  color: var(--compose-text-muted);
-  width: var(--dv-tabs-and-actions-container-height);
-  height: var(--dv-tabs-and-actions-container-height);
-}
-
-.compose-editor__settings-icon:hover,
-.compose-editor__settings-icon[aria-expanded='true'] {
-  background: var(--compose-surface-hover);
-  color: var(--compose-text-strong);
-}
-
-.compose-editor__settings-icon:focus-visible {
-  outline: 2px solid var(--compose-focus);
-  outline-offset: -2px;
-}
-
-.compose-editor__settings-icon svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
 }
 
 .compose-editor__visually-hidden {
@@ -994,28 +1564,138 @@
   display: none;
 }
 
-.compose-editor__dockview,
-.compose-editor__scene-history-dockview,
-.compose-editor__core-dockview {
+.compose-editor__dockview {
   --dv-background-color: var(--compose-workspace-bg);
-  --dv-group-view-background-color: var(--compose-workspace-bg);
+  --dv-group-view-background-color: transparent;
   --dv-tabs-and-actions-container-background-color: var(--compose-surface-raised);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--compose-surface-active);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--compose-surface-raised);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--compose-surface-raised);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--compose-surface-sunken);
+  /*
+   * 面板头的标签走 chrome 唯一的那一种选中画法：活动的一格是一块柔和的圆角底，其余透明。
+   * 这里改的是 Dockview 自己的变量而不是加选择器——它内部那几条规则带着 group 状态的前缀，
+   * 权重比外面写得出的高，靠加选择器压它只会赢一半（圆角进去了、底色没进去）。
+   *
+   * 组有没有焦点**不改变**这个画法：底回答的是「这一组里在看哪一个」，而不是「焦点在哪一组」。
+   */
+  --dv-activegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
   --dv-activegroup-visiblepanel-tab-color: var(--compose-text-strong);
-  --dv-activegroup-hiddenpanel-tab-color: var(--compose-text-subtle);
-  --dv-inactivegroup-visiblepanel-tab-color: var(--compose-text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--compose-text-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--compose-text-strong);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--compose-text-muted);
-  --dv-tab-divider-color: var(--compose-border);
+  /* 贴满整格与竖线是同一个决定的两半：标签成了圆角底，分隔线就没有存在理由。 */
+  --dv-tab-divider-color: transparent;
   --dv-separator-border: 1px solid var(--compose-border);
   --dv-active-sash-color: var(--compose-accent);
   --dv-scrollbar-background-color: var(--compose-scrollbar);
+  /* 组自己不再着色：卡面画在「区」那一层，组要透出它下面的卡。 */
+  --dv-group-view-background-color: transparent;
+  /* 沟槽本身就是那条边界，里面不再画线。 */
+  --dv-separator-border: transparent;
 }
 
-.compose-editor[data-compose-theme='light'] .dv-dockview,
-.compose-editor[data-compose-theme='light'] .dv-groupview {
+/*
+ * 卡片。
+ *
+ * **一张卡 = 顶栏一颗折叠开关管的那一块，加上画布**，因此它是「根分支的一个直接视图」——
+ * 左列是含两段的分支节点，画布与右栏是叶子组，底部 edge group 住在 shell 那一层。按 Dockview
+ * 的**组**来画会让左边那颗开关一按收走两张卡，而那两张卡看起来是各自独立的对象。
+ *
+ * 边框用 `inset` 阴影而不是真 `border`：分支节点内部的视图由 Dockview 用 JS 按像素绝对定位，
+ * 真边框会让它们溢出 2px；`box-shadow` 不参与布局，而且跟着 `border-radius` 走。
+ */
+.compose-editor .dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container > .dv-view > .dv-branch-node,
+.compose-editor .dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container > .dv-view > .dv-groupview,
+.compose-editor .dv-groupview.dv-edge-group {
+  border-radius: var(--compose-workspace-card-radius);
+  background: var(--compose-panel-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--compose-border),
+    inset 0 2px 0 -1px rgb(255 255 255 / 3.5%);
+}
+
+/* 浅色底上 1px 灰线读起来像表格线；深色底上投影几乎不可见（没有光可挡）。各用各的手段。 */
+.compose-editor[data-compose-theme='light'] .dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container > .dv-view > .dv-branch-node,
+.compose-editor[data-compose-theme='light'] .dv-grid-view > .dv-branch-node > .dv-split-view-container > .dv-view-container > .dv-view > .dv-groupview,
+.compose-editor[data-compose-theme='light'] .dv-groupview.dv-edge-group {
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 0 0 1px rgb(16 24 40 / 5%);
+}
+
+/*
+ * 圆角只作用在卡的外框上，内部各层跟着圆。画布卡的组头是隐藏的，因此四个角都归它的面板；
+ * 左列那张卡的两段共用一圈边框，朝向接缝的两个角**不圆**——它们在卡的中间，不是卡的角。
+ */
+.compose-editor .dv-groupview > .dv-tabs-and-actions-container {
+  border-radius: var(--compose-workspace-card-radius) var(--compose-workspace-card-radius) 0 0;
+}
+
+.compose-editor__panel {
+  border-radius: 0 0 var(--compose-workspace-card-radius) var(--compose-workspace-card-radius);
+}
+
+.compose-editor__canvas-panel {
+  border-radius: var(--compose-workspace-card-radius);
+}
+
+.compose-editor .dv-groupview:has([data-workspace-panel='scene']) .compose-editor__panel {
+  border-radius: 0;
+}
+
+.compose-editor .dv-groupview:has(
+  [data-workspace-panel='palette'],
+  [data-workspace-panel='history']
+) > .dv-tabs-and-actions-container {
+  border-radius: 0;
+}
+
+/* 底部组的标签行在下面：两头的圆角跟着翻过来，否则卡的上两个角被内容涂成方的。 */
+.compose-editor .dv-groupview-header-bottom > .dv-tabs-and-actions-container {
+  border-radius: 0 0 var(--compose-workspace-card-radius) var(--compose-workspace-card-radius);
+}
+
+.compose-editor .dv-groupview-header-bottom .compose-editor__panel {
+  border-radius: var(--compose-workspace-card-radius) var(--compose-workspace-card-radius) 0 0;
+}
+
+/* 折叠后的底部条只剩标签行，它此刻就是整张卡。 */
+.compose-editor .dv-groupview.dv-edge-collapsed > .dv-tabs-and-actions-container {
+  border-radius: var(--compose-workspace-card-radius);
+}
+
+/*
+ * 有沟槽就不画线。
+ *
+ * Dockview 在 margin 不为 0 时给 splitview 加上 `dv-splitview-has-margin`，但它自己的样式表
+ * 没有用这个类——分隔线仍由 `.dv-view::before` 画着。这里按那个类关掉它：沟槽本身就是那条
+ * 边界，再画一条线是同一句话说两遍。
+ *
+ * 必须按类而不是靠 `--dv-separator-border`：shell 那一层的 splitview（画布网格与底部
+ * edge group 之间的那条）在 `.compose-editor__dockview` **之外**，变量到不了它，症状是底部那
+ * 张卡顶上横着一条紫线。
+ */
+.compose-editor .dv-splitview-has-margin > .dv-view-container > .dv-view::before {
+  display: none;
+}
+
+/*
+ * 沟槽即 sash：可见的 6px 与拖得到的 6px 是同一条。
+ *
+ * Dockview 把 sash 摆在间距正中（`offset + size - sashWidth / 2 + margin / 2`），而它 JS 里
+ * 那个 `sashWidth = 4` 只用于摆位、宽度归 CSS。因此加宽到 6 之后用 `margin` 抵掉那 1px 偏移，
+ * 命中带就与沟槽逐像素重合。
+ */
+.compose-editor .dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash {
+  width: 6px;
+  margin-left: -1px;
+}
+
+.compose-editor .dv-split-view-container.dv-vertical > .dv-sash-container > .dv-sash {
+  height: 6px;
+  margin-top: -1px;
+}
+
+/* 组不在这一行里：浅色下它同样要透出卡面，否则左列那张卡会被两个组各自涂成桌面色。 */
+.compose-editor[data-compose-theme='light'] .dv-dockview {
   background: var(--compose-workspace-bg);
 }
 
@@ -1023,26 +1703,78 @@
   background: var(--compose-surface-raised);
 }
 
-.compose-editor[data-compose-theme='light'] .dv-groupview.dv-active-group
-  > .dv-tabs-and-actions-container .dv-tab.dv-active-tab,
-.compose-editor[data-compose-theme='light'] .dv-groupview.dv-inactive-group
-  > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
-  background: var(--compose-surface-active);
-  color: var(--compose-text-strong);
+/*
+ * 底部 Edge Group 自带一份更近的变量定义（`.dv-edge-group` 上），而它本身还住在 shell 那一层、
+ * 在 `.compose-editor__dockview` 之外，因此上面写在 dockview 根上的那一份到不了它——症状是三块
+ * 面板头统一了、底栏那一条还是深蓝。变量必须在**组**这一层再落一次。
+ */
+.compose-editor .dv-groupview {
+  --dv-tabs-and-actions-container-background-color: var(--compose-surface-raised);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--compose-text-strong);
+  --dv-activegroup-hiddenpanel-tab-color: var(--compose-text-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--compose-text-strong);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--compose-text-muted);
+  --dv-tab-divider-color: transparent;
 }
 
-.compose-editor[data-compose-theme='light'] .dv-groupview.dv-active-group
-  > .dv-tabs-and-actions-container .dv-tab.dv-inactive-tab,
-.compose-editor[data-compose-theme='light'] .dv-groupview.dv-inactive-group
-  > .dv-tabs-and-actions-container .dv-tab.dv-inactive-tab {
-  background: var(--compose-surface-raised);
-  color: var(--compose-text-muted);
+/*
+ * 面板头的标签与文档标签、工作区 pill 是**同一种画法**：一块柔和的圆角底。
+ *
+ * Dockview 默认把标签画成贴满整格的方块并用 `--dv-tab-divider-color` 分隔，因此这里既要给
+ * 标签自己上圆角、也要把那条分隔线关掉——贴满与竖线是同一个决定的两半。
+ */
+.compose-editor .dv-tabs-and-actions-container {
+  align-items: center;
+  padding-inline: 5px;
+  gap: 2px;
+}
+
+.compose-editor .dv-tabs-and-actions-container .dv-tab {
+  height: 22px;
+  min-width: 0;
+  padding: 0 9px;
+  border-radius: 6px;
+  line-height: 22px;
+}
+
+.compose-editor .dv-tabs-and-actions-container .dv-tab::before,
+.compose-editor .dv-tabs-and-actions-container .dv-tab::after {
+  display: none;
+}
+
+/* hover 只提亮文字：底是「选中」的专用通道。 */
+.compose-editor .dv-tabs-and-actions-container .dv-tab.dv-inactive-tab:hover {
+  color: var(--compose-text-subtle);
+}
+
+/*
+ * 画布列是一列：第一行是文档标签条（30px，与左右面板头齐平），其余是活动文档的表面。
+ * 表面此前写死 `height: 100%`——上面多了一行之后那会溢出一整条标签条的高度，因此改由 flex
+ * 分配剩下的高度。
+ */
+.compose-editor__canvas-panel > .compose-editor__document-tabs {
+  flex: none;
+}
+
+.compose-editor__canvas-panel > .compose-editor__document-surface,
+.compose-editor__canvas-panel > .compose-editor__page-document,
+.compose-editor__canvas-panel > .compose-editor__component-document,
+.compose-editor__canvas-panel > .compose-editor__asset-document,
+.compose-editor__canvas-panel > .compose-editor__placeholder {
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 /*
  * 页面文档、组件文档与固定画布面板共用同一套工具栏与内容区结构，因此必须使用相同的
  * flex 列布局：.compose-editor__canvas-content 依赖 flex-1 撑开，放进 grid 容器会塌陷。
  */
+.compose-editor__document-surface,
 .compose-editor__page-document,
 .compose-editor__component-document {
   display: flex;
@@ -1096,13 +1828,14 @@
 }
 
 /* 设计/动画模式切换器：靠右紧贴保存按钮的两段式 radiogroup。 */
+/*
+ * 模式切换器住标签行的行尾，因此改用**头部行的画法**：柔和的圆角底加更亮的文字，没有外框盒、
+ * 没有竖线。「从 N 个里挑一个」与工作区 pill 同形不是撞车，那正是它该长的样子。
+ * 工具按钮的按下态不跟着改——工具回答「哪个开着」，模式回答「你在编哪一层」。
+ */
 .compose-editor__mode-switcher {
   display: inline-flex;
-  margin-inline-start: auto;
-  padding: 2px;
-  border: 1px solid var(--compose-border);
-  border-radius: 6px;
-  background: var(--compose-surface-sunken);
+  align-items: center;
   gap: 2px;
 }
 
@@ -1112,9 +1845,12 @@
 }
 
 .compose-editor__mode-switcher-option {
-  padding: 3px 10px;
+  display: flex;
+  height: 22px;
+  align-items: center;
+  padding: 0 10px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--compose-text-subtle);
   cursor: pointer;
@@ -1133,7 +1869,7 @@
 }
 
 .compose-editor__mode-switcher-option[aria-checked='true'] {
-  background: var(--compose-surface-selected);
+  background: var(--compose-surface-hover);
   color: var(--compose-text-strong);
 }
 

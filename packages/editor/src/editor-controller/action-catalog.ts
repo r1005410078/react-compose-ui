@@ -35,6 +35,7 @@ import {
   getEditorActionCategory,
   getEditorActionReasons,
   getEditorShortcutActionLabel,
+  getEditorWorkspaceSwitchLabel,
 } from '../editor-i18n'
 import type { EditorActionReasons } from '../editor-i18n'
 import {
@@ -118,6 +119,25 @@ export interface ComposeEditorActionContext {
   readonly fitContainer: () => void
   /** 切换网格吸附。 */
   readonly toggleGridSnap: () => void
+  /**
+   * 打开画布网格与吸附设置。
+   *
+   * @remarks
+   * 它在图面上的唯一入口是网格按钮旁边那个 ▾ 菜单，而工具栏货架按工作区可增删——把网格从
+   * 货架上拿掉时，这项能力会跟着一起消失。目录里有这一条，「货架不得成为任何能力的唯一入口」
+   * 才对网格那一格成立。
+   *
+   * 缺席时目录不产出该动作（与 `undo` 同样的可选处理）：脱离编辑器单独用控制器时没有那个弹层。
+   */
+  readonly openCanvasSettings?: () => void
+  /**
+   * 切换变换指示器（旋转 / 缩放把手的可见性）。
+   *
+   * @remarks
+   * 与 {@link openCanvasSettings} 同一条理由：它在图面上的唯一入口是工具栏那颗按钮，而货架
+   * 可增删。它切的是 chrome 的可见性而不是模式，因此没有「不可用」这一档。
+   */
+  readonly toggleTransformGizmo?: () => void
   /** 切换智能吸附。 */
   readonly toggleSmartSnap: () => void
   /** 撤销一步。 */
@@ -126,6 +146,20 @@ export interface ComposeEditorActionContext {
   readonly redo?: () => void
   /** 打开设置；宿主未提供时目录整条省略该动作。 */
   readonly openSettings?: () => void
+  /**
+   * 保存当前文档；宿主未接文档会话时目录整条省略。
+   *
+   * @remarks
+   * 保存曾经只是 `compose-editor.tsx` 里硬接的一个 `Cmd/Ctrl+S`——既搜不到、也改不了键。
+   * 它现在是一条普通动作，标签条上那颗按钮因此可以删掉。
+   */
+  readonly saveDocument?: () => void
+  /** 当前是否有可保存的文档；`false` 时动作带不可用原因而不是静默无反应。 */
+  readonly canSaveDocument?: boolean
+  /** 切换设计 / 动画模式；宿主未启用页面系统时目录整条省略。 */
+  readonly toggleAnimationMode?: () => void
+  /** 工作区动作；未接入工作区时（纯插槽宿主）目录整条省略。 */
+  readonly workspace?: ComposeEditorWorkspaceActions
   /** 打开“创建组件”命名流程；未配置 Component Store 时目录整条省略。 */
   readonly createComponent?: () => void
   /** 当前会话剪贴板是否可复制。省略时按选区推断。 */
@@ -140,6 +174,23 @@ export interface ComposeEditorActionContext {
   readonly cutSelection?: () => void
   /** 按建议落点粘贴会话剪贴板。 */
   readonly pasteSelection?: () => void
+}
+
+/**
+ * 工作区动作的执行入口；切换器、管理菜单与命令行三处走同一份。
+ *
+ * @public
+ */
+export interface ComposeEditorWorkspaceActions {
+  /** 当前列表，按切换器顺序；`title` 已本地化。 */
+  readonly items: readonly { readonly id: string; readonly title: string }[]
+  readonly currentId: string
+  readonly switchTo: (id: string) => void
+  readonly next: () => void
+  readonly previous: () => void
+  readonly focusCanvas: () => void
+  readonly saveAs: () => void
+  readonly reset: () => void
 }
 
 /**
@@ -245,6 +296,10 @@ export function createComposeEditorActionHandlers(
       () => { context.fitContainer() },
     ),
     'stage.toggleGridSnap': handler(undefined, () => { context.toggleGridSnap() }),
+    // 宿主没给弹层入口时执行层是空操作；不另立一条不可用文案——脱离编辑器单独用控制器是
+    // 少数情形，为它加一句只在那里出现的提示不划算。
+    'stage.canvasSettings': handler(undefined, () => { context.openCanvasSettings?.() }),
+    'stage.toggleTransformGizmo': handler(undefined, () => { context.toggleTransformGizmo?.() }),
     'stage.toggleSmartSnap': handler(undefined, () => { context.toggleSmartSnap() }),
     'edit.copy': handler(
       (context.canCopy ?? context.selectedIds.length > 0) ? undefined : 'noSelection',
@@ -385,7 +440,25 @@ export function createComposeEditorActionHandlers(
       () => { context.redo?.() },
     ),
     'editor.settings': handler(undefined, () => { context.openSettings?.() }),
+    'document.save': handler(
+      (context.canSaveDocument ?? false) ? undefined : 'noDocument',
+      () => { context.saveDocument?.() },
+    ),
+    'document.toggleAnimationMode': handler(
+      undefined,
+      () => { context.toggleAnimationMode?.() },
+    ),
+    'workspace.next': handler(undefined, () => { context.workspace?.next() }),
+    'workspace.previous': handler(undefined, () => { context.workspace?.previous() }),
+    'workspace.focusCanvas': handler(undefined, () => { context.workspace?.focusCanvas() }),
+    'workspace.saveAs': handler(undefined, () => { context.workspace?.saveAs() }),
+    'workspace.reset': handler(undefined, () => { context.workspace?.reset() }),
   }
+}
+
+/** 按 id 切换到某个工作区的动作 id；工作区是运行期列表，因此这几条不在静态目录里。 @public */
+export function composeWorkspaceSwitchActionId(workspaceId: string) {
+  return `workspace.switch.${workspaceId}`
 }
 
 /** 目录呈现顺序；与执行层解耦，改动顺序不影响行为。 */
@@ -399,6 +472,8 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'stage.fitSelection',
   'stage.fitContainer',
   'stage.toggleGridSnap',
+  'stage.canvasSettings',
+  'stage.toggleTransformGizmo',
   'stage.toggleSmartSnap',
   'edit.duplicate',
   'edit.copy',
@@ -416,6 +491,13 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'history.undo',
   'history.redo',
   'editor.settings',
+  'document.save',
+  'document.toggleAnimationMode',
+  'workspace.next',
+  'workspace.previous',
+  'workspace.focusCanvas',
+  'workspace.saveAs',
+  'workspace.reset',
 ]
 
 /**
@@ -465,7 +547,20 @@ export const COMPOSE_EDITOR_COMMAND_ALIASES: Partial<
   'history.undo': ['UNDO', 'U'],
   'history.redo': ['REDO'],
   'editor.settings': ['SETTINGS'],
+  'workspace.next': ['WSNEXT'],
+  'workspace.previous': ['WSPREV'],
+  'workspace.focusCanvas': ['CANVASONLY'],
+  'workspace.saveAs': ['WSSAVEAS'],
+  'workspace.reset': ['WSRESET'],
 }
+
+const WORKSPACE_ACTION_IDS: ReadonlySet<ComposeEditorActionId> = new Set([
+  'workspace.next',
+  'workspace.previous',
+  'workspace.focusCanvas',
+  'workspace.saveAs',
+  'workspace.reset',
+])
 
 /**
  * 目录的一条：可呈现半边加一个执行入口。
@@ -495,11 +590,27 @@ export function createComposeEditorCatalog(
   const reasons = getEditorActionReasons(locale, formatMessage)
   const handlers = createComposeEditorActionHandlers(context)
 
-  return CATALOG_ORDER
+  const category = getEditorActionCategory(locale, 'editor', formatMessage)
+  // 切换到某个工作区：列表是运行期的，因此每个工作区一条，id 与 `workspace.switch.<id>` 同型，
+  // 命令行按 id 键入即可（`resolve` 大小写无关）。
+  const switchEntries: ComposeEditorCatalogEntry[] = (context.workspace?.items ?? []).map((item) => ({
+    descriptor: {
+      id: composeWorkspaceSwitchActionId(item.id),
+      title: getEditorWorkspaceSwitchLabel(locale, item.title, formatMessage),
+      category,
+      shortcut: [],
+    },
+    run: () => { context.workspace?.switchTo(item.id) },
+  }))
+
+  return [...CATALOG_ORDER
     // 宿主没有提供设置入口时整条省略，避免产出点了没反应的条目。
     .filter((id) => (
       (id !== 'editor.settings' || context.openSettings !== undefined)
+      && (id !== 'document.save' || context.saveDocument !== undefined)
+      && (id !== 'document.toggleAnimationMode' || context.toggleAnimationMode !== undefined)
       && (id !== 'edit.createComponent' || context.createComponent !== undefined)
+      && (!WORKSPACE_ACTION_IDS.has(id) || context.workspace !== undefined)
     ))
     .map((id) => {
       const entry = handlers[id]
@@ -519,7 +630,7 @@ export function createComposeEditorCatalog(
         },
         run: entry.run,
       }
-    })
+    }), ...switchEntries]
 }
 
 /**

@@ -504,3 +504,29 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.getAllByLabelText('名称')).toHaveLength(1)
   })
 })
+
+describe('OpenSpec: editor-workspace-layout / 面板头统一为标签加一条 chrome', () => {
+  it('不再有那条标题行，动作与搜索同一行', () => {
+    /*
+     * 对象名住在 Dockview 标签上（`属性 · 矩形`），面板里因此不该再写一遍——同一个问题在两处
+     * 回答时，占地更大的那一遍是 52px 的一整条。
+     */
+    const registry = createComposeEntityRegistry({ components: [] })
+    const { container } = render(
+      <EntityInspector
+        dispatch={vi.fn()}
+        document={document}
+        entity={entity}
+        headerTrailing={<button type="button">应用</button>}
+        idFactory={() => 'command-1'}
+        registry={registry}
+      />,
+    )
+
+    expect(container.querySelector('.compose-editor__entity-inspector-header')).toBeNull()
+    const actions = container.querySelector('[data-property-part="toolbar-actions"]')
+    expect(actions).not.toBeNull()
+    expect(actions?.querySelector('button')).toHaveTextContent('应用')
+    expect(actions?.parentElement).toHaveAttribute('data-property-part', 'toolbar')
+  })
+})

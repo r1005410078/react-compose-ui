@@ -476,7 +476,8 @@ describe('junction Preset', () => {
   })
 
   it('默认不出现在 Palette', () => {
-    expect(DEFAULT_COMPOSE_JUNCTION_PRESET.paletteHidden).toBe(true)
+    // 节点藏起来的理由是它自己的（拖出来的节点不连着任何导线），与工具栏货架无关。
+    expect(DEFAULT_COMPOSE_JUNCTION_PRESET.paletteHidden).toBe('always')
   })
 })
 

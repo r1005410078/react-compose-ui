@@ -54,17 +54,41 @@ import {
 import type { PropertyPanelFilter, TreeCommitOptions } from '../property-tree'
 import '../styles.css'
 
-/**
- * 默认三列布局优先保障编辑器空间；对齐 UE4 Details 面板的紧凑操作列，38px 用 16px 图标放下
- * 2 个入口，使绑定入口与重置能同时直接可见，而不必退化为单槽聚合菜单。
+/*
+ * 标签列的默认宽度按**比例**算：固定像素列会让面板变宽时富余全部落进编辑列——一个最多填四位
+ * 数的输入框独吞两百多像素，而标签列一动不动。Unity（`0.45w − 40`，下限 120）、Godot
+ * （每行一个 `name_split_ratio`，默认 0.5）与 Unreal（`column_width` 是 float）分的都是比例，
+ * 没有一家用固定像素标签列。
+ *
+ * 0.38 而不是照抄 Unity 的 0.45：那条是给英文长词的（"Rotation Constraint X"），这里最长的
+ * 标签是四个汉字约 48px。上限 148 是本产品自己加的一档——Unity 与 Godot 不封顶，因为它们的
+ * 标签涨上去有用，而这里涨过 148 就只是一条空白。
+ *
+ * 用户拖过分隔条之后这条规则让位：宽度从 `null`（自动）变成一个具体像素值，「恢复默认列宽」
+ * 把它放回 `null` 而不是放回某个像素数。
  */
-const DEFAULT_LABEL_WIDTH = 120
+const LABEL_WIDTH_RATIO = 0.38
+const MAX_AUTO_LABEL_WIDTH = 148
+
+/**
+ * 操作列：对齐 UE4 Details 面板的紧凑操作列，38px 用 16px 图标放下 2 个入口，使绑定入口与
+ * 重置能同时直接可见，而不必退化为单槽聚合菜单。
+ */
 const DEFAULT_ACTION_WIDTH = 38
-const DEFAULT_PANEL_WIDTH = 365
+const DEFAULT_PANEL_WIDTH = 284
 const MIN_LABEL_WIDTH = 88
 const MIN_ACTION_WIDTH = 32
 const MAX_ACTION_WIDTH = 96
 const MIN_EDITOR_WIDTH = 120
+
+/** 未经用户调整时标签列的宽度：面板宽度的固定比例，两端封顶。 */
+function autoLabelWidth(availableWidth: number) {
+  return clamp(
+    Math.round(availableWidth * LABEL_WIDTH_RATIO),
+    MIN_LABEL_WIDTH,
+    MAX_AUTO_LABEL_WIDTH,
+  )
+}
 
 /** 属性在受控值中的稳定路径。 */
 export type PropertyPath = readonly (string | number)[]
@@ -549,6 +573,15 @@ export interface ComposePropertyPanelRootProps
    * 与搜索同属 chrome band，避免在 Entity 标题与搜索之间再插一整条割裂灰条。
    */
   statusSlot?: ReactNode
+  /**
+   * 搜索工具带右端的宿主动作。
+   *
+   * @remarks
+   * 与搜索**同一行**，不是它上面或下面另起一条。宿主此前把这些动作放在面板自己画的一条标题
+   * 行里，那条行连同标题一共 52px——而标题本身在 Dockview 标签上已经写着一遍了。同一个问题
+   * 不该在两处回答，动作因此并进这一行，面板头收成「标签 + 一条 chrome」。
+   */
+  toolbarActions?: ReactNode
 }
 
 /** 一个独立 Schema 属性区的分组属性。 */
@@ -587,6 +620,7 @@ export function ComposePropertyPanelRoot({
   children,
   header,
   statusSlot,
+  toolbarActions,
   className,
   style,
   ...htmlProps
@@ -607,13 +641,15 @@ export function ComposePropertyPanelRoot({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
-  const [labelWidth, setLabelWidth] = useState(DEFAULT_LABEL_WIDTH)
+  // `null` = 还没被用户调整过，跟着面板宽度按比例走。
+  const [customLabelWidth, setCustomLabelWidth] = useState<number | null>(null)
   const [actionWidth, setActionWidth] = useState(DEFAULT_ACTION_WIDTH)
   const [availableWidth, setAvailableWidth] = useState(
     typeof style?.width === 'number' ? style.width : DEFAULT_PANEL_WIDTH,
   )
+  const labelWidth = customLabelWidth ?? autoLabelWidth(availableWidth)
   const resizeLabel = (candidate: number) => {
-    setLabelWidth(clamp(candidate, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)))
+    setCustomLabelWidth(clamp(candidate, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)))
   }
   const resizeAction = (candidate: number) => {
     setActionWidth(clamp(candidate, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, availableWidth - labelWidth - MIN_EDITOR_WIDTH))))
@@ -653,7 +689,10 @@ export function ComposePropertyPanelRoot({
       setAvailableWidth(width)
       const nextAction = clamp(actionWidth, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, width - MIN_LABEL_WIDTH - MIN_EDITOR_WIDTH)))
       setActionWidth(nextAction)
-      setLabelWidth(clamp(labelWidth, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, width - nextAction - MIN_EDITOR_WIDTH)))
+      // 自动那一档不写死：它是从当前宽度算出来的，写回去等于把用户没做过的选择固化下来。
+      setCustomLabelWidth((current) => current === null
+        ? null
+        : clamp(current, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, width - nextAction - MIN_EDITOR_WIDTH)))
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -783,7 +822,7 @@ export function ComposePropertyPanelRoot({
                   role="menuitem"
                   type="button"
                   onClick={() => {
-                    setLabelWidth(DEFAULT_LABEL_WIDTH)
+                    setCustomLabelWidth(null)
                     setActionWidth(DEFAULT_ACTION_WIDTH)
                     setSettingsOpen(false)
                   }}
@@ -791,6 +830,11 @@ export function ComposePropertyPanelRoot({
               </div>
             ) : null}
           </div>
+          {toolbarActions ? (
+            <div className="property-panel__toolbar-actions" data-property-part="toolbar-actions">
+              {toolbarActions}
+            </div>
+          ) : null}
         </div>
       </div>
       <PropertyPanelRootContext.Provider value={view}>
@@ -1077,11 +1121,13 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDescriptions, setShowDescriptions] = useState(false)
-  const [labelWidth, setLabelWidth] = useState(DEFAULT_LABEL_WIDTH)
+  // `null` = 还没被用户调整过，跟着面板宽度按比例走。
+  const [customLabelWidth, setCustomLabelWidth] = useState<number | null>(null)
   const [actionWidth, setActionWidth] = useState(DEFAULT_ACTION_WIDTH)
   const [availableWidth, setAvailableWidth] = useState(
     typeof style?.width === 'number' ? style.width : DEFAULT_PANEL_WIDTH,
   )
+  const labelWidth = customLabelWidth ?? autoLabelWidth(availableWidth)
   const rootClassName = ['property-panel', className].filter(Boolean).join(' ')
   const asyncSchema = (schema as unknown as { async?: boolean }).async === true
   const validation = asyncSchema ? null : v.safeParse(schema, value)
@@ -1097,7 +1143,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   } as CSSProperties
 
   const resizeLabel = (candidate: number) => {
-    setLabelWidth(clamp(candidate, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)))
+    setCustomLabelWidth(clamp(candidate, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, availableWidth - actionWidth - MIN_EDITOR_WIDTH)))
   }
   const resizeAction = (candidate: number) => {
     setActionWidth(clamp(candidate, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, availableWidth - labelWidth - MIN_EDITOR_WIDTH))))
@@ -1137,7 +1183,10 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
       setAvailableWidth(width)
       const nextAction = clamp(actionWidth, MIN_ACTION_WIDTH, Math.min(MAX_ACTION_WIDTH, Math.max(MIN_ACTION_WIDTH, width - MIN_LABEL_WIDTH - MIN_EDITOR_WIDTH)))
       setActionWidth(nextAction)
-      setLabelWidth(clamp(labelWidth, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, width - nextAction - MIN_EDITOR_WIDTH)))
+      // 自动那一档不写死：它是从当前宽度算出来的，写回去等于把用户没做过的选择固化下来。
+      setCustomLabelWidth((current) => current === null
+        ? null
+        : clamp(current, MIN_LABEL_WIDTH, Math.max(MIN_LABEL_WIDTH, width - nextAction - MIN_EDITOR_WIDTH)))
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -1270,7 +1319,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
                 role="menuitem"
                 type="button"
                 onClick={() => {
-                  setLabelWidth(DEFAULT_LABEL_WIDTH)
+                  setCustomLabelWidth(null)
                   setActionWidth(DEFAULT_ACTION_WIDTH)
                   setSettingsOpen(false)
                 }}

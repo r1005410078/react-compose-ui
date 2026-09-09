@@ -28,6 +28,15 @@ export interface ComposeComponentDescriptor {
   readonly kind: ComposeComponentAssetV1['kind']
   readonly revision: string
   readonly reference: ComposeComponentReference
+  /**
+   * 组件文件所在文件夹，从 Provider 根往下的各级名称；直接躺在根下时是空数组。
+   *
+   * @remarks
+   * 物料面板的货架按**文件夹**取材（选文件夹不选文件），因此分类这件事的事实来源是资源树
+   * 而不是组件文件里的某个字段。路径由 Store 顺着 `parentId` 链（列举时逐层下钻的那条链）
+   * 推出，组件协议一个字节不改。
+   */
+  readonly folderPath: readonly string[]
 }
 
 /** 一次目录列举结果；损坏文件不会阻断其他组件。 @public */
@@ -37,6 +46,14 @@ export interface ComposeComponentCatalog {
     readonly assetKey: string
     readonly issues: readonly ComposeComponentAssetIssue[]
   }[]
+  /**
+   * Provider 根之下的全部文件夹路径（不含根自己）。
+   *
+   * @remarks
+   * 货架要分得清「这个文件夹是空的」与「这个文件夹没了」——只看组件的 `folderPath` 两者都是
+   * 一个都没有。列举本来就要逐层下钻，顺手记下路径不多走一趟 Provider。
+   */
+  readonly folders: readonly (readonly string[])[]
 }
 
 /** Component Store 读取的文件与 Provider revision。 @public */
@@ -182,23 +199,57 @@ export function createComposeComponentStore(input: {
     return snapshot
   }
 
-  const listEntries = async (folderId: string, signal?: AbortSignal): Promise<readonly ComposeAssetEntry[]> => {
+  /** 一个文件连同它所在文件夹的路径；路径是逐层下钻时攒出来的那条 `parentId` 链。 */
+  interface WalkedEntry {
+    readonly entry: ComposeAssetEntry
+    readonly folderPath: readonly string[]
+  }
+
+  const listEntries = async (
+    folderId: string,
+    folderPath: readonly string[],
+    folders: (readonly string[])[],
+    signal?: AbortSignal,
+  ): Promise<readonly WalkedEntry[]> => {
     throwIfAborted(signal)
     const entries = await provider.list({ folderId, signal })
-    const nested = await Promise.all(entries.map(async (entry) => (
-      entry.kind === 'folder' ? listEntries(entry.id, signal) : [entry]
-    )))
+    const nested = await Promise.all(entries.map(async (entry) => {
+      if (entry.kind !== 'folder') return [{ entry, folderPath }]
+      const childPath = [...folderPath, entry.name]
+      folders.push(childPath)
+      return listEntries(entry.id, childPath, folders, signal)
+    }))
     return nested.flat()
   }
 
+  /**
+   * 列举目录。
+   *
+   * @remarks
+   * 并发调用共用同一个在飞的请求，但请求体**不接任何调用方的 signal**：取消是调用方自己的事，
+   * 共享的那份活儿要跑完并把结果缓存给所有人。反过来（把第一个调用方的 signal 传进去）的症状
+   * 很具体——React StrictMode 的挂载→清理→再挂载里，第一次挂载在清理时 abort，第二次挂载拿到
+   * 的却是**同一个**已经注定要以「操作已取消」失败的 promise，而它自己的 signal 还活着，
+   * 于是错误被当成真的读取失败显示出来，整个目录退化成空。端到端跑的是生产构建、
+   * StrictMode 双调用在那里不会发生，因此这类回归只有组件/单元测试挡得住。
+   *
+   * 代价写在明处：一次列举开始之后就取消不掉了。这在这里可接受——它是只读列举，
+   * 结果本来就要进缓存；而 `generation` 已经挡住了 `invalidate` / `dispose` 之后的过期写入。
+   */
   async function listComponents(signal?: AbortSignal): Promise<ComposeComponentCatalog> {
     ensureActive()
     throwIfAborted(signal)
     if (catalog) return catalog
-    if (catalogInFlight) return catalogInFlight
+    if (catalogInFlight) {
+      const shared = await catalogInFlight
+      // 等的过程中本次调用方可能已经取消了：结果照旧进缓存，只是不交给它。
+      throwIfAborted(signal)
+      return shared
+    }
     const requestGeneration = generation
     const request = (async () => {
-      const entries = (await listEntries(provider.root.id, signal)).filter((entry) => (
+      const folders: (readonly string[])[] = []
+      const walked = (await listEntries(provider.root.id, [], folders)).filter(({ entry }) => (
         entry.kind === 'file'
         && isComposeComponentMediaType(entry.mediaType)
         && isComposeComponentFileName(entry.name)
@@ -206,9 +257,9 @@ export function createComposeComponentStore(input: {
       ))
       const components: ComposeComponentDescriptor[] = []
       const issues: Array<{ assetKey: string; issues: readonly ComposeComponentAssetIssue[] }> = []
-      for (const entry of entries) {
+      for (const { entry, folderPath } of walked) {
         try {
-          const snapshot = await readEntry(entry, signal)
+          const snapshot = await readEntry(entry)
           components.push({
             entryId: entry.id,
             assetKey: snapshot.assetKey,
@@ -217,6 +268,7 @@ export function createComposeComponentStore(input: {
             kind: snapshot.asset.kind,
             revision: snapshot.revision,
             reference: referenceFor(snapshot.assetKey),
+            folderPath,
           })
         }
         catch (error) {
@@ -236,13 +288,15 @@ export function createComposeComponentStore(input: {
         a.displayName.localeCompare(b.displayName, locale)
         || a.assetKey.localeCompare(b.assetKey, locale)
       ))
-      const result = { components, issues }
+      const result = { components, issues, folders }
       if (requestGeneration === generation) catalog = result
       return result
     })()
     catalogInFlight = request
     try {
-      return await request
+      const result = await request
+      throwIfAborted(signal)
+      return result
     }
     finally {
       if (catalogInFlight === request) catalogInFlight = null

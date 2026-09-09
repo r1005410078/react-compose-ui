@@ -9,30 +9,36 @@ import {
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
 
-// 外层 initializeOuterWorkspace 保持 mock：本文件只关心中央/文档面板行为
-// （现在挂在内层 core Dockview 上），bottom Edge Group 的结构已经在
-// workspace-layout.test.ts 里覆盖。
-const initializeOuterWorkspaceMock = vi.hoisted(() => vi.fn())
-// 外层 mock api 只需要是一个跨渲染稳定的引用，供 handleOuterReady 的幂等判断使用；
-// initializeOuterWorkspace 本身被整体 mock 掉，不会真的调用它的方法。
-const outerDockviewMock = vi.hoisted(() => ({}))
-// 内层 scene/canvas/inspector Dockview：initializeCoreWorkspace 未被 mock，会真的对这个
-// 假 api 调用 addGroup/addEdgeGroup/addPanel，所以形状要跟 workspace-layout.test.ts 里的
-// createWorkspaceApi 一致，而不只是原来的 addPanel/getPanel。
+/**
+ * 单一 Dockview 的替身：`initializeWorkspace` 未被 mock，会真的对它调用
+ * addGroup/addEdgeGroup/addPanel，所以形状要跟 workspace-layout.test.ts 里的 createWorkspaceApi 一致。
+ */
 const workspaceDockviewMock = vi.hoisted(() => {
-  const groups = new Map<string, { id: string; locked?: string }>()
-  const edgeGroups = new Map<string, { id: string; locked?: string }>()
+  interface FakeGroup {
+    id: string
+    locked: string | undefined
+    api: { setVisible: ReturnType<typeof vi.fn> }
+  }
+  const groups = new Map<string, FakeGroup>()
+  const edgeGroups = new Map<string, { id: string; locked?: string; isCollapsed: () => boolean; expand: () => void; collapse: () => void }>()
   const panels = new Map<string, { id: string; api: { close: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> } }>()
   return {
+    height: 600,
     addGroup: vi.fn((options: { id: string }) => {
-      const group = { id: options.id, locked: undefined as string | undefined }
+      const group: FakeGroup = { id: options.id, locked: undefined, api: { setVisible: vi.fn() } }
       groups.set(options.id, group)
       return group
     }),
     getGroup: vi.fn((id: string) => groups.get(id)),
     addEdgeGroup: vi.fn((position: string, options: { id: string }) => {
-      const group = { id: options.id, locked: undefined as string | undefined }
-      groups.set(options.id, group)
+      let collapsed = true
+      const group = {
+        id: options.id,
+        locked: undefined as string | undefined,
+        isCollapsed: () => collapsed,
+        expand: () => { collapsed = false },
+        collapse: () => { collapsed = true },
+      }
       edgeGroups.set(position, group)
       return group
     }),
@@ -40,54 +46,17 @@ const workspaceDockviewMock = vi.hoisted(() => {
     addPanel: vi.fn((options: { id: string }) => {
       const panel = {
         id: options.id,
-        api: { close: vi.fn(), setActive: vi.fn() },
+        api: { close: vi.fn(() => { panels.delete(options.id) }), setActive: vi.fn() },
       }
       panels.set(options.id, panel)
       return panel
     }),
     getPanel: vi.fn((id: string) => panels.get(id)),
+    removePanel: vi.fn((panel: { id: string }) => { panels.delete(panel.id) }),
+    onDidActivePanelChange: vi.fn(() => ({ dispose: () => undefined })),
     groups,
     edgeGroups,
     panels,
-  }
-})
-const sceneHistoryDockviewMock = vi.hoisted(() => {
-  const groups = new Map<string, { id: string; locked?: string }>()
-  const panels = new Map<string, {
-    id: string
-    api: { close: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> }
-  }>()
-  return {
-    height: 480,
-    addGroup: vi.fn((options: { id: string }) => {
-      const group = { id: options.id, locked: undefined as string | undefined }
-      groups.set(options.id, group)
-      return group
-    }),
-    addPanel: vi.fn((options: { id: string }) => {
-      const panel = {
-        id: options.id,
-        api: {
-          close: vi.fn(() => panels.delete(options.id)),
-          setActive: vi.fn(),
-        },
-      }
-      panels.set(options.id, panel)
-      return panel
-    }),
-    getGroup: vi.fn((id: string) => groups.get(id)),
-    getPanel: vi.fn((id: string) => panels.get(id)),
-    groups,
-    panels,
-  }
-})
-
-vi.mock('../workspace-layout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../workspace-layout')>()
-
-  return {
-    ...actual,
-    initializeOuterWorkspace: initializeOuterWorkspaceMock,
   }
 })
 
@@ -106,6 +75,12 @@ vi.mock('@compose-ui/scene-tree', async () => {
 vi.mock('@compose-ui/asset-browser', async () => {
   const React = await import('react')
   return {
+    // 资源文档表面只需要一个能挂进画布面板的替身；Monaco 的行为由 asset-browser 自己的测试覆盖。
+    ComposeAssetPreview: React.forwardRef<HTMLDivElement, { entry: { name: string } }>(
+      function ComposeAssetPreviewMock({ entry }, ref) {
+        return React.createElement('div', { ref, 'data-testid': 'asset-preview' }, entry.name)
+      },
+    ),
     ComposeAssetBrowser: ({
       provider,
       onAssetOpen,
@@ -152,43 +127,28 @@ vi.mock('@compose-ui/asset-browser', async () => {
 
 vi.mock('dockview-react', async () => {
   const React = await import('react')
-  // 三层 Dockview：外层（只挂 core 面板 + bottom Edge Group，被 initializeOuterWorkspace mock
-  // 整体接管）、中层 core（scene/canvas/inspector，真的跑 initializeCoreWorkspace）、
-  // 最内层 scene-history（场景/组件库/历史，真的跑 initializeSceneToolsWorkspace）。
-  const apiByClassName: Record<string, unknown> = {
-    'compose-editor__core-dockview': workspaceDockviewMock,
-    'compose-editor__scene-history-dockview': sceneHistoryDockviewMock,
-  }
-  const testIdByClassName: Record<string, string> = {
-    'compose-editor__core-dockview': 'core-dockview',
-    'compose-editor__scene-history-dockview': 'scene-history-dockview',
-  }
-
   return {
     themeAbyss: { name: 'abyss', className: 'dockview-theme-abyss' },
     DockviewDefaultTab: ({ api }: { api: { title?: string } }) =>
       React.createElement('span', null, api.title),
-    DockviewReact: ({ className, components, onReady, rightHeaderActionsComponent: HeaderActions }: {
-      className?: string
+    DockviewReact: ({ components, onReady, rightHeaderActionsComponent: HeaderActions }: {
       components: Record<string, React.FunctionComponent>
       onReady: (event: { api: unknown }) => void
       rightHeaderActionsComponent?: React.FunctionComponent<{
         group: { id: string }
       }>
     }) => {
-      const api = (className && apiByClassName[className]) || outerDockviewMock
-      const testId = (className && testIdByClassName[className]) || 'dockview'
       React.useEffect(() => {
-        onReady({ api })
-      }, [api, onReady])
+        onReady({ api: workspaceDockviewMock })
+      }, [onReady])
 
+      // 组头动作只有场景组与属性组有（各一个折叠按钮）；面板组件各渲染一次。
       return React.createElement(
         'div',
-        { 'data-testid': testId },
-        className === 'compose-editor__core-dockview' && HeaderActions
-          ? React.createElement(HeaderActions, {
-              group: { id: 'compose-scene-edge' },
-            })
+        { 'data-testid': 'dockview' },
+        HeaderActions
+          ? ['compose-left-0', 'compose-right-0'].map((id) =>
+              React.createElement(HeaderActions, { key: id, group: { id } }))
           : null,
         Object.entries(components).map(([name, Component]) =>
           React.createElement(Component, { key: name }),
@@ -198,7 +158,7 @@ vi.mock('dockview-react', async () => {
   }
 })
 
-import { ComposeEditor } from '../index'
+import { COMPOSE_DEFAULT_WORKSPACES, ComposeEditor } from '../index'
 import type { ComposeEditorController, ComposeEditorStageOverrides } from '../index'
 import { getRequiredEditorMessage } from '../editor-i18n'
 import { createDefaultComposeEditorPreferences } from '../editor-preferences'
@@ -240,22 +200,22 @@ function createHistoryController(
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
-  initializeOuterWorkspaceMock.mockClear()
   workspaceDockviewMock.groups.clear()
   workspaceDockviewMock.edgeGroups.clear()
   workspaceDockviewMock.panels.clear()
   Object.values(workspaceDockviewMock).forEach((member) => {
     if (typeof member === 'function' && 'mockClear' in member) member.mockClear()
   })
-  sceneHistoryDockviewMock.groups.clear()
-  sceneHistoryDockviewMock.panels.clear()
-  Object.values(sceneHistoryDockviewMock).forEach((member) => {
-    if (typeof member === 'function' && 'mockClear' in member) member.mockClear()
-  })
 })
 
+/** 设置的入口是应用菜单里的一项（顶栏右端那颗齿轮已删），因此要先点标志。 */
+function openSettings() {
+  fireEvent.click(screen.getByRole('button', { name: '应用菜单' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '设置' }))
+}
+
 describe('ComposeEditor', () => {
-  it('OpenSpec: editor-workspace-layout / 中央 Canvas Group 承载资源文档 / 打开同一资源只创建一个 always 标签', async () => {
+  it('OpenSpec: editor-workspace-layout / 文档标签条 / 重复打开同一资源只激活现有标签', async () => {
     const provider = {
       id: 'memory',
       label: 'Memory assets',
@@ -272,23 +232,24 @@ describe('ComposeEditor', () => {
       read: vi.fn(),
     }
     render(<ComposeEditor assets={{ browser: { provider } }} />)
-    // 初次挂载已经为内层 Dockview 建了 canvas/scene/inspector 三个面板；
-    // 下面只关心打开资源文档这一次动作触发的 addPanel 调用。
-    workspaceDockviewMock.addPanel.mockClear()
+    // 未启用页面系统：固定画布是标签条上的第一个、不可关闭的标签。
+    const canvasTab = screen.getByRole('tab', { name: '画布' })
+    expect(canvasTab).toHaveAttribute('aria-selected', 'true')
+    const addPanelCalls = workspaceDockviewMock.addPanel.mock.calls.length
 
     fireEvent.click(screen.getByRole('button', { name: 'mock asset open' }))
-    await waitFor(() => expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(expect.objectContaining({
-      component: 'assetDocument',
-      id: 'compose-asset-document:memory:logo-key',
-      renderer: 'always',
-      title: 'logo.svg',
-      position: { direction: 'within', referenceGroup: 'compose-canvas-group' },
-    })))
+    const tab = await screen.findByRole('tab', { name: /logo\.svg/ })
+    expect(tab).toHaveAttribute('data-workspace-tab', 'compose-asset-document:memory:logo-key')
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(canvasTab).toHaveAttribute('aria-selected', 'false')
+    // 文档不是 Dockview 面板：打开它不往 Dockview 里加任何东西。
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledTimes(addPanelCalls)
 
+    fireEvent.click(canvasTab)
+    expect(canvasTab).toHaveAttribute('aria-selected', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'mock asset open' }))
-    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledTimes(1)
-    expect(workspaceDockviewMock.getPanel('compose-asset-document:memory:logo-key')?.api.setActive)
-      .toHaveBeenCalledTimes(1)
+    expect(screen.getAllByRole('tab', { name: /logo\.svg/ })).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: /logo\.svg/ })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('OpenSpec: editor-workspace-layout / Editor 资源拖入桥接 / 默认资源面板拖入当前 Stage', async () => {
@@ -791,7 +752,7 @@ describe('ComposeEditor', () => {
 
     expect(screen.getByText('Latest inspector')).toBeInTheDocument()
     expect(screen.queryByText('First inspector')).not.toBeInTheDocument()
-    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledTimes(4)
   })
 
   it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 使用默认历史面板', () => {
@@ -799,22 +760,20 @@ describe('ComposeEditor', () => {
     render(<ComposeEditor history={history} />)
 
     expect(screen.getByTestId('default-scene-tree')).toBeInTheDocument()
-    expect(screen.getByTestId('scene-history-dockview')).toBeInTheDocument()
     expect(screen.getByLabelText('历史记录')).toHaveAttribute('data-compose-ui', 'history')
     expect(screen.queryByRole('separator', { name: '调整场景树与历史记录高度' }))
       .not.toBeInTheDocument()
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'compose-component-library-panel',
-        position: { referenceGroup: 'compose-scene-tools-group' },
+        position: { referenceGroup: 'compose-left-1' },
       }),
     )
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'compose-history-panel',
-        initialHeight: 192,
-        minimumHeight: 120,
-        position: { referenceGroup: 'compose-scene-tools-group' },
+        inactive: true,
+        position: { referenceGroup: 'compose-left-1' },
       }),
     )
 
@@ -830,23 +789,21 @@ describe('ComposeEditor', () => {
     )
 
     expect(screen.getByText('自定义历史')).toBeInTheDocument()
-    expect(screen.getByTestId('scene-history-dockview')).toBeInTheDocument()
     expect(screen.queryByLabelText('历史记录')).not.toBeInTheDocument()
 
     rerender(<ComposeEditor history={history} slots={{ history: null }} />)
     expect(screen.queryByText('自定义历史')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('历史记录')).not.toBeInTheDocument()
-    expect(screen.getByTestId('scene-history-dockview')).toBeInTheDocument()
+    expect(screen.getByTestId('dockview')).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 不启用历史', () => {
     render(<ComposeEditor />)
 
-    expect(screen.getByTestId('scene-history-dockview')).toBeInTheDocument()
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'compose-component-library-panel' }),
     )
-    expect(sceneHistoryDockviewMock.addPanel).not.toHaveBeenCalledWith(
+    expect(workspaceDockviewMock.addPanel).not.toHaveBeenCalledWith(
       expect.objectContaining({ id: 'compose-history-panel' }),
     )
     expect(screen.queryByLabelText('历史记录')).not.toBeInTheDocument()
@@ -855,12 +812,12 @@ describe('ComposeEditor', () => {
   it('OpenSpec: editor-workspace-layout / 场景下方工具分栏 / 不启用历史：动态移除 History', () => {
     const history = createHistoryController()
     const { rerender } = render(<ComposeEditor history={history} />)
-    const historyPanel = sceneHistoryDockviewMock.getPanel('compose-history-panel')
+    const historyPanel = workspaceDockviewMock.getPanel('compose-history-panel')
 
     rerender(<ComposeEditor />)
 
     expect(historyPanel?.api.close).toHaveBeenCalledTimes(1)
-    expect(sceneHistoryDockviewMock.getPanel('compose-history-panel')).toBeUndefined()
+    expect(workspaceDockviewMock.getPanel('compose-history-panel')).toBeUndefined()
   })
 
   it('runs history shortcuts from editor inputs while preserving the controlled panel override', () => {
@@ -884,27 +841,29 @@ describe('ComposeEditor', () => {
 
   it('OpenSpec: editor-workspace-layout / Dockview 场景工具布局 / 调整下方工具高度', () => {
     render(<ComposeEditor history={createHistoryController()} />)
-    expect(sceneHistoryDockviewMock.addGroup).toHaveBeenCalledWith({
-      direction: 'right',
-      id: 'compose-scene-content-group',
-      constraints: { minimumHeight: 160 },
-    })
-    expect(sceneHistoryDockviewMock.addGroup).toHaveBeenCalledWith({
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'left',
+      referenceGroup: 'compose-canvas-group',
+      id: 'compose-left-0',
+      constraints: { minimumWidth: 180, minimumHeight: 160 },
+    }))
+    // 工具组取可用高度（替身报 600）的 40%。
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledWith(expect.objectContaining({
       constraints: { minimumHeight: 120 },
       direction: 'below',
-      id: 'compose-scene-tools-group',
-      initialHeight: 192,
-      referenceGroup: 'compose-scene-content-group',
-    })
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledWith(
+      id: 'compose-left-1',
+      initialHeight: 240,
+      referenceGroup: 'compose-left-0',
+    }))
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'compose-scene-content-panel',
         minimumHeight: 160,
       }),
     )
-    expect(sceneHistoryDockviewMock.addGroup).toHaveBeenCalledTimes(2)
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(3)
-    expect(sceneHistoryDockviewMock.getPanel('compose-component-library-panel')?.api.setActive)
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledTimes(4)
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledTimes(8)
+    expect(workspaceDockviewMock.getPanel('compose-component-library-panel')?.api.setActive)
       .toHaveBeenCalledTimes(1)
   })
 
@@ -913,7 +872,7 @@ describe('ComposeEditor', () => {
     const { rerender } = render(
       <ComposeEditor history={firstHistory} slots={{ inspector: '第一版属性' }} />,
     )
-    const nestedDockview = screen.getByTestId('scene-history-dockview')
+    const dockview = screen.getByTestId('dockview')
 
     rerender(
       <ComposeEditor
@@ -927,9 +886,9 @@ describe('ComposeEditor', () => {
 
     expect(screen.getByRole('button', { name: '最新动作' })).toBeInTheDocument()
     expect(screen.getByText('第二版属性')).toBeInTheDocument()
-    expect(screen.getByTestId('scene-history-dockview')).toBe(nestedDockview)
-    expect(sceneHistoryDockviewMock.addPanel).toHaveBeenCalledTimes(3)
-    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('dockview')).toBe(dockview)
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledTimes(8)
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledTimes(4)
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 默认显示空场景树', () => {
@@ -945,7 +904,8 @@ describe('ComposeEditor', () => {
     expect(screen.getByText('组件属性内容')).toBeInTheDocument()
     expect(screen.getByText('事务日志内容')).toBeInTheDocument()
     expect(screen.getByText('命令内容')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: '动画编辑器' })).toBeInTheDocument()
+    // 时间线只在动画模式下渲染：它的面板也只在那时存在，设计模式不养着一份时间线。
+    expect(screen.queryByRole('region', { name: '动画编辑器' })).not.toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 插槽与场景树内容更新', () => {
@@ -962,7 +922,7 @@ describe('ComposeEditor', () => {
     )
 
     expect(screen.getByTestId('default-scene-tree')).toHaveTextContent('Latest')
-    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledTimes(4)
   })
 
   it('OpenSpec: editor-workspace-layout / React 内容插槽 / 宿主覆盖场景树', () => {
@@ -995,30 +955,75 @@ describe('ComposeEditor', () => {
     expect(handleClick).toHaveBeenCalledTimes(1)
   })
 
-  it('OpenSpec: editor-workspace-layout / 四区编辑器工作区 / Strict Mode 重放初始化', () => {
+  it('OpenSpec: editor-workspace-layout / 单一 Dockview 实例 / Strict Mode 下唯一', () => {
     render(
       <StrictMode>
         <ComposeEditor />
       </StrictMode>,
     )
 
-    expect(initializeOuterWorkspaceMock).toHaveBeenCalledTimes(1)
+    // onReady 在 Strict Mode 下重放，按 api 身份去重：每组每面板各只建一次。
+    expect(workspaceDockviewMock.addGroup).toHaveBeenCalledTimes(4)
+    expect(workspaceDockviewMock.addEdgeGroup).toHaveBeenCalledTimes(1)
+    expect(workspaceDockviewMock.addPanel).toHaveBeenCalledTimes(7)
+    expect(screen.getAllByTestId('dockview')).toHaveLength(1)
+  })
+
+  it('OpenSpec: editor-workspace-layout / 工作区定义与注入 / 重名抛错', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const page = COMPOSE_DEFAULT_WORKSPACES[0]!
+    expect(() => render(<ComposeEditor workspaces={[page, { ...page, title: '再来一个' }]} />))
+      .toThrow(/duplicate workspace id "page"/)
+    spy.mockRestore()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 工作区定义与注入 / 宿主注入工作区', () => {
+    const page = COMPOSE_DEFAULT_WORKSPACES[0]!
+    render(
+      <ComposeEditor
+        workspaces={[page, {
+          id: 'substation',
+          title: '变电站',
+          description: '符号库在右',
+          layout: { kind: 'preset', left: [['sceneGraph']], right: [['componentLibrary'], ['inspector']] },
+          session: page.session,
+          seeds: page.seeds,
+        }]}
+      />,
+    )
+    const group = screen.getByRole('radiogroup', { name: '工作区' })
+    const radios = screen.getAllByRole('radio').filter((radio) => group.contains(radio))
+    expect(radios.map((radio) => radio.textContent)).toEqual(['页面', '变电站'])
+    expect(radios[0]).toHaveAttribute('aria-checked', 'true')
+    expect(radios[1]).toHaveAttribute('title', '符号库在右')
+    // 命令行的词汇表里也有它：切换到某个工作区是动作目录的一条。
+    fireEvent.click(radios[1]!)
+    expect(radios[1]).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('OpenSpec: editor-workspace-layout / 切换不打断画布 / Strict Mode 下宿主元素唯一', () => {
+    render(
+      <StrictMode>
+        <ComposeEditor slots={{ stage: <div data-testid="stage-probe">Stage</div> }} />
+      </StrictMode>,
+    )
+    // 画布内容渲染进一个稳定的宿主元素，Dockview 面板只把它搬进盒子：重放挂载之后仍只有一份。
+    expect(screen.getAllByTestId('stage-probe')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-workspace-host="canvas"]')).toHaveLength(1)
   })
 
   it('OpenSpec: editor-preferences / 设置模态弹框 / 打开和关闭设置', async () => {
     const { container } = render(<ComposeEditor />)
 
-    const button = screen.getByRole('button', { name: '设置' })
-    expect(button).toHaveAttribute('aria-expanded', 'false')
-    expect(button).toHaveAttribute('aria-haspopup', 'dialog')
+    const button = screen.getByRole('button', { name: '应用菜单' })
+    expect(button).toHaveAttribute('aria-haspopup', 'menu')
 
-    fireEvent.click(button)
-    expect(button).toHaveAttribute('aria-expanded', 'true')
+    openSettings()
     expect(screen.getByRole('dialog', { name: '设置' })).toHaveAttribute(
       'aria-modal',
       'true',
     )
-    expect(screen.getByTestId('dockview').parentElement).toHaveAttribute('inert')
+    expect(screen.getByTestId('dockview').closest('.compose-editor__workspace')).toHaveAttribute('inert')
     await waitFor(() => {
       expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveFocus()
     })
@@ -1027,13 +1032,13 @@ describe('ComposeEditor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
-    expect(screen.getByTestId('dockview').parentElement).not.toHaveAttribute('inert')
+    expect(screen.getByTestId('dockview').closest('.compose-editor__workspace')).not.toHaveAttribute('inert')
     expect(button).toHaveFocus()
   })
 
   it('OpenSpec: editor-preferences / 设置模态弹框 / 使用 Escape 关闭设置', () => {
     render(<ComposeEditor />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
     const capture = screen.getByRole('button', { name: '修改临时平移快捷键' })
     fireEvent.click(capture)
@@ -1049,9 +1054,10 @@ describe('ComposeEditor', () => {
     })
 
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '设置' })).toHaveFocus()
+    // 焦点回到标志：它现在是设置的入口，也是它唯一的锚点。
+    expect(screen.getByRole('button', { name: '应用菜单' })).toHaveFocus()
 
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.mouseDown(screen.getByTestId('settings-backdrop'))
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
   })
@@ -1062,7 +1068,7 @@ describe('ComposeEditor', () => {
     const editor = screen.getByRole('region', { name: 'Compose editor' })
 
     expect(editor).toHaveAttribute('data-compose-theme', 'dark')
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
 
     expect(editor).toHaveAttribute('data-compose-theme', 'light')
@@ -1114,7 +1120,7 @@ describe('ComposeEditor', () => {
       />,
     )
     const editor = screen.getByRole('region', { name: 'Compose editor' })
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
 
     expect(onPreferencesChange).toHaveBeenCalledWith(
@@ -1133,7 +1139,7 @@ describe('ComposeEditor', () => {
 
   it('OpenSpec: editor-preferences / 内建界面语言 / 切换默认工作区语言', () => {
     const { container } = render(<ComposeEditor />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('button', { name: '语言' }))
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
 
@@ -1141,8 +1147,8 @@ describe('ComposeEditor', () => {
     const editor = container.querySelector('[data-compose-ui="editor"]')
     expect(editor).not.toBeNull()
     expect(editor).toHaveAttribute('lang', 'en-US')
-    expect(container.querySelector('.compose-editor__settings-icon'))
-      .toHaveAttribute('aria-label', 'Settings')
+    expect(container.querySelector('.compose-editor__brand'))
+      .toHaveAttribute('aria-label', 'Application menu')
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
   })
 
@@ -1218,7 +1224,7 @@ describe('ComposeEditor', () => {
   it('OpenSpec: editor-preferences / 可配置单次快捷键 / 拒绝同作用域冲突', () => {
     const onPreferencesChange = vi.fn()
     render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
     // 换过三次：平移、旋转、缩放，三个工具都已删除——旋转与缩放的入口都并进了变换指示器，
     // 而那是 chrome 的可见性、不是工具。换成仍然存在的创建容器。
@@ -1235,7 +1241,7 @@ describe('ComposeEditor', () => {
   it('OpenSpec: editor-preferences / 实例级编辑器偏好 / 通知完整偏好', () => {
     const onPreferencesChange = vi.fn()
     render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
     const capture = screen.getByRole('button', { name: '修改临时平移快捷键' })
     fireEvent.click(capture)
@@ -1251,11 +1257,11 @@ describe('ComposeEditor', () => {
     }))
   })
 
-  it('OpenSpec: editor-workspace-layout / 设置入口保持布局独立 / 从活动栏打开设置', () => {
+  it('OpenSpec: editor-workspace-layout / 设置入口保持布局独立 / 从标签条打开设置', () => {
     const { container } = render(<ComposeEditor />)
     const canvasPanel = container.querySelector('[data-workspace-panel="canvas"]')
 
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
 
     expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
     expect(canvasPanel).toBeInTheDocument()
@@ -1264,7 +1270,7 @@ describe('ComposeEditor', () => {
   it('OpenSpec: editor-workspace-layout / 设置入口保持布局独立 / 更新设置期间保持布局', () => {
     const { container } = render(<ComposeEditor />)
     const canvasPanel = container.querySelector('[data-workspace-panel="canvas"]')
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
 
     fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
 
@@ -1329,13 +1335,15 @@ describe('ComposeEditor', () => {
     )
     expect(screen.getByRole('region', { name: 'Compose editor' }))
       .toHaveStyle({ '--compose-accent': '#ff00aa' })
-    expect(screen.getByRole('button', { name: '偏好设置' })).toBeInTheDocument()
+    // 宿主注入的 `editor.settings` 文案落在应用菜单那一项上——设置的入口现在在那里。
+    fireEvent.click(screen.getByRole('button', { name: 'Application menu' }))
+    expect(screen.getByRole('menuitem', { name: '偏好设置' })).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-preferences / 可配置单次快捷键 / 清除和恢复快捷键', () => {
     const onPreferencesChange = vi.fn()
     render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }))
 
     fireEvent.click(screen.getByRole('button', { name: '清除临时平移快捷键' }))
@@ -1353,7 +1361,7 @@ describe('ComposeEditor', () => {
 
   it('OpenSpec: editor-preferences / 设置模态弹框 / 搜索设置', () => {
     render(<ComposeEditor />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索设置' }), {
       target: { value: '临时平移' },
     })
@@ -1368,14 +1376,14 @@ describe('ComposeEditor', () => {
     expect(screen.queryByRole('heading', { name: '快捷键' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '关闭设置' }))
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     expect(screen.getByRole('searchbox', { name: '搜索设置' })).toHaveValue('')
     expect(screen.getByRole('heading', { name: '外观' })).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-preferences / 快捷键输入隔离 / 查看只读手势', () => {
     render(<ComposeEditor />)
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    openSettings()
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索设置' }), {
       target: { value: '方向键' },
     })

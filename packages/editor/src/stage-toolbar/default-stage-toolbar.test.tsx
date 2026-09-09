@@ -228,3 +228,28 @@ describe('DefaultStageToolbar', () => {
     expect(screen.getByRole('button', { name: '矩形' })).toHaveAttribute('aria-pressed', 'false')
   })
 })
+
+describe('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 按下态分两种', () => {
+  it('工具与开关按角色分派样式', () => {
+    /*
+     * 两者按下去做的事不同，因此不能长得一样。这里断的是 `data-toolbar-role`——样式由它分派，
+     * 而 jsdom 不跑样式表，断算出来的颜色会得到一条永远绿的假用例。
+     */
+    renderToolbar('select')
+
+    const select = screen.getByRole('button', { name: '选择' })
+    const polar = screen.getByRole('button', { name: '极轴追踪' })
+
+    expect(select).toHaveAttribute('data-toolbar-role', 'tool')
+    expect(select).toHaveAttribute('aria-pressed', 'true')
+    // 极轴默认开着：它是可以与别的开关同时按下的那一类。
+    expect(polar).toHaveAttribute('data-toolbar-role', 'switch')
+    expect(polar).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('绘图命令按钮算工具：它们同样恒有至多一个按下', () => {
+    renderToolbar('select')
+    const rectangle = window.document.querySelector('[data-toolbar-item="RECTANGLE"]')
+    expect(rectangle).toHaveAttribute('data-toolbar-role', 'tool')
+  })
+})

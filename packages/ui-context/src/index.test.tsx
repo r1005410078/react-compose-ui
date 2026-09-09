@@ -66,6 +66,40 @@ describe('Compose UI contexts', () => {
     expect(output).toHaveTextContent('"theme":"dark"')
   })
 
+  // OpenSpec: editor-workspace-layout / 工作区主题 token / 桌面色与面板色可分
+  it('两种主题下桌面色都与面板色不同，且深色的桌面更暗', () => {
+    /*
+     * 桌面是卡片下面那张底。深色主题此前两个值都是 `#101216`——看不出问题只是因为那时没有任何
+     * 地方露出桌面；卡片化之后同值会让卡片只剩边框在说话。
+     */
+    const luminance = (hex: string) => Number.parseInt(hex.slice(1, 3), 16)
+      + Number.parseInt(hex.slice(3, 5), 16) + Number.parseInt(hex.slice(5, 7), 16)
+    function SurfaceProbe() {
+      const theme = useComposeThemeContext()
+      return (
+        <output data-testid="surfaces">
+          {JSON.stringify({
+            workspaceBackground: theme?.tokens.workspaceBackground,
+            panelBackground: theme?.tokens.panelBackground,
+          })}
+        </output>
+      )
+    }
+    for (const theme of ['dark', 'light'] as const) {
+      render(
+        <ComposeThemeProvider theme={theme}>
+          <SurfaceProbe />
+        </ComposeThemeProvider>,
+      )
+      const tokens = JSON.parse(screen.getByTestId('surfaces').textContent!)
+      expect(tokens.workspaceBackground).not.toBe(tokens.panelBackground)
+      if (theme === 'dark') {
+        expect(luminance(tokens.workspaceBackground)).toBeLessThan(luminance(tokens.panelBackground))
+      }
+      cleanup()
+    }
+  })
+
   it('OpenSpec: ui-context / 可嵌套主题环境 / 跟随系统主题', () => {
     let dark = false
     let listener: (() => void) | null = null

@@ -307,6 +307,17 @@ describe('OpenSpec: editor-preferences / 编辑器动作可在命令行键入', 
   const catalogIds = () => byId(createComposeEditorActions(context({
     createComponent: () => {},
     openSettings: () => {},
+    // 工作区动作只在接入了工作区会话时列出，与设置、创建组件同一条规则。
+    workspace: {
+      items: [{ id: 'page', title: '页面' }],
+      currentId: 'page',
+      switchTo: () => {},
+      next: () => {},
+      previous: () => {},
+      focusCanvas: () => {},
+      saveAs: () => {},
+      reset: () => {},
+    },
   })))
 
   it('键入别名执行动作', () => {
@@ -383,3 +394,58 @@ describe('OpenSpec: editor-preferences / 编辑器动作可在命令行键入', 
 function draftingMessages() {
   return new Proxy({}, { get: (_target, key) => String(key) }) as never
 }
+
+describe('OpenSpec: editor-preferences / 文档级动作进入目录', () => {
+  it('宿主未接文档会话时两条都整条省略', () => {
+    const ids = byId(createComposeEditorActions(context()))
+    expect(ids).not.toContain('document.save')
+    expect(ids).not.toContain('document.toggleAnimationMode')
+  })
+
+  it('保存列出且可执行', () => {
+    const saveDocument = vi.fn()
+    const actions = createComposeEditorActions(context({
+      saveDocument,
+      canSaveDocument: true,
+    }))
+    const save = actions.find((action) => action.id === 'document.save')
+
+    expect(save).toMatchObject({ title: '保存文档', disabledReason: undefined })
+    save?.run()
+    expect(saveDocument).toHaveBeenCalledOnce()
+  })
+
+  it('没有可保存的文档时说明原因，且 run 不产生副作用', () => {
+    // 「列出来但按下没反应」与「敲错字」在屏幕上无法区分，因此这一档必须带原因。
+    const saveDocument = vi.fn()
+    const actions = createComposeEditorActions(context({
+      saveDocument,
+      canSaveDocument: false,
+    }))
+    const save = actions.find((action) => action.id === 'document.save')
+
+    expect(save?.disabledReason).toBe('没有打开的文档')
+    save?.run()
+    expect(saveDocument).not.toHaveBeenCalled()
+  })
+
+  it('模式切换列出且可执行', () => {
+    const toggleAnimationMode = vi.fn()
+    const actions = createComposeEditorActions(context({ toggleAnimationMode }))
+    const toggle = actions.find((action) => action.id === 'document.toggleAnimationMode')
+
+    expect(toggle).toMatchObject({ title: '切换动画模式', disabledReason: undefined })
+    toggle?.run()
+    expect(toggleAnimationMode).toHaveBeenCalledOnce()
+  })
+
+  it('保存默认绑 Cmd/Ctrl+S，模式切换默认不绑键', () => {
+    /*
+     * 这一条钉的是「删掉标签条上那颗保存按钮」的前提：键位从硬接改成读键位表之后，默认值
+     * 必须仍是 Cmd/Ctrl+S，否则用户会在没有任何提示的情况下失去保存。
+     */
+    const shortcuts = createDefaultComposeEditorPreferences().shortcuts
+    expect(shortcuts['document.save']).toEqual([{ code: 'KeyS', primary: true }])
+    expect(shortcuts['document.toggleAnimationMode']).toEqual([])
+  })
+})

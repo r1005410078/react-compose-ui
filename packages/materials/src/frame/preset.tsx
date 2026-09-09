@@ -39,7 +39,7 @@ export function createFramePreset(
     label: '场景',
     defaultName: '场景',
     icon: <ComposeContainerMaterialIcon />,
-    paletteHidden: true,
+    paletteHidden: 'always',
     createComponents: () => ({
       ...container.createComponents(),
       Appearance: { ...COMPOSE_DEFAULT_SCENE_APPEARANCE },

@@ -78,7 +78,7 @@ export function createSvgMaterial(
       label: options.label ?? 'SVG',
       defaultName: options.name ?? 'SVG',
       icon: <ComposeSvgMaterialIcon />,
-      paletteHidden: true,
+      paletteHidden: 'always',
       createComponents: () => rendererPresetComponents({
         type: 'svg',
         props,

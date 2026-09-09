@@ -74,14 +74,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
-import type {
-  DockviewReadyEvent,
-  IDockviewPanelProps,
-} from 'dockview-react'
+import type { DockviewReadyEvent } from 'dockview-react'
 import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
 import type { ComposeSceneTreeProps } from '@compose-ui/scene-tree'
@@ -118,27 +116,43 @@ import type {
   ComposeEditorMode,
   ComposePageDocumentSession,
   ComposeWorkspaceDocumentSession,
+  ComposeWorkspaceSeeds,
 } from '../workspace-layout'
 import {
-  AssetBrowserPanel,
-  AnimationPanel,
-  ComposeCommandPanel,
-  TransactionLogPanel,
-  WorkspaceCorePanel,
-} from '../workspace-layout'
+  COMPOSE_TOOLBAR_SEPARATOR,
+  ComposeToolbarShelfContext,
+} from '../stage-toolbar/toolbar-shelf'
+import type { ComposeToolbarItem } from '../stage-toolbar/toolbar-shelf'
 import {
+  applyWorkspaceInitialSizes,
+  COMPOSE_DEFAULT_WORKSPACES,
+  DEFAULT_TOOLS_WEIGHT,
+  DEFAULT_WORKSPACE_SEEDS,
   createAssetDocumentPanelId,
   createComponentDocumentPanelId,
   createPageDocumentPanelId,
-  isWorkspaceDocumentPanelId,
-  initializeCoreWorkspace,
-  useWorkspaceEdgeCollapse,
-  initializeOuterWorkspace,
+  createWorkspaceHostElements,
+  initializeWorkspace,
   localizeWorkspace,
-  WORKSPACE_GROUP_IDS,
+  setWorkspacePaletteTitle,
+  setWorkspacePanelTitle,
+  syncWorkspaceHistoryPanel,
+  useWorkspaceSession,
+  useWorkspaceSideCollapse,
+  workspaceComponents,
+  WorkspaceDialogs,
+  EditorTopBar,
+  WorkspacePortals,
+  WORKSPACE_CARD_GAP,
   WORKSPACE_COMPONENT_IDS,
+  WORKSPACE_HEADER_HEIGHT,
   WORKSPACE_PANEL_IDS,
 } from '../workspace-layout'
+import type {
+  ComposeEditorWorkspaceDefinition,
+  ComposeWorkspaceSessionPort,
+} from '../workspace-layout'
+import type { ComposeEditorWorkspaceActions } from '../editor-controller/action-catalog'
 import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
 import {
@@ -227,6 +241,22 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
   /** 项目 Component/Variant 独立工作区；省略时仍可使用 Controller 上的 Store 创建实例。 */
   components?: ComposeEditorComponentsConfig
   /**
+   * 工作区列表；省略时是内建的 `COMPOSE_DEFAULT_WORKSPACES`。
+   *
+   * @remarks
+   * 宿主按业务注入自己的工作区（`[...COMPOSE_DEFAULT_WORKSPACES, mine]`）；`id` 重名会在挂载时
+   * 抛错而不是静默丢弃。用户「另存为」的工作区不在这里——它们住在偏好里。
+   */
+  workspaces?: readonly ComposeEditorWorkspaceDefinition[]
+  /**
+   * 宿主往工具栏目录里补的项；每一项**指向**一个已有动作或命令，自己不携带行为。
+   *
+   * @remarks
+   * 与 `commands` 是同一条注入边界：先把 `MIRROR` 注册成命令，再用这里的一项给它一个按钮。
+   * 补进目录不等于上架——还要把它的 id 写进某个工作区的 `toolbar`，否则它只是「可以被排上去」。
+   */
+  toolbarItems?: readonly ComposeToolbarItem[]
+  /**
    * 请求以某个场景为目标打开预览。
    *
    * @remarks
@@ -236,18 +266,16 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
   onScenePreview?: (frameId: string) => void
 }
 
-// 外层 Dockview 只有一个中央面板（挂载内层 scene/canvas/inspector Dockview）和 bottom Edge
-// Group 里的四个工具标签；scene/canvas/inspector/文档面板的组件映射在内层自己维护
-// （workspace-panels.tsx 的 coreComponents），不属于这里。
-const workspaceComponents = {
-  [WORKSPACE_COMPONENT_IDS.core]: WorkspaceCorePanel,
-  [WORKSPACE_COMPONENT_IDS.transactionLog]: TransactionLogPanel,
-  [WORKSPACE_COMPONENT_IDS.command]: ComposeCommandPanel,
-  [WORKSPACE_COMPONENT_IDS.assetBrowser]: AssetBrowserPanel,
-  [WORKSPACE_COMPONENT_IDS.animation]: AnimationPanel,
-} satisfies Record<string, React.FunctionComponent<IDockviewPanelProps>>
-
 const workspaceTabComponents = { workspaceTab: WorkspaceTab }
+/**
+ * Dockview 主题：沿用 abyss 的类名与变量映射，折叠后的底部边缘组高度取面板头高度——底部收起
+ * 之后剩下的就是它的标签条，两者不一致会露出一条没有内容的空带。
+ */
+const workspaceTheme = {
+  ...themeAbyss,
+  edgeGroupCollapsedSize: WORKSPACE_HEADER_HEIGHT,
+  gap: WORKSPACE_CARD_GAP,
+}
 const emptySceneTreeProps: ComposeSceneTreeProps = {
   nodes: [],
   selectedIds: [],
@@ -372,6 +400,8 @@ export function ComposeEditor({
   assets,
   pages,
   components,
+  workspaces,
+  toolbarItems,
   onScenePreview,
   preferences,
   defaultPreferences,
@@ -384,12 +414,12 @@ export function ComposeEditor({
   const hostI18n = useComposeI18nContext()
   const generatedSettingsId = useId()
   const settingsPanelId = `compose-editor-settings-${generatedSettingsId.replace(/:/g, '')}`
-  /** 内层 scene/canvas/inspector Dockview 的 api；文档面板生命周期都挂在这个实例上。 */
-  const initializedApi = useRef<DockviewReadyEvent['api'] | null>(null)
-  /** 外层 Dockview 的 api，只用来在 locale 变化时重新本地化 bottom Edge Group 的标签标题。 */
-  const outerApiRef = useRef<DockviewReadyEvent['api'] | null>(null)
-  /** 内层 Dockview 已提供中央组；页面目录先返回时必须等到这里才能插入首页标签。 */
+  /** 唯一的 Dockview 实例；底部工具组的重组与两侧收起都作用在它上面。 */
+  const dockviewApiRef = useRef<DockviewReadyEvent['api'] | null>(null)
+  /** Dockview 已摆好四区；页面目录先返回时必须等到这里才能打开首页。 */
   const [workspaceReady, setWorkspaceReady] = useState(false)
+  /** 各面板内容的稳定宿主元素；每个编辑器实例一套，Dockview 面板只把它们搬进自己的盒子。 */
+  const [hosts] = useState(() => createWorkspaceHostElements())
   /** 已自动尝试过的首页 key；用户关闭标签或目录刷新都不应强制再次打开。 */
   const startupHomePageKeysRef = useRef(new Set<string>())
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -697,14 +727,31 @@ export function ComposeEditor({
   ) => {
     updateDocument(panelId, (current) => current.kind === 'component' ? update(current) : current)
   }, [updateDocument])
+  /**
+   * 关掉一个文档：从会话表里删掉，活动的那个被关掉时把活动位交给右边的邻居（没有就左边）。
+   *
+   * @remarks
+   * 文档不再是 Dockview 面板，「关掉活动标签之后谁活动」这件事 Dockview 不再替我们做。
+   * 先右后左是浏览器与 VS Code 的共同约定。单文档模式下没有邻居时回到固定画布。
+   */
   const closeDocumentImmediately = useCallback((panelId: string) => {
-    const panel = initializedApi.current?.getPanel(panelId)
-    panel?.api.close?.()
     if (!documentsRef.current.has(panelId)) return
+    const order = [...documentsRef.current.keys()]
     const next = new Map(documentsRef.current)
     next.delete(panelId)
     replaceDocuments(next)
+    setActiveDocumentPanelId((active) => {
+      if (active !== panelId) return active
+      const index = order.indexOf(panelId)
+      return order[index + 1] ?? order[index - 1] ?? null
+    })
   }, [replaceDocuments])
+  /** 激活一个已打开的文档；未启用页面系统时固定画布也算一个可激活的「文档」。 */
+  const activateDocument = useCallback((panelId: string) => {
+    if (documentsRef.current.has(panelId) || panelId === WORKSPACE_PANEL_IDS.canvas) {
+      setActiveDocumentPanelId(panelId)
+    }
+  }, [])
   const settleAssetDocumentClose = useCallback((allowed: boolean) => {
     const pending = pendingAssetDocumentCloseRef.current
     if (!pending) return
@@ -763,14 +810,13 @@ export function ComposeEditor({
       ? COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE
       : undefined
     const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id, { readOnly })
-    const existing = initializedApi.current?.getPanel(panelId)
-    if (existing) {
+    if (documentsRef.current.has(panelId)) {
       if (scriptIntelligence) {
         updateDocument(panelId, (current) => current.kind === 'asset'
           ? { ...current, scriptIntelligence }
           : current)
       }
-      existing.api.setActive()
+      setActiveDocumentPanelId(panelId)
       return
     }
     const next = new Map(documentsRef.current)
@@ -785,20 +831,9 @@ export function ComposeEditor({
       save: null,
     })
     replaceDocuments(next)
-    initializedApi.current?.addPanel({
-      id: panelId,
-      component: WORKSPACE_COMPONENT_IDS.assetDocument,
-      tabComponent: 'workspaceTab',
-      title: readOnly ? `${entry.name}${editorMessages.pages.readOnlySuffix}` : entry.name,
-      renderer: 'always',
-      position: {
-        direction: 'within',
-        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
-      },
-    })
+    setActiveDocumentPanelId(panelId)
   }, [
     assets?.browser?.provider,
-    editorMessages.pages.readOnlySuffix,
     replaceDocuments,
     updateDocument,
   ])
@@ -857,6 +892,14 @@ export function ComposeEditor({
   const activeComponentSession = activeWorkspaceSession?.kind === 'component'
     ? activeWorkspaceSession
     : undefined
+  /*
+   * 两条文档级动作（保存、切换动画模式）的共同前提：当前是页面或组件文档。资源文档由 Monaco
+   * 自己的保存入口负责，动画模式对它也无从谈起——这与标签条右端那两个控件的显示条件同源。
+   */
+  const activeDocumentChrome = activeWorkspaceSession?.kind === 'asset'
+    ? undefined
+    : activeWorkspaceSession
+  const canSaveActiveDocument = activeDocumentChrome !== undefined
   const selectedControllerEntity = controller?.selectedIds?.length === 1
     ? controller.document?.entities[controller.selectedIds[0]!]
     : undefined
@@ -885,9 +928,8 @@ export function ComposeEditor({
     const provider = assets?.browser?.provider
     if (!provider || !entry.assetKey) return
     const panelId = createPageDocumentPanelId(provider.id, entry.assetKey)
-    const existing = initializedApi.current?.getPanel(panelId)
-    if (existing) {
-      existing.api.setActive()
+    if (documentsRef.current.has(panelId)) {
+      setActiveDocumentPanelId(panelId)
       return
     }
     const result = await pageWorkspace.openPage(entry)
@@ -898,18 +940,7 @@ export function ComposeEditor({
     const next = new Map(documentsRef.current)
     next.set(panelId, { ...result.session, panelId })
     replaceDocuments(next)
-    initializedApi.current?.addPanel({
-      id: panelId,
-      component: WORKSPACE_COMPONENT_IDS.pageDocument,
-      tabComponent: 'workspaceTab',
-      title: result.session.displayName,
-      // 与资源文档不同，页面面板不使用 always renderer：页面共享工作区画布，同组内只有
-      // 活动标签渲染 Stage，避免出现两个 Stage 实例。
-      position: {
-        direction: 'within',
-        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
-      },
-    })
+    setActiveDocumentPanelId(panelId)
   }, [assets?.browser?.provider, pageWorkspace, replaceDocuments])
 
   // 新页面 Store 代表一个新的工作区实例；此前 Provider 的一次性打开记录不能沿用。
@@ -979,9 +1010,8 @@ export function ComposeEditor({
     const store = componentWorkspace.store
     if (!store) return
     const panelId = createComponentDocumentPanelId(store.providerId, descriptor.assetKey)
-    const existing = initializedApi.current?.getPanel(panelId)
-    if (existing) {
-      existing.api.setActive()
+    if (documentsRef.current.has(panelId)) {
+      setActiveDocumentPanelId(panelId)
       return
     }
     const result = await componentWorkspace.openComponent(descriptor)
@@ -992,16 +1022,7 @@ export function ComposeEditor({
     const next = new Map(documentsRef.current)
     next.set(panelId, { ...result.session, panelId })
     replaceDocuments(next)
-    initializedApi.current?.addPanel({
-      id: panelId,
-      component: WORKSPACE_COMPONENT_IDS.componentDocument,
-      tabComponent: 'workspaceTab',
-      title: result.session.displayName,
-      position: {
-        direction: 'within',
-        referenceGroup: WORKSPACE_GROUP_IDS.canvas,
-      },
-    })
+    setActiveDocumentPanelId(panelId)
   }, [componentWorkspace, replaceDocuments])
 
   /**
@@ -1149,6 +1170,9 @@ export function ComposeEditor({
         kind: source.asset.kind,
         revision: source.revision,
         reference: store.createReference(entry.assetKey),
+        // 这份描述符只用来打开文档（按 assetKey 与引用寻址）。分组用的路径一律从目录读，
+        // 因此这里不去反查文件夹链。
+        folderPath: [],
       })
     }
     catch (error) {
@@ -1295,6 +1319,17 @@ export function ComposeEditor({
       setPageNotice(error instanceof Error ? error.message : String(error))
     })
   }, [activePageSession?.pageKey, pageWorkspace])
+  /**
+   * 当前工作区的新建种子。
+   *
+   * @remarks
+   * 走 ref 而不是直接读会话：会话在这一行之下才建立（它要先知道文档标签），而菜单项此刻就要
+   * 构造好。读它的只有用户点下「创建页面」之后跑的那个回调，那时 ref 早已是最新的。
+   */
+  const workspaceSeedsRef = useRef<ComposeWorkspaceSeeds>(DEFAULT_WORKSPACE_SEEDS)
+  /** 当前工作区工具组的高度权重；容器量到真实尺寸之后要按它补落一次，见 `handleReady`。 */
+  const workspaceToolsWeightRef = useRef(DEFAULT_TOOLS_WEIGHT)
+
   const handlePageCreated = useCallback((descriptor: ComposePageDescriptor) => {
     void openPageDocument({
       id: descriptor.entryId,
@@ -1316,6 +1351,7 @@ export function ComposeEditor({
     onPageSetupChanged: handlePageSetupChanged,
     onPageSetupError: setPageNotice,
     provider: pageProvider,
+    resolveSeeds: () => workspaceSeedsRef.current,
     store: pageStore,
   }), [
     editorMessages,
@@ -1461,6 +1497,7 @@ export function ComposeEditor({
           kind: component.asset.kind,
           revision: component.revision,
           reference: store!.createReference(component.assetKey),
+          folderPath: [],
         })
       },
       onError: setComponentNotice,
@@ -1941,46 +1978,6 @@ export function ComposeEditor({
     animationScopeFrameId,
   ])
 
-  const resolvedComponentLibraryPanel = slots?.componentLibrary !== undefined
-    ? slots.componentLibrary
-    : !controller
-      ? undefined
-      : !componentWorkspace.store
-        ? controller.componentLibraryPanel
-        : (
-      <ComposeComponentLibraryPanel
-        registry={controller.registry}
-        store={componentWorkspace.store}
-        onOpenIntent={openComponentDocument}
-        onCreateVariantIntent={(descriptor) => {
-          setVariantName(`${descriptor.displayName} Variant`)
-          setPendingVariantInstance(null)
-          setPendingVariantParent(descriptor)
-        }}
-        onCreateIntent={(item) => {
-          controller.interactionController.send({
-            type: 'external.add',
-            item: createComponentLibraryStageItem(item),
-          })
-        }}
-        onItemDragStart={({ item, clientPoint }) => {
-          controller.interactionController.send({
-            type: 'external.begin',
-            item: createComponentLibraryStageItem(item),
-            clientPoint,
-          })
-        }}
-        onItemDragMove={({ clientPoint }) => {
-          controller.interactionController.send({ type: 'external.move', clientPoint })
-        }}
-        onItemDragEnd={({ clientPoint }) => {
-          controller.interactionController.send({ type: 'external.end', clientPoint })
-        }}
-        onItemDragCancel={() => {
-          controller.interactionController.send({ type: 'external.cancel' })
-        }}
-      />
-          )
   const handlePanelDocumentClose = useCallback((panelId: string) => {
     void requestDocumentClose(panelId)
   }, [requestDocumentClose])
@@ -2003,11 +2000,35 @@ export function ComposeEditor({
    * 恢复资源标签与切换前的折叠状态。addPanel/removePanel 会触发
    * `onDidActivePanelChange`，用 guard 防止监听器把切换路由回自己形成循环。
    */
+  /**
+   * 把时间线面板加进底部组、激活并展开。
+   *
+   * @remarks
+   * 进入动画模式与工作区切换之后都要它：时间线不进布局快照，切换重建面板之后得加回来。
+   */
+  const ensureAnimationPanel = useCallback(() => {
+    // 宿主测试替身可能只实现部分 api：Dockview 操作逐个防御。
+    const api = dockviewApiRef.current as Partial<DockviewReadyEvent['api']> | null
+    if (!api) return
+    const bottomGroup = typeof api.getEdgeGroup === 'function' ? api.getEdgeGroup('bottom') : undefined
+    let panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
+    if (!panel && bottomGroup && typeof api.addPanel === 'function') {
+      panel = api.addPanel({
+        id: WORKSPACE_PANEL_IDS.animation,
+        component: WORKSPACE_COMPONENT_IDS.animation,
+        tabComponent: 'workspaceTab',
+        title: editorMessagesRef.current.workspace.animation,
+        position: { referenceGroup: bottomGroup.id },
+      })
+    }
+    panel?.api.setActive()
+    bottomGroup?.expand()
+  }, [])
   const setEditorMode = useCallback((
     mode: ComposeEditorMode,
     options?: { readonly restoreCollapsed?: boolean },
   ) => {
-    const rawApi = outerApiRef.current
+    const rawApi = dockviewApiRef.current
     if (!rawApi || editorModeGuardRef.current) return
     const active = animationModeRef.current.active
     if ((mode === 'animation') === active) return
@@ -2020,18 +2041,7 @@ export function ComposeEditor({
         : undefined
       if (mode === 'animation') {
         bottomCollapsedBeforeAnimationRef.current = bottomGroup?.isCollapsed() ?? null
-        let panel = api.getPanel?.(WORKSPACE_PANEL_IDS.animation)
-        if (!panel && bottomGroup && typeof api.addPanel === 'function') {
-          panel = api.addPanel({
-            id: WORKSPACE_PANEL_IDS.animation,
-            component: WORKSPACE_COMPONENT_IDS.animation,
-            tabComponent: 'workspaceTab',
-            title: editorMessagesRef.current.workspace.animation,
-            position: { referenceGroup: bottomGroup.id },
-          })
-        }
-        panel?.api.setActive()
-        bottomGroup?.expand()
+        ensureAnimationPanel()
         animationModeRef.current.setActive(true)
       }
       else {
@@ -2053,7 +2063,7 @@ export function ComposeEditor({
     finally {
       editorModeGuardRef.current = false
     }
-  }, [])
+  }, [ensureAnimationPanel])
 
   /** 空态创建引导：在页面同目录创建动画文件、绑定并水合镜像。 */
   const animationModeMessages = editorMessages.animationMode
@@ -2159,15 +2169,36 @@ export function ComposeEditor({
     hydrateAnimation,
   ])
 
-  /** 外层 Dockview 就绪：只需要建立中央面板（内层 Dockview 的宿主）和 bottom Edge Group。 */
-  const handleOuterReady = useCallback((event: DockviewReadyEvent) => {
-    if (outerApiRef.current === event.api) {
+  const historyEnabled = resolvedHistory !== undefined || slots?.history !== undefined
+  /**
+   * Dockview 就绪：摆出四区并订阅底部标签的活动事件。
+   *
+   * @remarks
+   * 文档不是 Dockview 面板，因此这里不再从活动面板事件推导活动文档——那由标签条与打开路径
+   * 直接写 state。留下的订阅只做一件事：动画模式下点击底部的其它标签等价于切回设计模式。
+   * `onReady` 在 Strict Mode 下会重放，按 api 身份去重。
+   */
+  const handleReady = useCallback((event: DockviewReadyEvent) => {
+    if (dockviewApiRef.current === event.api) {
       return
     }
-    initializeOuterWorkspace(event.api, resolvedPreferences.locale, hostI18n?.formatMessage)
-    outerApiRef.current = event.api
-    // 底部工具组（资源/命令/日志 + 动态时间线）属于外层 Dockview：动画模式下点击其它
-    // 底部标签等价于切回设计模式——只能在这里监听，内层 core api 收不到这些标签的活动事件。
+    initializeWorkspace(
+      event.api,
+      resolvedPreferences.locale,
+      hostI18n?.formatMessage,
+      { historyEnabled },
+    )
+    dockviewApiRef.current = event.api
+    setWorkspaceReady(true)
+    // 容器在 onReady 时可能还没有真实尺寸（Strict Mode 重放、宿主先挂后量都会这样），
+    // 那时落下去的初始尺寸会在第一次真实布局后被摊成等份：等 api 报出非零尺寸再落一次。
+    if (!(event.api.width > 0 && event.api.height > 0)) {
+      const subscription = event.api.onDidLayoutChange?.(() => {
+        if (!(event.api.width > 0 && event.api.height > 0)) return
+        subscription?.dispose()
+        applyWorkspaceInitialSizes(event.api, workspaceToolsWeightRef.current)
+      })
+    }
     event.api.onDidActivePanelChange?.((change) => {
       if (editorModeGuardRef.current) return
       const panelId = change.panel?.id
@@ -2179,46 +2210,111 @@ export function ComposeEditor({
         setEditorMode('design', { restoreCollapsed: false })
       }
     })
-  }, [hostI18n?.formatMessage, resolvedPreferences.locale, setEditorMode])
+  }, [historyEnabled, hostI18n?.formatMessage, resolvedPreferences.locale, setEditorMode])
 
-  // 边缘面板的展开状态按文档类型记忆，避免一种标签里的收起连带影响另一种。
-  useWorkspaceEdgeCollapse(
-    initializedApi,
-    activeDocumentPanelId ? documents.get(activeDocumentPanelId)?.kind ?? null : null,
-    workspaceReady,
-  )
+  // 两侧的收起状态从组的可见性派生：隐藏是布局的一部分，随工作区的快照走。
+  const sideCollapse = useWorkspaceSideCollapse(dockviewApiRef, workspaceReady)
+
+  /*
+   * 应用菜单里的「命令面板」：先展开底栏再把命令面板设为活动。底栏收起时 `setActive` 到不了
+   * 那个面板，只做后一步的症状是「点了菜单什么都没发生」。
+   */
+  const openCommandPanel = useCallback(() => {
+    sideCollapse.setCollapsed('bottom', false)
+    dockviewApiRef.current?.getPanel?.(WORKSPACE_PANEL_IDS.command)?.api.setActive()
+  }, [sideCollapse])
 
   /**
-   * 内层 scene/canvas/inspector Dockview 就绪。它经 Context 的 `onCoreDockviewReady` 从
-   * `WorkspaceCoreDockview` 转发过来，而不是直接作为某个 `<DockviewReact>` 的 `onReady`——
-   * 那个内层实例挂在 workspace-panels.tsx 里，这里拿不到它的 DOM/组件引用。
+   * 画布会话开关的读写端口：由 controller 持有，工作区切换时整组换入换出。
+   *
+   * @remarks
+   * 宿主可以传只实现部分接口的 controller（测试替身与插槽宿主就是这么做的），缺 setter 时
+   * 工作区照常切布局、只是不换开关。
    */
-  const handleReady = useCallback((event: DockviewReadyEvent) => {
-    if (initializedApi.current === event.api) {
-      return
+  const sessionPort = useMemo<ComposeWorkspaceSessionPort | null>(() => {
+    if (!controller || typeof controller.setGridVisible !== 'function') return null
+    return {
+      get: () => ({
+        angleConstraint: controller.angleConstraint,
+        polarIncrement: controller.polarIncrement,
+        gridVisible: controller.gridVisible,
+        crosshairSize: controller.crosshairSize,
+        transformGizmo: controller.transformGizmo,
+      }),
+      set: (next) => {
+        controller.setAngleConstraint(next.angleConstraint)
+        controller.setPolarIncrement(next.polarIncrement)
+        controller.setGridVisible(next.gridVisible)
+        controller.setCrosshairSize(next.crosshairSize)
+        controller.setTransformGizmo(next.transformGizmo)
+      },
     }
-
-    initializeCoreWorkspace(
-      event.api,
-      resolvedPreferences.locale,
-      hostI18n?.formatMessage,
-      { includeCanvas: pages === undefined && components === undefined },
-    )
-    initializedApi.current = event.api
-    setWorkspaceReady(true)
-    // 活动页面由中央 Canvas Group 内的活动面板决定。Dockview 的活动面板是全局的：点击
-    // 组件库、资源面板等其他组的面板同样会触发该事件，若据此推导 Stage 宿主，页面标签会
-    // 立刻失去宿主身份而让画布整体消失。因此只接受画布组内的面板 ID。
-    event.api.onDidActivePanelChange?.((change) => {
-      const panelId = change.panel?.id
-      if (panelId === undefined) return
-      if (
-        !isWorkspaceDocumentPanelId(panelId)
-        && !(pages === undefined && panelId === WORKSPACE_PANEL_IDS.canvas)
-      ) return
-      setActiveDocumentPanelId(panelId)
-    })
-  }, [components, hostI18n?.formatMessage, pages, resolvedPreferences.locale])
+  }, [controller])
+  const workspaceSession = useWorkspaceSession({
+    apiRef: dockviewApiRef,
+    ready: workspaceReady,
+    injected: workspaces ?? COMPOSE_DEFAULT_WORKSPACES,
+    preferences: resolvedPreferences,
+    updatePreferences,
+    locale: resolvedPreferences.locale,
+    formatMessage: hostI18n?.formatMessage,
+    historyEnabled,
+    activeDocumentKey: activeDocumentPanelId,
+    animationActive: animationMode.active,
+    restoreAnimationPanel: ensureAnimationPanel,
+    sessionPort,
+    notify: setPageNotice,
+  })
+  useLayoutEffect(() => {
+    workspaceSeedsRef.current = workspaceSession.seeds
+    workspaceToolsWeightRef.current = workspaceSession.toolsWeight
+  })
+  /*
+   * 货架与宿主目录项经 Context 下发：中间那一层属于宿主（`slots.stageToolbar` 可以把工具栏包进
+   * 自己的节点里），`cloneElement` 补 prop 那条路在那里就断了。
+   */
+  const { openDialog, setToolbarShelf, toolbar: workspaceToolbar } = workspaceSession
+  const openToolbarDialog = useCallback(() => { openDialog('toolbar') }, [openDialog])
+  const toolbarShelfContext = useMemo(
+    () => ({
+      shelf: workspaceToolbar,
+      items: toolbarItems,
+      onCustomize: openToolbarDialog,
+      onShelfChange: setToolbarShelf,
+    }),
+    [openToolbarDialog, setToolbarShelf, toolbarItems, workspaceToolbar],
+  )
+  /**
+   * 当前工作区的工具栏上有哪几个 Preset 的入口。
+   *
+   * @remarks
+   * 物料面板用它求值 `paletteHidden: 'toolbar'`：工具栏给了入口的物料不必再占一块瓦片，而
+   * 货架按工作区不同，因此这份名单也按工作区不同。id 直接取货架里的那些——绘图命令的 id 与
+   * 它产出的 Preset id 是同一个词的两种大小写（`CIRCLE` / `circle`），工具 id 则本来就同名
+   * （`draw-text` 对 `text`）。
+   *
+   * 货架缺席时给 `undefined`（而不是空数组）：那表示「宿主没接工作区」，此时 `'toolbar'`
+   * 一档照旧全藏，与货架落地之前逐字相同；空数组会让每一个 `'toolbar'` 物料都冒出来。
+   */
+  const toolbarPresetIds = useMemo(() => {
+    const shelf = workspaceSession.toolbar
+    if (!shelf) return undefined
+    return shelf.flatMap((id) => (
+      id === COMPOSE_TOOLBAR_SEPARATOR ? [] : [id.toLowerCase(), id.replace(/^draw-/, '')]
+    ))
+  }, [workspaceSession.toolbar])
+  const workspacePaletteTitle = workspaceSession.palette?.title
+    ?? editorMessages.workspace.componentLibrary
+  const workspaceActions = useMemo<ComposeEditorWorkspaceActions>(() => ({
+    items: workspaceSession.items.map(({ id, title }) => ({ id, title })),
+    currentId: workspaceSession.currentId,
+    switchTo: workspaceSession.switchTo,
+    next: workspaceSession.next,
+    previous: workspaceSession.previous,
+    focusCanvas: workspaceSession.toggleCanvasOnly,
+    saveAs: () => workspaceSession.openDialog('saveAs'),
+    reset: workspaceSession.reset,
+  }), [workspaceSession])
 
   /**
    * 注入 Stage 命令行的宿主动作。
@@ -2231,6 +2327,19 @@ export function ComposeEditor({
    * 语言，这与命令面板的装配位置是同一条既有理由。
    */
   const actionContext = controller?.actionContext
+  /*
+   * 两条文档级动作的稳定入口：命令面板与命令行各拿一次，因此不在渲染期现搓闭包——那会读到
+   * 一个 ref，而 ref 的值只有在事件发生时才作数。
+   */
+  const saveActiveDocument = useCallback(() => {
+    void activeDocumentChrome?.save?.()
+  }, [activeDocumentChrome])
+  // 读会话状态而不是那个 ref：ref 只在事件里才作数，而这个回调是当作 prop 交出去的。
+  const animationActive = animationMode.active
+  const toggleAnimationMode = useCallback(() => {
+    setEditorMode(animationActive ? 'design' : 'animation')
+  }, [animationActive, setEditorMode])
+
   const stageCommands = useMemo(() => {
     // 与 `controller?.renderStage` 一样按可选消费：`ComposeEditorController` 是宿主可以自己
     // 实现的接口，只实现关心的那几项是正当用法（既有测试与插槽宿主就是这么做的）。缺席时
@@ -2242,14 +2351,73 @@ export function ComposeEditor({
       locale: resolvedPreferences.locale,
       openSettings: toggleSettings,
       shortcuts: resolvedPreferences.shortcuts,
+      workspace: workspaceActions,
+      /*
+       * 文档级动作在这里补而不是在控制器里：控制器不认识文档会话（页面 / 组件 / 资源三种
+       * 标签住在编辑器上），这与 `workspace` 补在这里是同一条理由。
+       */
+      saveDocument: () => { void activeDocumentChrome?.save?.() },
+      canSaveDocument: canSaveActiveDocument,
+      // 没有页面 / 组件文档时整条省略，而不是列一个按下去没反应的条目；判据与标签条上那个
+      // 切换器的显示条件是同一个。
+      toggleAnimationMode: activeDocumentChrome === undefined
+        ? undefined
+        : () => { setEditorMode(animationModeRef.current.active ? 'design' : 'animation') },
     })
   }, [
     actionContext,
+    activeDocumentChrome,
+    canSaveActiveDocument,
     hostI18n?.formatMessage,
     resolvedPreferences.locale,
     resolvedPreferences.shortcuts,
+    setEditorMode,
     toggleSettings,
+    workspaceActions,
   ])
+
+  const resolvedComponentLibraryPanel = slots?.componentLibrary !== undefined
+    ? slots.componentLibrary
+    : !controller
+      ? undefined
+      : !componentWorkspace.store
+        ? controller.componentLibraryPanel
+        : (
+      <ComposeComponentLibraryPanel
+        registry={controller.registry}
+        store={componentWorkspace.store}
+        shelf={workspaceSession.palette}
+        toolbarPresetIds={toolbarPresetIds}
+        onOpenIntent={openComponentDocument}
+        onCreateVariantIntent={(descriptor) => {
+          setVariantName(`${descriptor.displayName} Variant`)
+          setPendingVariantInstance(null)
+          setPendingVariantParent(descriptor)
+        }}
+        onCreateIntent={(item) => {
+          controller.interactionController.send({
+            type: 'external.add',
+            item: createComponentLibraryStageItem(item),
+          })
+        }}
+        onItemDragStart={({ item, clientPoint }) => {
+          controller.interactionController.send({
+            type: 'external.begin',
+            item: createComponentLibraryStageItem(item),
+            clientPoint,
+          })
+        }}
+        onItemDragMove={({ clientPoint }) => {
+          controller.interactionController.send({ type: 'external.move', clientPoint })
+        }}
+        onItemDragEnd={({ clientPoint }) => {
+          controller.interactionController.send({ type: 'external.end', clientPoint })
+        }}
+        onItemDragCancel={() => {
+          controller.interactionController.send({ type: 'external.cancel' })
+        }}
+      />
+          )
 
   const content = {
       sceneGraphPanel: slots?.sceneGraph !== undefined
@@ -2270,6 +2438,7 @@ export function ComposeEditor({
         ? slots.stageToolbar
         : addDefaultElementProps(controller?.stageToolbar, {
             shortcuts: resolvedPreferences.shortcuts,
+            toolbarItems,
           }),
       children: slots?.stage !== undefined
         ? slots.stage
@@ -2344,9 +2513,14 @@ export function ComposeEditor({
       transactionLogPanel: slots?.transactionLog,
       commandPanel: slots?.command !== undefined
         ? slots.command
+        // eslint-disable-next-line react-hooks/refs -- 切模式要在事件里操作 Dockview（加/删时间线面板），读 ref 是它的本分；这里只是把回调交出去，渲染期不会调用它。
         : addDefaultElementProps(controller?.commandPanel, {
             onOpenSettings: toggleSettings,
             shortcuts: resolvedPreferences.shortcuts,
+            // 文档级动作住在编辑器这一层；控制器不认识文档会话。
+            onSaveDocument: saveActiveDocument,
+            canSaveDocument: canSaveActiveDocument,
+            onToggleAnimationMode: canSaveActiveDocument ? toggleAnimationMode : undefined,
           }),
       assetBrowserPanel: slots?.assetBrowser !== undefined
         ? slots.assetBrowser
@@ -2373,6 +2547,10 @@ export function ComposeEditor({
             )
           })(),
       documents,
+      // 未启用页面系统时固定画布就是那个「文档」；标签条据此画出一个不可关闭的画布标签。
+      activeDocumentPanelId: activeDocumentPanelId
+        ?? (pages === undefined && components === undefined ? WORKSPACE_PANEL_IDS.canvas : null),
+      activateDocument,
       stageHostPanelId,
       registerDocumentSave,
       setDocumentDirty,
@@ -2383,7 +2561,11 @@ export function ComposeEditor({
       settingsPanelId,
       setSettingsButton,
       toggleSettings,
-      onCoreDockviewReady: handleReady,
+      openCommandPanel,
+      sideCollapsed: sideCollapse.collapsed,
+      toggleSide: sideCollapse.toggle,
+      hosts,
+      workspace: workspaceSession,
     }
   const handleHistoryShortcut = useComposeHistoryShortcuts(
     resolvedHistory ?? disabledHistory,
@@ -2465,6 +2647,8 @@ export function ComposeEditor({
         kind: created.asset.kind,
         revision: created.revision,
         reference,
+        // 新建的变体落在资源根（`parentId: null`），因此这里的空路径是真的。
+        folderPath: [],
       }
       // 对齐 Unity：从实例创建变体后，场景物体默认改绑为新变体的实例，覆盖已固化进变体。
       if (pendingVariantInstance && controller) {
@@ -2523,23 +2707,59 @@ export function ComposeEditor({
   ])
 
   useEffect(() => {
-    // localizeWorkspace 按面板 ID 逐个 getPanel，找不到就跳过，两个 Dockview 实例各自只有
-    // 自己那部分面板；分别调用即可，不需要为外层/内层拆两份本地化函数。
-    if (initializedApi.current) {
+    if (dockviewApiRef.current) {
       localizeWorkspace(
-        initializedApi.current,
+        dockviewApiRef.current,
         resolvedPreferences.locale,
         hostI18n?.formatMessage,
       )
-    }
-    if (outerApiRef.current) {
-      localizeWorkspace(
-        outerApiRef.current,
-        resolvedPreferences.locale,
-        hostI18n?.formatMessage,
+      // 物料面板的标签名是**工作区**的东西（页面「基础组件」/ 绘图「符号库」），而
+      // localizeWorkspace 只知道语言：换完语言要把货架的标题再写回去。
+      setWorkspacePaletteTitle(
+        dockviewApiRef.current,
+        workspacePaletteTitle,
       )
     }
-  }, [hostI18n?.formatMessage, resolvedPreferences.locale])
+  }, [hostI18n?.formatMessage, resolvedPreferences.locale, workspacePaletteTitle])
+
+  /*
+   * 属性面板的对象语义住在**标签**上（`属性 · 矩形`），面板里因此不再有那条 52px 的标题行。
+   * 变的只有文字——标签的位置与它左侧的图标不动，否则跟着选区变的标签会让用户以为面板被换掉。
+   */
+  // 下钻进实例内部时被检查的是内部实体，它不在宿主文档里——标签要跟着**面板正在显示的那个**。
+  const inspectorSubject = controller?.instanceInnerSelection?.entity.name
+    ?? selectedControllerEntity?.name
+    /*
+     * 没有选择时面板显示的是**页面配置**，它的语义同样住在标签上。此前它在面板里另起了一条
+     * 52px 的标题行——那正是这条规则要删掉的东西，实体那一侧删了、页面这一侧漏了：一条只在
+     * 「点空白」时冒出来的标题行，把三块面板的头从「标签 + 一条 chrome」变成了三层。
+     * 判据与页面配置面板自己的 `hasPageContext` 是同一个：有没有活动页面会话。
+     */
+    ?? (activePageSession && (controller?.selectedIds?.length ?? 0) === 0
+      ? editorMessages.pageInspector.title
+      : undefined)
+  const inspectorPanelTitle = inspectorSubject
+    ? `${editorMessages.workspace.inspector} · ${inspectorSubject}`
+    : editorMessages.workspace.inspector
+  useEffect(() => {
+    if (!dockviewApiRef.current) return
+    setWorkspacePanelTitle(
+      dockviewApiRef.current,
+      WORKSPACE_PANEL_IDS.inspector,
+      inspectorPanelTitle,
+    )
+  }, [inspectorPanelTitle, workspaceReady])
+
+  // 宿主在挂载后提供或撤掉历史控制器：历史标签跟着加入或关掉，工具组的其余部分不重建。
+  useEffect(() => {
+    if (!workspaceReady || !dockviewApiRef.current) return
+    syncWorkspaceHistoryPanel(
+      dockviewApiRef.current,
+      historyEnabled,
+      resolvedPreferences.locale,
+      hostI18n?.formatMessage,
+    )
+  }, [historyEnabled, hostI18n?.formatMessage, resolvedPreferences.locale, workspaceReady])
 
   const pendingAssetDocument = pendingAssetDocumentClose
     ? documents.get(pendingAssetDocumentClose.panelId)
@@ -2581,18 +2801,24 @@ export function ComposeEditor({
             event.preventDefault()
             toggleSettings()
           }
-          // 页面与组件标签没有 Monaco 那样的内建保存入口；这里提供编辑器范围的保存快捷键。
+          /*
+           * 保存走**键位表**而不是硬接 `Cmd/Ctrl+S`：硬接的键既不在命令面板里、用户也没法
+           * 在设置的键位页改。默认值仍是 `Cmd/Ctrl+S`，改绑之后这里自动跟着走。
+           */
           if (
             !event.defaultPrevented
-            && activeWorkspaceSession !== undefined
-            && activeWorkspaceSession.kind !== 'asset'
+            && canSaveActiveDocument
             && !event.nativeEvent.isComposing
             && !isEditableKeyboardTarget(event.target)
-            && (event.metaKey || event.ctrlKey)
-            && event.key.toLowerCase() === 's'
+            && resolvedPreferences.shortcuts['document.save'].some((binding) =>
+              isComposeEditorKeybindingMatch(
+                event.nativeEvent,
+                binding,
+                typeof navigator === 'undefined' ? '' : navigator.platform,
+              ))
           ) {
             event.preventDefault()
-            void activeWorkspaceSession.save?.()
+            void activeDocumentChrome?.save?.()
             return
           }
           if (resolvedHistory && !event.defaultPrevented) handleHistoryShortcut(event)
@@ -2607,20 +2833,29 @@ export function ComposeEditor({
               }
             : {})}
         >
+        <ComposeToolbarShelfContext.Provider value={toolbarShelfContext}>
         <WorkspaceContentContext.Provider value={content}>
+          {/* 面板内容住在 Dockview 之外的稳定宿主元素里；Dockview 面板只把它们搬进盒子。 */}
+          <WorkspacePortals />
+          <WorkspaceDialogs />
           <div
             className="compose-editor__workspace"
             ref={setWorkspaceElement}
           >
-            <DockviewReact
-              className="compose-editor__dockview"
-              components={workspaceComponents}
-              disableDnd
-              disableFloatingGroups
-              onReady={handleOuterReady}
-              tabComponents={workspaceTabComponents}
-              theme={themeAbyss}
-            />
+            <EditorTopBar />
+            <div className="compose-editor__body">
+              {/*
+                * 组头上没有折叠按钮、边缘也没有把手：折叠的唯一入口是应用顶栏右端那三颗开关。
+                */}
+              <DockviewReact
+                className="compose-editor__dockview"
+                components={workspaceComponents}
+                disableFloatingGroups
+                onReady={handleReady}
+                tabComponents={workspaceTabComponents}
+                theme={workspaceTheme}
+              />
+            </div>
           </div>
           {settingsOpen ? (
             <SettingsDialog
@@ -2902,6 +3137,7 @@ export function ComposeEditor({
             </div>
           )}
         </WorkspaceContentContext.Provider>
+        </ComposeToolbarShelfContext.Provider>
         </ComposeAnimationPanelProvider>
       </EditorRoot>
       </ComposeColorHistoryProvider>

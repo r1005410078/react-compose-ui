@@ -97,8 +97,8 @@ test('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 创�
   const scriptBox = (await scriptSection.boundingBox())!
   expect(animationBox.y).toBeGreaterThan(scriptBox.y)
 
-  // 保存页面：绑定引用与清单写盘。
-  await editor.getByRole('button', { name: '保存页面' }).click()
+  // 保存页面：绑定引用与清单写盘。标签条上那颗按钮已删，保存是 `document.save` 动作。
+  await page.keyboard.press('Control+S')
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(0)
 
   // 切回设计模式：时间线标签移除，底部恢复 资源/命令/日志。

@@ -521,7 +521,7 @@ const registry = createComposeEntityRegistry({
     {
       id: 'component-instance',
       label: 'Component',
-      paletteHidden: true,
+      paletteHidden: 'always',
       createComponents: () => ({
         Transform: { rotation: 0 },
         LayoutItem: layoutItem(transform(0, 0, 1, 1)),
@@ -585,7 +585,7 @@ function componentStore(
       assetKey,
       scope: 'persistent',
     }),
-    listComponents: async () => ({ components: [], issues: [] }),
+    listComponents: async () => ({ components: [], issues: [], folders: [] }),
     readComponent: async () => { throw new Error('unused') },
     createComponent: create,
     saveComponent: async () => { throw new Error('unused') },

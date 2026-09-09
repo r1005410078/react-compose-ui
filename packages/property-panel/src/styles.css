@@ -12,7 +12,12 @@
 
 @layer components {
   .property-panel {
-    --pp-label-width: 120px;
+    /*
+     * 这里只是挂载前的兜底值（取下限）。真正的默认宽度是**面板宽度的比例**，由组件按
+     * `LABEL_WIDTH_RATIO` 算好后以内联样式写进来——规则连同它的理由写在那一处，
+     * 这里不复制第二份。
+     */
+    --pp-label-width: 88px;
     --pp-action-width: 38px;
     --pp-control-width: 234px;
     --pp-font-size: 12px;
@@ -34,7 +39,12 @@
     --pp-accent: var(--compose-accent, #2c84f6);
 
     position: relative;
-    min-width: 300px;
+    /*
+     * 264 是量出来的下限：再窄一档，「1280 × 720 (HD)」这类最长的下拉就被箭头压住了，
+     * 判据是最长的那一行读不读得完。它必须不大于宿主给 Inspector 的默认宽度，否则把右区
+     * 拖窄只会让面板溢出到容器外面被裁掉。
+     */
+    min-width: 264px;
     min-height: 0;
     overflow: auto;
     scrollbar-color: #4c4d4d transparent;
@@ -145,11 +155,25 @@
     margin: 0 8px 4px;
   }
 
+  /* 宿主动作与搜索**同一行**，不是它上面或下面另起一条。 */
+  .property-panel__toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-inline-start: 4px;
+  }
+
+  /*
+   * 搜索 + 两颗动作按钮同一行。按钮是**这一行里的按钮**而不是与搜索并列的三个格子：此前它们
+   * 是 34px 的整列、上下贴满行高、彼此用竖线隔开，读起来像三块面板而不是一条 chrome。
+   * 收成 22px 的方按钮之后，间距与圆角与编辑器其余 chrome 同档，竖线也就没有存在理由了。
+   */
   .property-panel__toolbar {
-    display: grid;
+    display: flex;
     min-height: var(--pp-toolbar-height);
-    grid-template-columns: minmax(0, 1fr) 34px 34px;
-    align-items: stretch;
+    align-items: center;
+    gap: 2px;
+    padding-inline-end: 6px;
     background: transparent;
     box-shadow: none;
     border-bottom: 0;
@@ -158,9 +182,10 @@
   .property-panel__search {
     display: flex;
     min-width: 0;
+    flex: 1 1 auto;
     align-items: center;
     gap: 6px;
-    margin: 5px 6px;
+    margin: 5px 4px 5px 6px;
     padding: 0 7px;
     border: 1px solid #343535;
     border-radius: 3px;
@@ -200,29 +225,39 @@
 
   .property-panel__menu-anchor {
     position: relative;
-    display: grid;
-    border-left: 1px solid #343535;
+    display: flex;
+    flex: none;
+    align-items: center;
   }
 
   .property-panel__menu-anchor > button {
     display: grid;
+    width: 22px;
+    height: 22px;
     place-items: center;
     border: 0;
+    border-radius: 6px;
     background: transparent;
+    color: var(--pp-text-muted);
     cursor: pointer;
   }
 
+  /* 与搜索框里那枚放大镜同为 16px：同一行里两种图标尺寸没有可说明的理由。 */
   .property-panel__menu-anchor > button > svg {
-    width: 18px;
-    height: 18px;
-    color: #b7b8b8;
-    filter: drop-shadow(0 1px 1px #000);
+    width: 16px;
+    height: 16px;
   }
 
+  /* hover 与展开是同一块柔和的底，与编辑器 chrome 的画法一致；不再用渐变与投影。 */
   .property-panel__menu-anchor > button:hover,
   .property-panel__menu-anchor > button[aria-expanded="true"] {
-    color: #fff;
-    background: linear-gradient(180deg, #2b2c2c, #222323);
+    background: var(--pp-bg-raised);
+    color: var(--pp-text);
+  }
+
+  .property-panel__menu-anchor > button:focus-visible {
+    outline: 2px solid var(--pp-accent);
+    outline-offset: -2px;
   }
 
   .property-panel__menu {

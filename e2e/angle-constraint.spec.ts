@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { switchToDrawingWorkspace } from './support/test-helpers'
 
 /**
  * 角度约束：关 / 正交 / 极轴，三者互斥，默认极轴。
@@ -8,6 +9,8 @@ import { expect, test } from '@playwright/test'
  */
 test('OpenSpec: editor-workspace-layout / 工具栏上的角度约束 / 两个按钮是同一个单选组', async ({ page }) => {
   await page.goto('/?no-auto-fit')
+  // 正交与极轴按钮只在绘图工作区的货架上——页面留下的两条命令一条轴对齐、一条只取两点。
+  await switchToDrawingWorkspace(page)
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const ortho = editor.getByRole('button', { name: '正交' })
   const polar = editor.getByRole('button', { name: '极轴追踪' })

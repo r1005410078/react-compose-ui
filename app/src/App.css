@@ -66,6 +66,16 @@ input {
   font: inherit;
 }
 
-button {
+/*
+ * 只作用于示例应用自己的按钮。
+ *
+ * @remarks
+ * 它此前是一条**没有分层**的裸 `button` 规则，而编辑器包的样式住在 `@layer components` 里——
+ * 无层的规则压过任何有层的规则，与选择器权重无关。于是工具栏图标的颜色一直由继承决定，
+ * `text-subtle`（静息）与按下态的颜色**从来没生效过**，而这在按下态还带底色时看不出来。
+ */
+.stage-demo__preview-button,
+.stage-demo__action-button,
+.stage-demo__failure-controls button {
   color: inherit;
 }

@@ -1,4 +1,5 @@
-type StageToolbarIconName =
+/** 工具栏图标名；工具栏的格与「更多」菜单项按它画同一枚图标。 @internal */
+export type StageToolbarIconName =
   | 'arc'
   | 'arrow'
   | 'center-view'

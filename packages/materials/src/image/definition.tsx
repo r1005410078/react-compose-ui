@@ -78,7 +78,7 @@ export function createImageMaterial(
       label: options.label ?? 'Image',
       defaultName: options.name ?? 'Image',
       icon: <ComposeImageMaterialIcon />,
-      paletteHidden: true,
+      paletteHidden: 'always',
       createComponents: () => rendererPresetComponents({
         type: 'image',
         props,

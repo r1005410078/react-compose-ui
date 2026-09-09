@@ -1,14 +1,13 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ComposeAnimationPanelProvider } from '@compose-ui/animation-panel'
-import type { IDockviewPanelProps } from 'dockview-react'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
 import type {
   ComposeWorkspaceDocumentSession,
   WorkspaceContent,
 } from './workspace-context'
 import { WorkspaceContentContext } from './workspace-context'
-import { ComponentDocumentPanel, InspectorPanel } from './workspace-panels'
+import { ComponentDocumentSurface, InspectorPanel } from './workspace-panels'
 
 // 本仓库没有开 RTL 自动清理：不显式 cleanup，前一条用例的 DOM 会留在文档里，
 // 「不应该出现」这类断言就会读到上一条渲染的结果。
@@ -35,13 +34,11 @@ describe('InspectorPanel', () => {
   })
 })
 
-describe('ComponentDocumentPanel', () => {
-  /** Dockview 面板 props 只用到 `api.id`；其余字段本组件不读。 */
-  const panelProps = { api: { id: 'component-panel' } } as unknown as IDockviewPanelProps
-
+describe('ComponentDocumentSurface', () => {
   function componentSession(): ComposeWorkspaceDocumentSession {
     return {
       kind: 'component',
+      panelId: 'component-panel',
       assetKey: 'Components/Switch.component.json',
       displayName: '刀闸',
       sourceKind: 'base',
@@ -50,38 +47,32 @@ describe('ComponentDocumentPanel', () => {
     } as unknown as ComposeWorkspaceDocumentSession
   }
 
-  function renderPanel(extra: Record<string, unknown>) {
+  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 组件表面的工具栏行尾没有它', () => {
     const content = {
       documents: new Map([['component-panel', componentSession()]]),
+      editorMode: 'design',
+      onEditorModeChange: () => undefined,
       saveDocument: () => undefined,
-      ...extra,
+      stageHostPanelId: 'component-panel',
+      stageToolbar: <div>工具栏</div>,
+      children: <div>舞台</div>,
     } as unknown as WorkspaceContent
-    return render(
+    render(
       <ComposeUIProvider locale="zh-CN">
         <WorkspaceContentContext.Provider value={content}>
-          <ComponentDocumentPanel {...panelProps} />
+          <ComponentDocumentSurface session={componentSession() as never} />
         </WorkspaceContentContext.Provider>
       </ComposeUIProvider>,
     )
-  }
 
-  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 组件文档也提供入口', () => {
-    renderPanel({ editorMode: 'design', onEditorModeChange: () => undefined })
-
+    expect(screen.getByText('工具栏')).toBeInTheDocument()
+    expect(screen.getByText('舞台')).toBeInTheDocument()
+    expect(screen.getByLabelText('主组件 刀闸')).toBeInTheDocument()
     /*
-     * 原先这里没有切换器，理由是「动画绑定是页面级概念」。`add-instance-animation` 之后
-     * 绑定住在宿主页面上那个实例 Entity 的 `Bindings` 上，组件文档里只剩清单与轨道，
-     * 那条理由自己失效了。
+     * 模式切换器搬去了文档标签行的行尾：工具栏行是会溢出的货架，而模式不该与一堆可增删的
+     * 工具抢同一条行。保存则彻底没有按钮了——它是 `document.save` 动作。
      */
-    const group = screen.getByRole('radiogroup')
-    expect(group).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: '动画' })).toBeInTheDocument()
-  })
-
-  it('OpenSpec: editor-workspace-layout / 设计与动画模式切换器 / 未接入模式的宿主仍不提供', () => {
-    // 未启用页面系统的嵌入宿主不传这两个 prop，那条限制与组件无关，本刀不碰。
-    renderPanel({})
-
-    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: '编辑模式' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /保存/ })).not.toBeInTheDocument()
   })
 })
