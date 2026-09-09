@@ -8,10 +8,22 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import {
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  ComposeContextMenuSeparator,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComposeComponentCatalog, ComposeComponentDescriptor, ComposeComponentStore } from '../component-store'
-import { COMPOSE_DEFAULT_COMPONENT_SHELF, resolveComponentShelf } from './component-shelf'
+import {
+  COMPOSE_DEFAULT_COMPONENT_SHELF,
+  keepOnlyComponentShelfSection,
+  resolveComponentShelf,
+  setComponentShelfPresetVisible,
+} from './component-shelf'
 import type {
   ComposeComponentShelf,
   ComposeComponentShelfGroup,
@@ -69,6 +81,20 @@ export interface ComposeComponentLibraryPanelProps extends Omit<HTMLAttributes<H
   readonly onItemDragEnd?: (event: ComposeComponentLibraryDragEvent) => void
   /** 拖拽因 pointer cancel 结束。 */
   readonly onItemDragCancel?: (item: ComposeComponentLibraryItem) => void
+  /**
+   * 改当前工作区的物料货架；不给时瓦片右键里那些改货架的项整个不出现。
+   *
+   * @remarks
+   * 这三个回调走 **prop** 而不是 Context，与工具栏那边（`ComposeToolbarShelfContext`）**有意
+   * 不同**：那边的中间层属于宿主（工具栏元素由 controller 造、经 `slots.stageToolbar` 交回去，
+   * 宿主可以把它包进自己的 Fragment），`cloneElement` 补 prop 那条路会断；而本面板由编辑器
+   * 直接渲染、`shelf` 本来就是 prop，没有那一层。Context 不是 prop 透传的默认替代。
+   */
+  readonly onShelfChange?: (shelf: ComposeComponentShelf) => void
+  /** 打开「自定义物料面板…」对话框；不给时那一项不出现。 */
+  readonly onCustomize?: () => void
+  /** 在资源浏览器里定位某个文件夹；只有文件夹来源的瓦片会用到。 */
+  readonly onRevealFolder?: (folderPath: readonly string[]) => void
 }
 
 /** 面板会话的空状态；`shelf` 是它挂在哪一份货架上的身份。 */
@@ -226,6 +252,9 @@ export function ComposeComponentAssetIcon({ kind }: {
 export function ComposeComponentLibraryPanel({
   registry,
   store,
+  onShelfChange,
+  onCustomize,
+  onRevealFolder,
   shelf = COMPOSE_DEFAULT_COMPONENT_SHELF,
   toolbarPresetIds,
   onCreateIntent,
@@ -404,13 +433,15 @@ export function ComposeComponentLibraryPanel({
   const hiddenByToolbar = (presetId: string) => (
     toolbarPresetIds === undefined || toolbarPresetIds.includes(presetId)
   )
+  // 求值一次给两个消费者：解析出瓦片，以及右键菜单里「藏 / 显」要用的那份可见 Preset 名单。
+  const presetEntries = registry.listPresets().map((preset) => ({
+    ...preset,
+    paletteHidden: preset.paletteHidden === 'always'
+      || (preset.paletteHidden === 'toolbar' && hiddenByToolbar(preset.id)),
+  }))
   const sections = resolveComponentShelf({
     shelf: { ...shelf, sections: visibleSections },
-    presets: registry.listPresets().map((preset) => ({
-      ...preset,
-      paletteHidden: preset.paletteHidden === 'always'
-        || (preset.paletteHidden === 'toolbar' && hiddenByToolbar(preset.id)),
-    })),
+    presets: presetEntries,
     catalog,
     query,
     labels: {
@@ -431,6 +462,26 @@ export function ComposeComponentLibraryPanel({
     setSession({ ...active, dismissed: new Set(dismissed).add(id) })
   }
 
+  /*
+   * 瓦片右键。payload 是「哪一段的哪一个 Preset」，从 DOM 上的 data 属性读——与工具栏那边
+   * 逐字同一条做法，也免去把段 id 一路穿过 renderGroup / renderTile 两层。段 id 是稳定的，
+   * 因此这里不像工具栏那样需要按下标寻址（那边的分隔线可以有多条，id 认不出是哪一条）。
+   */
+  const shelfMenu = useComposeContextMenu<{ sectionId: string | null; presetId: string | null }>()
+  const menuTarget = shelfMenu.payload
+  const menuSection = menuTarget?.sectionId === undefined || menuTarget.sectionId === null
+    ? null
+    : shelf.sections.find((section) => section.id === menuTarget.sectionId) ?? null
+  // 可见 Preset 的 id，顺序即呈现顺序——`setComponentShelfPresetVisible` 要拿它把 `include` 写出来。
+  const availablePresetIds = presetEntries
+    .filter((preset) => preset.paletteHidden !== true)
+    .map((preset) => preset.id)
+  const applyShelf = (next: ComposeComponentShelf) => {
+    onShelfChange?.(next)
+    shelfMenu.close()
+  }
+  const canEditShelf = onShelfChange !== undefined
+
   const renderTile = (tile: ComposeComponentShelfTile) => {
     if (tile.kind === 'preset') {
       const item: ComposeComponentLibraryItem = { kind: 'preset', presetId: tile.presetId }
@@ -438,6 +489,7 @@ export function ComposeComponentLibraryPanel({
         <button
           aria-label={`${zh ? '添加' : 'Add'} ${tile.label}`}
           className="compose-component-library__tile"
+          data-shelf-preset={tile.presetId}
           key={tile.presetId}
           onClick={() => { activate(item) }}
           onPointerDown={(event) => { pointerDown(event, item) }}
@@ -523,6 +575,20 @@ export function ComposeComponentLibraryPanel({
       {...htmlProps}
       aria-label={shelf.title ?? (zh ? '组件库内容' : 'Component library content')}
       className={['compose-component-library', className].filter(Boolean).join(' ')}
+      onContextMenu={(event) => {
+        if (!canEditShelf && onCustomize === undefined) return
+        /*
+         * 落在瓦片上就把那一段（以及基础瓦片的那个 Preset）交给菜单，落在空白处只给自定义
+         * 入口——空白处没有可操作的目标，列一个按下去什么都不做的项比不列更糟。
+         */
+        const target = event.target as HTMLElement | null
+        shelfMenu.openAt(event, {
+          sectionId: target?.closest?.('[data-shelf-section]')?.getAttribute('data-shelf-section')
+            ?? null,
+          presetId: target?.closest?.('[data-shelf-preset]')?.getAttribute('data-shelf-preset')
+            ?? null,
+        })
+      }}
     >
       {shelf.search ? (
         <div className="compose-component-library__search">
@@ -569,6 +635,59 @@ export function ComposeComponentLibraryPanel({
           </section>
         )
       })}
+      {canEditShelf || onCustomize ? (
+        <ComposeContextMenu {...shelfMenu.rootProps}>
+          <ComposeContextMenuContent>
+            {canEditShelf && menuSection?.kind === 'presets' && menuTarget?.presetId ? (
+              <>
+                <ComposeContextMenuItem
+                  onClick={() => applyShelf(setComponentShelfPresetVisible({
+                    shelf,
+                    sectionId: menuSection.id,
+                    presetId: menuTarget.presetId!,
+                    visible: false,
+                    available: availablePresetIds,
+                  }))}
+                >
+                  {zh ? '从面板隐藏' : 'Hide from panel'}
+                </ComposeContextMenuItem>
+                <ComposeContextMenuSeparator />
+              </>
+            ) : null}
+            {menuSection?.kind === 'folder' ? (
+              <>
+                {/*
+                  * 文件夹来源里的瓦片**不能单个隐藏**：那会让「往这个文件夹里再导十个符号，
+                  * 它们自动出现」变成谎言。这里能做的只有整段的两件事。
+                  */}
+                {canEditShelf && shelf.sections.length > 1 ? (
+                  <ComposeContextMenuItem
+                    onClick={() => applyShelf(keepOnlyComponentShelfSection(shelf, menuSection.id))}
+                  >
+                    {zh ? '只看这一组' : 'Show only this group'}
+                  </ComposeContextMenuItem>
+                ) : null}
+                {onRevealFolder ? (
+                  <ComposeContextMenuItem
+                    onClick={() => {
+                      shelfMenu.close()
+                      onRevealFolder(menuSection.folderPath)
+                    }}
+                  >
+                    {zh ? '在资源里打开此文件夹' : 'Reveal folder in assets'}
+                  </ComposeContextMenuItem>
+                ) : null}
+                <ComposeContextMenuSeparator />
+              </>
+            ) : null}
+            {onCustomize ? (
+              <ComposeContextMenuItem onClick={() => { shelfMenu.close(); onCustomize() }}>
+                {zh ? '自定义物料面板…' : 'Customize palette…'}
+              </ComposeContextMenuItem>
+            ) : null}
+          </ComposeContextMenuContent>
+        </ComposeContextMenu>
+      ) : null}
       {dragPreview ? (
         <div
           className="component-palette__drag-preview compose-component-library__drag-preview"

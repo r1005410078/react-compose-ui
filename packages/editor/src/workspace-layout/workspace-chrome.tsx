@@ -258,6 +258,9 @@ export function WorkspaceMenu({ order }: { order?: number }) {
           <button role="menuitem" type="button" onClick={() => choose(() => workspace.openDialog('toolbar'))}>
             {t.customizeToolbar}
           </button>
+          <button role="menuitem" type="button" onClick={() => choose(() => workspace.openDialog('palette'))}>
+            {t.customizePalette}
+          </button>
           <button role="menuitem" type="button" onClick={() => choose(() => workspace.reset())}>
             {t.reset}
           </button>

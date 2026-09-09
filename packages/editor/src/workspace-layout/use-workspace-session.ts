@@ -58,7 +58,7 @@ export interface ComposeWorkspaceSessionItem {
  * `toolbar` 与 `palette` 是两条**货架**的编辑面。它们与 `saveAs` / `rename` / `delete` 并列，
  * 因为它们改的同样是「这个工作区是什么样子」，写的同样是偏好而不是文档。
  */
-export type ComposeWorkspaceDialog = 'saveAs' | 'rename' | 'delete' | 'toolbar' | null
+export type ComposeWorkspaceDialog = 'saveAs' | 'rename' | 'delete' | 'toolbar' | 'palette' | null
 
 /** 工作区会话：切换器、管理菜单、动作目录三处共用的一份状态与动作。 @internal */
 export interface ComposeWorkspaceSessionHandle {

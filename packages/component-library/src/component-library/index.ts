@@ -7,7 +7,15 @@ export type {
   ComposeComponentLibraryItem,
   ComposeComponentLibraryPanelProps,
 } from './compose-component-library-panel'
-export { COMPOSE_DEFAULT_COMPONENT_SHELF } from './component-shelf'
+export {
+  COMPOSE_DEFAULT_COMPONENT_SHELF,
+  addComponentShelfSection,
+  keepOnlyComponentShelfSection,
+  moveComponentShelfSection,
+  removeComponentShelfSection,
+  setComponentShelfPresetVisible,
+  updateComponentShelfSection,
+} from './component-shelf'
 export type {
   ComposeComponentShelf,
   ComposeComponentShelfFolderSection,

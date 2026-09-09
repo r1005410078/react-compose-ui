@@ -2303,6 +2303,19 @@ export function ComposeEditor({
       id === COMPOSE_TOOLBAR_SEPARATOR ? [] : [id.toLowerCase(), id.replace(/^draw-/, '')]
     ))
   }, [workspaceSession.toolbar])
+  /*
+   * 自定义物料面板那两列的目录。Preset 名单按当前工作区的货架求值过 `paletteHidden`——被判据
+   * 藏起来的 Preset **不出现在勾选列表里**：它们藏不藏不是这份货架的决定（工具栏已提供入口），
+   * 列出来会让用户以为自己能把它勾回来。
+   */
+  const paletteCatalog = useMemo(() => ({
+    presets: (controller?.registry?.listPresets() ?? [])
+      .filter((preset) => preset.paletteHidden !== 'always'
+        && !(preset.paletteHidden === 'toolbar'
+          && (toolbarPresetIds === undefined || toolbarPresetIds.includes(preset.id))))
+      .map((preset) => ({ id: preset.id, label: preset.label })),
+    folders: componentCatalog?.folders ?? [],
+  }), [componentCatalog, controller, toolbarPresetIds])
   const workspacePaletteTitle = workspaceSession.palette?.title
     ?? editorMessages.workspace.componentLibrary
   const workspaceActions = useMemo<ComposeEditorWorkspaceActions>(() => ({
@@ -2383,11 +2396,19 @@ export function ComposeEditor({
       : !componentWorkspace.store
         ? controller.componentLibraryPanel
         : (
+      /*
+       * 刻意不接 `onRevealFolder`：内建的资源浏览器由宿主的 `assets.browser` 传选中态，编辑器
+       * 没有把选中收成受控，因此它此刻做得到的只有「把资源标签挪到前面来」——而菜单上写的是
+       * 「打开此文件夹」。不接则那一项整个不出现，比出现一个只挪面板的入口好。宿主自己控制
+       * 选中时把它传进来即可，面板那一侧已经就绪。
+       */
       <ComposeComponentLibraryPanel
         registry={controller.registry}
         store={componentWorkspace.store}
         shelf={workspaceSession.palette}
         toolbarPresetIds={toolbarPresetIds}
+        onCustomize={() => workspaceSession.openDialog('palette')}
+        onShelfChange={workspaceSession.setPaletteShelf}
         onOpenIntent={openComponentDocument}
         onCreateVariantIntent={(descriptor) => {
           setVariantName(`${descriptor.displayName} Variant`)
@@ -2562,6 +2583,7 @@ export function ComposeEditor({
       setSettingsButton,
       toggleSettings,
       openCommandPanel,
+      paletteCatalog,
       sideCollapsed: sideCollapse.collapsed,
       toggleSide: sideCollapse.toggle,
       hosts,
