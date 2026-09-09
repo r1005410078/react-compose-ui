@@ -119,7 +119,7 @@ describe('ComposeAnimationPanel', () => {
   it('OpenSpec: animation-panel / 关键帧选择与属性同步 / 无选中关键帧时不显示虚假序号', () => {
     render(
       <ComposeAnimationPanelProvider
-        defaultValue={{ ...createDefaultComposeAnimationPanelValue(), selectedKeyframeId: null }}
+        defaultValue={{ ...createDefaultComposeAnimationPanelValue(), selectedKeyframeIds: [] }}
       >
         <ComposeAnimationInspector />
       </ComposeAnimationPanelProvider>,
@@ -279,7 +279,7 @@ describe('ComposeAnimationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keyframe 100 ms: 背景填充' }))
     expect(onValueChange).toHaveBeenCalledWith(expect.objectContaining({
       currentTimeMs: 200,
-      selectedKeyframeId: 'fault-background-fill-100',
+      selectedKeyframeIds: ['fault-background-fill-100'],
     }))
     expect(screen.getByRole('slider', { name: 'Current time' })).toHaveValue('200')
     expect(screen.getByRole('region', { name: 'Animation editor' }))
@@ -857,12 +857,15 @@ describe('语义化面板动作回调', () => {
     fireEvent.pointerDown(keyframe, { button: 0, clientX: 200, pointerId: 8 })
     fireEvent.pointerMove(keyframe, { clientX: 250, pointerId: 8 })
     fireEvent.pointerUp(keyframe, { clientX: 250, pointerId: 8 })
-    const moves = actions.filter((action) => action.kind === 'move-keyframe')
+    // 拖动是作用于整个选区的手势，单选时 items 只有一项；`move-keyframe` 留给字段面板。
+    const moves = actions.filter((action) => action.kind === 'move-keyframes')
     expect(moves[moves.length - 1]).toEqual({
-      kind: 'move-keyframe',
-      propertyId: 'background-fill',
-      keyframeId: 'fault-background-fill-200',
-      timeMs: 250,
+      kind: 'move-keyframes',
+      items: [{
+        propertyId: 'background-fill',
+        keyframeId: 'fault-background-fill-200',
+        timeMs: 250,
+      }],
     })
   })
 
@@ -1052,5 +1055,195 @@ describe('更多操作菜单', () => {
     // 焦点恢复的目标是行内的命中按钮：行本身是不可聚焦的 div，
     // resolveFocusTarget 会退回到 event.target.closest('button')。
     await vi.waitFor(() => { expect(document.activeElement).toBe(hit) })
+  })
+})
+
+describe('关键帧框选与批量操作', () => {
+  /**
+   * jsdom 没有布局：把默认夹具画成 1 px = 1 ms 的时间轴，车道按出现顺序每行 28 px，
+   * 菱形 12 px 见方、落在行内 8～20 px 处。矩形 / 菱形的几何都从这里读。
+   */
+  function stubMarqueeGeometry() {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const rect = (left: number, top: number, width: number, height: number) => ({
+        left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}),
+      } as DOMRect)
+      // 只给 .scale 宽度、不给滚动容器：容器宽度为 0 时缩放级别退回旧启发式，拖动吸附步长是 10 ms，
+      // 与既有拖动用例同一套几何。
+      if (this.classList.contains('compose-animation-timeline__scale')) return rect(0, 0, 300, 400)
+      const keyframeId = this.dataset['keyframeId']
+      if (keyframeId !== undefined) {
+        const timeMs = Number.parseInt(keyframeId.slice(keyframeId.lastIndexOf('-') + 1), 10)
+        const lanes = Array.from(document.querySelectorAll('[data-property-lane]'))
+        const laneIndex = lanes.indexOf(this.closest('[data-property-lane]')!)
+        return rect(timeMs - 6, laneIndex * 28 + 8, 12, 12)
+      }
+      return rect(0, 0, 0, 0)
+    })
+  }
+
+  function renderPanel(onAction = vi.fn()) {
+    render(
+      <ComposeAnimationPanelProvider
+        defaultValue={createDefaultComposeAnimationPanelValue()}
+        onAction={onAction}
+      >
+        <ComposeAnimationTimeline />
+        <ComposeAnimationInspector />
+      </ComposeAnimationPanelProvider>,
+    )
+    return { onAction }
+  }
+  const keyframe = (name: string) => screen.getByRole('button', { name })
+  const scale = () => document.querySelector<HTMLElement>('.compose-animation-timeline__scale')!
+
+  it('OpenSpec: animation-panel / 关键帧车道框选 / 框选跨两条轨道', () => {
+    stubMarqueeGeometry()
+    const { onAction } = renderPanel()
+    // 从背景填充车道 90 ms 处的空白按下，拖到透明度车道 250 ms：碰到 100、200（背景填充）与 150（透明度）。
+    const laneHit = screen.getByRole('button', { name: '选择 背景填充 关键帧轨道' })
+    fireEvent.pointerDown(laneHit, { button: 0, clientX: 90, clientY: 4, pointerId: 3 })
+    fireEvent.pointerMove(scale(), { clientX: 250, clientY: 40, pointerId: 3 })
+    expect(document.querySelector('.compose-animation-timeline__marquee')).not.toBeNull()
+    fireEvent.pointerUp(scale(), { clientX: 250, clientY: 40, pointerId: 3 })
+
+    expect(keyframe('关键帧 100 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(keyframe('关键帧 200 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(keyframe('关键帧 150 ms：透明度')).toHaveAttribute('aria-current', 'true')
+    expect(keyframe('关键帧 0 ms：背景填充')).not.toHaveAttribute('aria-current')
+    expect(keyframe('关键帧 300 ms：背景填充')).not.toHaveAttribute('aria-current')
+    // 折叠的 Alarm 轨道没有渲染菱形，矩形再大也框不到它。
+    expect(screen.queryByRole('button', { name: '关键帧 160 ms：填充色' })).toBeNull()
+    expect(document.querySelector('.compose-animation-timeline__marquee')).toBeNull()
+    expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
+    expect(screen.getByText('已选 3 个关键帧')).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: '时间' })).toBeNull()
+    const selects = onAction.mock.calls.map(([action]) => action).filter((action) => action.kind === 'select')
+    expect(selects[selects.length - 1]).toMatchObject({
+      kind: 'select',
+      keyframeIds: ['fault-background-fill-100', 'fault-background-fill-200', 'fault-opacity-150'],
+    })
+  })
+
+  it('OpenSpec: animation-panel / 关键帧车道框选 / 没有移动的按下仍是属性轨道点击', () => {
+    stubMarqueeGeometry()
+    renderPanel()
+    const laneHit = screen.getByRole('button', { name: '选择 透明度 关键帧轨道' })
+    fireEvent.pointerDown(laneHit, { button: 0, clientX: 90, clientY: 32, pointerId: 3 })
+    // 浏览器会在 pointerup 之前补发一次原地 move：原地不算动过。
+    fireEvent.pointerMove(laneHit, { clientX: 90, clientY: 32, pointerId: 3 })
+    fireEvent.pointerUp(laneHit, { clientX: 90, clientY: 32, pointerId: 3 })
+    fireEvent.click(laneHit)
+
+    expect(screen.getByRole('button', { name: '选择属性轨道 透明度' })).toHaveAttribute('aria-current', 'true')
+    expect(keyframe('关键帧 200 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(document.querySelector('.compose-animation-timeline__marquee')).toBeNull()
+  })
+
+  it('OpenSpec: animation-panel / 关键帧选区是集合 / Shift 累加选中', () => {
+    renderPanel()
+    fireEvent.click(keyframe('关键帧 0 ms：背景填充'))
+    fireEvent.click(keyframe('关键帧 200 ms：背景填充'), { shiftKey: true })
+    expect(keyframe('关键帧 0 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(keyframe('关键帧 200 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByText('已选 2 个关键帧')).toBeVisible()
+
+    fireEvent.click(keyframe('关键帧 200 ms：背景填充'), { shiftKey: true })
+    expect(keyframe('关键帧 200 ms：背景填充')).not.toHaveAttribute('aria-current')
+    expect(keyframe('关键帧 0 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('textbox', { name: '时间' })).toHaveValue('0')
+  })
+
+  it('OpenSpec: animation-panel / 关键帧选区是集合 / 按下已选成员不收敛选区', () => {
+    stubMarqueeGeometry()
+    renderPanel()
+    fireEvent.click(keyframe('关键帧 100 ms：背景填充'))
+    fireEvent.click(keyframe('关键帧 200 ms：背景填充'), { shiftKey: true })
+
+    // 按下 + 原地松手：收敛成单选。
+    const target = keyframe('关键帧 200 ms：背景填充')
+    fireEvent.pointerDown(target, { button: 0, clientX: 200, clientY: 14, pointerId: 5 })
+    expect(keyframe('关键帧 100 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    fireEvent.pointerMove(target, { clientX: 200, clientY: 14, pointerId: 5 })
+    fireEvent.pointerUp(target, { clientX: 200, clientY: 14, pointerId: 5 })
+    expect(keyframe('关键帧 100 ms：背景填充')).not.toHaveAttribute('aria-current')
+    expect(keyframe('关键帧 200 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('OpenSpec: animation-panel / 批量移动关键帧 / 整体后移与钳制', () => {
+    stubMarqueeGeometry()
+    const { onAction } = renderPanel()
+    fireEvent.click(keyframe('关键帧 200 ms：背景填充'))
+    fireEvent.click(keyframe('关键帧 150 ms：透明度'), { shiftKey: true })
+
+    const anchor = keyframe('关键帧 200 ms：背景填充')
+    fireEvent.pointerDown(anchor, { button: 0, clientX: 200, clientY: 14, pointerId: 6 })
+    fireEvent.pointerMove(anchor, { clientX: 250, clientY: 14, pointerId: 6 })
+    fireEvent.pointerUp(anchor, { clientX: 250, clientY: 14, pointerId: 6 })
+
+    expect(keyframe('关键帧 250 ms：背景填充')).toHaveAttribute('aria-current', 'true')
+    expect(keyframe('关键帧 200 ms：透明度')).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('slider', { name: '当前时间' })).toHaveValue('200')
+    const moves = onAction.mock.calls.map(([action]) => action).filter((action) => action.kind === 'move-keyframes')
+    expect(moves[moves.length - 1]).toEqual({
+      kind: 'move-keyframes',
+      items: [
+        { propertyId: 'background-fill', keyframeId: 'fault-background-fill-200', timeMs: 250 },
+        { propertyId: 'opacity', keyframeId: 'fault-opacity-150', timeMs: 200 },
+      ],
+    })
+
+    // 焦点在选区成员上按方向键同样作用于整个选区。
+    fireEvent.keyDown(keyframe('关键帧 200 ms：透明度'), { key: 'ArrowRight' })
+    expect(keyframe('关键帧 260 ms：背景填充')).toBeInTheDocument()
+    expect(keyframe('关键帧 210 ms：透明度')).toBeInTheDocument()
+
+    // 钳制读整个选区：背景填充 260 ms 再往右 50 会撞上未选中的 300 ms，整组停下并提示。
+    const next = keyframe('关键帧 260 ms：背景填充')
+    fireEvent.pointerDown(next, { button: 0, clientX: 260, clientY: 14, pointerId: 7 })
+    fireEvent.pointerMove(next, { clientX: 300, clientY: 14, pointerId: 7 })
+    fireEvent.pointerUp(next, { clientX: 300, clientY: 14, pointerId: 7 })
+    expect(keyframe('关键帧 260 ms：背景填充')).toBeInTheDocument()
+    expect(keyframe('关键帧 210 ms：透明度')).toBeInTheDocument()
+    expect(document.querySelector('.compose-animation-timeline__notice')).toHaveTextContent('该属性轨道已存在同一时间的关键帧')
+  })
+
+  it('OpenSpec: animation-panel / 批量删除关键帧 / Delete 删除选区并只发一个动作', () => {
+    const { onAction } = renderPanel()
+    fireEvent.click(keyframe('关键帧 100 ms：背景填充'))
+    fireEvent.click(keyframe('关键帧 150 ms：透明度'), { shiftKey: true })
+    fireEvent.keyDown(keyframe('关键帧 150 ms：透明度'), { key: 'Delete' })
+
+    expect(screen.queryByRole('button', { name: '关键帧 100 ms：背景填充' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '关键帧 150 ms：透明度' })).toBeNull()
+    expect(screen.getByText('未选中关键帧')).toBeVisible()
+    const removes = onAction.mock.calls.map(([action]) => action).filter((action) => action.kind === 'remove-keyframes')
+    expect(removes).toEqual([{
+      kind: 'remove-keyframes',
+      items: [
+        { propertyId: 'background-fill', keyframeId: 'fault-background-fill-100' },
+        { propertyId: 'opacity', keyframeId: 'fault-opacity-150' },
+      ],
+    }])
+    expect(onAction.mock.calls.some(([action]) => action.kind === 'remove-keyframe')).toBe(false)
+  })
+
+  it('OpenSpec: animation-panel / 批量删除关键帧 / 右键菜单按选区换条目', async () => {
+    renderPanel()
+    fireEvent.click(keyframe('关键帧 100 ms：背景填充'))
+    fireEvent.click(keyframe('关键帧 200 ms：背景填充'), { shiftKey: true })
+    fireEvent.click(keyframe('关键帧 150 ms：透明度'), { shiftKey: true })
+
+    fireEvent.contextMenu(keyframe('关键帧 200 ms：背景填充'))
+    expect(await screen.findByRole('menuitem', { name: '删除选中的 3 个关键帧' })).toBeVisible()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    // 按在未选中的帧上只删它自己，选区不变。菜单开着时 Radix 会把其余内容标成 aria-hidden，
+    // 因此选区状态直接从 DOM 属性读，不走可访问性查询。
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '关键帧 0 ms：背景填充' }))
+    expect(await screen.findByRole('menuitem', { name: '删除本帧' })).toBeVisible()
+    expect(screen.queryByRole('menuitem', { name: /删除选中的/u })).toBeNull()
+    expect(document.querySelector('[data-keyframe-id="fault-background-fill-200"]')).toHaveAttribute('data-selected', 'true')
+    expect(document.querySelector('[data-keyframe-id="fault-background-fill-0"]')).not.toHaveAttribute('data-selected')
   })
 })

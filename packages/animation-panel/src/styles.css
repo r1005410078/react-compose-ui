@@ -1011,6 +1011,17 @@
   cursor: ew-resize;
   color: color-mix(in srgb, var(--ap-keyframe-selected) 55%, white);
 }
+/*
+ * 框选矩形：与选中态同色——框住的就是「会被选中的那一块」。只有「碰到就选」一种判定，
+ * 因此不像画布那样按方向换色。压在菱形之上而不吃指针：手势由 .scale 持有捕获。
+ */
+.compose-animation-timeline__marquee {
+  position: absolute;
+  z-index: 7;
+  border: 1px solid var(--ap-accent);
+  background: color-mix(in srgb, var(--ap-accent) 12%, transparent);
+  pointer-events: none;
+}
 
 /* 擦洗区只覆盖标尺带：铺满整块 scale 会盖住轨道空白区，让属性轨道的点击永远落不到实处。
    高度约束放在 --ruler 修饰类而非基础规则上，这样"class 存在"的测试才能真正保护这个约束。 */

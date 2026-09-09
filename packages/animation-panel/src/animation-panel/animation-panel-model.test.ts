@@ -4,7 +4,10 @@ import {
   advanceComposeAnimationPlayback,
   clampComposeAnimationPixelsPerMs,
   getComposeAnimationClips,
+  moveComposeAnimationKeyframes,
   panComposeAnimationTimeline,
+  removeComposeAnimationKeyframes,
+  resolveComposeAnimationMarqueeSelection,
   updateComposeAnimationDuration,
   updateComposeAnimationClip,
   updateComposeAnimationKeyframe,
@@ -40,7 +43,7 @@ describe('animation panel model', () => {
     const value = { ...createDefaultComposeAnimationPanelValue(), currentTimeMs: 150 }
     const next = addComposeAnimationKeyframe(value)
 
-    expect(next.selectedKeyframeId).toBe('background-fill-150')
+    expect(next.selectedKeyframeIds).toEqual(['background-fill-150'])
     expect(next.model.tracks[0]?.properties[0]?.keyframes.map(({ timeMs }) => timeMs))
       .toEqual([0, 100, 150, 200, 300])
   })
@@ -109,11 +112,11 @@ describe('animation panel model', () => {
     const readded = addComposeAnimationKeyframe({
       ...moved.value,
       currentTimeMs: 150,
-      selectedKeyframeId: null,
+      selectedKeyframeIds: [],
     })
     const ids = readded.model.tracks[0]?.properties[0]?.keyframes.map(({ id }) => id) ?? []
     expect(new Set(ids).size).toBe(ids.length)
-    expect(readded.selectedKeyframeId).toBe('background-fill-150-2')
+    expect(readded.selectedKeyframeIds).toEqual(['background-fill-150-2'])
   })
 
   it('OpenSpec: animation-panel / 缩放边界钳制 / 缩小到下限后停止响应', () => {
@@ -202,5 +205,81 @@ describe('片段与轨道的显式归属', () => {
     })
     expect(clips.filter((clip) => clip.trackId === 'a').map((clip) => clip.id)).toEqual(['c2'])
     expect(clips.filter((clip) => clip.trackId === 'b').map((clip) => clip.id)).toEqual(['c1'])
+  })
+})
+
+describe('关键帧选区是集合', () => {
+  it('OpenSpec: animation-panel / 关键帧车道框选 / 判定只有碰到就选，擦边也算', () => {
+    const candidates = [
+      { keyframeId: 'a', rect: { left: 94, top: 8, right: 106, bottom: 20 } },
+      { keyframeId: 'b', rect: { left: 194, top: 36, right: 206, bottom: 48 } },
+      { keyframeId: 'c', rect: { left: 294, top: 8, right: 306, bottom: 20 } },
+    ]
+    // 反向拖出来的矩形（右下 → 左上）与正向同义。
+    expect(resolveComposeAnimationMarqueeSelection(candidates, { left: 250, top: 40, right: 100, bottom: 0 }))
+      .toEqual(['a', 'b'])
+    // 边缘相接算碰到：矩形右边恰好落在 c 的左边上。
+    expect(resolveComposeAnimationMarqueeSelection(candidates, { left: 250, top: 0, right: 294, bottom: 20 }))
+      .toEqual(['c'])
+    expect(resolveComposeAnimationMarqueeSelection(candidates, { left: 110, top: 0, right: 190, bottom: 60 }))
+      .toEqual([])
+  })
+
+  it('OpenSpec: animation-panel / 批量移动关键帧 / 整组同加一个位移，钳制读整个选区', () => {
+    const initial = createDefaultComposeAnimationPanelValue()
+    const ids = ['fault-background-fill-100', 'fault-opacity-150']
+    const moved = moveComposeAnimationKeyframes(initial, ids, 40)
+    expect(moved.conflict).toBe(false)
+    expect(moved.deltaMs).toBe(40)
+    expect(moved.value.model.tracks[0]?.properties[0]?.keyframes.map(({ timeMs }) => timeMs))
+      .toEqual([0, 140, 200, 300])
+    expect(moved.value.model.tracks[0]?.properties[1]?.keyframes.map(({ timeMs }) => timeMs))
+      .toEqual([0, 190, 300])
+
+    // 越界按最早 / 最晚的成员收：0 ms 与 200 ms 一起往左拖 100，位移停在 0，谁都不动。
+    const pinned = moveComposeAnimationKeyframes(initial, ['fault-background-fill-0', 'fault-background-fill-200'], -100)
+    expect(pinned.deltaMs).toBe(0)
+    expect(pinned.value).toBe(initial)
+    // 往右拖 500 只走到最晚成员顶到 duration 的那个位移（字号轨道 20 / 140 → 180 / 300，280 ms 那帧没被撞上）。
+    const capped = moveComposeAnimationKeyframes(initial, ['title-font-size-20', 'title-font-size-140'], 500)
+    expect(capped.conflict).toBe(false)
+    expect(capped.deltaMs).toBe(160)
+  })
+
+  it('OpenSpec: animation-panel / 批量移动关键帧 / 与同轨道未选中的帧重合即冲突，选区成员之间不算', () => {
+    const initial = createDefaultComposeAnimationPanelValue()
+    // 100 ms 往右 100 撞上未选中的 200 ms。
+    const conflict = moveComposeAnimationKeyframes(initial, ['fault-background-fill-100'], 100)
+    expect(conflict.conflict).toBe(true)
+    expect(conflict.value).toBe(initial)
+    // 100 ms 与 200 ms 一起往右 100：100 落到 200 的原位，但 200 也在选区里、一起挪走了。
+    const together = moveComposeAnimationKeyframes(
+      initial,
+      ['fault-background-fill-100', 'fault-background-fill-200'],
+      100,
+    )
+    // 200 ms 顶到 300 ms 的未选中帧才是冲突；这里位移 100 让 200 落到 300，因此也应冲突。
+    expect(together.conflict).toBe(true)
+    // 位移 50 则两者各自落到 150 / 250，中间没有别的帧。
+    const clear = moveComposeAnimationKeyframes(
+      initial,
+      ['fault-background-fill-100', 'fault-background-fill-200'],
+      50,
+    )
+    expect(clear.conflict).toBe(false)
+    expect(clear.value.model.tracks[0]?.properties[0]?.keyframes.map(({ timeMs }) => timeMs))
+      .toEqual([0, 150, 250, 300])
+  })
+
+  it('OpenSpec: animation-panel / 批量删除关键帧 / 删除后选区清空', () => {
+    const initial = {
+      ...createDefaultComposeAnimationPanelValue(),
+      selectedKeyframeIds: ['fault-background-fill-100', 'fault-opacity-150', 'fault-scale-100'],
+    }
+    const next = removeComposeAnimationKeyframes(initial, ['fault-background-fill-100', 'fault-opacity-150'])
+    expect(next.selectedKeyframeIds).toEqual(['fault-scale-100'])
+    expect(next.model.tracks[0]?.properties[0]?.keyframes.map(({ timeMs }) => timeMs)).toEqual([0, 200, 300])
+    expect(next.model.tracks[0]?.properties[1]?.keyframes.map(({ timeMs }) => timeMs)).toEqual([0, 300])
+    expect(removeComposeAnimationKeyframes(next, ['missing'])).toBe(next)
   })
 })

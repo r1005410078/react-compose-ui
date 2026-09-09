@@ -17,9 +17,13 @@ import { useAnimationPanelSession } from './animation-panel-context'
 import {
   clampComposeAnimationPixelsPerMs,
   getComposeAnimationClips,
+  getComposeAnimationSoleSelectedKeyframeId,
   panComposeAnimationTimeline,
+  resolveComposeAnimationMarqueeSelection,
   zoomComposeAnimationTimelineAt,
 } from './animation-panel-model'
+import type { ComposeAnimationMarqueeRect } from './animation-panel-model'
+import type { ComposeAnimationKeyframeSelectMode } from './animation-panel-provider'
 import { AnimationPanelProvider } from './animation-panel-provider'
 import { ComposeButton, ComposeColorPicker, useComposeContextMenu } from '@compose-ui/components'
 import { CommittedInput } from './committed-input'
@@ -83,6 +87,7 @@ const messages = {
     menuAddKeyframeAtPlayhead: '在播放头处打点',
     menuAddKeyframeAtPointer: '在光标所在时间打点',
     menuRemoveKeyframe: '删除本帧',
+    menuRemoveSelectedKeyframes: (count: number) => `删除选中的 ${count} 个关键帧`,
     menuPreviousKeyframe: '跳到上一个关键帧',
     menuNextKeyframe: '跳到下一个关键帧',
     propertyKeyframe: (name: string) => `${name} 关键帧标记`,
@@ -90,9 +95,10 @@ const messages = {
     interpolationRange: '曲线区间',
     keyframe: (timeMs: number, label: string) => `关键帧 ${timeMs} ms：${label}`,
     interpolationSegment: (startMs: number, endMs: number, label: string) => `编辑 ${startMs} ms 至 ${endMs} ms 的${label}动画曲线`,
-    keyframeMove: '使用左右方向键每次移动 10 毫秒，也可以水平拖动',
+    keyframeMove: '使用左右方向键每次移动 10 毫秒，也可以水平拖动；按住 Shift 点击加选，Delete 删除选中的关键帧',
     keyframeHeading: '关键帧',
     noSelection: '未选中关键帧',
+    multiSelection: (count: number) => `已选 ${count} 个关键帧`,
     time: '时间',
     value: '值',
     lastKeyframeNote: '末帧的出向段没有下一帧，暂不参与求值',
@@ -130,6 +136,7 @@ const messages = {
     menuAddKeyframeAtPlayhead: 'Add keyframe at playhead',
     menuAddKeyframeAtPointer: 'Add keyframe at pointer time',
     menuRemoveKeyframe: 'Delete this keyframe',
+    menuRemoveSelectedKeyframes: (count: number) => `Delete ${count} selected keyframes`,
     menuPreviousKeyframe: 'Go to previous keyframe',
     menuNextKeyframe: 'Go to next keyframe',
     propertyKeyframe: (name: string) => `${name} keyframe marker`,
@@ -137,9 +144,10 @@ const messages = {
     interpolationRange: 'Curve range',
     keyframe: (timeMs: number, label: string) => `Keyframe ${timeMs} ms: ${label}`,
     interpolationSegment: (startMs: number, endMs: number, label: string) => `Edit ${label} animation curve from ${startMs} ms to ${endMs} ms`,
-    keyframeMove: 'Use the left and right arrow keys to move by 10 milliseconds, or drag horizontally',
+    keyframeMove: 'Use the left and right arrow keys to move by 10 milliseconds, or drag horizontally; Shift-click adds to the selection, Delete removes the selected keyframes',
     keyframeHeading: 'Keyframe',
     noSelection: 'No keyframe selected',
+    multiSelection: (count: number) => `${count} keyframes selected`,
     time: 'Time',
     value: 'Value',
     lastKeyframeNote: 'The last keyframe has no following keyframe, so its outgoing segment is not sampled',
@@ -243,13 +251,15 @@ export function ComposeAnimationTimeline({
     notice,
     addKeyframe,
     addKeyframeAtTime,
-    moveKeyframe,
+    moveKeyframes,
     removeKeyframe,
+    removeSelectedKeyframes,
     removeTrack,
     removeTrackGroup,
     seekAdjacentKeyframe,
     selectClip,
     selectKeyframe,
+    selectKeyframes,
     selectProperty,
     selectTrack,
     selectInterpolationSegment,
@@ -839,7 +849,11 @@ export function ComposeAnimationTimeline({
         <TimelineScale
           currentRatio={currentRatio}
           onKeyframeContextMenu={(event, context) => {
-            actionsMenu.openAt(event, { kind: 'keyframe', ...context })
+            // 右键不是选择手势：按在选区成员上才按选区数量换条目，按在未选中的帧上只删它自己。
+            const selectedCount = value.selectedKeyframeIds.includes(context.keyframeId)
+              ? value.selectedKeyframeIds.length
+              : 1
+            actionsMenu.openAt(event, { kind: 'keyframe', ...context, selectedCount })
           }}
           onLaneContextMenu={(event, context) => {
             actionsMenu.openAt(event, { kind: 'lane', ...context })
@@ -848,8 +862,10 @@ export function ComposeAnimationTimeline({
           onSelectProperty={selectProperty}
           value={value}
           onUpdateClipRange={updateClipRange}
-          onMoveKeyframe={moveKeyframe}
+          onMoveKeyframes={moveKeyframes}
+          onRemoveSelectedKeyframes={removeSelectedKeyframes}
           onSelectKeyframe={selectKeyframe}
+          onSelectKeyframes={selectKeyframes}
           onSelectInterpolationSegment={selectInterpolationSegment}
           scaleRef={scaleRef}
           scaleScrollRef={scaleScrollRef}
@@ -879,6 +895,7 @@ export function ComposeAnimationTimeline({
           nextKeyframe: t.menuNextKeyframe,
           previousKeyframe: t.menuPreviousKeyframe,
           removeKeyframe: t.menuRemoveKeyframe,
+          removeSelectedKeyframes: t.menuRemoveSelectedKeyframes,
           removeTrack: t.menuRemoveTrack,
           removeTrackGroup: t.menuRemoveTrackGroup,
         }}
@@ -889,6 +906,7 @@ export function ComposeAnimationTimeline({
         }}
         onAddKeyframeAtTime={addKeyframeAtTime}
         onRemoveKeyframe={removeKeyframe}
+        onRemoveSelectedKeyframes={removeSelectedKeyframes}
         onRemoveTrack={removeTrack}
         onRemoveTrackGroup={removeTrackGroup}
         onSeekAdjacentKeyframe={seekAdjacentKeyframe}
@@ -902,10 +920,12 @@ function TimelineScale({
   markerStepMs,
   onKeyframeContextMenu,
   onLaneContextMenu,
-  onMoveKeyframe,
+  onMoveKeyframes,
+  onRemoveSelectedKeyframes,
   onSelectClip,
   onSelectProperty,
   onSelectKeyframe,
+  onSelectKeyframes,
   onSelectInterpolationSegment,
   onUpdateClipRange,
   scaleRef,
@@ -925,10 +945,14 @@ function TimelineScale({
     event: ReactMouseEvent,
     context: { readonly propertyId: string, readonly label: string, readonly timeMs: number },
   ) => void
-  readonly onMoveKeyframe: (keyframeId: string, timeMs: number) => void
+  /** 拖动与方向键：以该帧为锚点平移整个选区。 */
+  readonly onMoveKeyframes: (anchorKeyframeId: string, timeMs: number) => void
+  readonly onRemoveSelectedKeyframes: () => void
   readonly onSelectClip: (clipId: string) => void
   readonly onSelectProperty: (propertyId: string) => void
-  readonly onSelectKeyframe: (keyframeId: string) => void
+  readonly onSelectKeyframe: (keyframeId: string, mode?: ComposeAnimationKeyframeSelectMode) => void
+  /** 框选落地。 */
+  readonly onSelectKeyframes: (keyframeIds: readonly string[], mode: 'replace' | 'add') => void
   readonly onSelectInterpolationSegment: (endKeyframeId: string) => void
   readonly onUpdateClipRange: (clipId: string, startTimeMs: number, endTimeMs: number) => void
   readonly scaleRef: RefObject<HTMLDivElement | null>
@@ -941,7 +965,37 @@ function TimelineScale({
   const t = messages[locale]
   const keyframeMoveHelpId = useId()
   const clipMoveHelpId = useId()
-  const [dragging, setDragging] = useState<{ readonly keyframeId: string; readonly pointerId: number } | null>(null)
+  /**
+   * 关键帧按下手势。`moved` 记的是指针有没有离开过按下点——这是本手势唯一的分流判据，
+   * 不引入位移阈值；`collapseOnRelease` 表示按下时它已经是多选的一员：那一刻不收敛选区
+   * （否则从多选中拖任何一个都会先把其余成员丢掉），松手且没动过才收敛成单选。
+   */
+  const [dragging, setDragging] = useState<{
+    readonly keyframeId: string
+    readonly pointerId: number
+    readonly originX: number
+    readonly originY: number
+    readonly moved: boolean
+    readonly collapseOnRelease: boolean
+  } | null>(null)
+  /**
+   * 框选手势，矩形以 `.scale` 局部坐标记录：横向滚动时矩形随内容走。`moved` 同上——
+   * 指针没离开过按下点就还原成这次按下本来的含义（`lane-hit` 的点击 = 选中属性轨道）。
+   */
+  const [marquee, setMarquee] = useState<{
+    readonly pointerId: number
+    readonly clientX: number
+    readonly clientY: number
+    readonly originX: number
+    readonly originY: number
+    readonly currentX: number
+    readonly currentY: number
+    readonly additive: boolean
+    readonly moved: boolean
+  } | null>(null)
+  // 拖出过框的那次按下，松手后浏览器仍可能给 lane-hit 补发一次 click；用它挡掉那次点击。
+  // 在下一次按下时复位，而不是在 click 里复位：pointer capture 生效时那次 click 未必会来。
+  const marqueeMovedRef = useRef(false)
   const [clipDragging, setClipDragging] = useState<{
     readonly clipId: string
     readonly endTimeMs: number
@@ -969,23 +1023,149 @@ function TimelineScale({
   ) => {
     if (event.button !== 0) return
     event.preventDefault()
+    // 这次按下压根不是框选，别让上一次框选留下的守卫吃掉它之后的 click。
+    marqueeMovedRef.current = false
     const element = event.currentTarget
     element.focus()
+    // Shift + 按下只切换去留，不开拖动：它的含义是「加进 / 移出选区」，与画布一致。
+    if (event.shiftKey) {
+      onSelectKeyframe(keyframeId, 'toggle')
+      return
+    }
     if ('setPointerCapture' in element) element.setPointerCapture(event.pointerId)
-    onSelectKeyframe(keyframeId)
-    setDragging({ keyframeId, pointerId: event.pointerId })
+    const alreadySelected = value.selectedKeyframeIds.includes(keyframeId)
+    if (!alreadySelected) onSelectKeyframe(keyframeId)
+    setDragging({
+      keyframeId,
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      originY: event.clientY,
+      moved: false,
+      collapseOnRelease: alreadySelected && value.selectedKeyframeIds.length > 1,
+    })
   }
   const handleKeyframePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     if (!dragging || dragging.pointerId !== event.pointerId) return
     event.preventDefault()
-    onMoveKeyframe(dragging.keyframeId, getTimeAtClientX(event.clientX))
+    // 浏览器会在 pointerup 之前补发一次原地的 move：原地不算动过。
+    if (!dragging.moved) {
+      if (event.clientX === dragging.originX && event.clientY === dragging.originY) return
+      setDragging({ ...dragging, moved: true })
+    }
+    onMoveKeyframes(dragging.keyframeId, getTimeAtClientX(event.clientX))
   }
   const endKeyframeDrag = (event: PointerEvent<HTMLButtonElement>) => {
     if (!dragging || dragging.pointerId !== event.pointerId) return
     if ('releasePointerCapture' in event.currentTarget) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
+    if (!dragging.moved && dragging.collapseOnRelease) onSelectKeyframe(dragging.keyframeId)
     setDragging(null)
+  }
+  const cancelKeyframeDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!dragging || dragging.pointerId !== event.pointerId) return
+    setDragging(null)
+  }
+  /** 把 `.scale` 里渲染出来的每个菱形量成局部坐标的命中区；折叠的轨道没有菱形，天然不参与。 */
+  const collectKeyframeHitRects = () => {
+    const scale = scaleRef.current
+    if (!scale) return []
+    const bounds = scale.getBoundingClientRect()
+    return Array.from(scale.querySelectorAll<HTMLElement>('[data-keyframe-id]')).map((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        keyframeId: element.dataset['keyframeId']!,
+        rect: {
+          left: rect.left - bounds.left,
+          top: rect.top - bounds.top,
+          right: rect.right - bounds.left,
+          bottom: rect.bottom - bounds.top,
+        },
+      }
+    })
+  }
+  const isMarqueeOrigin = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false
+    // 关键帧与片段按钮各有自己的拖动手势；车道命中层、纯背景与插值段（它只有点击）都能起手框选。
+    // 插值段铺满相邻两帧之间的整条车道，不放行它，用户就没有一处「关键帧之间的空白」可按。
+    const button = target.closest('button')
+    return button === null
+      || button.classList.contains('compose-animation-timeline__lane-hit')
+      || button.classList.contains('compose-animation-timeline__interpolation-segment')
+  }
+  const handleMarqueePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !isMarqueeOrigin(event.target)) return
+    const bounds = scaleRef.current?.getBoundingClientRect()
+    if (!bounds) return
+    marqueeMovedRef.current = false
+    const x = event.clientX - bounds.left
+    const y = event.clientY - bounds.top
+    setMarquee({
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      originX: x,
+      originY: y,
+      currentX: x,
+      currentY: y,
+      additive: event.shiftKey,
+      moved: false,
+    })
+  }
+  const handleMarqueePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!marquee || marquee.pointerId !== event.pointerId) return
+    const scale = scaleRef.current
+    if (!scale) return
+    if (!marquee.moved) {
+      if (event.clientX === marquee.clientX && event.clientY === marquee.clientY) return
+      // 只接管拖，不接管点：捕获在第一次真的移动之后才拿，原地按下松开仍是 lane-hit 自己的点击。
+      if ('setPointerCapture' in scale) scale.setPointerCapture(event.pointerId)
+      marqueeMovedRef.current = true
+    }
+    const bounds = scale.getBoundingClientRect()
+    setMarquee({
+      ...marquee,
+      moved: true,
+      currentX: event.clientX - bounds.left,
+      currentY: event.clientY - bounds.top,
+    })
+  }
+  const endMarquee = (event: PointerEvent<HTMLDivElement>) => {
+    if (!marquee || marquee.pointerId !== event.pointerId) return
+    const scale = scaleRef.current
+    if (scale && 'releasePointerCapture' in scale && scale.hasPointerCapture?.(event.pointerId)) {
+      scale.releasePointerCapture(event.pointerId)
+    }
+    if (marquee.moved) {
+      const rect: ComposeAnimationMarqueeRect = {
+        left: marquee.originX,
+        top: marquee.originY,
+        right: marquee.currentX,
+        bottom: marquee.currentY,
+      }
+      const hits = resolveComposeAnimationMarqueeSelection(collectKeyframeHitRects(), rect)
+      onSelectKeyframes(hits, marquee.additive ? 'add' : 'replace')
+      // 焦点交给选中的第一个菱形：紧接着的 Delete / 方向键才有地方落，也让读屏知道选中了什么。
+      const first = hits[0]
+      if (first !== undefined && scale) {
+        // 按 dataset 比对而不是拼选择器：关键帧 id 由宿主编码（编辑器用的是 JSON），什么字符都可能有。
+        Array.from(scale.querySelectorAll<HTMLElement>('[data-keyframe-id]'))
+          .find((element) => element.dataset['keyframeId'] === first)
+          ?.focus({ preventScroll: true })
+      }
+    }
+    setMarquee(null)
+  }
+  const cancelMarquee = (event: PointerEvent<HTMLDivElement>) => {
+    if (!marquee || marquee.pointerId !== event.pointerId) return
+    setMarquee(null)
+  }
+  /** `Delete` / `Backspace` 从任何一个时间线内的焦点冒上来都删整个选区；选区为空时不接管。 */
+  const handleScaleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    if (value.selectedKeyframeIds.length === 0) return
+    event.preventDefault()
+    onRemoveSelectedKeyframes()
   }
   const beginClipDrag = (
     event: PointerEvent<HTMLButtonElement>,
@@ -1065,10 +1245,17 @@ function TimelineScale({
   const clips = getComposeAnimationClips(value.model)
   return (
     <div className="compose-animation-timeline__scale-scroll" ref={scaleScrollRef}>
+      {/* 键盘与框选手势都挂在 .scale 上：它包住全部车道与菱形，事件从各按钮冒上来只需接一处；
+          它自己不进 Tab 序列，焦点始终落在里面的关键帧按钮上。 */}
       <div
         className="compose-animation-timeline__scale"
         ref={scaleRef}
         style={{ '--animation-playhead': `${currentRatio * 100}%`, width: `${scaleWidthPx}px` } as CSSProperties}
+        onKeyDown={handleScaleKeyDown}
+        onPointerCancel={cancelMarquee}
+        onPointerDown={handleMarqueePointerDown}
+        onPointerMove={handleMarqueePointerMove}
+        onPointerUp={endMarquee}
       >
         {value.model.tracks.map((track) => {
           // 片段按轨道 label / id 前缀归属；无匹配时该物体行不画片段条
@@ -1168,12 +1355,15 @@ function TimelineScale({
                       className="compose-animation-timeline__lane-hit"
                       data-property-lane-hit={property.id}
                       type="button"
-                      onClick={() => onSelectProperty(property.id)}
+                      onClick={() => {
+                        if (marqueeMovedRef.current) return
+                        onSelectProperty(property.id)
+                      }}
                     />
                     {keyframes.slice(1).map((keyframe, keyframeIndex) => {
                       const startKeyframe = keyframes[keyframeIndex]!
                       // 插值挂出向段：控制这一段的是起点关键帧，选中态与点击都跟着它走。
-                      const segmentCurrent = value.selectedKeyframeId === startKeyframe.id
+                      const segmentCurrent = getComposeAnimationSoleSelectedKeyframeId(value) === startKeyframe.id
                       const startRatio = timelineRatio(startKeyframe.timeMs, value.model.durationMs)
                       const endRatio = timelineRatio(keyframe.timeMs, value.model.durationMs)
                       return (
@@ -1187,13 +1377,14 @@ function TimelineScale({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation()
+                            if (marqueeMovedRef.current) return
                             onSelectInterpolationSegment(startKeyframe.id)
                           }}
                         ><CurveIcon /></button>
                       )
                     })}
                     {keyframes.map((keyframe) => {
-                      const selected = value.selectedKeyframeId === keyframe.id
+                      const selected = value.selectedKeyframeIds.includes(keyframe.id)
                       return (
                         <button
                           aria-current={selected || undefined}
@@ -1201,20 +1392,26 @@ function TimelineScale({
                           aria-describedby={keyframeMoveHelpId}
                           className="compose-animation-timeline__keyframe"
                           data-dragging={dragging?.keyframeId === keyframe.id || undefined}
+                          data-keyframe-id={keyframe.id}
+                          data-selected={selected || undefined}
                           key={keyframe.id}
                           style={{ left: `${timelineRatio(keyframe.timeMs, value.model.durationMs) * 100}%` }}
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation()
-                            onSelectKeyframe(keyframe.id)
+                            // 指针路径已经在 pointerdown / pointerup 里定了选区；这里只接键盘激活
+                            // （Enter / Space 合成的 click 的 detail 是 0），否则拖完一组会被收敛成单选。
+                            if (event.detail !== 0) return
+                            onSelectKeyframe(keyframe.id, event.shiftKey ? 'toggle' : 'replace')
                           }}
                           onKeyDown={(event) => {
                             if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
                             event.preventDefault()
-                            onSelectKeyframe(keyframe.id)
-                            onMoveKeyframe(keyframe.id, keyframe.timeMs + (event.key === 'ArrowLeft' ? -10 : 10))
+                            // 焦点落在选区成员上时位移作用于整个选区；不在选区里就先选中它自己。
+                            if (!value.selectedKeyframeIds.includes(keyframe.id)) onSelectKeyframe(keyframe.id)
+                            onMoveKeyframes(keyframe.id, keyframe.timeMs + (event.key === 'ArrowLeft' ? -10 : 10))
                           }}
-                          onPointerCancel={endKeyframeDrag}
+                          onPointerCancel={cancelKeyframeDrag}
                           onContextMenu={(event) => {
                             // 停止冒泡：否则车道会把它当成空白右键，给出"在光标时间打点"。
                             event.stopPropagation()
@@ -1241,6 +1438,19 @@ function TimelineScale({
         {/* 擦洗输入与倒三角只在头部标尺行渲染一份；这里只保留竖线穿过各轨道，与标尺行的
             playhead 共用同一个 --animation-playhead 百分比，两段视觉上仍是同一条线。 */}
         <div aria-hidden="true" className="compose-animation-timeline__playhead" data-scope="lanes"><span /><i /></div>
+        {marquee?.moved ? (
+          <div
+            aria-hidden="true"
+            className="compose-animation-timeline__marquee"
+            data-additive={marquee.additive || undefined}
+            style={{
+              left: `${Math.min(marquee.originX, marquee.currentX)}px`,
+              top: `${Math.min(marquee.originY, marquee.currentY)}px`,
+              width: `${Math.abs(marquee.currentX - marquee.originX)}px`,
+              height: `${Math.abs(marquee.currentY - marquee.originY)}px`,
+            }}
+          />
+        ) : null}
       </div>
     </div>
   )
@@ -1282,6 +1492,9 @@ export function ComposeAnimationInspector({
     ? `${selectedKeyframe.keyframe.timeMs} ms → ${nextKeyframe.timeMs} ms`
     : ''
   const isLastKeyframe = selectedKeyframe !== undefined && nextKeyframe === undefined
+  // 时间 / 值 / 插值三个字段都只能作用于一个帧：多选下显示其中任何一个的值都在说谎，只报数量。
+  const selectedCount = value.selectedKeyframeIds.length
+  const multiSelected = selectedCount > 1
   const noticeId = useId()
 
   return (
@@ -1298,10 +1511,15 @@ export function ComposeAnimationInspector({
       <header className="compose-animation-inspector__header">
         <h2>{t.keyframeHeading}</h2>
         <div>
-          <strong>{selectedKeyframe ? `${trackLabel} / ${propertyLabel}` : t.noSelection}</strong>
+          <strong>
+            {multiSelected
+              ? t.multiSelection(selectedCount)
+              : (selectedKeyframe ? `${trackLabel} / ${propertyLabel}` : t.noSelection)}
+          </strong>
           <span>{selectedIndex >= 0 ? selectedIndex + 1 : '—'} / {keyframes.length}</span>
         </div>
       </header>
+      {multiSelected ? null : (
       <div className="compose-animation-inspector__fields">
         <label>
           <span>{t.time}</span>
@@ -1382,6 +1600,8 @@ export function ComposeAnimationInspector({
           </label>
         ) : null}
       </div>
+      )}
+      {multiSelected ? null : (
       <div className="compose-animation-inspector__easing-editor">
         <ComposeEasingCurveEditor
           key={selectedKeyframe?.keyframe.id ?? 'none'}
@@ -1393,6 +1613,7 @@ export function ComposeAnimationInspector({
           }}
         />
       </div>
+      )}
       {/* 播报由时间线的 live region 负责：两个组件同时挂载时重复播报比没有播报更糟。
           这里只做常驻可见说明，并通过 aria-describedby 挂到时间字段上。 */}
       {notice ? <p className="compose-animation-inspector__notice" id={noticeId}>{t.duplicateTime}</p> : null}

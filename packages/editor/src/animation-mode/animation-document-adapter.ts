@@ -231,6 +231,26 @@ export function translateAnimationPanelAction(
         },
       }]
     }
+    case 'move-keyframes': {
+      // 整组共享 mergeKey：N 条 move 合成一次事务，撤销一步整组回去。key 里带上成员 id，
+      // 同一次拖动的逐帧动作在合并窗口内继续合并成一条记录，换一批成员则另起一条。
+      const mergeKey = `animation-move-keyframes:${animationId}:${action.items.map((item) => item.keyframeId).join('|')}`
+      return action.items.flatMap((item) => {
+        const ref = decodeAnimationKeyframeId(item.keyframeId)
+        if (!ref) return []
+        return [{
+          type: COMPOSE_ANIMATION_COMMAND_TYPES.moveKeyframe,
+          payload: {
+            animationId,
+            entityId: ref.entityId,
+            path: ref.path as JsonValue,
+            keyframeId: ref.keyframeId,
+            timeMs: item.timeMs,
+          },
+          mergeKey,
+        }]
+      })
+    }
     case 'remove-keyframe': {
       const ref = decodeAnimationKeyframeId(action.keyframeId)
       if (!ref) return []
@@ -243,6 +263,23 @@ export function translateAnimationPanelAction(
           keyframeId: ref.keyframeId,
         },
       }]
+    }
+    case 'remove-keyframes': {
+      const mergeKey = `animation-remove-keyframes:${animationId}:${action.items.map((item) => item.keyframeId).join('|')}`
+      return action.items.flatMap((item) => {
+        const ref = decodeAnimationKeyframeId(item.keyframeId)
+        if (!ref) return []
+        return [{
+          type: COMPOSE_ANIMATION_COMMAND_TYPES.removeKeyframe,
+          payload: {
+            animationId,
+            entityId: ref.entityId,
+            path: ref.path as JsonValue,
+            keyframeId: ref.keyframeId,
+          },
+          mergeKey,
+        }]
+      })
     }
     case 'set-keyframe-value': {
       const ref = decodeAnimationKeyframeId(action.keyframeId)

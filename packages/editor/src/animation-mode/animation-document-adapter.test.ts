@@ -138,7 +138,7 @@ describe('面板动作 → 动画命令', () => {
 
   it('OpenSpec: editor-workspace-layout / 动画模式 / 会话动作不产生文档命令', () => {
     expect(translate({ kind: 'set-current-time', timeMs: 150 })).toEqual([])
-    expect(translate({ kind: 'select', trackId: 'hero', propertyId: null, keyframeId: null }))
+    expect(translate({ kind: 'select', trackId: 'hero', propertyId: null, keyframeIds: [] }))
       .toEqual([])
     expect(translate({ kind: 'toggle-auto-record' })).toEqual([])
   })
@@ -155,6 +155,44 @@ describe('面板动作 → 动画命令', () => {
         timeMs: 250,
       },
     }])
+  })
+
+  it('OpenSpec: animation-panel / 批量移动关键帧 / 整组翻译为共享 mergeKey 的移动命令', () => {
+    const otherId = encodeAnimationKeyframeId({
+      entityId: 'hero',
+      path: ['LayoutItem', 'offset'],
+      keyframeId: 'a',
+    })
+    const drafts = translate({
+      kind: 'move-keyframes',
+      items: [
+        { propertyId, keyframeId, timeMs: 350 },
+        { propertyId, keyframeId: otherId, timeMs: 50 },
+      ],
+    })
+    expect(drafts.map((draft) => draft.type)).toEqual(['animation.keyframe.move', 'animation.keyframe.move'])
+    expect(drafts.map((draft) => draft.payload)).toMatchObject([
+      { keyframeId: 'b', timeMs: 350 },
+      { keyframeId: 'a', timeMs: 50 },
+    ])
+    // 一个 mergeKey 管住整组：宿主运行时据此把 N 条命令合成一次可撤销事务。
+    expect(new Set(drafts.map((draft) => draft.mergeKey)).size).toBe(1)
+    expect(drafts[0]?.mergeKey).toBeTruthy()
+  })
+
+  it('OpenSpec: animation-panel / 批量删除关键帧 / 整组翻译为共享 mergeKey 的删除命令', () => {
+    const otherId = encodeAnimationKeyframeId({
+      entityId: 'hero',
+      path: ['LayoutItem', 'offset'],
+      keyframeId: 'a',
+    })
+    const drafts = translate({
+      kind: 'remove-keyframes',
+      items: [{ propertyId, keyframeId }, { propertyId, keyframeId: otherId }],
+    })
+    expect(drafts.map((draft) => draft.type)).toEqual(['animation.keyframe.remove', 'animation.keyframe.remove'])
+    expect(new Set(drafts.map((draft) => draft.mergeKey)).size).toBe(1)
+    expect(drafts[0]?.mergeKey).toBeTruthy()
   })
 
   it('改值翻译为同时间 upsert，保留关键帧身份', () => {

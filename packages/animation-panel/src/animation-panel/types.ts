@@ -113,8 +113,15 @@ export interface ComposeAnimationPanelValue {
   readonly model: ComposeAnimationPanelModel
   /** 当前播放头毫秒位置。 */
   readonly currentTimeMs: number
-  /** 已选关键帧 ID；无选择时为 null。 */
-  readonly selectedKeyframeId: string | null
+  /**
+   * 已选关键帧 ID 集合；无选择时为空数组。
+   *
+   * @remarks
+   * 选区是集合，单选是它恰好一个成员的退化情形。不另存一个单值的「当前关键帧」：
+   * 同一份事实两处表示，多选时那个单值没有说得清的取值。字段面板等只能作用于一个帧的
+   * 地方读 `selectedKeyframe`（Context 上的定位结果），它只在选区恰好一个成员时有值。
+   */
+  readonly selectedKeyframeIds: readonly string[]
   /** 已选对象轨道 ID；无选择时为 null。 */
   readonly selectedTrackId?: string | null
   /** 已选属性轨道 ID；无选择时为 null。 */
@@ -145,7 +152,8 @@ export type ComposeAnimationPanelAction =
       readonly kind: 'select'
       readonly trackId: string | null
       readonly propertyId: string | null
-      readonly keyframeId: string | null
+      /** 整个关键帧选区；无选择时为空数组。 */
+      readonly keyframeIds: readonly string[]
     }
   | {
       readonly kind: 'add-keyframe'
@@ -154,16 +162,46 @@ export type ComposeAnimationPanelAction =
       readonly timeMs: number
       readonly value: ComposeAnimationKeyframeValue
     }
+  /**
+   * 字段面板写入一个关键帧的时间。
+   *
+   * @remarks
+   * 时间线上的拖动与方向键一律发 `move-keyframes`（单选时 `items` 只有一项）：前者描述
+   * 一个字段的写入，后者描述一次作用于整个选区的手势，两者不是同一件事的两种形状。
+   */
   | {
       readonly kind: 'move-keyframe'
       readonly propertyId: string
       readonly keyframeId: string
       readonly timeMs: number
     }
+  /**
+   * 一次手势把整个选区平移到新的时间；`items` 逐帧携带落地后的时间。
+   *
+   * @remarks
+   * 宿主应把它合成一次可撤销事务：整组只撤销一步，与「删除某对象的全部轨道」同一条做法。
+   */
+  | {
+      readonly kind: 'move-keyframes'
+      readonly items: readonly {
+        readonly propertyId: string
+        readonly keyframeId: string
+        readonly timeMs: number
+      }[]
+    }
+  /** 删除单个关键帧（右键菜单落在未选中的关键帧上）。 */
   | {
       readonly kind: 'remove-keyframe'
       readonly propertyId: string
       readonly keyframeId: string
+    }
+  /** 删除整个选区；宿主应合成一次可撤销事务。 */
+  | {
+      readonly kind: 'remove-keyframes'
+      readonly items: readonly {
+        readonly propertyId: string
+        readonly keyframeId: string
+      }[]
     }
   | {
       readonly kind: 'set-keyframe-value'

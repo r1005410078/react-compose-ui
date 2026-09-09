@@ -34,7 +34,7 @@ interface AnimationModeSessionState {
   readonly currentTimeMs: number
   readonly isPlaying: boolean
   readonly autoRecord: boolean
-  readonly selectedKeyframeId: string | null
+  readonly selectedKeyframeIds: readonly string[]
   readonly selectedTrackId: string | null
   readonly selectedPropertyId: string | null
   readonly selectedClipId: string | null
@@ -44,7 +44,7 @@ const INITIAL_SESSION: AnimationModeSessionState = {
   currentTimeMs: 0,
   isPlaying: false,
   autoRecord: true,
-  selectedKeyframeId: null,
+  selectedKeyframeIds: [],
   selectedTrackId: null,
   selectedPropertyId: null,
   selectedClipId: null,
@@ -173,7 +173,7 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     return {
       model,
       currentTimeMs: Math.min(session.currentTimeMs, model.durationMs),
-      selectedKeyframeId: session.selectedKeyframeId,
+      selectedKeyframeIds: session.selectedKeyframeIds,
       selectedTrackId: session.selectedTrackId,
       selectedPropertyId: session.selectedPropertyId,
       selectedClipId: session.selectedClipId,
@@ -183,14 +183,18 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
     }
   }, [animation?.playbackMode, animationId, document, hostFrameId, propertyLabel, session])
 
+  // 缓动只能作用于一个帧：选区恰好一个成员时才有目标，多选下缓动编辑器退成只读。
+  const soleSelectedKeyframeId = session.selectedKeyframeIds.length === 1
+    ? session.selectedKeyframeIds[0]!
+    : null
   const selectedKeyframeEasing = useMemo(
     () => resolveAnimationKeyframeEasing(
       document,
       animationId,
-      session.selectedKeyframeId,
+      soleSelectedKeyframeId,
       propertyLabel,
     ),
-    [animationId, document, propertyLabel, session.selectedKeyframeId],
+    [animationId, document, propertyLabel, soleSelectedKeyframeId],
   )
 
   const setKeyframeInterpolation = useCallback((
@@ -218,7 +222,7 @@ export function useAnimationMode(options: AnimationModeOptions): AnimationModeSe
       currentTimeMs: next.currentTimeMs,
       isPlaying: next.isPlaying,
       autoRecord: next.autoRecord,
-      selectedKeyframeId: next.selectedKeyframeId,
+      selectedKeyframeIds: next.selectedKeyframeIds,
       selectedTrackId: next.selectedTrackId ?? null,
       selectedPropertyId: next.selectedPropertyId ?? null,
       selectedClipId: next.selectedClipId ?? null,

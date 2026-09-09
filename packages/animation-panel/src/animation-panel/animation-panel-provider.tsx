@@ -3,7 +3,10 @@ import {
   adjacentComposeAnimationKeyframeTime,
   advanceComposeAnimationPlayback,
   addComposeAnimationKeyframe,
+  getComposeAnimationSoleSelectedKeyframeId,
+  moveComposeAnimationKeyframes,
   removeComposeAnimationKeyframe,
+  removeComposeAnimationKeyframes,
   removeComposeAnimationPropertyTrack,
   removeComposeAnimationTrackGroup,
   clampComposeAnimationTime,
@@ -24,8 +27,12 @@ import type {
   ComposeAnimationPlaybackMode,
 } from './types'
 
+/** 关键帧选择的两种模式：替换选区，或切换该帧在选区里的去留（`Shift` + 点击）。 */
+export type ComposeAnimationKeyframeSelectMode = 'replace' | 'toggle'
+
 export interface ComposeAnimationPanelSession {
   readonly value: ComposeAnimationPanelValue
+  /** 选区恰好一个成员时的定位结果；多选或无选择时为 `undefined`。 */
   readonly selectedKeyframe: ReturnType<typeof findComposeAnimationKeyframe>
   readonly notice: 'duplicate-time' | null
   readonly setCurrentTime: (timeMs: number) => void
@@ -33,14 +40,25 @@ export interface ComposeAnimationPanelSession {
   readonly setPlaying: (isPlaying: boolean) => void
   readonly setPlaybackMode: (mode: ComposeAnimationPlaybackMode) => void
   readonly toggleAutoRecord: () => void
-  readonly selectKeyframe: (keyframeId: string) => void
+  readonly selectKeyframe: (keyframeId: string, mode?: ComposeAnimationKeyframeSelectMode) => void
+  /** 框选落地：替换选区，或把这批加进既有选区（`Shift` + 框选）。 */
+  readonly selectKeyframes: (keyframeIds: readonly string[], mode: 'replace' | 'add') => void
   readonly selectTrack: (trackId: string) => void
   readonly selectProperty: (propertyId: string) => void
   readonly selectClip: (clipId: string) => void
   readonly updateClipRange: (clipId: string, startTimeMs: number, endTimeMs: number) => void
   readonly selectInterpolationSegment: (startKeyframeId: string) => void
   readonly moveKeyframe: (keyframeId: string, timeMs: number) => void
+  /**
+   * 时间线手势：以 `anchorKeyframeId` 为锚点把整个选区平移到 `timeMs`。
+   *
+   * @remarks
+   * 锚点不在选区里时只移动锚点自己。单选就是选区一个成员的情形，拖动与方向键只走这一个入口。
+   */
+  readonly moveKeyframes: (anchorKeyframeId: string, timeMs: number) => void
   readonly removeKeyframe: (keyframeId: string) => void
+  /** 删除整个选区；选区为空时什么都不做。 */
+  readonly removeSelectedKeyframes: () => void
   /** 删除一条属性轨道及其全部关键帧。 */
   readonly removeTrack: (propertyId: string) => void
   /** 删除一个对象轨道下的全部属性轨道。 */
@@ -135,18 +153,42 @@ export function AnimationPanelProvider({
     commit({ ...valueRef.current, autoRecord: !valueRef.current.autoRecord })
     emit({ kind: 'toggle-auto-record' })
   }, [commit, emit])
-  const selectKeyframe = useCallback((keyframeId: string) => {
+  const selectKeyframe = useCallback((keyframeId: string, mode: ComposeAnimationKeyframeSelectMode = 'replace') => {
     const current = valueRef.current
     const located = findComposeAnimationKeyframe(current.model, keyframeId)
     if (!located) return
     setNotice(null)
+    const alreadySelected = current.selectedKeyframeIds.includes(keyframeId)
+    const selectedKeyframeIds = mode === 'toggle'
+      ? (alreadySelected
+          ? current.selectedKeyframeIds.filter((id) => id !== keyframeId)
+          : [...current.selectedKeyframeIds, keyframeId])
+      : [keyframeId]
     commit({
       ...current,
-      selectedKeyframeId: keyframeId,
+      selectedKeyframeIds,
       selectedPropertyId: located.property.id,
       selectedTrackId: null,
     })
-    emit({ kind: 'select', trackId: null, propertyId: located.property.id, keyframeId })
+    emit({ kind: 'select', trackId: null, propertyId: located.property.id, keyframeIds: selectedKeyframeIds })
+  }, [commit, emit])
+  const selectKeyframes = useCallback((keyframeIds: readonly string[], mode: 'replace' | 'add') => {
+    const current = valueRef.current
+    const existing = keyframeIds.filter((id) => findComposeAnimationKeyframe(current.model, id))
+    const merged = mode === 'add'
+      ? [...current.selectedKeyframeIds, ...existing.filter((id) => !current.selectedKeyframeIds.includes(id))]
+      : existing
+    setNotice(null)
+    // 属性轨道的选中态跟着「恰好一个成员」走：多选横跨多条轨道，没有哪一条能代表整个选区。
+    const sole = merged.length === 1 ? findComposeAnimationKeyframe(current.model, merged[0]!) : undefined
+    const selectedPropertyId = sole ? sole.property.id : (merged.length === 0 ? current.selectedPropertyId : null)
+    commit({
+      ...current,
+      selectedKeyframeIds: merged,
+      selectedPropertyId,
+      selectedTrackId: merged.length === 0 ? current.selectedTrackId : null,
+    })
+    emit({ kind: 'select', trackId: null, propertyId: selectedPropertyId ?? null, keyframeIds: merged })
   }, [commit, emit])
   const selectTrack = useCallback((trackId: string) => {
     const current = valueRef.current
@@ -160,7 +202,7 @@ export function AnimationPanelProvider({
       selectedPropertyId: null,
       selectedClipId: null,
     })
-    emit({ kind: 'select', trackId, propertyId: null, keyframeId: current.selectedKeyframeId })
+    emit({ kind: 'select', trackId, propertyId: null, keyframeIds: current.selectedKeyframeIds })
   }, [commit, emit])
   const selectProperty = useCallback((propertyId: string) => {
     const current = valueRef.current
@@ -175,7 +217,7 @@ export function AnimationPanelProvider({
       selectedTrackId: null,
       selectedClipId: null,
     })
-    emit({ kind: 'select', trackId: null, propertyId, keyframeId: current.selectedKeyframeId })
+    emit({ kind: 'select', trackId: null, propertyId, keyframeIds: current.selectedKeyframeIds })
   }, [commit, emit])
   const selectClip = useCallback((clipId: string) => {
     const current = valueRef.current
@@ -191,7 +233,7 @@ export function AnimationPanelProvider({
       selectedTrackId: trackId,
       selectedPropertyId: null,
     })
-    emit({ kind: 'select', trackId, propertyId: null, keyframeId: current.selectedKeyframeId })
+    emit({ kind: 'select', trackId, propertyId: null, keyframeIds: current.selectedKeyframeIds })
   }, [commit, emit])
   const updateClipRange = useCallback((clipId: string, startTimeMs: number, endTimeMs: number) => {
     setNotice(null)
@@ -205,7 +247,7 @@ export function AnimationPanelProvider({
     setNotice(null)
     commit({
       ...current,
-      selectedKeyframeId: startKeyframeId,
+      selectedKeyframeIds: [startKeyframeId],
       selectedPropertyId: located.property.id,
       selectedTrackId: null,
     })
@@ -213,7 +255,7 @@ export function AnimationPanelProvider({
       kind: 'select',
       trackId: null,
       propertyId: located.property.id,
-      keyframeId: startKeyframeId,
+      keyframeIds: [startKeyframeId],
     })
   }, [commit, emit])
   const updateKeyframe = useCallback((keyframeId: string, update: Partial<Pick<ComposeAnimationKeyframe, 'timeMs' | 'value' | 'interpolation'>>) => {
@@ -226,7 +268,7 @@ export function AnimationPanelProvider({
     setNotice(null)
     commit({
       ...result.value,
-      selectedKeyframeId: keyframeId,
+      selectedKeyframeIds: [keyframeId],
     })
     const located = findComposeAnimationKeyframe(result.value.model, keyframeId)
     if (located) {
@@ -249,12 +291,36 @@ export function AnimationPanelProvider({
     return true
   }, [commit, emit])
   const updateSelectedKeyframe = useCallback((update: Partial<Pick<ComposeAnimationKeyframe, 'timeMs' | 'value' | 'interpolation'>>) => {
-    const keyframeId = valueRef.current.selectedKeyframeId
+    const keyframeId = getComposeAnimationSoleSelectedKeyframeId(valueRef.current)
     return keyframeId ? updateKeyframe(keyframeId, update) : false
   }, [updateKeyframe])
   const moveKeyframe = useCallback((keyframeId: string, timeMs: number) => {
     updateKeyframe(keyframeId, { timeMs })
   }, [updateKeyframe])
+  const moveKeyframes = useCallback((anchorKeyframeId: string, timeMs: number) => {
+    const current = valueRef.current
+    const anchor = findComposeAnimationKeyframe(current.model, anchorKeyframeId)
+    if (!anchor) return
+    const keyframeIds = current.selectedKeyframeIds.includes(anchorKeyframeId)
+      ? current.selectedKeyframeIds
+      : [anchorKeyframeId]
+    const deltaMs = clampComposeAnimationTime(timeMs, current.model.durationMs) - anchor.keyframe.timeMs
+    const result = moveComposeAnimationKeyframes(current, keyframeIds, deltaMs)
+    if (result.conflict) {
+      setNotice('duplicate-time')
+      return
+    }
+    setNotice(null)
+    if (result.deltaMs === 0) return
+    commit(result.value)
+    const items = keyframeIds.flatMap((keyframeId) => {
+      const located = findComposeAnimationKeyframe(result.value.model, keyframeId)
+      return located
+        ? [{ propertyId: located.property.id, keyframeId, timeMs: located.keyframe.timeMs }]
+        : []
+    })
+    emit({ kind: 'move-keyframes', items })
+  }, [commit, emit])
   const removeKeyframe = useCallback((keyframeId: string) => {
     const current = valueRef.current
     const located = findComposeAnimationKeyframe(current.model, keyframeId)
@@ -262,6 +328,17 @@ export function AnimationPanelProvider({
     setNotice(null)
     commit(removeComposeAnimationKeyframe(current, keyframeId))
     emit({ kind: 'remove-keyframe', propertyId: located.property.id, keyframeId })
+  }, [commit, emit])
+  const removeSelectedKeyframes = useCallback(() => {
+    const current = valueRef.current
+    const items = current.selectedKeyframeIds.flatMap((keyframeId) => {
+      const located = findComposeAnimationKeyframe(current.model, keyframeId)
+      return located ? [{ propertyId: located.property.id, keyframeId }] : []
+    })
+    if (items.length === 0) return
+    setNotice(null)
+    commit(removeComposeAnimationKeyframes(current, items.map((item) => item.keyframeId)))
+    emit({ kind: 'remove-keyframes', items })
   }, [commit, emit])
   const removeTrack = useCallback((propertyId: string) => {
     const current = valueRef.current
@@ -308,7 +385,7 @@ export function AnimationPanelProvider({
     const current = valueRef.current
     const next = addComposeAnimationKeyframe(current)
     commit(next)
-    const keyframeId = next.selectedKeyframeId
+    const keyframeId = getComposeAnimationSoleSelectedKeyframeId(next)
     // 命中已有帧时模型只改选择；只有真正新增时才发编辑动作。
     if (!keyframeId || findComposeAnimationKeyframe(current.model, keyframeId)) return
     const located = findComposeAnimationKeyframe(next.model, keyframeId)
@@ -355,7 +432,7 @@ export function AnimationPanelProvider({
   // 把整条时间线一起刷新。所有回调都是稳定的 useCallback，依赖只剩会话值与提示。
   const session = useMemo<ComposeAnimationPanelSession>(() => ({
     value,
-    selectedKeyframe: findComposeAnimationKeyframe(value.model, value.selectedKeyframeId),
+    selectedKeyframe: findComposeAnimationKeyframe(value.model, getComposeAnimationSoleSelectedKeyframeId(value)),
     notice,
     setCurrentTime,
     setDuration,
@@ -363,13 +440,16 @@ export function AnimationPanelProvider({
     setPlaybackMode,
     toggleAutoRecord,
     selectKeyframe,
+    selectKeyframes,
     selectTrack,
     selectProperty,
     selectClip,
     updateClipRange,
     selectInterpolationSegment,
     moveKeyframe,
+    moveKeyframes,
     removeKeyframe,
+    removeSelectedKeyframes,
     removeTrack,
     removeTrackGroup,
     addKeyframeAtTime,
@@ -378,9 +458,10 @@ export function AnimationPanelProvider({
     toggleTrack,
     addKeyframe,
   }), [
-    addKeyframe, addKeyframeAtTime, moveKeyframe, notice, removeKeyframe, removeTrack,
-    removeTrackGroup, seekAdjacentKeyframe, selectClip, selectInterpolationSegment,
-    selectKeyframe, selectProperty, selectTrack, setCurrentTime, setDuration,
+    addKeyframe, addKeyframeAtTime, moveKeyframe, moveKeyframes, notice, removeKeyframe,
+    removeSelectedKeyframes, removeTrack, removeTrackGroup, seekAdjacentKeyframe, selectClip,
+    selectInterpolationSegment, selectKeyframe, selectKeyframes, selectProperty, selectTrack,
+    setCurrentTime, setDuration,
     setPlaybackMode, setPlaying, toggleAutoRecord, toggleTrack, updateClipRange,
     updateSelectedKeyframe, value,
   ])

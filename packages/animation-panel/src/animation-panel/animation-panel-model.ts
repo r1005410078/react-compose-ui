@@ -335,25 +335,122 @@ export function removeComposeAnimationKeyframe(
   value: ComposeAnimationPanelValue,
   keyframeId: string,
 ): ComposeAnimationPanelValue {
-  const located = findComposeAnimationKeyframe(value.model, keyframeId)
-  if (!located) return value
+  return removeComposeAnimationKeyframes(value, [keyframeId])
+}
+
+/**
+ * 从会话中删除一批关键帧；一个都不存在时原样返回。
+ *
+ * @remarks
+ * 被删的 id 同时从选区里清掉——选区是集合，留下悬空成员会让「已选 N 个」数出一个
+ * 屏幕上不存在的帧。
+ */
+export function removeComposeAnimationKeyframes(
+  value: ComposeAnimationPanelValue,
+  keyframeIds: readonly string[],
+): ComposeAnimationPanelValue {
+  const removed = new Set(keyframeIds.filter((id) => findComposeAnimationKeyframe(value.model, id)))
+  if (removed.size === 0) return value
   return {
     ...value,
-    selectedKeyframeId: value.selectedKeyframeId === keyframeId ? null : value.selectedKeyframeId,
+    selectedKeyframeIds: value.selectedKeyframeIds.filter((id) => !removed.has(id)),
     model: {
       ...value.model,
-      tracks: value.model.tracks.map((track, trackIndex) => trackIndex !== located.location.trackIndex
-        ? track
-        : {
-            ...track,
-            properties: track.properties.map((property, propertyIndex) =>
-              propertyIndex !== located.location.propertyIndex
-                ? property
-                : {
-                    ...property,
-                    keyframes: property.keyframes.filter((keyframe) => keyframe.id !== keyframeId),
-                  }),
-          }),
+      tracks: value.model.tracks.map((track) => ({
+        ...track,
+        properties: track.properties.map((property) => ({
+          ...property,
+          keyframes: property.keyframes.filter((keyframe) => !removed.has(keyframe.id)),
+        })),
+      })),
+    },
+  }
+}
+
+/** 选区恰好一个成员时返回它，否则 `null`：只能作用于一个帧的地方一律读这里。 */
+export function getComposeAnimationSoleSelectedKeyframeId(
+  value: Pick<ComposeAnimationPanelValue, 'selectedKeyframeIds'>,
+): string | null {
+  return value.selectedKeyframeIds.length === 1 ? value.selectedKeyframeIds[0]! : null
+}
+
+/** 时间标尺容器局部坐标下的矩形，单位 px。 */
+export interface ComposeAnimationMarqueeRect {
+  readonly left: number
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+}
+
+/**
+ * 框选判定：矩形**碰到**的关键帧全部入选。
+ *
+ * @remarks
+ * 判定只有「碰到就选」一种，不按拖拽方向区分：关键帧是点不是面，「完全框住」与「碰到」
+ * 对点给出同一个答案。读的是菱形的命中区而不是中心点——用户框的是屏幕上看见的那个菱形，
+ * 擦到一角也算碰到；边缘相接同样算碰到。候选由调用方从渲染出来的菱形量出来，折叠的轨道
+ * 因此天然不参与。
+ */
+export function resolveComposeAnimationMarqueeSelection(
+  candidates: readonly { readonly keyframeId: string; readonly rect: ComposeAnimationMarqueeRect }[],
+  marquee: ComposeAnimationMarqueeRect,
+): readonly string[] {
+  const left = Math.min(marquee.left, marquee.right)
+  const right = Math.max(marquee.left, marquee.right)
+  const top = Math.min(marquee.top, marquee.bottom)
+  const bottom = Math.max(marquee.top, marquee.bottom)
+  return candidates
+    .filter(({ rect }) => !(rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom))
+    .map(({ keyframeId }) => keyframeId)
+}
+
+/**
+ * 把一批关键帧同加一个时间位移。
+ *
+ * @remarks
+ * 钳制读**整个选区**：先按越界收（最早的成员不早于 0、最晚的不晚于 duration），再逐成员
+ * 查同轨道**未选中**的关键帧有没有落在同一时间——有则整组不动并报冲突，由调用方停在上一次
+ * 合法的位置。成员之间共享同一个位移，因此彼此的次序与间距天然不变、也不会互相碰撞。
+ * 位移取整：关键帧时间按整毫秒存储。
+ */
+export function moveComposeAnimationKeyframes(
+  value: ComposeAnimationPanelValue,
+  keyframeIds: readonly string[],
+  deltaMs: number,
+): { readonly value: ComposeAnimationPanelValue; readonly deltaMs: number; readonly conflict: boolean } {
+  const selected = new Set(keyframeIds)
+  const members = value.model.tracks
+    .flatMap((track) => track.properties)
+    .flatMap((property) => property.keyframes
+      .filter((keyframe) => selected.has(keyframe.id))
+      .map((keyframe) => ({ property, keyframe })))
+  if (members.length === 0) return { value, deltaMs: 0, conflict: false }
+  const requested = Math.round(Number.isFinite(deltaMs) ? deltaMs : 0)
+  const earliest = Math.min(...members.map(({ keyframe }) => keyframe.timeMs))
+  const latest = Math.max(...members.map(({ keyframe }) => keyframe.timeMs))
+  const delta = Math.max(-earliest, Math.min(value.model.durationMs - latest, requested))
+  if (delta === 0) return { value, deltaMs: 0, conflict: false }
+  const conflict = members.some(({ property, keyframe }) => property.keyframes.some((other) => (
+    !selected.has(other.id) && other.timeMs === keyframe.timeMs + delta
+  )))
+  if (conflict) return { value, deltaMs: 0, conflict: true }
+  return {
+    conflict: false,
+    deltaMs: delta,
+    value: {
+      ...value,
+      model: {
+        ...value.model,
+        tracks: value.model.tracks.map((track) => ({
+          ...track,
+          properties: track.properties.map((property) => ({
+            ...property,
+            keyframes: property.keyframes.map((keyframe) => selected.has(keyframe.id)
+              ? { ...keyframe, timeMs: keyframe.timeMs + delta }
+              : keyframe),
+          })),
+        })),
+      },
     },
   }
 }
@@ -361,7 +458,7 @@ export function removeComposeAnimationKeyframe(
 export function addComposeAnimationKeyframe(
   value: ComposeAnimationPanelValue,
 ): ComposeAnimationPanelValue {
-  const selected = findComposeAnimationKeyframe(value.model, value.selectedKeyframeId)
+  const selected = findComposeAnimationKeyframe(value.model, getComposeAnimationSoleSelectedKeyframeId(value))
   const target = selected ?? (() => {
     const track = value.model.tracks[0]
     const property = track?.properties[0]
@@ -372,7 +469,7 @@ export function addComposeAnimationKeyframe(
   })()
   if (!target) return value
   const existing = target.property.keyframes.find(({ timeMs }) => timeMs === value.currentTimeMs)
-  if (existing) return { ...value, selectedKeyframeId: existing.id }
+  if (existing) return { ...value, selectedKeyframeIds: [existing.id] }
   const keyframe: ComposeAnimationKeyframe = {
     ...target.keyframe,
     id: createUniqueKeyframeId(value.model, target.property.id, value.currentTimeMs),
@@ -380,7 +477,7 @@ export function addComposeAnimationKeyframe(
   }
   return {
     ...value,
-    selectedKeyframeId: keyframe.id,
+    selectedKeyframeIds: [keyframe.id],
     model: {
       ...value.model,
       tracks: value.model.tracks.map((track, trackIndex) => trackIndex !== target.location.trackIndex
@@ -400,11 +497,16 @@ function isRemoved(selectedId: string | null | undefined, removedIds: ReadonlySe
   return selectedId !== null && selectedId !== undefined && removedIds.has(selectedId)
 }
 
+/** 从关键帧选区里清掉已被删除的成员。 */
+function withoutRemovedKeyframes(selectedKeyframeIds: readonly string[], removedIds: ReadonlySet<string>) {
+  return selectedKeyframeIds.filter((id) => !removedIds.has(id))
+}
+
 /**
  * 从会话模型中移除一条属性轨道及其全部关键帧。
  *
  * @remarks
- * 同时清理指向该轨道的选择：留下悬空的 `selectedPropertyId` / `selectedKeyframeId` 会让属性面板
+ * 同时清理指向该轨道的选择：留下悬空的 `selectedPropertyId` / `selectedKeyframeIds` 会让属性面板
  * 停在一条已不存在的轨道上。
  */
 export function removeComposeAnimationPropertyTrack(
@@ -420,10 +522,7 @@ export function removeComposeAnimationPropertyTrack(
   return {
     ...value,
     selectedPropertyId: value.selectedPropertyId === propertyId ? null : value.selectedPropertyId,
-    selectedKeyframeId: value.selectedKeyframeId !== null
-      && removedKeyframeIds.has(value.selectedKeyframeId)
-      ? null
-      : value.selectedKeyframeId,
+    selectedKeyframeIds: withoutRemovedKeyframes(value.selectedKeyframeIds, removedKeyframeIds),
     model: {
       ...value.model,
       tracks: value.model.tracks.map((track) => track.id !== owner.id
@@ -451,9 +550,7 @@ export function removeComposeAnimationTrackGroup(
     selectedPropertyId: isRemoved(value.selectedPropertyId, removedPropertyIds)
       ? null
       : value.selectedPropertyId,
-    selectedKeyframeId: isRemoved(value.selectedKeyframeId, removedKeyframeIds)
-      ? null
-      : value.selectedKeyframeId,
+    selectedKeyframeIds: withoutRemovedKeyframes(value.selectedKeyframeIds, removedKeyframeIds),
     selectedClipId: clips.some((clip) => (
       clip.id === value.selectedClipId && clip.trackId === trackId
     ))

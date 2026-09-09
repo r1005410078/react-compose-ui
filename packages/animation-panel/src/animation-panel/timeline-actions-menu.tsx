@@ -32,6 +32,8 @@ export type TimelineMenuTarget =
       readonly propertyId: string
       readonly keyframeId: string
       readonly label: string
+      /** 该帧所在选区的成员数；按在未选中的帧上是 1——右键不是选择手势，条目只删它自己。 */
+      readonly selectedCount: number
     }
 
 /** 菜单条目文案；由时间线按当前 locale 传入，组件自身不做本地化。 */
@@ -41,6 +43,7 @@ export interface TimelineActionsMenuMessages {
   readonly addKeyframeAtPlayhead: string
   readonly addKeyframeAtPointer: string
   readonly removeKeyframe: string
+  readonly removeSelectedKeyframes: (count: number) => string
   readonly previousKeyframe: string
   readonly nextKeyframe: string
 }
@@ -53,6 +56,7 @@ export interface TimelineActionsMenuProps {
   readonly onAddKeyframeAtTime: (propertyId: string, timeMs: number) => void
   readonly onAddKeyframeAtPlayhead: (propertyId: string) => void
   readonly onRemoveKeyframe: (keyframeId: string) => void
+  readonly onRemoveSelectedKeyframes: () => void
   readonly onRemoveTrack: (propertyId: string) => void
   readonly onRemoveTrackGroup: (trackId: string) => void
   readonly onSeekAdjacentKeyframe: (propertyId: string, direction: 'previous' | 'next') => void
@@ -73,6 +77,7 @@ export function TimelineActionsMenu({
   onAddKeyframeAtPlayhead,
   onAddKeyframeAtTime,
   onRemoveKeyframe,
+  onRemoveSelectedKeyframes,
   onRemoveTrack,
   onRemoveTrackGroup,
   onSeekAdjacentKeyframe,
@@ -122,12 +127,21 @@ export function TimelineActionsMenu({
           </ComposeContextMenuItem>
         ) : null}
         {target?.kind === 'keyframe' ? (
-          <ComposeContextMenuItem
-            variant="destructive"
-            onClick={() => onRemoveKeyframe(target.keyframeId)}
-          >
-            {messages.removeKeyframe}
-          </ComposeContextMenuItem>
+          target.selectedCount > 1 ? (
+            <ComposeContextMenuItem
+              variant="destructive"
+              onClick={onRemoveSelectedKeyframes}
+            >
+              {messages.removeSelectedKeyframes(target.selectedCount)}
+            </ComposeContextMenuItem>
+          ) : (
+            <ComposeContextMenuItem
+              variant="destructive"
+              onClick={() => onRemoveKeyframe(target.keyframeId)}
+            >
+              {messages.removeKeyframe}
+            </ComposeContextMenuItem>
+          )
         ) : null}
       </ComposeContextMenuContent>
     </ComposeContextMenu>

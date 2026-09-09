@@ -75,7 +75,7 @@ export function createEmptyComposeAnimationPanelValue(): ComposeAnimationPanelVa
   return {
     model: { durationMs: 300, tracks: [] },
     currentTimeMs: 0,
-    selectedKeyframeId: null,
+    selectedKeyframeIds: [],
     selectedTrackId: null,
     selectedPropertyId: null,
     selectedClipId: null,
@@ -154,7 +154,7 @@ export function createDefaultComposeAnimationPanelValue(): ComposeAnimationPanel
       ],
     },
     currentTimeMs: 200,
-    selectedKeyframeId: 'fault-background-fill-200',
+    selectedKeyframeIds: ['fault-background-fill-200'],
     selectedTrackId: 'fault',
     selectedPropertyId: null,
     selectedClipId: 'fault-animation',
