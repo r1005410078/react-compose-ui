@@ -14,7 +14,12 @@ test('OpenSpec: stage / 绘图命令的单键快捷键 / 按 R 画出一个矩�
   await expect(prompt).toContainText('命令：')
 
   const surface = stage.getByTestId('stage-surface')
-  await expect(surface).toBeVisible()
+  /*
+   * `toBeVisible()` 之后再 `boundingBox()` 是两趟往返：编辑器布局在首帧之后还会动一下，
+   * 中间那一刻量到的可能是 `null`，报出来是一句与本用例无关的 `Cannot read properties of
+   * null`。轮询到量得着为止。
+   */
+  await expect.poll(() => surface.boundingBox()).not.toBeNull()
   const box = (await surface.boundingBox())!
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 

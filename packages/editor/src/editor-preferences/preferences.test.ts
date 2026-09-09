@@ -67,6 +67,29 @@ describe('editor preferences', () => {
     expect(normalized.custom.map((workspace) => workspace.id)).toEqual(['c1'])
   })
 
+  it('OpenSpec: editor-preferences / 实例级编辑器偏好 / 另存来的工作区带着两条货架', () => {
+    /*
+     * 归一化逐字段重建 custom 条目，因此**每加一个字段都要在这里抄一遍**。漏掉 `toolbar` 时
+     * 另存为当场看着是对的，直到偏好走一趟归一化——那个工作区的工具栏退回目录全集，既不是它
+     * 另存时的样子，也不是任何一条内建货架。判别性在于两条货架**都**断，只断一条时另一条
+     * 漏掉照样绿。
+     */
+    const normalized = normalizeComposeEditorWorkspacePreferences({
+      custom: [{
+        id: 'c1',
+        title: '接线现场',
+        layout: { kind: 'snapshot', format: 'dockview@7', data: {} },
+        session: {},
+        toolbar: ['select', 'grid', 'LINE'],
+        palette: { title: '现场物料', sections: [{ kind: 'presets', id: 'basics' }] },
+      }],
+    })
+    expect(normalized.custom[0]).toMatchObject({
+      toolbar: ['select', 'grid', 'LINE'],
+      palette: { title: '现场物料' },
+    })
+  })
+
   it('OpenSpec: editor-preferences / 可配置单次快捷键 / 重新绑定动作', () => {
     expect(normalizeComposeEditorKeybinding({
       alt: false,
