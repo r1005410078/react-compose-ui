@@ -59,6 +59,18 @@ export interface WorkspaceContent {
   activeDocumentPanelId: string | null
   /** 激活一个已打开的文档；标签条与重复打开都走它。 */
   activateDocument: (panelId: string) => void
+  /**
+   * 自定义物料面板对话框要用的两份目录：当前可见的基础 Preset，与资源里存在的文件夹路径。
+   *
+   * @remarks
+   * 走 content 而不是给对话框传 prop，是因为 `WorkspaceDialogs` 由 `dialog` 状态自己驱动、
+   * 中间隔着整棵工作区 chrome；而这两份都是**已经求值好的可呈现数据**，不是 Store 或 Registry
+   * 句柄——对话框因此仍然不认识资源协议。缺席即两列为空，宿主不接组件资源时正是如此。
+   */
+  paletteCatalog?: {
+    readonly presets: readonly { readonly id: string; readonly label: string }[]
+    readonly folders: readonly (readonly string[])[]
+  }
   /** 左右两侧此刻收没收起；把手与面板头上的折叠按钮都读它。 */
   sideCollapsed: ComposeWorkspaceSideCollapsed
   /** 收起或展开一侧。 */

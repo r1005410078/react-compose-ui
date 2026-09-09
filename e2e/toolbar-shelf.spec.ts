@@ -274,3 +274,176 @@ test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 按�
   expect(text.color).toBe('rgb(142, 152, 168)')
   expect(snap.color).toBe('rgb(140, 192, 255)')
 })
+
+test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 右键收走容器之后快捷键仍可用', async ({ page }) => {
+  const { editor, stage } = await openEditor(page)
+  const toolbar = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
+
+  // 容器只在**页面**货架上——绘图那条默认就不含它（3.6 断的正是这件事）。
+  await toolbar.locator('[data-toolbar-item="draw-container"]').click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '从工具栏移除' }).click()
+  expect(await itemIds(editor)).not.toContain('draw-container')
+
+  /*
+   * 容器没有命令词，它的第二条入口是**动作目录**：默认键位 `F`，命令面板也搜得到。
+   * 判别性在于按键之后工具真的切过去了——只断言「按钮没了」的用例，在一个连能力一起收走的
+   * 实现上同样会绿。
+   */
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await stage.press('f')
+  // 容器工具接管之后「选择」就不再是按下的那一个：工具是单选，恒有至多一个按下。
+  await expect(editor.getByRole('button', { name: '选择' })).toHaveAttribute('aria-pressed', 'false')
+
+  // 重置把它拿回来。
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义工具栏…' })
+    .click()
+  await page.getByRole('dialog').getByRole('button', { name: '重置为默认' }).click()
+  expect(await itemIds(editor)).toContain('draw-container')
+})
+
+test('OpenSpec: editor-workspace-layout / 工具栏货架 / 宿主注入的目录项可上架并启动命令', async ({ page }) => {
+  const { editor, stage } = await openEditor(page)
+
+  /*
+   * 注入的是「目录里多一项可选的」而不是「工具栏上多一颗按钮」：示例应用的 `demo-circle`
+   * 默认不在任何一条内建货架上，因此它此刻只在对话框的「未放入」那一列里。
+   */
+  expect(await shelfIds(editor)).not.toContain('demo-circle')
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义工具栏…' })
+    .click()
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('[data-shelf-available="demo-circle"]').click()
+  await dialog.getByRole('button', { name: '加入货架' }).click()
+  await dialog.getByRole('button', { name: '完成' }).click()
+
+  const button = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
+    .locator('[data-toolbar-item="demo-circle"]')
+  await expect(button).toBeVisible()
+  // 按下去启动的就是它指向的那条命令会话，与在命令行敲 `CIRCLE` 到达同一个地方。
+  await button.click()
+  await expect(stage.getByText(/指定圆心/).first()).toBeVisible()
+  await page.keyboard.press('Escape')
+})
+
+test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 重排跨越工作区切换后仍在', async ({ page }) => {
+  const { editor, switcher } = await openEditor(page)
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义工具栏…' })
+    .click()
+  const dialog = page.getByRole('dialog')
+
+  // 把 `ARROW` 一路上移到第二位（「选择」钉在第一位，谁都挪不到它前面去）。
+  await dialog.locator('[data-shelf-item="ARROW"]').click()
+  const moveUp = dialog.getByRole('button', { name: '上移' })
+  // 按到禁用为止：「选择」钉在第一位，因此 `ARROW` 最远只能到第二位。
+  await expect(moveUp).toBeEnabled()
+  while (await moveUp.isEnabled()) await moveUp.click()
+  await dialog.getByRole('button', { name: '完成' }).click()
+  expect((await itemIds(editor)).indexOf('ARROW')).toBe(1)
+
+  // 切走再切回：货架住在偏好里、按工作区索引，不是一份会话状态。
+  await switcher.getByRole('radio', { name: '绘图' }).click()
+  await expect(switcher.getByRole('radio', { name: '绘图' })).toHaveAttribute('aria-checked', 'true')
+  await switcher.getByRole('radio', { name: '页面' }).click()
+  await expect(switcher.getByRole('radio', { name: '页面' })).toHaveAttribute('aria-checked', 'true')
+  expect((await itemIds(editor)).indexOf('ARROW')).toBe(1)
+})
+
+test('OpenSpec: editor-preferences / 工作区管理 / 另存为带走改过的货架', async ({ page }) => {
+  const { editor, switcher } = await openEditor(page)
+  const toolbar = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
+
+  // 先改一格，让页面工作区与它的基线不同。
+  await toolbar.locator('[data-toolbar-item="ARROW"]').click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '从工具栏移除' }).click()
+  expect(await itemIds(editor)).not.toContain('ARROW')
+
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menuitem', { name: '另存为工作区…' }).click()
+  const dialog = page.getByRole('dialog', { name: '另存为工作区' })
+  await dialog.getByRole('textbox', { name: '名称' }).fill('接线现场')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  await expect(dialog).toBeHidden()
+
+  const saved = switcher.getByRole('radio', { name: '接线现场' })
+  await expect(saved).toHaveAttribute('aria-checked', 'true')
+  // 另存为复制的是「此刻这个工作区的样子」，货架是其中一样。
+  expect(await itemIds(editor)).not.toContain('ARROW')
+
+  // 回到来源工作区并重置它：新工作区是一份副本，不跟着源走。
+  await switcher.getByRole('radio', { name: '页面' }).click()
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义工具栏…' })
+    .click()
+  await page.getByRole('dialog').getByRole('button', { name: '重置为默认' }).click()
+  expect(await itemIds(editor)).toContain('ARROW')
+
+  await saved.click()
+  await expect(saved).toHaveAttribute('aria-checked', 'true')
+  expect(await itemIds(editor)).not.toContain('ARROW')
+})
+
+test('OpenSpec: component-library / 自定义物料面板 / 右键隐藏、只看这一组与对话框', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const library = editor.locator('[data-workspace-panel="component-library"]')
+  await expect(library).toBeVisible()
+
+  // 1) 基础瓦片右键即隐藏；同一个 Preset 的别的入口（快捷键 / 动作目录）不受影响。
+  const container = library.getByRole('button', { name: /Container/ })
+  await container.click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '从面板隐藏' }).click()
+  await expect(container).toBeHidden()
+
+  /*
+   * 2) 文件夹来源那一段只给整段的两件事——单个隐藏会让「往这个文件夹里再导十个符号，它们
+   * 自动出现」变成谎言。右键落在**那一段**上即可（菜单的目标是段，不是某一块瓦片），因此
+   * 这条不需要示例应用先有项目组件：示例的项目组件段本来就是空的（写着 0）。
+   */
+  const project = library.locator('[data-shelf-section="components"]')
+  await project.click({ button: 'right' })
+  const menu = page.getByRole('menu')
+  await expect(menu.getByRole('menuitem', { name: '从面板隐藏' })).toHaveCount(0)
+  await menu.getByRole('menuitem', { name: '只看这一组' }).click()
+  // 只剩那一段：基础组件那一段整段消失。
+  await expect(library.getByRole('heading', { name: /基础组件/ })).toHaveCount(0)
+
+  // 3) 右键进对话框，重置把两样都拿回来。
+  await project.click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '自定义物料面板…' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: '自定义物料面板' })).toBeVisible()
+  await dialog.getByRole('button', { name: '重置为默认' }).click()
+  await expect(library.getByRole('heading', { name: /基础组件/ })).toBeVisible()
+  await expect(library.getByRole('button', { name: /Container/ })).toBeVisible()
+})
+
+test('OpenSpec: component-library / 自定义物料面板 / 对话框排序、标题与添加来源', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const library = editor.locator('[data-workspace-panel="component-library"]')
+  await expect(library.getByRole('heading', { name: /基础组件/ })).toBeVisible()
+
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义物料面板…' })
+    .click()
+  const dialog = page.getByRole('dialog')
+
+  // 面板标题同时是它在 Dockview 上的标签名：面板内部不再画第二遍。
+  await dialog.getByRole('textbox').first().fill('现场物料')
+  // 把「基础组件」那一段挪到后面去。
+  await dialog.locator('[data-palette-section="basics"]').click()
+  await dialog.getByRole('button', { name: '下移' }).click()
+  await dialog.getByRole('button', { name: '完成' }).click()
+
+  await expect(editor.locator('[data-workspace-tab="compose-component-library-panel"]'))
+    .toContainText('现场物料')
+  const headings = await library.getByRole('heading').allInnerTexts()
+  expect(headings.findIndex((text) => text.includes('基础组件')))
+    .toBeGreaterThan(headings.findIndex((text) => text.includes('项目组件')))
+})

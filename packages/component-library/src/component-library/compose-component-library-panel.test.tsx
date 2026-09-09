@@ -15,6 +15,9 @@ interface PanelApi {
     readonly onCreateVariantIntent?: (descriptor: unknown) => void
     readonly onItemDragStart?: (event: unknown) => void
     readonly onItemDragEnd?: (event: unknown) => void
+    readonly onShelfChange?: (shelf: ComposeComponentShelf) => void
+    readonly onCustomize?: () => void
+    readonly onRevealFolder?: (folderPath: readonly string[]) => void
   }>
 }
 
@@ -210,5 +213,80 @@ describe('ComposeComponentLibraryPanel', () => {
       assetKey: 'button',
       kind: 'base',
     }))
+  })
+})
+
+describe('OpenSpec: component-library / 自定义物料面板 / 瓦片右键', () => {
+  // 这一组是上面那个 describe 的同级，因此要自己卸载——否则第二次 render 之后同名瓦片有两个。
+  afterEach(cleanup)
+
+  const shelf: ComposeComponentShelf = {
+    sections: [
+      { kind: 'presets', id: 'basics' },
+      { kind: 'folder', id: 'components', folderPath: [] },
+    ],
+  }
+
+  function renderPanel(overrides: Record<string, unknown> = {}) {
+    const Panel = api.ComposeComponentLibraryPanel!
+    const onShelfChange = vi.fn()
+    const onCustomize = vi.fn()
+    const onRevealFolder = vi.fn()
+    render(
+      <Panel
+        onCustomize={onCustomize}
+        onRevealFolder={onRevealFolder}
+        onShelfChange={onShelfChange}
+        registry={registry}
+        shelf={shelf}
+        store={componentStore()}
+        {...overrides}
+      />,
+    )
+    return { onCustomize, onRevealFolder, onShelfChange }
+  }
+
+  it('基础瓦片给「从面板隐藏」，写出的是其余 Preset 的清单', async () => {
+    const { onShelfChange } = renderPanel()
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加 Container' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '从面板隐藏' }))
+    // `include` 缺省表示「全部」，因此藏掉一个必须把其余的写出来。夹具只有 Container 一个
+    // 可见 Preset，写出来的就是空清单——那正是「这一段什么都不列」。
+    expect(onShelfChange).toHaveBeenCalledTimes(1)
+    expect(onShelfChange.mock.calls[0]![0].sections[0]).toMatchObject({ id: 'basics', include: [] })
+  })
+
+  it('文件夹瓦片不给单个隐藏，只给整段的两件事', async () => {
+    const { onRevealFolder } = renderPanel()
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加主组件 Button' }))
+    // 单个隐藏会让「往这个文件夹里再导十个符号，它们自动出现」变成谎言。
+    expect(screen.queryByRole('menuitem', { name: '从面板隐藏' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('menuitem', { name: '只看这一组' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: '在资源里打开此文件夹' }))
+    expect(onRevealFolder).toHaveBeenCalledWith([])
+  })
+
+  it('「只看这一组」把货架收成只剩那一段', async () => {
+    const { onShelfChange } = renderPanel()
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加主组件 Button' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '只看这一组' }))
+    expect(onShelfChange.mock.calls[0]![0].sections.map((s: { id: string }) => s.id))
+      .toEqual(['components'])
+  })
+
+  it('空白处只给自定义入口：那里没有可操作的目标', async () => {
+    const { onCustomize } = renderPanel()
+    fireEvent.contextMenu(screen.getByRole('region', { name: '组件库内容' }))
+    expect(screen.queryByRole('menuitem', { name: '从面板隐藏' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '只看这一组' })).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('menuitem', { name: '自定义物料面板…' }))
+    expect(onCustomize).toHaveBeenCalledTimes(1)
+  })
+
+  it('宿主不给回调时整个菜单不出现：右键落回浏览器默认', async () => {
+    const Panel = api.ComposeComponentLibraryPanel!
+    render(<Panel registry={registry} shelf={shelf} store={componentStore()} />)
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加 Container' }))
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })

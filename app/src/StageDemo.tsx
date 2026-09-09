@@ -21,7 +21,7 @@ import {
   ComposeEditor,
   useComposeEditorController,
 } from '@compose-ui/editor'
-import type { ComposeEditorTransactionEvent } from '@compose-ui/editor'
+import type { ComposeEditorTransactionEvent, ComposeToolbarItem } from '@compose-ui/editor'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import { createComposeComponentStore } from '@compose-ui/component-library'
 import {
@@ -357,6 +357,31 @@ function targetPath(event: ComposeEditorTransactionEvent, targetId: string) {
   return patch?.path.slice(2)
 }
 
+/**
+ * 宿主注入的工具栏目录项，演示 `toolbarItems` 这条注入边界。
+ *
+ * @remarks
+ * 它**默认不在任何一条内建货架上**——注入的是「目录里多一项可选的」，不是「工具栏上多一颗
+ * 按钮」；用户从「自定义工具栏…」里把它加上去。目标指向一条既有命令，因为宿主自定义命令
+ * 眼下没有经 `ComposeEditor` 注入的通路（`ComposeStageProps.commands` 在 Stage 上）；这条
+ * 演示要证明的是注入的**目录项**能上架、能按、按下去与敲那个命令名走同一条会话。
+ *
+ * 常量住在组件外：它一个引用都不捕获，放在组件里每次渲染都会重建，工具栏目录的身份因此每帧
+ * 都变。
+ */
+const DEMO_TOOLBAR_ITEMS: readonly ComposeToolbarItem[] = [
+  {
+    id: 'demo-circle',
+    label: '示例圆',
+    icon: (
+      <svg aria-hidden="true" height="20" viewBox="0 0 20 20" width="20">
+        <circle cx="10" cy="10" fill="none" r="6" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+    target: { kind: 'command', id: 'CIRCLE' },
+  },
+]
+
 export function StageDemoWorkspace() {
   const demonstrateComponentFailures = new URLSearchParams(window.location.search)
     .has('component-failure-demo')
@@ -531,6 +556,7 @@ export function StageDemoWorkspace() {
     <>
       <ComposeEditor
         className="editor-workspace"
+        toolbarItems={DEMO_TOOLBAR_ITEMS}
         assets={{
           browser: { provider: assetProvider },
           resolver: assetResolver,

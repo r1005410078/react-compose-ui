@@ -17,6 +17,8 @@ import { useWorkspaceContent } from './workspace-context'
 import { getEditorMessages } from '../editor-i18n'
 import { COMPOSE_TOOLBAR_CATALOG, useComposeToolbarShelf } from '../stage-toolbar/toolbar-shelf'
 import { ToolbarShelfDialog } from './toolbar-shelf-dialog'
+import { PaletteShelfDialog } from './palette-shelf-dialog'
+import { COMPOSE_DEFAULT_COMPONENT_SHELF } from '@compose-ui/component-library'
 
 /**
  * 工作区管理的三个对话框：另存为、重命名、删除确认。
@@ -30,7 +32,7 @@ import { ToolbarShelfDialog } from './toolbar-shelf-dialog'
 export function WorkspaceDialogs() {
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
-  const { workspace } = useWorkspaceContent()
+  const { workspace, paletteCatalog } = useWorkspaceContent()
   const { dialog, current } = workspace
   const { items: injectedToolbarItems } = useComposeToolbarShelf()
   if (dialog === null) return null
@@ -78,6 +80,19 @@ export function WorkspaceDialogs() {
         onClose={close}
         onReset={() => workspace.reset()}
         onSubmit={(shelf) => workspace.setToolbarShelf(shelf)}
+      />
+    )
+  }
+
+  if (dialog === 'palette') {
+    return (
+      <PaletteShelfDialog
+        folders={paletteCatalog?.folders ?? []}
+        presets={paletteCatalog?.presets ?? []}
+        shelf={workspace.palette ?? COMPOSE_DEFAULT_COMPONENT_SHELF}
+        onClose={close}
+        onReset={() => workspace.reset()}
+        onSubmit={(shelf) => workspace.setPaletteShelf(shelf)}
       />
     )
   }

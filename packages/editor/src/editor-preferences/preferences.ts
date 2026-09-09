@@ -321,6 +321,12 @@ export function normalizeComposeEditorWorkspacePreferences(
         layout: workspace.layout,
         // 货架与种子是后加的字段：偏好里没有的那份按页面的默认值补齐，而不是丢掉整个工作区。
         palette: workspace.palette,
+        /*
+         * 两条货架都要抄。这里逐字段重建而不是整份透传（其余字段要挡形状不对的偏好），因此
+         * 漏掉一条的症状很隐蔽：另存为当场看着是对的，直到偏好走一趟归一化，那个工作区的
+         * 工具栏就退回**目录全集**——既不是它另存时的样子，也不是任何一条内建货架。
+         */
+        toolbar: workspace.toolbar,
         session: workspace.session,
         seeds: normalizeSeeds(workspace.seeds),
       }))

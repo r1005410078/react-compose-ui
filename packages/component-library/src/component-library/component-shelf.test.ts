@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { resolveComponentShelf } from './component-shelf'
-import type { ComposeComponentShelf } from './component-shelf'
+import {
+  addComponentShelfSection,
+  keepOnlyComponentShelfSection,
+  moveComponentShelfSection,
+  removeComponentShelfSection,
+  resolveComponentShelf,
+  setComponentShelfPresetVisible,
+  updateComponentShelfSection,
+} from './component-shelf'
+import type { ComposeComponentShelf, ComposeComponentShelfFolderSection } from './component-shelf'
 import type { ComposeComponentCatalog, ComposeComponentDescriptor } from '../component-store'
 
 const labels = { basics: '基础组件', components: '项目组件' }
@@ -106,5 +114,94 @@ describe('resolveComponentShelf', () => {
     const [section] = resolve(shelf)
     expect(section?.groups[0]?.tiles.map((tile) => (tile.kind === 'preset' ? tile.presetId : null)))
       .toEqual(['container'])
+  })
+})
+
+describe('OpenSpec: component-library / 自定义物料面板 / 货架编辑', () => {
+  const ids = (shelf: ComposeComponentShelf) => shelf.sections.map((section) => section.id)
+  const available = ['container', 'text']
+
+  it('挪段：按 id 寻址，越界原样返回', () => {
+    expect(ids(moveComponentShelfSection(symbols, 'components', -1)))
+      .toEqual(['components', 'symbols', 'basics'])
+    // 连按到头之后静默不动——编辑面上那颗按钮此时已经禁用，这里是键盘用户的第二道。
+    expect(moveComponentShelfSection(symbols, 'symbols', -1)).toBe(symbols)
+    expect(moveComponentShelfSection(symbols, 'basics', 1)).toBe(symbols)
+    expect(moveComponentShelfSection(symbols, '不存在', 1)).toBe(symbols)
+  })
+
+  it('去掉一段；整份货架可以空', () => {
+    expect(ids(removeComponentShelfSection(symbols, 'components'))).toEqual(['symbols', 'basics'])
+    const emptied = symbols.sections.reduce(
+      (shelf, section) => removeComponentShelfSection(shelf, section.id),
+      symbols,
+    )
+    expect(emptied.sections).toEqual([])
+    expect(removeComponentShelfSection(symbols, '不存在')).toBe(symbols)
+  })
+
+  it('只看这一组：收成只剩那一段，标题与搜索照旧', () => {
+    const only = keepOnlyComponentShelfSection(symbols, 'components')
+    expect(ids(only)).toEqual(['components'])
+    expect(only.title).toBe('符号库')
+    expect(only.search).toBe(true)
+  })
+
+  it('加一段：重复 id 原样返回', () => {
+    const added = addComponentShelfSection(symbols, {
+      kind: 'folder',
+      id: 'signs',
+      folderPath: ['Symbols', 'Signs'],
+    })
+    expect(ids(added)).toEqual(['symbols', 'components', 'basics', 'signs'])
+    expect(addComponentShelfSection(symbols, { kind: 'presets', id: 'basics' })).toBe(symbols)
+  })
+
+  it('改段选项：文件夹的分组方式与折叠', () => {
+    const flat = updateComponentShelfSection<ComposeComponentShelfFolderSection>(
+      symbols,
+      'symbols',
+      { groupBy: 'flat', collapsed: true },
+    )
+    expect(flat.sections[0]).toMatchObject({ groupBy: 'flat', collapsed: true, id: 'symbols' })
+    // 改完仍然解析得动，而且真的按平铺出一组。
+    expect(resolve(flat)[0]!.groups).toHaveLength(1)
+  })
+
+  it('藏一个基础 Preset：include 缺省时先把其余的写出来', () => {
+    const hidden = setComponentShelfPresetVisible({
+      shelf: symbols,
+      sectionId: 'basics',
+      presetId: 'container',
+      visible: false,
+      available,
+    })
+    expect(hidden.sections[2]).toMatchObject({ include: ['text'] })
+    const tiles = resolve(hidden)[2]!.groups.flatMap((group) => group.tiles)
+    expect(tiles.map((tile) => (tile.kind === 'preset' ? tile.presetId : ''))).toEqual(['text'])
+  })
+
+  it('显回来时回到 available 里的位置，不是末尾', () => {
+    const hidden = setComponentShelfPresetVisible({
+      shelf: symbols, sectionId: 'basics', presetId: 'container', visible: false, available,
+    })
+    const shown = setComponentShelfPresetVisible({
+      shelf: hidden, sectionId: 'basics', presetId: 'container', visible: true, available,
+    })
+    // 藏了再显不该把它挪到最后——那个位移用户没有要求过，撤销也回不来。
+    expect(shown.sections[2]).toMatchObject({ include: ['container', 'text'] })
+  })
+
+  it('paletteHidden 的 Preset 勾不动：那不是货架的决定', () => {
+    // 「矩形」不在 available 里（判据把它挡下了），因此写货架是 no-op 而不是写出一条假清单。
+    expect(setComponentShelfPresetVisible({
+      shelf: symbols, sectionId: 'basics', presetId: 'rect', visible: true, available,
+    })).toBe(symbols)
+  })
+
+  it('文件夹段上勾 Preset 是 no-op：文件夹来源不能按单项挑', () => {
+    expect(setComponentShelfPresetVisible({
+      shelf: symbols, sectionId: 'symbols', presetId: 'container', visible: false, available,
+    })).toBe(symbols)
   })
 })

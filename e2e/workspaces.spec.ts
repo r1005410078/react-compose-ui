@@ -85,8 +85,18 @@ test('OpenSpec: editor-workspace-layout / 切换不打断画布 / 命令会话�
   await expect(log).toBeVisible()
   const rowsBefore = await log.getByRole('button').count()
 
-  // LINE 取到一个点之后切工作区。
-  await editor.getByRole('button', { name: '直线', exact: true }).click()
+  /*
+   * LINE 取到一个点之后切工作区。**从命令行启动而不是点按钮**：这条用例问的是「命令会话跨
+   * 切换活不活得下来」，而「LINE 在不在这个工作区的工具栏货架上」是另一回事——「变电站」是从
+   * 页面另存来的，页面货架里本来就没有绘图命令。
+   *
+   * 它此前点的是按钮，能绿是因为一处缺陷：偏好归一化漏抄了 `toolbar`，另存来的工作区因此退回
+   * **目录全集**，而全集里有 `LINE`。缺陷修好之后这条用例跟着红了——它当时钉住的是那个缺陷。
+   */
+  const commandInput = stage.getByRole('textbox', { name: '命令行' })
+  await commandInput.click()
+  await commandInput.fill('LINE')
+  await page.keyboard.press('Enter')
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
   await page.mouse.click(surface.x + 200, surface.y + 200)
   const prompt = stage.getByTestId('stage-drafting-command-prompt')

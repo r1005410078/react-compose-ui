@@ -249,3 +249,148 @@ export function resolveComponentShelf(input: {
     }
   })
 }
+
+/*
+ * 以下是货架的**编辑**那一半：对话框与瓦片右键都只调这里，自己不拼对象。
+ *
+ * 与工具栏那边（`moveToolbarShelfItem` 一族）的一处差别：那边按**下标**寻址，因为分隔线可以
+ * 有多条、id 认不出是哪一条；这里每一段都有稳定 id，因此一律按 id。混用两种寻址是这类成对
+ * 模块最容易出的错，所以在这里写明它们为什么不一样。
+ */
+
+/** 找不到那一段时**原样返回**，不抛错：右键菜单与对话框都可能拿着一份刚被别处改过的货架。 */
+function sectionIndex(shelf: ComposeComponentShelf, id: string) {
+  return shelf.sections.findIndex((section) => section.id === id)
+}
+
+function withSections(
+  shelf: ComposeComponentShelf,
+  sections: readonly ComposeComponentShelfSection[],
+): ComposeComponentShelf {
+  return { ...shelf, sections }
+}
+
+/**
+ * 把某一段往前或往后挪一格。
+ *
+ * @remarks
+ * 越界原样返回：编辑面上那两颗按钮此时是禁用的，这里再挡一次是因为键盘用户可以连按，而连按
+ * 到头之后静默不动比抛错好——与 `moveToolbarShelfItem` 同一条理由。
+ *
+ * @public
+ */
+export function moveComponentShelfSection(
+  shelf: ComposeComponentShelf,
+  id: string,
+  delta: -1 | 1,
+): ComposeComponentShelf {
+  const index = sectionIndex(shelf, id)
+  if (index < 0) return shelf
+  const target = index + delta
+  if (target < 0 || target >= shelf.sections.length) return shelf
+  const next = [...shelf.sections]
+  const [section] = next.splice(index, 1)
+  next.splice(target, 0, section!)
+  return withSections(shelf, next)
+}
+
+/** 去掉某一段。整份货架可以空——那是「面板里什么都不列」，是用户说得出口的意图。 @public */
+export function removeComponentShelfSection(
+  shelf: ComposeComponentShelf,
+  id: string,
+): ComposeComponentShelf {
+  const index = sectionIndex(shelf, id)
+  if (index < 0) return shelf
+  return withSections(shelf, shelf.sections.filter((_, at) => at !== index))
+}
+
+/**
+ * 「只看这一组」：把货架收成只剩这一段。
+ *
+ * @remarks
+ * 它是 `removeComponentShelfSection` 的补集而不是一个**会话**开关：右键菜单上那一项改的是
+ * 货架本身，因此撤销的办法与别的货架改动一样——重置为默认。做成会话态的话，用户切走再切回
+ * 会发现它自己恢复了，而屏幕上没有东西解释为什么。
+ *
+ * @public
+ */
+export function keepOnlyComponentShelfSection(
+  shelf: ComposeComponentShelf,
+  id: string,
+): ComposeComponentShelf {
+  const index = sectionIndex(shelf, id)
+  if (index < 0) return shelf
+  return withSections(shelf, [shelf.sections[index]!])
+}
+
+/** 往货架末尾加一段；id 已经在货架上的原样返回。 @public */
+export function addComponentShelfSection(
+  shelf: ComposeComponentShelf,
+  section: ComposeComponentShelfSection,
+): ComposeComponentShelf {
+  if (sectionIndex(shelf, section.id) >= 0) return shelf
+  return withSections(shelf, [...shelf.sections, section])
+}
+
+/**
+ * 改某一段的选项（标题、折叠、文件夹的分组方式）。
+ *
+ * @remarks
+ * `patch` 按段的种类收窄，因此给文件夹段传 `groupBy`、给 Preset 段传 `include` 各自成立，
+ * 而反过来编译期就挡住了——两种段的字段不通用，运行期再判一次分不出「传错了」与「传了
+ * undefined」。
+ *
+ * @public
+ */
+export function updateComponentShelfSection<TSection extends ComposeComponentShelfSection>(
+  shelf: ComposeComponentShelf,
+  id: string,
+  patch: Partial<Omit<TSection, 'kind' | 'id'>>,
+): ComposeComponentShelf {
+  const index = sectionIndex(shelf, id)
+  if (index < 0) return shelf
+  const next = [...shelf.sections]
+  next[index] = { ...shelf.sections[index]!, ...patch } as ComposeComponentShelfSection
+  return withSections(shelf, next)
+}
+
+/**
+ * 让某个基础 Preset 在某一段里出现或消失。
+ *
+ * @remarks
+ * `include` 缺省表示「全部可见 Preset」，因此**藏掉一个就必须把其余的写出来**——这也是这个
+ * 函数需要 `available`（此刻全部可见 Preset 的 id，顺序即呈现顺序）的原因：货架本身不认识
+ * Registry。
+ *
+ * 代价说在明处：写出清单之后，以后新加进 Registry 的 Preset 不会自动出现在这一段里。对基础
+ * Preset 这是可接受的——它们只有几个、id 写在代码里，而**文件夹**来源那边「新导入的自动
+ * 出现」是一句承诺，所以那边**不能**按单项挑（见 {@link ComposeComponentShelfFolderSection}）。
+ *
+ * `visible` 为真时把 id 放回**它在 `available` 里的位置**而不是末尾：呈现顺序由 Registry 决定，
+ * 藏了再显不该把它挪到最后——那个位移用户没有要求过，撤销也回不来。
+ *
+ * @public
+ */
+export function setComponentShelfPresetVisible(input: {
+  readonly shelf: ComposeComponentShelf
+  readonly sectionId: string
+  readonly presetId: string
+  readonly visible: boolean
+  readonly available: readonly string[]
+}): ComposeComponentShelf {
+  const { available, presetId, sectionId, shelf, visible } = input
+  const index = sectionIndex(shelf, sectionId)
+  const section = shelf.sections[index]
+  if (!section || section.kind !== 'presets') return shelf
+  // 这个 Preset 根本不在可见集里（被 `paletteHidden` 判据挡下）时不写货架：那不是货架的决定。
+  if (!available.includes(presetId)) return shelf
+
+  const current = section.include ?? available
+  const next = visible
+    ? available.filter((id) => id === presetId || current.includes(id))
+    : current.filter((id) => id !== presetId)
+  if (next.length === current.length && next.every((id, at) => id === current[at])) return shelf
+  return updateComponentShelfSection<ComposeComponentShelfPresetSection>(shelf, sectionId, {
+    include: next,
+  })
+}
