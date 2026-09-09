@@ -2,7 +2,14 @@ import type { IDockviewPanelHeaderProps } from 'dockview-react'
 import { useEffect, useReducer } from 'react'
 import type { PointerEventHandler } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import {
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuItem,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import { WORKSPACE_PANEL_IDS } from './workspace-layout'
+import { useWorkspaceContent } from './workspace-context'
 import { getEditorMessages } from '../editor-i18n'
 
 type WorkspaceTabProps = IDockviewPanelHeaderProps & {
@@ -17,17 +24,20 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
   const messages = getEditorMessages(
     i18n?.locale ?? 'zh-CN',
     i18n?.formatMessage,
-  ).workspace
+  )
+  const panelMessages = messages.workspace
+  const { workspace } = useWorkspaceContent()
+  const contextMenu = useComposeContextMenu<null>()
   const titles: Record<string, string> = {
-    [WORKSPACE_PANEL_IDS.scene]: messages.sceneGraph,
-    [WORKSPACE_PANEL_IDS.componentLibrary]: messages.componentLibrary,
-    [WORKSPACE_PANEL_IDS.history]: messages.history,
-    [WORKSPACE_PANEL_IDS.canvas]: messages.canvas,
-    [WORKSPACE_PANEL_IDS.inspector]: messages.inspector,
-    [WORKSPACE_PANEL_IDS.transactionLog]: messages.transactionLog,
-    [WORKSPACE_PANEL_IDS.command]: messages.command,
-    [WORKSPACE_PANEL_IDS.assetBrowser]: messages.assets,
-    [WORKSPACE_PANEL_IDS.animation]: messages.animation,
+    [WORKSPACE_PANEL_IDS.scene]: panelMessages.sceneGraph,
+    [WORKSPACE_PANEL_IDS.componentLibrary]: panelMessages.componentLibrary,
+    [WORKSPACE_PANEL_IDS.history]: panelMessages.history,
+    [WORKSPACE_PANEL_IDS.canvas]: panelMessages.canvas,
+    [WORKSPACE_PANEL_IDS.inspector]: panelMessages.inspector,
+    [WORKSPACE_PANEL_IDS.transactionLog]: panelMessages.transactionLog,
+    [WORKSPACE_PANEL_IDS.command]: panelMessages.command,
+    [WORKSPACE_PANEL_IDS.assetBrowser]: panelMessages.assets,
+    [WORKSPACE_PANEL_IDS.animation]: panelMessages.animation,
   }
   // 物料面板的标签名由**工作区**给（页面「基础组件」/ 绘图「符号库」），属性面板的由**选区**
   // 给（`属性 · 矩形`），因此这两个读面板自己的标题而不是这张按 id 查的表；其余面板的名字只
@@ -45,16 +55,38 @@ export function WorkspaceTab(props: WorkspaceTabProps) {
     ? props.api.title ?? titles[props.api.id]
     : titles[props.api.id] ?? props.api.title
 
+  /*
+   * 「自定义物料面板…」挂在**标签**上，而不是只挂在瓦片右键上：瓦片右键要求面板里至少有一个
+   * 瓦片，而一个瓦片都没有的面板（去掉了基础组件、或引用的文件夹没了）正是最需要配置的那一
+   * 档。标签始终在。瓦片右键仍然留着——那上面的「从面板隐藏」「只看这一组」是瓦片作用域的，
+   * 标签上给不出，两处菜单各自回答自己作用域里的问题。
+   */
+  const customizable = props.api.id === WORKSPACE_PANEL_IDS.componentLibrary
+
   return (
-    <div
-      className="compose-editor__text-tab"
-      data-workspace-tab={props.api.id}
-      onPointerDown={props.onPointerDown}
-      onPointerLeave={props.onPointerLeave}
-      onPointerUp={props.onPointerUp}
-      title={title}
-    >
-      {title}
-    </div>
+    <>
+      <div
+        className="compose-editor__text-tab"
+        data-workspace-tab={props.api.id}
+        onContextMenu={customizable ? (event) => contextMenu.openAt(event, null) : undefined}
+        onPointerDown={props.onPointerDown}
+        onPointerLeave={props.onPointerLeave}
+        onPointerUp={props.onPointerUp}
+        title={title}
+      >
+        {title}
+      </div>
+      {customizable ? (
+        <ComposeContextMenu {...contextMenu.rootProps}>
+          <ComposeContextMenuContent>
+            <ComposeContextMenuItem
+              onClick={() => { contextMenu.close(); workspace.openDialog('palette') }}
+            >
+              {messages.workspaces.customizePalette}
+            </ComposeContextMenuItem>
+          </ComposeContextMenuContent>
+        </ComposeContextMenu>
+      ) : null}
+    </>
   )
 }

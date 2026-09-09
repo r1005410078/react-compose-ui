@@ -2285,14 +2285,25 @@ export function ComposeEditor({
     () => [...(toolbarItems ?? []), animationToolbarItem],
     [animationToolbarItem, toolbarItems],
   )
+  /*
+   * 工具栏量出来的溢出切口：第一个被收进「更多」的格 id。自定义对话框拿它画切口，量不到
+   * 就不画——对话框自己量不到，它打开时工具栏可能已经被遮住了。
+   */
+  const [toolbarOverflowFrom, setToolbarOverflowFrom] = useState<string | null>(null)
   const toolbarShelfContext = useMemo(
     () => ({
       shelf: workspaceToolbar,
       items: resolvedToolbarItems,
       onCustomize: openToolbarDialog,
       onShelfChange: setToolbarShelf,
+      shortcuts: resolvedPreferences.shortcuts,
+      overflowFrom: toolbarOverflowFrom,
+      onOverflowChange: setToolbarOverflowFrom,
     }),
-    [openToolbarDialog, setToolbarShelf, resolvedToolbarItems, workspaceToolbar],
+    [
+      openToolbarDialog, resolvedPreferences.shortcuts, resolvedToolbarItems, setToolbarShelf,
+      toolbarOverflowFrom, workspaceToolbar,
+    ],
   )
   /**
    * 当前工作区的工具栏上有哪几个 Preset 的入口。

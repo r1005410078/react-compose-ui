@@ -119,8 +119,32 @@ export const ComposeDialogViewport = forwardRef<HTMLDivElement, ComposeDialogVie
   },
 )
 
+/**
+ * Dialog 内容的宽度档。
+ *
+ * @remarks
+ * 宽度是**消费者声明**的，不由内容撑开：撑开会让同一个对话框在不同数据下宽度不同——同一份
+ * 货架多两格就换一个宽度，用户读不出为什么。`wide` 这一档是给编排类对话框的，一条十几格的
+ * 横排货架要这么宽才排得下。
+ *
+ * @public
+ */
+export type ComposeDialogSize = 'default' | 'wide'
+
 /** Compose Dialog Content 属性。 */
-export type ComposeDialogContentProps = BasePopupProps
+export type ComposeDialogContentProps = BasePopupProps & {
+  /**
+   * 宽度档。
+   *
+   * @defaultValue 'default'
+   */
+  readonly size?: ComposeDialogSize
+}
+
+const DIALOG_SIZE_CLASS: Readonly<Record<ComposeDialogSize, string>> = {
+  default: 'cu:max-w-md',
+  wide: 'cu:max-w-[60rem]',
+}
 
 /**
  * 居中的 Dialog 内容表面。
@@ -131,7 +155,7 @@ export type ComposeDialogContentProps = BasePopupProps
  * @public
  */
 export const ComposeDialogContent = forwardRef<HTMLDivElement, ComposeDialogContentProps>(
-  function ComposeDialogContent({ className, style, ...props }, ref) {
+  function ComposeDialogContent({ className, size = 'default', style, ...props }, ref) {
     const theme = useComposeThemeContext()
     const i18n = useComposeI18nContext()
     return (
@@ -140,7 +164,8 @@ export const ComposeDialogContent = forwardRef<HTMLDivElement, ComposeDialogCont
         ref={ref}
         aria-modal="true"
         className={cn(
-          'cu:w-full cu:max-w-md cu:max-h-[calc(100dvh-2rem)] cu:overflow-y-auto cu:rounded-lg cu:border cu:border-border cu:bg-background cu:p-6 cu:text-foreground cu:shadow-lg cu:outline-none cu:data-[ending-style]:opacity-0',
+          'cu:w-full cu:max-h-[calc(100dvh-2rem)] cu:overflow-y-auto cu:rounded-lg cu:border cu:border-border cu:bg-background cu:p-6 cu:text-foreground cu:shadow-lg cu:outline-none cu:data-[ending-style]:opacity-0',
+          DIALOG_SIZE_CLASS[size],
           className,
         )}
         data-compose-theme={theme?.resolvedTheme ?? 'dark'}

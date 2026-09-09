@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   addComponentShelfSection,
   keepOnlyComponentShelfSection,
+  insertComponentShelfSectionAt,
   moveComponentShelfSection,
+  reorderComponentShelfSection,
   removeComponentShelfSection,
   resolveComponentShelf,
   setComponentShelfPresetVisible,
@@ -203,5 +205,35 @@ describe('OpenSpec: component-library / 自定义物料面板 / 货架编辑', (
     expect(setComponentShelfPresetVisible({
       shelf: symbols, sectionId: 'symbols', presetId: 'container', visible: false, available,
     })).toBe(symbols)
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 按下标重排段', () => {
+  const ids = (shelf: ComposeComponentShelf) => shelf.sections.map((section) => section.id)
+
+  it('按最终下标挪，前后两个方向都对', () => {
+    expect(ids(reorderComponentShelfSection(symbols, 'basics', 0)))
+      .toEqual(['basics', 'symbols', 'components'])
+    expect(ids(reorderComponentShelfSection(symbols, 'symbols', 2)))
+      .toEqual(['components', 'basics', 'symbols'])
+  })
+
+  it('落回原位、越界与找不到都原样返回', () => {
+    expect(reorderComponentShelfSection(symbols, 'symbols', 0)).toBe(symbols)
+    expect(reorderComponentShelfSection(symbols, '不存在', 1)).toBe(symbols)
+    // 钳到末尾而不是拒绝：拖到最下面是一次正当手势。
+    expect(ids(reorderComponentShelfSection(symbols, 'symbols', 9)))
+      .toEqual(['components', 'basics', 'symbols'])
+  })
+
+  it('按下标插入；同 id 的段已经在货架上时原样返回', () => {
+    const next = insertComponentShelfSectionAt(
+      symbols,
+      { kind: 'folder', id: 'relays', folderPath: ['Symbols', '继电器'] },
+      1,
+    )
+    expect(ids(next)).toEqual(['symbols', 'relays', 'components', 'basics'])
+    expect(insertComponentShelfSectionAt(symbols, { kind: 'presets', id: 'basics' }, 0))
+      .toBe(symbols)
   })
 })

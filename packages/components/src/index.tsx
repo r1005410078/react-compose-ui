@@ -61,6 +61,7 @@ export type {
   ComposeDialogOpenChange,
   ComposeDialogPortalProps,
   ComposeDialogProps,
+  ComposeDialogSize,
   ComposeDialogTitleProps,
   ComposeDialogTriggerProps,
   ComposeDialogViewportProps,

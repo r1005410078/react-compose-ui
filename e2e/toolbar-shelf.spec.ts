@@ -41,6 +41,47 @@ function shelfIds(editor: Locator) {
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-toolbar-item')))
 }
 
+
+/** 打开「自定义工具栏」：管理菜单那条路。 */
+async function openToolbarDialog(editor: Locator) {
+  await editor.getByRole('button', { name: '管理工作区' }).click()
+  await editor.getByRole('menu', { name: '管理工作区' })
+    .getByRole('menuitem', { name: '自定义工具栏…' })
+    .click()
+  const dialog = editor.page().getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: '自定义工具栏' })).toBeVisible()
+  return dialog
+}
+
+/**
+ * 用真实指针把一件东西拖到目标上。
+ *
+ * @remarks
+ * 走 `page.mouse` 而不是 Playwright 的 `dragTo`：后者派发的是 HTML5 拖放事件，而这两个对话框
+ * 刻意走 Pointer Events 与指针捕获。中间必须**分两步移动**——第一步让「指针离开过按下点」成立
+ * 从而开始拖动，第二步才落到目标上。
+ */
+async function dragTo(
+  page: Page,
+  from: Locator,
+  to: Locator,
+  edge: 'center' | 'before' | 'end' = 'center',
+) {
+  const source = (await from.boundingBox())!
+  const target = (await to.boundingBox())!
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(source.x + source.width / 2 + 12, source.y + source.height / 2)
+  /*
+   * 落点刻意不取目标的正中：中线正好是两个插入位之间的分界，浮点上落在哪一边说不准。
+   * `before` 贴左边、`end` 贴底部（编排区末尾那块空白），两者都离分界足够远。
+   */
+  const x = edge === 'before' ? target.x + 2 : target.x + target.width / 2
+  const y = edge === 'end' ? target.y + target.height - 8 : target.y + target.height / 2
+  await page.mouse.move(x, y, { steps: 6 })
+  await page.mouse.up()
+}
+
 test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 两个内建的默认货架不同', async ({ page }) => {
   const { editor, switcher } = await openEditor(page)
 
@@ -137,22 +178,18 @@ test('OpenSpec: component-library / 混合组件目录 / 圆的瓦片跟着货�
   await expect(library.getByRole('button', { name: 'Wire' })).toBeHidden()
 })
 
-test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 移除、重排与重置', async ({ page }) => {
+test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 拖出即移除，重置拿回来', async ({ page }) => {
   const { editor, switcher } = await openEditor(page)
-  const openDialog = async () => {
-    // 管理菜单的按钮在切换器**外面**（它管的是当前工作区，不是列表里的某一段）。
-    await editor.getByRole('button', { name: '管理工作区' }).click()
-    await editor.getByRole('menu', { name: '管理工作区' })
-      .getByRole('menuitem', { name: '自定义工具栏…' })
-      .click()
-    return page.getByRole('dialog')
-  }
+  const dialog = await openToolbarDialog(editor)
 
-  const dialog = await openDialog()
-  await expect(dialog).toBeVisible()
-  // 「选择」标为固定，且没有移除入口。
-  await dialog.getByRole('option', { name: /矩形/ }).first().click()
-  await dialog.getByRole('button', { name: '从货架移除' }).click()
+  const arrange = dialog.getByTestId('compose-shelf-arrange')
+  const source = dialog.getByTestId('compose-shelf-source')
+  await expect(arrange.locator('[data-shelf-id="RECTANGLE"]')).toBeVisible()
+
+  await dragTo(page, arrange.locator('[data-shelf-id="RECTANGLE"]'), source)
+  // 拖回来源列即移出：那一格出现在右边，编排区里没有了。
+  await expect(arrange.locator('[data-shelf-id="RECTANGLE"]')).toHaveCount(0)
+  await expect(source.locator('[data-shelf-available="RECTANGLE"]')).toBeVisible()
   await dialog.getByRole('button', { name: '完成' }).click()
 
   expect(await itemIds(editor)).not.toContain('RECTANGLE')
@@ -170,11 +207,47 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 移除、重排�
   await page.keyboard.press('Escape')
 
   // 重置把它拿回来，修改点熄灭。
-  const again = await openDialog()
+  const again = await openToolbarDialog(editor)
   await again.getByRole('button', { name: '重置为默认' }).click()
   expect(await itemIds(editor)).toContain('RECTANGLE')
   await expect(switcher.getByRole('radio', { name: '页面' }).getByRole('img', { name: '布局已改动' }))
     .toHaveCount(0)
+})
+
+test('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 按下不动仍是选中', async ({ page }) => {
+  const { editor } = await openEditor(page)
+  const dialog = await openToolbarDialog(editor)
+  const arrange = dialog.getByTestId('compose-shelf-arrange')
+  const before = await arrange.locator('[data-shelf-item]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-shelf-id')))
+
+  /*
+   * 原地按一下松开：浏览器在 `pointerup` 之前会补发一次原地 `pointermove`，因此「收没收到
+   * move」当不了判据——这条用例钉的正是那一点。
+   */
+  const box = (await arrange.locator('[data-shelf-id="draw-text"]').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.up()
+
+  await expect(dialog.getByTestId('compose-shelf-caret')).toHaveCount(0)
+  const after = await arrange.locator('[data-shelf-item]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-shelf-id')))
+  expect(after).toEqual(before)
+})
+
+test('OpenSpec: editor-workspace-layout / 自定义物料面板 / 右键组件面板标签', async ({ page }) => {
+  const { editor } = await openEditor(page)
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: '自定义物料面板…' }).click()
+
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: '自定义物料面板' })).toBeVisible()
+  // 与工具栏那份共用骨架：同一列来源、同一条页脚。
+  await expect(dialog.getByTestId('compose-shelf-source')).toBeVisible()
+  await expect(dialog.getByTestId('compose-shelf-arrange'))
+    .toHaveAttribute('data-shelf-orientation', 'vertical')
 })
 
 test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 下拉菜单不被工具栏行裁掉', async ({ page }) => {
@@ -316,8 +389,11 @@ test('OpenSpec: editor-workspace-layout / 工具栏货架 / 宿主注入的目�
     .getByRole('menuitem', { name: '自定义工具栏…' })
     .click()
   const dialog = page.getByRole('dialog')
-  await dialog.locator('[data-shelf-available="demo-circle"]').click()
-  await dialog.getByRole('button', { name: '加入货架' }).click()
+  await dragTo(
+    page,
+    dialog.locator('[data-shelf-available="demo-circle"]'),
+    dialog.getByTestId('compose-shelf-arrange').locator('[data-shelf-id="select"]'),
+  )
   await dialog.getByRole('button', { name: '完成' }).click()
 
   const button = editor.getByRole('toolbar', { name: 'Stage 工具栏' })
@@ -329,20 +405,16 @@ test('OpenSpec: editor-workspace-layout / 工具栏货架 / 宿主注入的目�
   await page.keyboard.press('Escape')
 })
 
-test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 重排跨越工作区切换后仍在', async ({ page }) => {
+test('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 拖到第二位，跨工作区切换后仍在', async ({ page }) => {
   const { editor, switcher } = await openEditor(page)
-  await editor.getByRole('button', { name: '管理工作区' }).click()
-  await editor.getByRole('menu', { name: '管理工作区' })
-    .getByRole('menuitem', { name: '自定义工具栏…' })
-    .click()
-  const dialog = page.getByRole('dialog')
+  const dialog = await openToolbarDialog(editor)
+  const arrange = dialog.getByTestId('compose-shelf-arrange')
 
-  // 把 `ARROW` 一路上移到第二位（「选择」钉在第一位，谁都挪不到它前面去）。
-  await dialog.locator('[data-shelf-item="ARROW"]').click()
-  const moveUp = dialog.getByRole('button', { name: '上移' })
-  // 按到禁用为止：「选择」钉在第一位，因此 `ARROW` 最远只能到第二位。
-  await expect(moveUp).toBeEnabled()
-  while (await moveUp.isEnabled()) await moveUp.click()
+  /*
+   * 判别性：断的是**落在哪两格之间**而不是「顺序变了」——插入线画的就是这个位置，而只断
+   * 「变了」在一个把它拖到别处的实现上同样会绿。「选择」钉在第一位，因此 `ARROW` 最远到第二位。
+   */
+  await dragTo(page, arrange.locator('[data-shelf-id="ARROW"]'), arrange.locator('[data-shelf-id="select"]'), 'before')
   await dialog.getByRole('button', { name: '完成' }).click()
   expect((await itemIds(editor)).indexOf('ARROW')).toBe(1)
 
@@ -436,9 +508,14 @@ test('OpenSpec: component-library / 自定义物料面板 / 对话框排序、�
 
   // 面板标题同时是它在 Dockview 上的标签名：面板内部不再画第二遍。
   await dialog.getByRole('textbox').first().fill('现场物料')
-  // 把「基础组件」那一段挪到后面去。
-  await dialog.locator('[data-palette-section="basics"]').click()
-  await dialog.getByRole('button', { name: '下移' }).click()
+  // 把「基础组件」那一段拖到「项目组件」下面去。
+  await dragTo(
+    page,
+    // 按压只收在卡头上：卡身长着开关，那些要能点。
+    dialog.locator('[data-shelf-handle="basics"]'),
+    dialog.getByTestId('compose-shelf-arrange'),
+    'end',
+  )
   await dialog.getByRole('button', { name: '完成' }).click()
 
   await expect(editor.locator('[data-workspace-tab="compose-component-library-panel"]'))

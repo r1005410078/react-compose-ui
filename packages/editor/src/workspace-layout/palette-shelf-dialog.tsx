@@ -1,22 +1,10 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
+import { ComposeInput } from '@compose-ui/components'
 import {
-  ComposeButton,
-  ComposeDialog,
-  ComposeDialogBackdrop,
-  ComposeDialogContent,
-  ComposeDialogDescription,
-  ComposeDialogFooter,
-  ComposeDialogHeader,
-  ComposeDialogPortal,
-  ComposeDialogTitle,
-  ComposeDialogViewport,
-  ComposeInput,
-} from '@compose-ui/components'
-import {
-  addComponentShelfSection,
-  moveComponentShelfSection,
+  insertComponentShelfSectionAt,
   removeComponentShelfSection,
+  reorderComponentShelfSection,
   setComponentShelfPresetVisible,
   updateComponentShelfSection,
 } from '@compose-ui/component-library'
@@ -26,8 +14,9 @@ import type {
   ComposeComponentShelfPresetSection,
 } from '@compose-ui/component-library'
 import { getEditorMessages } from '../editor-i18n'
+import { ShelfDialogShell, ShelfDragImage, ShelfDropCaret, useShelfReorder } from './shelf-dialog'
 
-/** 目录里一个基础 Preset 的可呈现半边。 */
+/** 目录里一个基础 Preset 的可呈现半边。 @internal */
 export interface PaletteShelfPreset {
   readonly id: string
   readonly label: string
@@ -39,7 +28,7 @@ interface PaletteShelfDialogProps {
   /** 当前工作区下可见的基础 Preset，顺序即呈现顺序。 */
   readonly presets: readonly PaletteShelfPreset[]
   /**
-   * 资源里存在的全部文件夹路径；「未放入」那一列由它减去已经在货架上的得到。
+   * 资源里存在的全部文件夹路径；来源列由它减去已经在货架上的得到。
    *
    * @remarks
    * 这就是资源浏览器列出的同一份文件夹集合（`ComposeComponentCatalog.folders`），因此
@@ -54,21 +43,26 @@ interface PaletteShelfDialogProps {
   readonly onReset: () => void
 }
 
-/** 根文件夹（空路径）在两列里都要有个名字，否则它渲染成一个空按钮。 */
+/** 根文件夹（空路径）在两边都要有个名字，否则它渲染成一条空行。 */
 function folderKey(path: readonly string[]) {
   return `folder:${path.join('/')}`
 }
 
+function pathOfKey(key: string): readonly string[] {
+  const raw = key.slice('folder:'.length)
+  return raw === '' ? [] : raw.split('/')
+}
+
 /**
- * 自定义物料面板：与 `ToolbarShelfDialog` 同一套两列 + 按钮，加上一块「选中这一段的选项」。
+ * 自定义物料面板：与「自定义工具栏」共用同一套骨架、同一列来源、同一套拖拽与键盘语义。
  *
  * @remarks
- * **排序同样不做 HTML5 拖放**，理由与工具栏那份逐字相同：可重排列表按仓库规则无论如何要写
- * 一遍完整的键盘重排，先写按钮那一份；拖放是它之上的增强而不是替代。两个货架一套做法。
+ * 编排区排的是**段**而不是格，因此它是纵的——「编排区画的是它将来的样子」，而物料面板本身
+ * 就是一列。段的选项（文件夹的分组方式、基础组件列哪几个）**直接长在段卡上**：三段各摊几个
+ * 开关时用户读得出哪个管哪一段，而「先选中一段、开关在别处」多要一次点击才看得到它们。
  *
- * 多出来的那一块是因为**段本身带选项**（文件夹的分组方式、基础组件列哪几个），而工具栏的一格
- * 只有「在不在、排第几」。它跟着选中的段走而不是每段都摊开——三段各摊四个开关时，用户读不出
- * 哪个开关管的是哪一段。
+ * 面板标题与「显示搜索框」是**面板级**的，因此排在编排区之外——层级由位置表达，挤进去会与
+ * 段卡的开关排成一片。
  *
  * 草稿住在本组件里，「完成」才写偏好：中途每一步都写的话，用户按「取消」无从退回。
  *
@@ -85,31 +79,25 @@ export function PaletteShelfDialog({
   const i18n = useComposeI18nContext()
   const t = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage).workspaces
   const [draft, setDraft] = useState<ComposeComponentShelf>(shelf)
-  // 段有稳定 id，因此选中项按 id 记——与工具栏那边按下标记是有意的差别（那边分隔线认不出）。
-  const [selected, setSelected] = useState<string | null>(draft.sections[0]?.id ?? null)
-  const [available, setAvailable] = useState<string | null>(null)
-
-  const section = draft.sections.find((entry) => entry.id === selected) ?? null
-  const index = draft.sections.findIndex((entry) => entry.id === selected)
+  const [search, setSearch] = useState('')
   const availablePresetIds = presets.map((preset) => preset.id)
 
-  const labelOfSection = (id: string) => {
-    const entry = draft.sections.find((candidate) => candidate.id === id)
-    if (!entry) return id
-    if (entry.title) return entry.title
-    if (entry.kind === 'presets') return t.paletteBasicsSource
-    return entry.folderPath.length === 0
+  const titleOfSection = (section: ComposeComponentShelf['sections'][number]) => {
+    if (section.title) return section.title
+    if (section.kind === 'presets') return t.paletteBasicsSource
+    return section.folderPath.length === 0
       ? t.paletteRootFolder
-      : entry.folderPath[entry.folderPath.length - 1]!
+      : section.folderPath[section.folderPath.length - 1]!
   }
 
-  // 「未放入」= 还没上架的基础组件段（至多一个）加上资源里还没上架的每个文件夹。
+  // 来源列 = 还没上架的基础组件（至多一条）加上资源里还没上架的每个文件夹。
   const hasPresets = draft.sections.some((entry) => entry.kind === 'presets')
   const shelfFolders = new Set(
     draft.sections
       .filter((entry): entry is ComposeComponentShelfFolderSection => entry.kind === 'folder')
       .map((entry) => folderKey(entry.folderPath)),
   )
+  const needle = search.trim().toLowerCase()
   const notOnShelf: readonly { readonly key: string; readonly label: string }[] = [
     ...(hasPresets ? [] : [{ key: 'presets:basics', label: t.paletteBasicsSource }]),
     ...[[] as readonly string[], ...folders]
@@ -118,178 +106,201 @@ export function PaletteShelfDialog({
         key: folderKey(path),
         label: path.length === 0 ? t.paletteRootFolder : path.join(' / '),
       })),
-  ]
+  ].filter((entry) => needle === '' || entry.label.toLowerCase().includes(needle))
 
-  const move = (delta: -1 | 1) => {
-    if (selected === null) return
-    setDraft(moveComponentShelfSection(draft, selected, delta))
-  }
-
-  const addSelected = () => {
-    if (available === null) return
-    if (available === 'presets:basics') {
-      setDraft(addComponentShelfSection(draft, { kind: 'presets', id: 'basics' }))
+  const addSource = (key: string, at: number) => {
+    if (key === 'presets:basics') {
+      setDraft((current) => insertComponentShelfSectionAt(
+        current,
+        { kind: 'presets', id: 'basics' },
+        at,
+      ))
+      return
     }
-    else {
-      const path = available.slice('folder:'.length)
-      const folderPath = path === '' ? [] : path.split('/')
-      setDraft(addComponentShelfSection(draft, {
+    const folderPath = pathOfKey(key)
+    setDraft((current) => insertComponentShelfSectionAt(
+      current,
+      {
         kind: 'folder',
-        // id 由路径推出，因此同一个文件夹加两次会被 `addComponentShelfSection` 挡下。
+        // id 由路径推出，因此同一个文件夹加两次会被 `insertComponentShelfSectionAt` 挡下。
         id: folderPath.length === 0 ? 'components' : folderPath.join('-'),
         folderPath,
-      }))
-    }
-    setAvailable(null)
+        // 拖进来的文件夹默认按子文件夹分组：一支符号库通常再分几类，平铺会得到一大片。
+        groupBy: 'subfolder',
+      },
+      at,
+    ))
   }
 
+  const reorder = useShelfReorder({
+    orientation: 'vertical',
+    count: draft.sections.length,
+    describeItem: (index) => {
+      const section = draft.sections[index]
+      return section ? titleOfSection(section) : ''
+    },
+    messages: t.shelfAnnounce,
+    onReorder: (from, to) => {
+      const id = draft.sections[from]?.id
+      if (id === undefined) return
+      setDraft((current) => reorderComponentShelfSection(current, id, to))
+    },
+    onAdd: addSource,
+    onRemove: (index) => {
+      const id = draft.sections[index]?.id
+      if (id === undefined) return
+      setDraft((current) => removeComponentShelfSection(current, id))
+    },
+  })
+
+  const { session } = reorder
+  const caretAt = session?.zone === 'shelf' ? session.insertBefore : null
+  const draggingIndex = session?.origin.zone === 'shelf' ? session.origin.index : null
+  const origin = session?.origin
+  const dragLabel = origin?.zone === 'source'
+    ? notOnShelf.find((entry) => entry.key === origin.key)?.label
+    : draggingIndex === null
+      ? undefined
+      : titleOfSection(draft.sections[draggingIndex]!)
+
   return (
-    <ComposeDialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <ComposeDialogPortal>
-        <ComposeDialogBackdrop />
-        <ComposeDialogViewport>
-          <ComposeDialogContent>
-            <ComposeDialogHeader>
-              <ComposeDialogTitle>{t.paletteTitle}</ComposeDialogTitle>
-              <ComposeDialogDescription>{t.paletteDescription}</ComposeDialogDescription>
-            </ComposeDialogHeader>
-            <div className="compose-editor__shelf-panel">
-              <label className="compose-editor__shelf-field">
-                <span>{t.paletteHeading}</span>
-                <ComposeInput
-                  value={draft.title ?? ''}
-                  onChange={(event) => {
-                    const next = event.target.value
-                    // 空标题不写成空串：缺席表示「按来源取默认名」，空串会把标签抹成一片空白。
-                    setDraft({ ...draft, title: next.trim() === '' ? undefined : next })
-                  }}
-                />
-              </label>
+    <ShelfDialogShell
+      hint={(
+        <>
+          {t.paletteDragHint}
+          <br />
+          {t.shelfKeyboardHint}
+        </>
+      )}
+      labels={{
+        title: t.paletteTitle,
+        description: t.paletteDescription,
+        arrangeTitle: t.paletteSections,
+        sourceTitle: t.paletteSourceTitle,
+        searchPlaceholder: t.paletteSourceSearch,
+        reset: t.toolbarResetShelf,
+        cancel: t.cancel,
+        done: t.toolbarDone,
+      }}
+      meta={(
+        <>
+          <label className="compose-editor__shelf-field">
+            <span>{t.paletteHeading}</span>
+            <ComposeInput
+              value={draft.title ?? ''}
+              onChange={(event) => {
+                const next = event.target.value
+                // 空标题不写成空串：缺席表示「按来源取默认名」，空串会把标签抹成一片空白。
+                setDraft({ ...draft, title: next.trim() === '' ? undefined : next })
+              }}
+            />
+          </label>
+          <label className="compose-editor__shelf-check">
+            <input
+              checked={draft.search === true}
+              type="checkbox"
+              onChange={(event) => setDraft({ ...draft, search: event.target.checked })}
+            />
+            <span>{t.paletteSearch}</span>
+          </label>
+        </>
+      )}
+      note={t.paletteSectionCount(draft.sections.length)}
+      orientation="vertical"
+      reorder={reorder}
+      search={search}
+      source={(
+        <>
+          {notOnShelf.length === 0 ? (
+            <p className="compose-editor__shelf-empty">{t.paletteAllOnShelf}</p>
+          ) : null}
+          {notOnShelf.map((entry) => (
+            <button
+              className="compose-editor__shelf-source"
+              data-palette-available={entry.key}
+              data-shelf-ghost={session?.origin.zone === 'source' && session.origin.key === entry.key
+                ? 'true'
+                : undefined}
+              key={entry.key}
+              role="option"
+              type="button"
+              {...reorder.sourceItemProps(entry.key)}
+              aria-selected={false}
+            >
+              <span className="compose-editor__shelf-grip" />
+              <span className="compose-editor__shelf-source-name">{entry.label}</span>
+            </button>
+          ))}
+        </>
+      )}
+      onClose={onClose}
+      onReset={onReset}
+      onSearchChange={setSearch}
+      onSubmit={() => onSubmit(draft)}
+    >
+      {draft.sections.map((section, index) => (
+        <Fragment key={section.id}>
+          {caretAt === index ? <ShelfDropCaret /> : null}
+          <div
+            aria-selected={index === reorder.focusIndex}
+            className="compose-editor__shelf-card"
+            data-palette-section={section.id}
+            data-shelf-ghost={draggingIndex === index ? 'true' : undefined}
+            data-shelf-item={index}
+            role="option"
+            tabIndex={-1}
+            onFocus={() => reorder.setFocusIndex(index)}
+          >
+            {/* 按压只收在卡头上：卡身长着开关，它们要能点。 */}
+            <div
+              className="compose-editor__shelf-card-head"
+              data-shelf-handle={section.id}
+              {...reorder.itemDragProps(index)}
+            >
+              <span className="compose-editor__shelf-grip" />
+              <span className="compose-editor__shelf-card-name">{titleOfSection(section)}</span>
+              {section.kind === 'folder' && section.folderPath.length > 0 ? (
+                <span className="compose-editor__shelf-crumb">{section.folderPath.join(' / ')}</span>
+              ) : null}
+            </div>
+            {/* 段的选项直接长在卡上；它们不参与拖动，因此按压只挂在卡头上。 */}
+            <div className="compose-editor__shelf-card-body">
               <label className="compose-editor__shelf-check">
                 <input
-                  checked={draft.search === true}
+                  checked={section.collapsed === true}
                   type="checkbox"
-                  onChange={(event) => setDraft({ ...draft, search: event.target.checked })}
+                  onChange={(event) => setDraft(updateComponentShelfSection(
+                    draft,
+                    section.id,
+                    { collapsed: event.target.checked },
+                  ))}
                 />
-                <span>{t.paletteSearch}</span>
+                <span>{t.paletteCollapsed}</span>
               </label>
-            </div>
-            <div className="compose-editor__shelf-dialog">
-              <div className="compose-editor__shelf-column">
-                <h3 id="compose-palette-on">{t.paletteSections}</h3>
-                <ul aria-labelledby="compose-palette-on" className="compose-editor__shelf-list" role="listbox">
-                  {draft.sections.map((entry) => (
-                    <li key={entry.id}>
-                      <button
-                        aria-selected={entry.id === selected}
-                        data-palette-section={entry.id}
-                        role="option"
-                        type="button"
-                        onClick={() => setSelected(entry.id)}
-                      >
-                        {labelOfSection(entry.id)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <div className="compose-editor__shelf-actions">
-                  <ComposeButton
-                    disabled={index <= 0}
-                    type="button"
-                    variant="outline"
-                    onClick={() => move(-1)}
-                  >
-                    {t.toolbarMoveUp}
-                  </ComposeButton>
-                  <ComposeButton
-                    disabled={index < 0 || index >= draft.sections.length - 1}
-                    type="button"
-                    variant="outline"
-                    onClick={() => move(1)}
-                  >
-                    {t.toolbarMoveDown}
-                  </ComposeButton>
-                  <ComposeButton
-                    disabled={selected === null}
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (selected === null) return
-                      const next = removeComponentShelfSection(draft, selected)
-                      setDraft(next)
-                      setSelected(next.sections[Math.max(0, index - 1)]?.id ?? null)
-                    }}
-                  >
-                    {t.toolbarRemoveItem}
-                  </ComposeButton>
-                </div>
-              </div>
-              <div className="compose-editor__shelf-column">
-                <h3 id="compose-palette-off">{t.paletteAvailable}</h3>
-                <ul aria-labelledby="compose-palette-off" className="compose-editor__shelf-list" role="listbox">
-                  {notOnShelf.map((entry) => (
-                    <li key={entry.key}>
-                      <button
-                        aria-selected={entry.key === available}
-                        data-palette-available={entry.key}
-                        role="option"
-                        type="button"
-                        onClick={() => setAvailable(entry.key)}
-                      >
-                        {entry.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <div className="compose-editor__shelf-actions">
-                  <ComposeButton
-                    disabled={available === null}
-                    type="button"
-                    variant="outline"
-                    onClick={addSelected}
-                  >
-                    {t.paletteAddFolder}
-                  </ComposeButton>
-                </div>
-              </div>
-            </div>
-            {section ? (
-              <div className="compose-editor__shelf-panel" data-palette-options={section.id}>
+              {section.kind === 'folder' ? (
                 <label className="compose-editor__shelf-check">
                   <input
-                    checked={section.collapsed === true}
+                    checked={section.groupBy === 'subfolder'}
                     type="checkbox"
-                    onChange={(event) => setDraft(updateComponentShelfSection(
-                      draft,
-                      section.id,
-                      { collapsed: event.target.checked },
-                    ))}
+                    onChange={(event) => setDraft(
+                      updateComponentShelfSection<ComposeComponentShelfFolderSection>(
+                        draft,
+                        section.id,
+                        { groupBy: event.target.checked ? 'subfolder' : 'flat' },
+                      ),
+                    )}
                   />
-                  <span>{t.paletteCollapsed}</span>
+                  <span>{t.paletteGroupBySubfolder}</span>
                 </label>
-                {section.kind === 'folder' ? (
-                  <label className="compose-editor__shelf-check">
-                    <input
-                      checked={section.groupBy === 'subfolder'}
-                      type="checkbox"
-                      onChange={(event) => setDraft(
-                        updateComponentShelfSection<ComposeComponentShelfFolderSection>(
-                          draft,
-                          section.id,
-                          { groupBy: event.target.checked ? 'subfolder' : 'flat' },
-                        ),
-                      )}
-                    />
-                    <span>{t.paletteGroupBySubfolder}</span>
-                  </label>
-                ) : (
-                  <fieldset className="compose-editor__shelf-presets">
-                    <legend>{t.palettePresets}</legend>
-                    {presets.map((preset) => (
+              ) : (
+                <fieldset className="compose-editor__shelf-presets">
+                  <legend>{t.palettePresets}</legend>
+                  {presets.map((preset) => {
+                    const include = (section as ComposeComponentShelfPresetSection).include
+                    return (
                       <label className="compose-editor__shelf-check" key={preset.id}>
                         <input
-                          checked={(section as ComposeComponentShelfPresetSection).include === undefined
-                            || (section as ComposeComponentShelfPresetSection).include!.includes(preset.id)}
+                          checked={include === undefined || include.includes(preset.id)}
                           type="checkbox"
                           onChange={(event) => setDraft(setComponentShelfPresetVisible({
                             shelf: draft,
@@ -301,27 +312,23 @@ export function PaletteShelfDialog({
                         />
                         <span>{preset.label}</span>
                       </label>
-                    ))}
-                  </fieldset>
-                )}
-              </div>
-            ) : null}
-            <ComposeDialogFooter>
-              <ComposeButton
-                type="button"
-                variant="outline"
-                onClick={() => { onReset(); onClose() }}
-              >
-                {t.toolbarResetShelf}
-              </ComposeButton>
-              <ComposeButton type="button" variant="outline" onClick={onClose}>{t.cancel}</ComposeButton>
-              <ComposeButton type="button" onClick={() => { onSubmit(draft); onClose() }}>
-                {t.toolbarDone}
-              </ComposeButton>
-            </ComposeDialogFooter>
-          </ComposeDialogContent>
-        </ComposeDialogViewport>
-      </ComposeDialogPortal>
-    </ComposeDialog>
+                    )
+                  })}
+                </fieldset>
+              )}
+            </div>
+          </div>
+        </Fragment>
+      ))}
+      {caretAt === draft.sections.length ? <ShelfDropCaret /> : null}
+      {session?.point && dragLabel !== undefined ? (
+        <ShelfDragImage
+          badge={session.zone === 'source' && session.origin.zone === 'shelf' ? 'remove' : 'add'}
+          point={session.point}
+        >
+          <span className="compose-editor__shelf-chip">{dragLabel}</span>
+        </ShelfDragImage>
+      ) : null}
+    </ShelfDialogShell>
   )
 }
