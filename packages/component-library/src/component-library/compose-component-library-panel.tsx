@@ -119,6 +119,24 @@ interface DragPreview {
 }
 
 /**
+ * 段 / 组标题的折叠箭头。
+ *
+ * @remarks
+ * 画法照抄 `@compose-ui/components` Tree 的 chevron（16 网格、同一条路径、14px、1.8 描边）：
+ * 面板与场景树并排在同一列里，两处箭头长得不一样会被读成两种不同的折叠。此前是一个文字字形
+ * `▾` 再旋转 90°，字形随字体变、与 SVG 描边的粗细也对不上。
+ */
+function SectionChevron({ expanded }: { readonly expanded: boolean }) {
+  return (
+    <span aria-hidden="true" className="compose-component-library__section-chevron">
+      <svg viewBox="0 0 16 16">
+        <path d={expanded ? 'm4 6 4 4 4-4' : 'm6 4 4 4-4 4'} />
+      </svg>
+    </span>
+  )
+}
+
+/**
  * 项目组件的单色线稿图标：等轴测立方体的三种画法。
  *
  * @remarks
@@ -503,6 +521,7 @@ export function ComposeComponentLibraryPanel({
             onClick={() => { toggleCollapsed(group.id) }}
             type="button"
           >
+            <SectionChevron expanded={!collapsed} />
             {`${group.title} (${group.tiles.length})`}
           </button>
         </h4>
@@ -561,6 +580,7 @@ export function ComposeComponentLibraryPanel({
                 onClick={() => { toggleCollapsed(section.id) }}
                 type="button"
               >
+                <SectionChevron expanded={!collapsed} />
                 {section.missing ? section.title : `${section.title} (${section.count})`}
               </button>
             </h3>
