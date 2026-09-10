@@ -2067,8 +2067,13 @@
  * 底部 Edge Group 自带一份更近的变量定义（`.dv-edge-group` 上），而它本身还住在 shell 那一层、
  * 在 `.compose-editor__dockview` 之外，因此上面写在 dockview 根上的那一份到不了它——症状是三块
  * 面板头统一了、底栏那一条还是深蓝。变量必须在**组**这一层再落一次。
+ *
+ * 高度同理：主题给的是 35px，而折叠后的底部组只有 `edgeGroupCollapsedSize`（30px）高，标签行
+ * 贴底摆放（`column-reverse`），多出的 5px 溢出到卡片上方——标签在 35px 的行里居中、在 30px
+ * 的卡片里就偏上。这里落的必须与 `WORKSPACE_HEADER_HEIGHT` 同一个数。
  */
 .compose-editor .dv-groupview {
+  --dv-tabs-and-actions-container-height: 30px;
   --dv-tabs-and-actions-container-background-color: var(--compose-surface-raised);
   --dv-activegroup-visiblepanel-tab-background-color: var(--compose-surface-hover);
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
