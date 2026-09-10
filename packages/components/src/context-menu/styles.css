@@ -1,0 +1,16 @@
+/*
+ * 菜单浮层的投影。
+ *
+ * Shadcn 的 `shadow-lg` 是给浅底页面定的：在这块深色画布上，浮层与它下面的图面几乎读不出
+ * 分界——菜单看起来像贴在画布上，而不是浮在上面。深浅两套各自取值，浅底上用一圈极淡的描边
+ * 兜底（浅底没有光可挡，纯投影几乎不可见）。
+ */
+[data-compose-ui='context-menu'] {
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+[data-compose-ui='context-menu'][data-compose-theme='light'] {
+  box-shadow:
+    0 10px 24px rgb(16 24 40 / 12%),
+    0 0 0 1px rgb(16 24 40 / 4%);
+}

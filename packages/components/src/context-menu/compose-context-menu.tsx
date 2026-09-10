@@ -185,7 +185,15 @@ function ComposeContextMenuSurface({
   finalFocus,
   isSubmenu = false,
   side,
-  sideOffset = 2,
+  /*
+   * 偏移量都相对**触发元素**量，而浮层自己还有 4px 内边距 + 1px 边框，因此两块浮层之间看得见
+   * 的缝 = `sideOffset - 5`。子菜单要 4px 的缝（贴着开会与一级的边框重叠，实测 -2.9px，两块
+   * 浮层看起来是粘在一起的一整块），所以取 9；一级菜单锚在指针上，2px 就够。
+   *
+   * 纵向同理：`alignOffset` 取 -4 抵掉那 4px 内边距，子菜单的**第一行**才与触发行齐平——
+   * 不抵的话整块菜单往下坐 4px，看起来像没对准。
+   */
+  sideOffset,
   style,
   ...popupProps
 }: ComposeContextMenuContentProps & { readonly isSubmenu?: boolean }) {
@@ -213,13 +221,13 @@ function ComposeContextMenuSurface({
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
         align={align}
-        alignOffset={alignOffset}
+        alignOffset={alignOffset ?? (isSubmenu ? -4 : undefined)}
         anchor={anchor}
         className="cu:z-[10000]"
         collisionPadding={collisionPadding}
         positionMethod="fixed"
         side={isSubmenu ? side : side ?? 'bottom'}
-        sideOffset={sideOffset}
+        sideOffset={sideOffset ?? (isSubmenu ? 9 : 2)}
       >
         <MenuPrimitive.Popup
           {...popupProps}
@@ -273,7 +281,7 @@ export const ComposeContextMenuItem = forwardRef<HTMLElement, ComposeContextMenu
         {...itemProps}
         ref={ref}
         className={cn(
-          'cu:relative cu:flex cu:w-full cu:cursor-default cu:items-center cu:gap-2 cu:rounded-sm cu:px-2 cu:py-1.5 cu:text-left cu:text-sm cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
+          'cu:relative cu:flex cu:w-full cu:cursor-default cu:items-center cu:gap-2 cu:rounded-sm cu:px-2 cu:py-1 cu:text-left cu:text-[13px] cu:leading-5 cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
           variant === 'destructive' && 'cu:text-destructive cu:data-[highlighted]:bg-destructive/15 cu:data-[highlighted]:text-destructive',
           className,
         )}
@@ -321,7 +329,7 @@ export const ComposeContextMenuLabel = forwardRef<HTMLDivElement, ComposeContext
       <MenuPrimitive.GroupLabel
         {...labelProps}
         ref={ref}
-        className={cn('cu:px-2 cu:py-1.5 cu:text-xs cu:font-medium cu:text-muted-foreground', className)}
+        className={cn('cu:px-2 cu:pt-1.5 cu:pb-1 cu:text-xs cu:font-medium cu:text-muted-foreground', className)}
         data-slot="context-menu-label"
       />
     )
@@ -353,7 +361,7 @@ export const ComposeContextMenuCheckboxItem = forwardRef<HTMLElement, ComposeCon
         {...itemProps}
         ref={ref}
         className={cn(
-          'cu:relative cu:flex cu:w-full cu:cursor-default cu:items-center cu:gap-2 cu:rounded-sm cu:py-1.5 cu:pr-2 cu:pl-8 cu:text-left cu:text-sm cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
+          'cu:relative cu:flex cu:w-full cu:cursor-default cu:items-center cu:gap-2 cu:rounded-sm cu:py-1 cu:pr-2 cu:pl-8 cu:text-left cu:text-[13px] cu:leading-5 cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
           className,
         )}
         data-slot="context-menu-checkbox-item"
@@ -384,7 +392,7 @@ export const ComposeContextMenuRadioItem = forwardRef<HTMLElement, ComposeContex
         {...itemProps}
         ref={ref}
         className={cn(
-          'cu:relative cu:flex cu:w-full cu:cursor-default cu:items-center cu:gap-2 cu:rounded-sm cu:py-1.5 cu:pr-2 cu:pl-8 cu:text-left cu:text-sm cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
+          'cu:relative cu:flex cu:w-full cu:cursor-default cu:items-center cu:gap-2 cu:rounded-sm cu:py-1 cu:pr-2 cu:pl-8 cu:text-left cu:text-[13px] cu:leading-5 cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
           className,
         )}
         data-slot="context-menu-radio-item"
@@ -415,12 +423,31 @@ export const ComposeContextMenuSubTrigger = forwardRef<HTMLElement, ComposeConte
         {...triggerProps}
         ref={ref}
         className={cn(
-          'cu:flex cu:w-full cu:cursor-default cu:items-center cu:rounded-sm cu:px-2 cu:py-1.5 cu:text-left cu:text-sm cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
+          'cu:flex cu:w-full cu:cursor-default cu:items-center cu:rounded-sm cu:px-2 cu:py-1 cu:text-left cu:text-[13px] cu:leading-5 cu:outline-hidden cu:select-none cu:data-[highlighted]:bg-accent cu:data-[highlighted]:text-accent-foreground cu:data-[disabled]:pointer-events-none cu:data-[disabled]:opacity-50',
           className,
         )}
         data-slot="context-menu-sub-trigger"
       >
-        {children}<span aria-hidden="true" className="cu:ml-auto cu:text-muted-foreground">›</span>
+        {children}
+        {/*
+          * 箭头是 SVG 而不是 `›` 字形：字形的宽度、字重与光学中心全跟着字体走（实测只有 5.7px
+          * 宽），与 13px 的正文和右对齐的快捷键怎么调都对不齐；SVG 是 14px 的方框，由 flex
+          * 居中，与场景树、物料面板的折叠箭头是同一条曲线。
+          */}
+        <svg
+          aria-hidden="true"
+          className="cu:ml-auto cu:shrink-0 cu:text-muted-foreground"
+          fill="none"
+          height="14"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.6"
+          viewBox="0 0 16 16"
+          width="14"
+        >
+          <path d="m6 4 4 4-4 4" />
+        </svg>
       </MenuPrimitive.SubmenuTrigger>
     )
   },

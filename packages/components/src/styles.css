@@ -3,6 +3,7 @@
 @import './angle-picker/styles.css';
 @import './color-picker/styles.css';
 @import './command-line/styles.css';
+@import './context-menu/styles.css';
 @import './tree/styles.css';
 
 @source './';
