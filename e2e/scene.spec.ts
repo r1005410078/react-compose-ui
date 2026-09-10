@@ -65,7 +65,7 @@ test('OpenSpec: editor-workspace-layout / 新建场景与激活场景 / 切换�
   // 激活写在页面文件里，不进撤销历史：撤销回滚的是文档事务，激活场景保持不变。
   // 刻意撤销一次与场景创建无关的事务——直接撤销掉刚激活的那块场景会混淆两件事。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await stage.focus()
   await stage.press('Control+z')
   await expect(editor.getByTestId(`stage-scene-tag-${activatedId}`)).toHaveClass(/is-active/)

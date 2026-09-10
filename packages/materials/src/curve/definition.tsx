@@ -65,7 +65,14 @@ function valueContract(
  */
 function curvePreset(
   id: 'curve' | 'arrow' | 'circle' | 'rect' | 'wire' | 'junction',
-  fallbackLabel: string,
+  /**
+   * 面板显示名与新建对象的默认名。
+   *
+   * @remarks
+   * 两者是**不同的字段**，因此分开给：显示名是中文（界面其余部分本来就是中文），而默认名写进
+   * **文档**，改它会动到既有页面与用户已经命名过的对象。
+   */
+  fallbackNames: { readonly label: string, readonly name: string },
   fallbackProps: JsonObject,
   geometry: (size: { readonly width: number; readonly height: number }) => ComposeCurve,
   icon: ReactNode,
@@ -86,8 +93,8 @@ function curvePreset(
   )
   return {
     id,
-    label: options.label ?? fallbackLabel,
-    defaultName: options.name ?? fallbackLabel,
+    label: options.label ?? fallbackNames.label,
+    defaultName: options.name ?? fallbackNames.name,
     icon,
     ...(paletteHidden ? { paletteHidden } : {}),
     createComponents: () => ({
@@ -158,7 +165,7 @@ export function createCurveMaterial(
     presets: [
       curvePreset(
         'curve',
-        'Curve',
+        { label: '曲线', name: 'Curve' },
         DEFAULT_CURVE_PROPS,
         (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
         <ComposeLineMaterialIcon />,
@@ -167,7 +174,7 @@ export function createCurveMaterial(
       ),
       curvePreset(
         'arrow',
-        'Arrow',
+        { label: '箭头', name: 'Arrow' },
         DEFAULT_ARROW_PROPS,
         (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
         <ComposeArrowMaterialIcon />,
@@ -176,7 +183,7 @@ export function createCurveMaterial(
       ),
       curvePreset(
         'circle',
-        'Circle',
+        { label: '圆', name: 'Circle' },
         DEFAULT_CURVE_PROPS,
         () => DEFAULT_CIRCLE_GEOMETRY,
         <ComposeCircleMaterialIcon />,
@@ -195,7 +202,7 @@ export function createCurveMaterial(
        */
       curvePreset(
         'rect',
-        'Rectangle',
+        { label: '矩形', name: 'Rectangle' },
         DEFAULT_CURVE_PROPS,
         composeRectangleGeometry,
         <ComposeRectMaterialIcon />,
@@ -204,7 +211,7 @@ export function createCurveMaterial(
       ),
       curvePreset(
         'wire',
-        'Wire',
+        { label: '导线', name: 'Wire' },
         DEFAULT_WIRE_PROPS,
         (size) => ({ ...DEFAULT_CURVE_GEOMETRY, end: { x: size.width, y: size.height } }),
         <ComposeLineMaterialIcon />,
@@ -221,7 +228,7 @@ export function createCurveMaterial(
        */
       curvePreset(
         'junction',
-        'Junction',
+        { label: '节点', name: 'Junction' },
         DEFAULT_JUNCTION_PROPS,
         composeJunctionGeometry,
         <ComposeCircleMaterialIcon />,

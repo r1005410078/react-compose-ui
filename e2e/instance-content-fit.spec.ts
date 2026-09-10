@@ -12,8 +12,8 @@ import type { Locator, Page } from '@playwright/test'
 
 async function createInstance(page: Page, editor: Locator) {
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   const source = sceneTree.getByRole('row', { name: /Container/ })
@@ -47,7 +47,7 @@ test('OpenSpec: basic-materials / 组件实例的内容缩放 / scale 只写宿�
   await expect(stage).toBeVisible()
   await createInstance(page, editor)
 
-  // `添加 Rectangle` 落的是曲线版 rect Preset：量嵌套实体的 DOM 盒（最深的那个就是矩形）。
+  // `添加 矩形` 落的是曲线版 rect Preset：量嵌套实体的 DOM 盒（最深的那个就是矩形）。
   const rectangle = editor.getByTestId('compose-component-instance-content')
     .locator('[data-component-instance-entity-id]').last()
   const before = (await rectangle.boundingBox())!

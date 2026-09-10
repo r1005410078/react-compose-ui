@@ -257,11 +257,11 @@ test('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 显式脱流保持
   const container = stage.getByTestId('stage-container')
   const containerBox = await container.boundingBox()
   expect(containerBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: containerBox!.x + 160,
     y: containerBox!.y + 160,
   })
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: containerBox!.x + 400,
     y: containerBox!.y + 160,
   })
@@ -463,7 +463,7 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   expect(outputBox).not.toBeNull()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
 

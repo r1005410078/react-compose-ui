@@ -10,7 +10,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头�
 
   // 放一个 Panel 并选中它。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
@@ -197,7 +197,7 @@ test('OpenSpec: stage / 画布可编辑运动路径 / 拖顶点、拖切线、�
 
   // 准备：放 Panel → 创建动画 → 0 ms 打点 → 播放头 200 ms 拖出第二个关键帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
@@ -273,7 +273,7 @@ test('OpenSpec: compose-preview / 预览按脚本绑定驱动动画 / 创建-打
 
   // 创建动画并打出两个位置关键帧（0 ms 菱形打点 + 200 ms 画布拖动自动记录）。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
@@ -351,7 +351,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
 
   // 节点 A：打 0 ms 关键帧，播放头 200 ms 拖出第二帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
@@ -378,7 +378,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   // 回归：动画模式下点击添加节点 B。采样文档先于布局快照拿到新实体时，
   // 画布曾因几何索引缺 box 抛错并整体卸载。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(nodes).toHaveCount(2)
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toHaveCount(1)
 
@@ -404,7 +404,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   // 回归：真实指针拖入节点 C 也不崩，且已有轨道不受影响。
   const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox.x + 450,
     y: outputBox.y + 40,
   })
@@ -431,7 +431,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
   await drawContainer(page, editor)
   const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox.x + 200,
     y: outputBox.y + 20,
   })
@@ -479,7 +479,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
   // 回归：动画进行中往已含动画子级的容器里再添加节点（点击添加以当前选中实体为
   // 兄弟插入，正好落进容器）。结构变化曾让采样文档先于布局快照拿到新实体而崩溃。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(nested).toHaveCount(2)
   await expect(stage.getByTestId('stage-container')).toBeVisible()
   await expect(animationPanel.getByRole('button', { name: '关键帧 0 ms：位置' })).toBeVisible()
@@ -497,7 +497,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 组件实例参与动�
 
   // 从容器创建组件实例。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   const source = sceneTree.getByRole('row').last()
   await source.click()
@@ -562,7 +562,7 @@ test('OpenSpec: editor-workspace-layout / 时间线更多操作菜单 / 右键�
 
   // 准备一条位置轨道：打点 + 播放头 200 ms 拖出第二帧。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(node)
@@ -619,7 +619,7 @@ test('OpenSpec: editor-workspace-layout / 画布 Inspector 关键帧缓动编辑
   await expect(stage).toBeVisible()
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
@@ -692,7 +692,7 @@ test('OpenSpec: editor-workspace-layout / 动画编辑开关 / 切换工作区�
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage).toBeVisible()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await clickCurveStroke(node)
 

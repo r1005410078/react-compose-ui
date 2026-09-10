@@ -109,7 +109,7 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 物料拖到场景外�
     x: region.x + region.width / 2,
     y: region.y + region.height / 2,
   }
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), drop)
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), drop)
 
   // 属于激活场景，但保留拖放位置：矩形中心贴着落点，不被钳回场景边界。
   const rect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')

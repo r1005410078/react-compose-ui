@@ -1,9 +1,12 @@
+import { Fragment } from 'react'
 import type { ReactNode } from 'react'
 import {
   ComposeContextMenu,
   ComposeContextMenuCheckboxItem,
   ComposeContextMenuContent,
+  ComposeContextMenuGroup,
   ComposeContextMenuItem,
+  ComposeContextMenuLabel,
   ComposeContextMenuSeparator,
   ComposeContextMenuShortcut,
   ComposeContextMenuSub,
@@ -32,6 +35,7 @@ import {
   type StageViewport,
 } from '@compose-ui/stage-engine'
 import type {
+  ComposeStageAddComponentGroup,
   ComposeStageDispatch,
   ComposeStageKeybinding,
   ComposeStageShortcutAction,
@@ -89,6 +93,12 @@ export interface StageContextMenuProps {
   readonly onViewportChange: (viewport: StageViewport) => void
   readonly onSceneActivate?: (frameId: string) => void
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
+  /** 「添加组件」的树；缺省时不渲染该项。 */
+  readonly addComponentMenu?: readonly ComposeStageAddComponentGroup[]
+  /** 选中一项：宿主的 id 与右键那一下的视口坐标。 */
+  readonly onAddComponent?: (itemId: string, clientPoint: { readonly x: number, readonly y: number }) => void
+  /** 右键那一下的视口坐标；由 `useComposeContextMenu` 的锚点给出。 */
+  readonly anchorPoint?: { readonly x: number, readonly y: number } | null
 }
 
 /**
@@ -113,6 +123,9 @@ export function StageContextMenu({
   messages,
   onClipboardAction,
   onCreateComponentIntent,
+  addComponentMenu,
+  onAddComponent,
+  anchorPoint,
   onSceneActivate,
   onSelectedIdsChange,
   onViewportChange,
@@ -160,6 +173,46 @@ export function StageContextMenu({
   return (
     <ComposeContextMenu {...rootProps}>
       <ComposeContextMenuContent aria-label={messages.canvasActions}>
+        {/*
+          * 「添加组件」排在最上面并与其余项之间留一条分隔：它是菜单里**唯一产出新内容**的一项，
+          * 其余每一项都是对已有对象的操作。
+          */}
+        {addComponentMenu && addComponentMenu.length > 0 && onAddComponent ? (
+          <>
+            <ComposeContextMenuSub>
+              <ComposeContextMenuSubTrigger>{messages.addComponent}</ComposeContextMenuSubTrigger>
+              <ComposeContextMenuSubContent aria-label={messages.addComponent}>
+                {addComponentMenu.map((group, index) => (
+                  <Fragment key={group.id}>
+                    {index > 0 ? <ComposeContextMenuSeparator /> : null}
+                    {/*
+                      * 标题必须包在 Group 里：Base UI 的 GroupLabel 缺少 Group 会**抛错**，
+                      * 而抛错的后果是整个菜单当场卸载——屏幕上看起来像「一悬停就关掉」。
+                      */}
+                    <ComposeContextMenuGroup>
+                      <ComposeContextMenuLabel>{group.title}</ComposeContextMenuLabel>
+                      {group.items.map((item) => (
+                      <ComposeContextMenuItem
+                        key={item.id}
+                        onClick={() => {
+                          // 落点是右键那一下：交回视口坐标，宿主走与面板拖入完全相同的那条路径。
+                          if (anchorPoint) onAddComponent(item.id, anchorPoint)
+                        }}
+                      >
+                        {item.icon ? (
+                          <span aria-hidden="true" className="compose-stage__menu-icon">{item.icon}</span>
+                        ) : null}
+                        {item.label}
+                      </ComposeContextMenuItem>
+                      ))}
+                    </ComposeContextMenuGroup>
+                  </Fragment>
+                ))}
+              </ComposeContextMenuSubContent>
+            </ComposeContextMenuSub>
+            <ComposeContextMenuSeparator />
+          </>
+        ) : null}
         {onSceneActivate && contextNodeId && document.rootIds.includes(contextNodeId) ? (
           <ComposeContextMenuItem
             disabled={contextNodeId === activeFrameId}

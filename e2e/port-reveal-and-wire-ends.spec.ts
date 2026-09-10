@@ -25,7 +25,7 @@ test('OpenSpec: stage / 端口在取点时按符号整组显现 / 取点时显�
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
   const frameBox = (await frame.boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 240,
     y: frameBox.y + 180,
   })
@@ -69,7 +69,7 @@ test('OpenSpec: stage / 导线两端的接线状态画在图面上 / 失效不�
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
   const frameBox = (await frame.boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 200,
     y: frameBox.y + 160,
   })
@@ -119,7 +119,7 @@ test('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 直角导线的拐�
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
   const frameBox = (await frame.boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 200,
     y: frameBox.y + 150,
   })

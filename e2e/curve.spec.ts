@@ -10,7 +10,7 @@ test('OpenSpec: compose-document / 曲线 Entity 纵向流程 / 添加、按距�
 
   // 点击添加：曲线的创建路径是 Palette，绘制手势属于后续的绘图模式。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Curve' }).click()
+  await editor.getByRole('button', { name: '添加 曲线' }).click()
 
   // 场景树零改动即可见——曲线是普通页面 Entity，这正是本刀要证明的。
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
@@ -79,7 +79,7 @@ test('OpenSpec: compose-document / 曲线 Entity / 位置关键帧零改动可�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Curve' }).click()
+  await editor.getByRole('button', { name: '添加 曲线' }).click()
 
   const stroke = stage.getByTestId('compose-material-curve-stroke')
   const box = await stroke.boundingBox()
@@ -123,7 +123,7 @@ test('OpenSpec: basic-materials / 曲线的虚线偏移 / 打两个关键帧让�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Curve' }).click()
+  await editor.getByRole('button', { name: '添加 曲线' }).click()
 
   const stroke = stage.getByTestId('compose-material-curve-stroke')
   const box = await stroke.boundingBox()

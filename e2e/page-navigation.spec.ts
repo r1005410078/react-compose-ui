@@ -76,7 +76,7 @@ test('OpenSpec: 页面宿主与跳转执行 / 未保存的跳转在预览中生�
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox!.x + 200,
     y: frameBox!.y + 160,
   })

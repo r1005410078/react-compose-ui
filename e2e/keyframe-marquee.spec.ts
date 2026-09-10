@@ -13,7 +13,7 @@ test('OpenSpec: animation-panel / 关键帧车道框选 / 框选后整体拖动�
   await expect(stage).toBeVisible()
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const node = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(node).toHaveCount(1)
   await clickCurveStroke(node)

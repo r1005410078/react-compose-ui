@@ -671,7 +671,18 @@ export type StageInteractionEvent =
   | { readonly type: 'external.begin'; readonly item: StageExternalDragItem; readonly clientPoint: StagePoint }
   | { readonly type: 'external.move'; readonly clientPoint: StagePoint }
   | { readonly type: 'external.end'; readonly clientPoint: StagePoint }
-  | { readonly type: 'external.add'; readonly item: StageExternalDragItem }
+  /**
+   * 不经拖拽直接落一个外部条目。
+   *
+   * @remarks
+   * `clientPoint` 缺席时按默认位置落（面板上点一下就是这一档）；给出时落在那个视口坐标上，
+   * 与拖拽松手走的是**同一个** `externalDrop`——画布右键「添加组件」用它把落点钉在右键那一下。
+   */
+  | {
+      readonly type: 'external.add'
+      readonly item: StageExternalDragItem
+      readonly clientPoint?: StagePoint
+    }
   | { readonly type: 'external.cancel' }
 
 /** 一个 Editor 实例内的 headless Stage 交互运行时。 @public */
@@ -1178,7 +1189,7 @@ export function createStageInteractionController(): StageInteractionController {
         return
       }
       if (event.type === 'external.add') {
-        externalDrop(event.item, null)
+        externalDrop(event.item, event.clientPoint ?? null)
         return
       }
       if (event.type === 'external.cancel' && snapshot.external) {

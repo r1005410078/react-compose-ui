@@ -1,3 +1,4 @@
+import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposeComponentCatalog, ComposeComponentDescriptor } from '../component-store'
 
 /**
@@ -64,8 +65,6 @@ export type ComposeComponentShelfSection =
 export interface ComposeComponentShelf {
   /** 面板标题；同时是它在 Dockview 上的标签名。 */
   readonly title?: string
-  /** 是否显示跨段搜索框。 @defaultValue false */
-  readonly search?: boolean
   readonly sections: readonly ComposeComponentShelfSection[]
 }
 
@@ -440,5 +439,74 @@ export function setComponentShelfPresetVisible(input: {
   if (next.length === current.length && next.every((id, at) => id === current[at])) return shelf
   return updateComponentShelfSection<ComposeComponentShelfPresetSection>(shelf, sectionId, {
     include: next,
+  })
+}
+
+/**
+ * 从 Registry 与目录解析出面板该画什么。
+ *
+ * @remarks
+ * 这是「同一棵树只有一个来源」的落点：物料面板与画布右键的「添加组件」菜单都调它，各建一份的
+ * 症状是「面板里有、菜单里没有」，而用户读不出为什么。
+ *
+ * `paletteHidden` 在 Registry 上带着**理由**：`'always'` 恒藏，`'toolbar'` 只在当前工作区的
+ * 工具栏已提供入口时才藏——本包不认识工具栏，由调用方用 `toolbarPresetIds` 告诉它。名单缺席时
+ * `'toolbar'` 一档照旧藏起来：不接工作区的宿主一个瓦片都不该多出来。
+ *
+ * 没有 Store 时文件夹段整段不出现，而不是出现一个写着 0 的空段。
+ *
+ * @public
+ */
+/**
+ * 当前工作区下可见的 Preset id，顺序即呈现顺序。
+ *
+ * @remarks
+ * 与 {@link resolveComposeComponentShelfView} 读同一条 `paletteHidden` 判据——瓦片右键的
+ * 「从面板隐藏」要拿它把 `include` 清单写出来，两处各判一次必然漂移。
+ *
+ * @public
+ */
+export function resolveComposeComponentVisiblePresetIds(input: {
+  readonly registry: ComposeEntityRegistry
+  readonly toolbarPresetIds?: readonly string[]
+}): readonly string[] {
+  const { registry, toolbarPresetIds } = input
+  return registry.listPresets()
+    .filter((preset) => !(preset.paletteHidden === 'always'
+      || (preset.paletteHidden === 'toolbar'
+        && (toolbarPresetIds === undefined || toolbarPresetIds.includes(preset.id)))))
+    .map((preset) => preset.id)
+}
+
+export function resolveComposeComponentShelfView(input: {
+  readonly registry: ComposeEntityRegistry
+  readonly shelf: ComposeComponentShelf
+  readonly catalog: ComposeComponentCatalog | null
+  /** 宿主接了项目组件 Store 没有；没接时文件夹段整段不出现。 */
+  readonly hasStore: boolean
+  readonly toolbarPresetIds?: readonly string[]
+  readonly query?: string
+  readonly labels: ComposeComponentShelfLabels
+  readonly locale?: string
+}): readonly ComposeComponentShelfViewSection[] {
+  const { catalog, hasStore, labels, locale, query = '', registry, shelf, toolbarPresetIds } = input
+  const hiddenByToolbar = (presetId: string) => (
+    toolbarPresetIds === undefined || toolbarPresetIds.includes(presetId)
+  )
+  const presets = registry.listPresets().map((preset) => ({
+    ...preset,
+    paletteHidden: preset.paletteHidden === 'always'
+      || (preset.paletteHidden === 'toolbar' && hiddenByToolbar(preset.id)),
+  }))
+  const sections = hasStore
+    ? shelf.sections
+    : shelf.sections.filter((section) => section.kind !== 'folder')
+  return resolveComponentShelf({
+    shelf: { ...shelf, sections },
+    presets,
+    catalog,
+    query,
+    labels,
+    ...(locale === undefined ? {} : { locale }),
   })
 }

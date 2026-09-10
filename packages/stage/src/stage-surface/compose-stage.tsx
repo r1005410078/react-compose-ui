@@ -203,6 +203,8 @@ function ComposeStageReady({
   onSceneActivate,
   onScenePreview,
   onCreateComponentIntent,
+  addComponentMenu,
+  onAddComponent,
   commands,
   activeFrameId,
   paintEditing = null,
@@ -1480,6 +1482,9 @@ function ComposeStageReady({
         surfaceSize={surfaceSize}
         viewport={viewport}
         onClipboardAction={executeClipboard}
+        addComponentMenu={addComponentMenu}
+        anchorPoint={contextMenu.anchorPoint}
+        onAddComponent={onAddComponent}
         onCreateComponentIntent={onCreateComponentIntent}
         onSceneActivate={onSceneActivate}
         onSelectedIdsChange={onSelectedIdsChange}

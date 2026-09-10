@@ -15,7 +15,8 @@ export function createContainerPreset(
   )
   return {
     id: 'container',
-    label: options.label ?? 'Container',
+    // 面板显示名是中文，新建对象的默认名保持英文——后者写进文档。
+    label: options.label ?? '容器',
     defaultName: options.name ?? 'Container',
     icon: <ComposeContainerMaterialIcon />,
     createComponents: () => ({

@@ -34,8 +34,8 @@ test('OpenSpec: scene-animation / 组件文档的动画 / 打点存成组件后�
   // 1. 画一个装着矩形的容器，把**容器**存成组件。
   // 源必须是容器：单个矩形存成组件时它自己就是组件根 Frame，组件内部没有可动的子级。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   const source = sceneTree.getByRole('row', { name: /Container/ })
   await source.click()
@@ -159,8 +159,8 @@ test('OpenSpec: stage-engine / 组件提取搬运动画清单 / 页面上打的�
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
 
   // 在**页面**的时间线上给矩形打两个旋转关键帧。
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()

@@ -195,14 +195,6 @@ export function PaletteShelfDialog({
               }}
             />
           </label>
-          <label className="compose-editor__shelf-check">
-            <input
-              checked={draft.search === true}
-              type="checkbox"
-              onChange={(event) => setDraft({ ...draft, search: event.target.checked })}
-            />
-            <span>{t.paletteSearch}</span>
-          </label>
         </>
       )}
       note={t.paletteSectionCount(draft.sections.length)}

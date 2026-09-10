@@ -283,7 +283,7 @@ const echartsRenderer = {
 
 const echartsPreset = {
   id: 'echarts-bar',
-  label: 'ECharts Chart',
+  label: '图表',
   defaultName: 'ECharts Chart',
   icon: <ComposeEchartsMaterialIcon />,
   createComponents: () => ({

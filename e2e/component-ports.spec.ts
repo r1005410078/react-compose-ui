@@ -24,7 +24,7 @@ test('OpenSpec: stage-engine / 端口捕捉 / 端口压过更近的曲线端点'
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   const frameBox = (await frame.boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 260,
     y: frameBox.y + 220,
   })

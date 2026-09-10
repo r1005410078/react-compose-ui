@@ -41,10 +41,26 @@
   font-weight: 600;
 }
 
+/*
+ * 两种排法共用一个容器：列表是一列行，网格是 auto-fill 的格子。
+ *
+ * 网格是默认——物料是**图形**，扫形状比读一列名字快；列表留给名字长、条目多的文件夹段。
+ */
 .compose-component-library__grid {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+/*
+ * 格子**不画边框**：图标本身就是线稿方框，再给每格套一个框就是两层方框互相打架，十几个框还
+ * 会把这块面积切碎。最小列宽 84px——六个物料在三列和四列下都是两行、高度一样，而三列的格子
+ * 宽得下「矩形」「断路器」不被拆成半个词；列数用 auto-fill 跟着栏宽走，拉宽自然变四列。
+ */
+.compose-component-library__grid[data-mode='grid'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 2px;
 }
 
 .compose-component-library__project-item {
@@ -122,6 +138,57 @@
   background: var(--compose-surface-hover, #292e36);
   color: var(--compose-text-strong, #f4f7fb);
   outline: none;
+}
+
+/*
+ * 网格里的一格：图标 24px 按原生网格画（不缩放，1.5 描边最实），名字区**固定两行高**——
+ * 一行的「容器」与两行的「Dragged Card Focused」并排时，图标才落在同一条水平线上。
+ */
+.compose-component-library__grid[data-mode='grid'] .compose-component-library__tile {
+  flex-direction: column;
+  height: auto;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px 6px;
+  border-radius: 7px;
+}
+
+.compose-component-library__grid[data-mode='grid'] .compose-component-library__icon,
+.compose-component-library__grid[data-mode='grid'] .compose-component-library__icon svg,
+.compose-component-library__grid[data-mode='grid'] .compose-component-asset-icon {
+  width: 24px;
+  height: 24px;
+}
+
+/*
+ * 名字两行封顶而不是单行截断：单行会把「Dragged Card」与「Dragged Card Focused」变成两个
+ * 一模一样的「Dragge…」，用户没有任何办法分辨。
+ */
+.compose-component-library__grid[data-mode='grid'] .compose-component-library__name {
+  display: -webkit-box;
+  box-sizing: border-box;
+  width: 100%;
+  height: 26px;
+  flex: none;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 11px;
+  line-height: 13px;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* 网格里没有横向余地写类别，主组件与变体靠图标形状区分（实线 / 两道短线）。 */
+.compose-component-library__grid[data-mode='grid'] .compose-component-library__meta {
+  display: none;
+}
+
+.compose-component-library__grid[data-mode='grid'] .compose-component-library__variant-action {
+  top: 4px;
+  right: 4px;
+  transform: none;
 }
 
 .compose-component-library__icon,
@@ -233,6 +300,54 @@
   color: var(--compose-text-muted, #6b7280);
   font-size: 11px;
   font-weight: 600;
+}
+
+/* 头一行：搜索（货架开启时）与排法开关同排；没有搜索时这一行只为那两颗按钮存在。 */
+.compose-component-library__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.compose-component-library__search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.compose-component-library__modes {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  gap: 2px;
+}
+
+.compose-component-library__mode {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--compose-text-muted, #8e98a8);
+  cursor: pointer;
+}
+
+.compose-component-library__mode svg {
+  width: 14px;
+  height: 14px;
+}
+
+.compose-component-library__mode[aria-pressed='true'] {
+  background: var(--compose-surface-hover, #292e36);
+  color: var(--compose-text-strong, #f4f7fb);
+}
+
+.compose-component-library__mode:focus-visible {
+  outline: 1px solid var(--compose-accent, #60a5fa);
+  outline-offset: 1px;
 }
 
 .compose-component-library__search input {

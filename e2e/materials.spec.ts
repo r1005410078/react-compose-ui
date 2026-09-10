@@ -12,7 +12,7 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
   const containerBox = await container.boundingBox()
   expect(containerBox).not.toBeNull()
   for (let index = 0; index < 5; index += 1) {
-    await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
       x: containerBox!.x + containerBox!.width / 2,
       y: containerBox!.y + containerBox!.height / 2,
     })
@@ -102,7 +102,7 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   expect(frameBox).not.toBeNull()
 
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 ECharts Chart' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 图表' }), {
     x: frameBox!.x + 320,
     y: frameBox!.y + 240,
   })
@@ -277,8 +277,8 @@ test('OpenSpec: basic-materials / 关联组件实例物料 / 实例暴露组件�
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   const source = sceneTree.getByRole('row').last()
   await source.click()
@@ -330,7 +330,7 @@ test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时�
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
   expect(outputBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Widget Switcher' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 组件切换器' }), {
     x: outputBox!.x + 260,
     y: outputBox!.y + 300,
   })
@@ -339,7 +339,7 @@ test('OpenSpec: WidgetSwitcher 物料 / 只显示活动子项并按选择临时�
 
   const rootRenderers = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   for (const x of [80, 300]) {
-    await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+    await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
       x: outputBox!.x + x,
       y: outputBox!.y + 24,
     })

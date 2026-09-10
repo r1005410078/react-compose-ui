@@ -411,7 +411,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(rectangle)
@@ -480,7 +480,7 @@ test('OpenSpec: stage / Pointer 手势原子性与取消 / move 与 resize 各�
   const frame = editor.getByTestId('stage-container')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox!.x + frameBox!.width * 0.35,
     y: frameBox!.y + frameBox!.height * 0.4,
   })
@@ -557,7 +557,7 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   const frame = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-container')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, {
     x: frameBox!.x + 220,
     y: frameBox!.y + 220,
@@ -667,7 +667,7 @@ test('OpenSpec: stage / 网格标尺辅助线与滚动导航 / 完成 Godot 风�
   const frame = stage.getByTestId('stage-container')
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox!.x + frameBox!.width * 0.3,
     y: frameBox!.y + frameBox!.height * 0.35,
   })
@@ -799,7 +799,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   })
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
@@ -816,7 +816,7 @@ test('OpenSpec: stage / DOM Scene 与 SVG Overlay 分层 / 完整示例视觉黄
   await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   expect(frameBox).not.toBeNull()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox!.x + 160,
     y: frameBox!.y + 180,
   })
@@ -904,7 +904,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / Canvas 标尺对�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(stage.locator('.compose-stage__node.is-renderer').first())
 
@@ -946,7 +946,7 @@ test('OpenSpec: stage / 顶层容器标题标签 / 场景带标签重命名而�
   const frameBox = (await stage.getByTestId('stage-container').boundingBox())!
 
   // 容器内放一个矩形：即使有内容，场景内的容器也不收敛、不带标签。
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + frameBox.width * 0.3,
     y: frameBox.y + frameBox.height * 0.3,
   })

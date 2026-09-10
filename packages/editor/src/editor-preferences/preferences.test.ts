@@ -233,4 +233,26 @@ describe('editor preferences', () => {
     expect(isEditableKeyboardTarget(editable)).toBe(true)
     expect(isEditableKeyboardTarget(button)).toBe(false)
   })
+
+  describe('OpenSpec: editor-preferences / 物料面板排法是编辑器偏好', () => {
+    it('默认网格', () => {
+      expect(createDefaultComposeEditorPreferences().palette.mode).toBe('grid')
+    })
+
+    it('存量偏好里缺这一段时补成网格', () => {
+      const legacy = { ...createDefaultComposeEditorPreferences() } as Partial<ComposeEditorPreferences>
+      delete (legacy as Record<string, unknown>).palette
+      expect(normalizeComposeEditorPreferences(legacy as ComposeEditorPreferences).palette.mode).toBe('grid')
+    })
+
+    it('只认识两个值，别的一律回落网格', () => {
+      const withMode = (mode: unknown) => normalizeComposeEditorPreferences({
+        ...createDefaultComposeEditorPreferences(),
+        palette: { mode },
+      } as unknown as ComposeEditorPreferences).palette.mode
+      expect(withMode('list')).toBe('list')
+      expect(withMode('gallery')).toBe('grid')
+      expect(withMode(undefined)).toBe('grid')
+    })
+  })
 })

@@ -23,7 +23,7 @@ test('OpenSpec: compose-document / 符号导线 / 绑定端跟着符号走，符
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   const frameBox = (await frame.boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 240,
     y: frameBox.y + 180,
   })
@@ -121,13 +121,13 @@ test('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 跨父级�
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   const frameBox = (await frame.boundingBox())!
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Container' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 容器' }), {
     x: frameBox.x + 160,
     y: frameBox.y + 150,
   })
   // 容器的 testid 不带 id 后缀，与矩形那套 `stage-entity-<id>` 不是一个命名。
   const containerBox = (await stage.getByTestId('stage-container').last().boundingBox())!
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: containerBox.x + containerBox.width / 2,
     y: containerBox.y + containerBox.height / 2,
   })

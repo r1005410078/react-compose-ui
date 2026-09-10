@@ -18,6 +18,8 @@ interface PanelApi {
     readonly onShelfChange?: (shelf: ComposeComponentShelf) => void
     readonly onCustomize?: () => void
     readonly onRevealFolder?: (folderPath: readonly string[]) => void
+    readonly mode?: 'grid' | 'list'
+    readonly onModeChange?: (mode: 'grid' | 'list') => void
   }>
 }
 
@@ -26,7 +28,7 @@ const api = libraryApi as unknown as PanelApi
 const registry = createComposeEntityRegistry({
   presets: [{
     id: 'container',
-    label: 'Container',
+    label: '容器',
     createComponents: () => ({
       Transform: { rotation: 0 },
       LayoutItem: {
@@ -121,7 +123,6 @@ describe('ComposeComponentLibraryPanel', () => {
         registry={registry}
         shelf={{
           title: '符号库',
-          search: true,
           sections: [
             { kind: 'folder', id: 'symbols', folderPath: ['Symbols'], groupBy: 'subfolder' },
             { kind: 'folder', id: 'components', folderPath: [] },
@@ -137,9 +138,9 @@ describe('ComposeComponentLibraryPanel', () => {
       expect(screen.getByRole('heading', { name: '项目组件 (2)' })).toBeInTheDocument()
     })
     // 折叠的段只剩标题，展开后瓦片出现。
-    expect(screen.queryByRole('button', { name: '添加 Container' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '添加 容器' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '基础组件 (1)' }))
-    expect(screen.getByRole('button', { name: '添加 Container' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加 容器' })).toBeInTheDocument()
     // 搜索跨段：段标题保留，不匹配的瓦片消失。
     fireEvent.change(screen.getByTestId('component-library-search'), { target: { value: 'danger' } })
     expect(screen.getByRole('heading', { name: '项目组件 (1)' })).toBeInTheDocument()
@@ -158,7 +159,7 @@ describe('ComposeComponentLibraryPanel', () => {
     const onCreateIntent = vi.fn()
     const Panel = api.ComposeComponentLibraryPanel!
     render(<Panel registry={registry} onCreateIntent={onCreateIntent} />)
-    fireEvent.click(screen.getByRole('button', { name: '添加 Container' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加 容器' }))
     expect(onCreateIntent).toHaveBeenCalledWith({ kind: 'preset', presetId: 'container' })
     expect(screen.queryByText('项目组件')).not.toBeInTheDocument()
   })
@@ -176,7 +177,7 @@ describe('ComposeComponentLibraryPanel', () => {
         onItemDragStart={vi.fn()}
       />,
     )
-    const tile = screen.getByRole('button', { name: '添加 Container' })
+    const tile = screen.getByRole('button', { name: '添加 容器' })
 
     // 一次完整的拖出面板：按下 → 超过 4px 阈值 → 在面板外松手（无 click）。
     fireEvent.pointerDown(tile, { button: 0, pointerId: 7, clientX: 10, clientY: 10 })
@@ -248,7 +249,7 @@ describe('OpenSpec: component-library / 自定义物料面板 / 瓦片右键', (
 
   it('基础瓦片给「从面板隐藏」，写出的是其余 Preset 的清单', async () => {
     const { onShelfChange } = renderPanel()
-    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加 Container' }))
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加 容器' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '从面板隐藏' }))
     // `include` 缺省表示「全部」，因此藏掉一个必须把其余的写出来。夹具只有 Container 一个
     // 可见 Preset，写出来的就是空清单——那正是「这一段什么都不列」。
@@ -286,7 +287,46 @@ describe('OpenSpec: component-library / 自定义物料面板 / 瓦片右键', (
   it('宿主不给回调时整个菜单不出现：右键落回浏览器默认', async () => {
     const Panel = api.ComposeComponentLibraryPanel!
     render(<Panel registry={registry} shelf={shelf} store={componentStore()} />)
-    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加 Container' }))
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '添加 容器' }))
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  describe('OpenSpec: component-library / 物料面板的网格与列表两种排法', () => {
+    const gridOf = () => screen.getByRole('region', { name: '组件库内容' })
+      .querySelector('.compose-component-library__grid')
+
+    it('默认是网格', async () => {
+      const Panel = api.ComposeComponentLibraryPanel!
+      render(<Panel registry={registry} />)
+      await screen.findByRole('button', { name: '添加 容器' })
+      expect(gridOf()).toHaveAttribute('data-mode', 'grid')
+      expect(screen.getByTestId('component-library-mode-grid')).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByTestId('component-library-mode-list')).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('不受控时点一下就换排法', async () => {
+      const Panel = api.ComposeComponentLibraryPanel!
+      render(<Panel registry={registry} />)
+      fireEvent.click(await screen.findByTestId('component-library-mode-list'))
+      expect(gridOf()).toHaveAttribute('data-mode', 'list')
+    })
+
+    it('受控时只上报，宿主不回传就不改变排法', async () => {
+      const Panel = api.ComposeComponentLibraryPanel!
+      const onModeChange = vi.fn()
+      render(<Panel registry={registry} mode="grid" onModeChange={onModeChange} />)
+      fireEvent.click(await screen.findByTestId('component-library-mode-list'))
+      expect(onModeChange).toHaveBeenCalledWith('list')
+      // 面板自己不持久化：宿主没回传，排法就还是网格。
+      expect(gridOf()).toHaveAttribute('data-mode', 'grid')
+    })
+
+    it('网格里长名字不塌成同一个前缀：名字整串仍在 DOM 上', async () => {
+      const Panel = api.ComposeComponentLibraryPanel!
+      render(<Panel registry={registry} store={componentStore()} />)
+      // 两个同前缀的项目组件在网格里各自留着完整名字，靠两行封顶排下去而不是截断成一个词。
+      expect(await screen.findByText('Button')).toBeInTheDocument()
+      expect(await screen.findByText('Button Danger')).toBeInTheDocument()
+    })
   })
 })

@@ -95,6 +95,7 @@ import type {
 } from '@compose-ui/asset-browser'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
+  COMPOSE_DEFAULT_COMPONENT_SHELF,
   ComposeComponentLibraryPanel,
   ComposeComponentAssetIcon,
   ComposeComponentInstanceOverridesPanel,
@@ -104,6 +105,7 @@ import {
   createComposeVariantAsset,
   createComposeVariantAssetFromInstance,
   readComposeComponentInstance,
+  resolveComposeComponentShelfView,
   updateComposeComponentInstanceFromSource,
   type ComposeComponentDescriptor,
   type ComposeComponentLibraryItem,
@@ -2337,6 +2339,59 @@ export function ComposeEditor({
       .map((preset) => ({ id: preset.id, label: preset.label })),
     folders: componentCatalog?.folders ?? [],
   }), [componentCatalog, controller, toolbarPresetIds])
+  /*
+   * 画布右键「添加组件」的那棵树。
+   *
+   * 与物料面板读**同一个**解析器（`resolveComposeComponentShelfView`）：各建一份的症状是
+   * 「面板里有、菜单里没有」，而用户读不出为什么。Stage 不认识组件目录协议，因此这里把它压成
+   * 一份「能列出什么」的扁平结构，连同 id → 创建意图的映射一起交出去。
+   */
+  const addComponentMenu = useMemo(() => {
+    const registry = controller?.registry
+    if (!registry) return null
+    const zh = resolvedPreferences.locale === 'zh-CN'
+    const sections = resolveComposeComponentShelfView({
+      registry,
+      shelf: workspaceSession.palette ?? COMPOSE_DEFAULT_COMPONENT_SHELF,
+      catalog: componentCatalog ?? null,
+      hasStore: componentWorkspace.store !== undefined,
+      ...(toolbarPresetIds === undefined ? {} : { toolbarPresetIds }),
+      labels: {
+        basics: zh ? '基础组件' : 'Basics',
+        components: zh ? '项目组件' : 'Project components',
+      },
+      locale: resolvedPreferences.locale,
+    })
+    const items = new Map<string, ComposeComponentLibraryItem>()
+    const groups = sections.flatMap((section) => section.groups.map((group) => ({
+      id: `${section.id}:${group.id}`,
+      // 子文件夹有自己的小标题；没有小标题的一组就用段标题——菜单里**没有第三级**。
+      title: group.title ?? section.title,
+      items: group.tiles.map((tile) => {
+        if (tile.kind === 'preset') {
+          const id = `preset:${tile.presetId}`
+          items.set(id, { kind: 'preset', presetId: tile.presetId })
+          return { id, label: tile.label, icon: registry.getPreset(tile.presetId)?.icon }
+        }
+        const id = `component:${tile.descriptor.assetKey}`
+        items.set(id, { kind: 'component', descriptor: tile.descriptor })
+        return {
+          id,
+          label: tile.descriptor.displayName,
+          icon: <ComposeComponentAssetIcon kind={tile.descriptor.kind} />,
+        }
+      }),
+    }))).filter((group) => group.items.length > 0)
+    return groups.length > 0 ? { groups, items } : null
+  }, [
+    componentCatalog,
+    componentWorkspace.store,
+    controller?.registry,
+    resolvedPreferences.locale,
+    toolbarPresetIds,
+    workspaceSession.palette,
+  ])
+
   const workspacePaletteTitle = workspaceSession.palette?.title
     ?? editorMessages.workspace.componentLibrary
   const workspaceActions = useMemo<ComposeEditorWorkspaceActions>(() => ({
@@ -2443,6 +2498,11 @@ export function ComposeEditor({
         store={componentWorkspace.store}
         shelf={workspaceSession.palette}
         toolbarPresetIds={toolbarPresetIds}
+        // 排法住偏好：它回答「我想怎么看」，不产生事务、不进撤销历史。
+        mode={resolvedPreferences.palette.mode}
+        onModeChange={(mode) => {
+          updatePreferences({ ...resolvedPreferences, palette: { ...resolvedPreferences.palette, mode } })
+        }}
         onCustomize={() => workspaceSession.openDialog('palette')}
         onShelfChange={workspaceSession.setPaletteShelf}
         onOpenIntent={openComponentDocument}
@@ -2501,6 +2561,24 @@ export function ComposeEditor({
         ? slots.stage
         : controller?.renderStage({
           commands: stageCommands,
+          ...(addComponentMenu
+            ? {
+                addComponentMenu: addComponentMenu.groups,
+                onAddComponent: (itemId: string, clientPoint: { readonly x: number, readonly y: number }) => {
+                  const item = addComponentMenu.items.get(itemId)
+                  if (!item) return
+                  /*
+                   * 走与「从物料面板拖进来」**同一个** `externalDrop`：落点是右键那一下，
+                   * 容器类升格为新场景、其余落进激活场景并保留世界落点，这条规则一个字不改。
+                   */
+                  controller.interactionController.send({
+                    type: 'external.add',
+                    item: createComponentLibraryStageItem(item),
+                    clientPoint,
+                  })
+                },
+              }
+            : {}),
           services: {
             assetResolver: resolvedAssetResolver,
             scriptModuleLoader: pages?.scriptModuleLoader,

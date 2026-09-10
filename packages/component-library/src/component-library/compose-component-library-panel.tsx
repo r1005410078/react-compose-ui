@@ -20,7 +20,8 @@ import type { ComposeComponentCatalog, ComposeComponentDescriptor, ComposeCompon
 import {
   COMPOSE_DEFAULT_COMPONENT_SHELF,
   keepOnlyComponentShelfSection,
-  resolveComponentShelf,
+  resolveComposeComponentShelfView,
+  resolveComposeComponentVisiblePresetIds,
   setComponentShelfPresetVisible,
 } from './component-shelf'
 import type {
@@ -94,7 +95,21 @@ export interface ComposeComponentLibraryPanelProps extends Omit<HTMLAttributes<H
   readonly onCustomize?: () => void
   /** 在资源浏览器里定位某个文件夹；只有文件夹来源的瓦片会用到。 */
   readonly onRevealFolder?: (folderPath: readonly string[]) => void
+  /**
+   * 物料排成网格还是一行一个；缺省网格。
+   *
+   * @remarks
+   * 受控：面板只上报改动，**自己不持久化**——与货架同一条边界，存哪儿由宿主决定（编辑器把它
+   * 放进偏好）。网格是默认，因为物料是**图形**，扫形状比读一列名字快；列表留给名字长、条目多
+   * 的文件夹段。
+   */
+  readonly mode?: ComposeComponentLibraryMode
+  /** 用户切换排法；不给时两颗按钮仍然渲染，但按下去只有本次会话生效。 */
+  readonly onModeChange?: (mode: ComposeComponentLibraryMode) => void
 }
+
+/** 物料的两种排法。 @public */
+export type ComposeComponentLibraryMode = 'grid' | 'list'
 
 /** 面板会话的空状态；`shelf` 是它挂在哪一份货架上的身份。 */
 function emptyShelfSession(shelf: ComposeComponentShelf) {
@@ -116,6 +131,32 @@ interface PointerSession {
 interface DragPreview {
   readonly item: ComposeComponentLibraryItem
   readonly clientPoint: { readonly x: number; readonly y: number }
+}
+
+/** 排法开关的两枚图标：四格与三横，与物料图标同一套线稿画法。 */
+function ComposeLibraryModeIcon({ mode }: { readonly mode: ComposeComponentLibraryMode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      viewBox="0 0 24 24"
+    >
+      {mode === 'grid' ? (
+        <>
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
+        </>
+      ) : (
+        <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+      )}
+    </svg>
+  )
 }
 
 /**
@@ -225,11 +266,23 @@ export function ComposeComponentLibraryPanel({
   onItemDragMove,
   onItemDragEnd,
   onItemDragCancel,
+  mode,
+  onModeChange,
   className,
   ...htmlProps
 }: ComposeComponentLibraryPanelProps) {
   const i18n = useComposeI18nContext()
   const zh = (i18n?.locale ?? 'zh-CN') === 'zh-CN'
+  /*
+   * 宿主不受控时的回退值。受控优先：宿主给了 `mode` 就以它为准，面板 MUST NOT 私自改变排法
+   * ——与货架同一条边界。
+   */
+  const [fallbackMode, setFallbackMode] = useState<ComposeComponentLibraryMode>('grid')
+  const activeMode = mode ?? fallbackMode
+  const selectMode = (next: ComposeComponentLibraryMode) => {
+    if (mode === undefined) setFallbackMode(next)
+    onModeChange?.(next)
+  }
   const [catalog, setCatalog] = useState<ComposeComponentCatalog | null>(null)
   const [error, setError] = useState<string | null>(null)
   /**
@@ -378,38 +431,22 @@ export function ComposeComponentLibraryPanel({
     onOpenIntent?.(descriptor)
   }
 
-  // 没有 Store 时文件夹段整段不出现（不是出现一个写着 0 的空段）：没接项目资源的宿主看到的
-  // 就该是今天那份只有基础 Preset 的面板。
-  const visibleSections = store
-    ? shelf.sections
-    : shelf.sections.filter((section) => section.kind !== 'folder')
   /*
-   * `paletteHidden` 在 Registry 上带着**理由**：`'always'` 恒藏，`'toolbar'` 只在工具栏已经
-   * 提供入口时才藏。后者按工作区不同，而本包不认识工具栏——由宿主用 `toolbarPresetIds` 告诉
-   * 我们「当前工作区的工具栏上有哪几条命令」，这里把它求值成一个布尔再往下传。
-   *
-   * 宿主不给这份名单时（独立使用本面板），`'toolbar'` 一档照旧藏起来：那是它在货架落地之前
-   * 的行为，不接工作区的宿主一个瓦片都不该多出来。
+   * 面板与画布右键的「添加组件」菜单读**同一个**解析器：各建一份的症状是「面板里有、菜单里
+   * 没有」。`paletteHidden` 的两种理由、没有 Store 时文件夹段整段不出现，都住在那里。
    */
-  const hiddenByToolbar = (presetId: string) => (
-    toolbarPresetIds === undefined || toolbarPresetIds.includes(presetId)
-  )
-  // 求值一次给两个消费者：解析出瓦片，以及右键菜单里「藏 / 显」要用的那份可见 Preset 名单。
-  const presetEntries = registry.listPresets().map((preset) => ({
-    ...preset,
-    paletteHidden: preset.paletteHidden === 'always'
-      || (preset.paletteHidden === 'toolbar' && hiddenByToolbar(preset.id)),
-  }))
-  const sections = resolveComponentShelf({
-    shelf: { ...shelf, sections: visibleSections },
-    presets: presetEntries,
+  const sections = resolveComposeComponentShelfView({
+    registry,
+    shelf,
     catalog,
+    hasStore: store !== undefined,
+    ...(toolbarPresetIds === undefined ? {} : { toolbarPresetIds }),
     query,
     labels: {
       basics: zh ? '基础组件' : 'Basics',
       components: zh ? '项目组件' : 'Project components',
     },
-    locale: i18n?.locale,
+    ...(i18n?.locale === undefined ? {} : { locale: i18n.locale }),
   }).filter((section) => !dismissed.has(section.id))
 
   const isCollapsed = (id: string, fallback: boolean) => collapseOverrides.get(id) ?? fallback
@@ -434,9 +471,10 @@ export function ComposeComponentLibraryPanel({
     ? null
     : shelf.sections.find((section) => section.id === menuTarget.sectionId) ?? null
   // 可见 Preset 的 id，顺序即呈现顺序——`setComponentShelfPresetVisible` 要拿它把 `include` 写出来。
-  const availablePresetIds = presetEntries
-    .filter((preset) => preset.paletteHidden !== true)
-    .map((preset) => preset.id)
+  const availablePresetIds = resolveComposeComponentVisiblePresetIds({
+    registry,
+    ...(toolbarPresetIds === undefined ? {} : { toolbarPresetIds }),
+  })
   const applyShelf = (next: ComposeComponentShelf) => {
     onShelfChange?.(next)
     shelfMenu.close()
@@ -506,7 +544,7 @@ export function ComposeComponentLibraryPanel({
   const renderGroup = (group: ComposeComponentShelfGroup) => {
     if (group.title === null) {
       return (
-        <div className="compose-component-library__grid" key={group.id}>
+        <div className="compose-component-library__grid" data-mode={activeMode} key={group.id}>
           {group.tiles.map(renderTile)}
         </div>
       )
@@ -526,7 +564,7 @@ export function ComposeComponentLibraryPanel({
           </button>
         </h4>
         {collapsed ? null : (
-          <div className="compose-component-library__grid">{group.tiles.map(renderTile)}</div>
+          <div className="compose-component-library__grid" data-mode={activeMode}>{group.tiles.map(renderTile)}</div>
         )}
       </div>
     )
@@ -552,7 +590,8 @@ export function ComposeComponentLibraryPanel({
         })
       }}
     >
-      {shelf.search ? (
+      <div className="compose-component-library__header">
+        {/* 检索框常驻：它是这块面板里唯一能在几十个符号中直达一个的入口，藏在开关后面等于没有。 */}
         <div className="compose-component-library__search">
           <input
             aria-label={zh ? '搜索组件' : 'Search components'}
@@ -563,7 +602,32 @@ export function ComposeComponentLibraryPanel({
             value={query}
           />
         </div>
-      ) : null}
+        {/*
+          * 两颗按钮而不是只放进右键菜单：那条入口用户自己发现不了，本仓库已经为这个毛病付过
+          * 一次代价（不进绘图模式就看不见命令行）。代价写在明处——没开搜索时这一行只为这两颗
+          * 按钮存在。
+          */}
+        <div className="compose-component-library__modes" role="group" aria-label={zh ? '物料排法' : 'Palette layout'}>
+          {([
+            ['grid', zh ? '网格' : 'Grid'],
+            ['list', zh ? '列表' : 'List'],
+          ] as const).map(([value, label]) => (
+            <button
+              aria-label={label}
+              aria-pressed={activeMode === value}
+              className="compose-component-library__mode"
+              data-mode={value}
+              data-testid={`component-library-mode-${value}`}
+              key={value}
+              onClick={() => { selectMode(value) }}
+              title={label}
+              type="button"
+            >
+              <ComposeLibraryModeIcon mode={value} />
+            </button>
+          ))}
+        </div>
+      </div>
       {error ? <p role="alert">{error}</p> : null}
       {store && !catalog && !error ? <p role="status">{zh ? '正在加载…' : 'Loading…'}</p> : null}
       {sections.map((section) => {

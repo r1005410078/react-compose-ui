@@ -200,7 +200,7 @@ test('OpenSpec: stage-paint-tools / 背景填充 / 线性渐变显示并提交�
   // 用**容器**而不是矩形：渐变与图片背景由共享 Paint 层绘制，而那一层不为曲线画背景
   // （盒是矩形而形状不是）。容器有全套 Appearance，这也是矩形与 Panel 合并之后渐变底板
   // 该走的那条路。
-  await editor.getByRole('button', { name: '添加 Container' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
 
   const rectangle = stage.locator('.compose-stage__node.is-container').first()
   await rectangle.click()

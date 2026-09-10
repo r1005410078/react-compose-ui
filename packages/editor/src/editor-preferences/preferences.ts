@@ -4,6 +4,7 @@ import {
 } from '@compose-ui/commands'
 import type { ComposeKeybinding } from '@compose-ui/commands'
 import { DEFAULT_STAGE_SHORTCUTS } from '@compose-ui/stage'
+import type { ComposeComponentLibraryMode } from '@compose-ui/component-library'
 import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
 import { formatComposeKeybinding } from '@compose-ui/components'
 import type {
@@ -85,6 +86,20 @@ export interface ComposeEditorPreferences {
   >
   /** 工作区：上次用的、按文档的记忆、拖过的布局与用户另存的工作区。 */
   readonly workspace: ComposeEditorWorkspacePreferences
+  /**
+   * 物料面板的排法：网格还是一行一个。
+   *
+   * @remarks
+   * 与工作区那一半同族——它回答「我想怎么看」，不改变文档里画了什么，因此不写文档、不进撤销
+   * 历史。默认网格：物料是图形，扫形状比读一列名字快。
+   */
+  readonly palette: ComposeEditorPalettePreferences
+}
+
+/** 偏好里的物料面板那一半。 @public */
+export interface ComposeEditorPalettePreferences {
+  /** 排法；默认 `'grid'`。 */
+  readonly mode: ComposeComponentLibraryMode
 }
 
 /**
@@ -253,6 +268,7 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
       'workspace.reset': [],
     }),
     workspace: createDefaultComposeEditorWorkspacePreferences(),
+    palette: { mode: 'grid' },
   }
 }
 
@@ -383,6 +399,10 @@ export function normalizeComposeEditorPreferences(
     workspace: normalizeComposeEditorWorkspacePreferences(
       (preferences as Partial<ComposeEditorPreferences>).workspace,
     ),
+    // 存量偏好里没有这一段，缺席即网格。
+    palette: {
+      mode: (preferences as Partial<ComposeEditorPreferences>).palette?.mode === 'list' ? 'list' : 'grid',
+    },
   }
 }
 

@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import type { ComposeCommandDefinition, ComposeKeybinding } from '@compose-ui/commands'
 import type { ComposeAngleConstraint, ComposeLayoutMeasurementPort } from '@compose-ui/core'
@@ -327,6 +327,26 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   /** 为当前规范化选区打开宿主的项目组件创建流程；省略时菜单不显示该入口。 */
   readonly onCreateComponentIntent?: (entityIds: readonly string[]) => void
   /**
+   * 画布右键「添加组件」的二级菜单，由宿主注入。
+   *
+   * @remarks
+   * Stage **不认识组件目录协议**——它不依赖 `@compose-ui/component-library`，因此注入的是
+   * 「能列出什么」，菜单的呈现与落点仍住 Stage。这与既有的命令注入是同一种形状，不引入第二种
+   * 机制。宿主 MUST 用喂给物料面板的**同一份**货架模型生成它，否则会出现「面板里有、菜单里
+   * 没有」而用户读不出原因。
+   *
+   * 缺省时菜单里不出现「添加组件」这一项。
+   */
+  readonly addComponentMenu?: readonly ComposeStageAddComponentGroup[]
+  /**
+   * 用户在「添加组件」里选了一项。
+   *
+   * @remarks
+   * `clientPoint` 是**右键那一下**的视口坐标。交给宿主而不是自己换算成世界坐标，是为了让它
+   * 走与「从物料面板拖进来」完全相同的落点路径——同一件事两套实现迟早漂移。
+   */
+  readonly onAddComponent?: (itemId: string, clientPoint: { readonly x: number, readonly y: number }) => void
+  /**
    * 宿主注入的命令定义。
    *
    * @remarks
@@ -494,4 +514,34 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly onEditablePathVertexToggle?: (vertexId: string) => void
   /** Entity 与命令 ID factory。默认使用 crypto.randomUUID 或时间回退。 */
   readonly idFactory?: () => string
+}
+
+/**
+ * 「添加组件」菜单里的一条。
+ *
+ * @remarks
+ * `id` 由宿主定义，Stage 原样回传——它不解释这个字符串的含义。
+ *
+ * @public
+ */
+export interface ComposeStageAddComponentItem {
+  readonly id: string
+  readonly label: string
+  /** 行首图标；省略时只有名字。 */
+  readonly icon?: ReactNode
+}
+
+/**
+ * 「添加组件」菜单里的一组。
+ *
+ * @remarks
+ * 一组对应物料面板里的一段或一个子文件夹。**没有第三级**：面板里文件夹本来就是平级的一段，
+ * 菜单里多套一层会让同一棵树在两处长得不一样，鼠标还要多走一次悬停。
+ *
+ * @public
+ */
+export interface ComposeStageAddComponentGroup {
+  readonly id: string
+  readonly title: string
+  readonly items: readonly ComposeStageAddComponentItem[]
 }

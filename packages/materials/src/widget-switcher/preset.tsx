@@ -27,7 +27,8 @@ export function createWidgetSwitcherPreset(
   )
   return {
     id: 'widget-switcher',
-    label: options.label ?? 'Widget Switcher',
+    // 面板显示名是中文，新建对象的默认名保持英文——后者写进文档。
+    label: options.label ?? '组件切换器',
     defaultName: options.name ?? 'Widget Switcher',
     icon: <ComposeWidgetSwitcherMaterialIcon />,
     createComponents: () => ({

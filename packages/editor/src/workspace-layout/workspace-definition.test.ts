@@ -88,10 +88,8 @@ describe('工作区定义与注入', () => {
   it('OpenSpec: editor-workspace-layout / 内建工作区 / 两份货架', () => {
     const [page, drawing] = COMPOSE_DEFAULT_WORKSPACES
     // 页面：基础组件 + 全部项目组件平铺，不带搜索。
-    expect(page!.palette?.search ?? false).toBe(false)
     expect(page!.palette?.sections.map((section) => section.kind)).toEqual(['presets', 'folder'])
     // 绘图：Symbols 按子文件夹分组打头、基础组件折叠收底，带搜索。
-    expect(drawing!.palette?.search).toBe(true)
     const [symbols, , basics] = drawing!.palette!.sections
     expect(symbols).toMatchObject({ kind: 'folder', folderPath: ['Symbols'], groupBy: 'subfolder' })
     expect(basics).toMatchObject({ kind: 'presets', collapsed: true })

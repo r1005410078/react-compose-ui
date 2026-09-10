@@ -32,9 +32,9 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
    * 没有瓦片。Text 与箭头的入口都在页面货架上，因此仍不出现；Wire 是自己的理由，恒不出现。
    */
   await expect(componentLibrary.getByRole('heading', { name: '基础组件 (6)' })).toBeVisible()
-  await expect(componentLibrary.getByRole('button', { name: '添加 Circle' })).toBeVisible()
-  await expect(componentLibrary.getByRole('button', { name: '添加 Rectangle' })).toBeVisible()
-  await expect(componentLibrary.getByRole('button', { name: '添加 Widget Switcher' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 圆' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 矩形' })).toBeVisible()
+  await expect(componentLibrary.getByRole('button', { name: '添加 组件切换器' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
 
   const editorBox = await editor.boundingBox()
@@ -674,13 +674,13 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   // Text 与箭头在页面货架上有工具栏入口，因此不出现在 Palette；圆没有，因此出现。
   await expect(editor.getByRole('button').filter({ hasText: /Container|Rectangle|ECharts/ }))
     .toHaveCount(3)
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 
   const stageBox = await stage.boundingBox()
   expect(stageBox).not.toBeNull()
-  const containerTile = editor.getByRole('button', { name: '添加 Container' })
+  const containerTile = editor.getByRole('button', { name: '添加 容器' })
   // 先滚进视口再读盒：物料面板是可滚动的，前一步新建 Entity 会让场景树长一行、把面板整体推走，
   // 而读到的旧坐标此时落在瓦片之外——按下去打在面板底板上，拖拽根本不会开始。
   await containerTile.scrollIntoViewIfNeeded()
@@ -712,7 +712,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   const frameBox = await frame.boundingBox()
   expect(frameBox).not.toBeNull()
 
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox!.x + frameBox!.width * 0.25,
     y: frameBox!.y + frameBox!.height * 0.35,
   })
@@ -875,7 +875,7 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
    * 现在是曲线，「`Curve` 不能与 Hierarchy 组合」——一条曲线不是容器。图表同样是叶子
    * Renderer，「一个 Entity 既是 Renderer 又是 Container」这件要验的事一个字不变。
    */
-  await editor.getByRole('button', { name: '添加 ECharts Chart' }).click()
+  await editor.getByRole('button', { name: '添加 图表' }).click()
 
   const rectangle = stage.locator('.compose-stage__node.is-renderer').first()
   await rectangle.click()
@@ -1417,7 +1417,7 @@ test('OpenSpec: command-panel / 命令动作检索与执行 / 从命令面板执
 
   // 新建 Panel 会自动选中它；这一步本身派发一条命令。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const nodes = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(nodes).toHaveCount(1)
   await expect(events).toHaveCount(1)
@@ -1441,7 +1441,7 @@ test('OpenSpec: editor-preferences / 动作执行与呈现分层 / 键盘与命�
   await expect(stage).toBeVisible()
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
     .toHaveCount(1)
 

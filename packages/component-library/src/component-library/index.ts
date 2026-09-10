@@ -5,6 +5,7 @@ export {
 export type {
   ComposeComponentLibraryDragEvent,
   ComposeComponentLibraryItem,
+  ComposeComponentLibraryMode,
   ComposeComponentLibraryPanelProps,
 } from './compose-component-library-panel'
 export {
@@ -14,12 +15,17 @@ export {
   keepOnlyComponentShelfSection,
   moveComponentShelfSection,
   removeComponentShelfSection,
+  resolveComposeComponentShelfView,
+  resolveComposeComponentVisiblePresetIds,
   reorderComponentShelfSection,
   setComponentShelfPresetVisible,
   updateComponentShelfSection,
 } from './component-shelf'
 export type {
   ComposeComponentShelf,
+  ComposeComponentShelfGroup,
+  ComposeComponentShelfTile,
+  ComposeComponentShelfViewSection,
   ComposeComponentShelfFolderSection,
   ComposeComponentShelfPresetSection,
   ComposeComponentShelfSection,

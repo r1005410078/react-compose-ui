@@ -298,7 +298,6 @@ const PAGE_WORKSPACE_PALETTE: ComposeComponentShelf = {
  */
 const DRAWING_WORKSPACE_PALETTE: ComposeComponentShelf = {
   title: '符号库',
-  search: true,
   sections: [
     { kind: 'folder', id: 'symbols', folderPath: ['Symbols'], groupBy: 'subfolder' },
     { kind: 'folder', id: 'components', folderPath: [] },

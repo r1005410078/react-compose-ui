@@ -176,7 +176,7 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 非曲线与�
   await drawLine(page, at(100, 100), at(300, 300))
   await drawLine(page, at(100, 380), at(300, 460))
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
 
   // 单选一个矩形 Entity：判据是「盒是不是这个对象的轮廓」，矩形的答案是「是」。
   await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)

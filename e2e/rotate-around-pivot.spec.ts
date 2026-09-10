@@ -19,7 +19,7 @@ test('OpenSpec: stage-engine / 旋转工具插件 / 非中心基点下只刻角�
   await expect(stage).toBeVisible()
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const first = stage.locator('.compose-stage__node.is-renderer').first()
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(first)

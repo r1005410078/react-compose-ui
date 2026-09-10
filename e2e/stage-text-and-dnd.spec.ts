@@ -203,7 +203,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
   const outputBox = await output.boundingBox()
   // Stage 可视区约 600x600，而 output 是 1280x720：落点必须留在可视区内，
   // 否则 pointer 事件打不到画布上。容器占 output 的 48..696 x 64..424，这里放它上方。
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
@@ -253,7 +253,7 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 贴边掠过不吸入', as
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
@@ -286,7 +286,7 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   // 1) 容器内放两个矩形，再启用 Auto Layout 把它们转成 Flow。
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
 
@@ -350,7 +350,7 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
 
@@ -390,7 +390,7 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Alt 强制吸入贴
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
@@ -429,7 +429,7 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Space 锁定原父�
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 Rectangle' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox!.x + 200,
     y: outputBox!.y + 20,
   })
@@ -470,7 +470,7 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
 
@@ -542,7 +542,7 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
 
@@ -592,7 +592,7 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
@@ -628,7 +628,7 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器�
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const rectangleButton = editor.getByRole('button', { name: '添加 Rectangle' })
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
   await pointerDrop(page, rectangleButton, { x: outputBox!.x + 500, y: outputBox!.y + 160 })
@@ -685,9 +685,9 @@ test('OpenSpec: stage / 组件实例内部下钻与命中 / 双击逐层下钻�
 
   // 单选提取会复用被选中的容器作为组件根，因此内部再嵌一层容器才能验证逐层下钻。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
-  await editor.getByRole('button', { name: '添加 Container' }).click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
   const source = sceneTree.getByRole('row').last()
   await source.click()
@@ -765,7 +765,7 @@ test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落�
   await expect(stage).toBeVisible()
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const inScene1 = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
   await expect(inScene1).toHaveCount(1)
 

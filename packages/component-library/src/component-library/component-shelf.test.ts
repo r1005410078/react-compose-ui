@@ -49,7 +49,6 @@ const presets = [
 
 const symbols: ComposeComponentShelf = {
   title: '符号库',
-  search: true,
   sections: [
     { kind: 'folder', id: 'symbols', folderPath: ['Symbols'], groupBy: 'subfolder' },
     { kind: 'folder', id: 'components', folderPath: [] },
@@ -142,11 +141,10 @@ describe('OpenSpec: component-library / 自定义物料面板 / 货架编辑', (
     expect(removeComponentShelfSection(symbols, '不存在')).toBe(symbols)
   })
 
-  it('只看这一组：收成只剩那一段，标题与搜索照旧', () => {
+  it('只看这一组：收成只剩那一段，标题照旧', () => {
     const only = keepOnlyComponentShelfSection(symbols, 'components')
     expect(ids(only)).toEqual(['components'])
     expect(only.title).toBe('符号库')
-    expect(only.search).toBe(true)
   })
 
   it('加一段：重复 id 原样返回', () => {

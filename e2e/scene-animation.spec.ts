@@ -47,7 +47,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 选中另一块场景�
 
   // 场景 1 里放一个矩形并给激活场景建动画。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const sceneOneRect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(sceneOneRect)
@@ -76,7 +76,7 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const sceneOneRect = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(sceneOneRect)
@@ -94,7 +94,7 @@ test('OpenSpec: editor-workspace-layout / 多场景动画会话 / 两块场景�
   const sceneTwoId = await createSecondScene(page, editor)
   await editor.getByTestId(`stage-container-label-${sceneTwoId}`).click()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const sceneTwoRect = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(sceneTwoRect).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。取**下边线**——第二块场景很小，
@@ -145,7 +145,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 清空选择回退到�
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer'))
   await createAnimationWithKeyframe(editor)
@@ -172,11 +172,11 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
   const animationPanel = editor.locator('[data-workspace-panel="animation"]')
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
 
-  // 场景 2（画完处于选中态）里直接添加 Rectangle，再复制一份拖回场景 1——
+  // 场景 2（画完处于选中态）里直接添加 矩形，再复制一份拖回场景 1——
   // 复刻缺陷报告的操作序列：动画模式下拖动场景 2 的原件曾被判成跨场景挂载。
   const sceneTwoId = await createSecondScene(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const inScene1 = stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer')
   const inScene2 = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(inScene2).toHaveCount(1)
@@ -257,7 +257,7 @@ test('OpenSpec: editor-workspace-layout / 运动路径以物体中心为锚 / �
    */
   const sceneTwoId = await createSecondScene(page, editor, 200)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const rect = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(rect).toHaveCount(1)
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
@@ -307,7 +307,7 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 刚�
   const sceneTwoId = await createSecondScene(page, editor, 200)
   await expect(editor.getByRole('img', { name: '有未保存改动' })).toHaveCount(1)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(
     stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`).first(),
@@ -329,7 +329,7 @@ test('OpenSpec: editor-workspace-layout / 未保存场景的动画创建 / 创�
 
   // 正常建一次动画，确认只落一份文件；绑定行候选 = 解除项 + 同目录文件 + 新建项。
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: '添加 Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
   await clickCurveStroke(stage.locator('[data-entity-id="frame-root"] .compose-stage__node.is-renderer'))
   await createAnimationWithKeyframe(editor)

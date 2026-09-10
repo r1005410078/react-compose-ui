@@ -1616,3 +1616,27 @@
   stroke-width: 1.5;
   pointer-events: none;
 }
+
+/*
+ * 右键菜单里「添加组件」那一档的行首图标：与物料面板的列表行同尺寸（16px）。
+ *
+ * 颜色比文字**暗一档**，高亮那一行才提亮——这一列图标是认读辅助，与名字同样亮会让整块菜单
+ * 读起来是两列并重的表格。图标是形状，不跟着菜单字号缩：缩了只会更难认。
+ */
+.compose-stage__menu-icon {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--compose-text-muted, #8e98a8);
+}
+
+[data-highlighted] > .compose-stage__menu-icon {
+  color: var(--compose-text-strong, #f4f7fb);
+}
+
+.compose-stage__menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
