@@ -1,8 +1,11 @@
 /**
- * 物料 Palette / 场景树用的彩色等轴测或立体图标。
+ * 物料 Palette / 场景树共用的单色线稿图标。
  *
  * @remarks
- * 避免单色 `currentColor` 扁平字：顶/面/阴影用不同明度形成体积感；色相按物料语义区分。
+ * 24 网格、1.5 描边、圆头圆角，一律 `currentColor`：颜色由所在的行给出（静息用次要文字色、
+ * 悬停与选中随行提亮），图标自己不带色相——面板与场景树上颜色已经被选中、拖放与运行状态占着，
+ * 十几个各带一种色相的立体图标只会把那几层信号淹掉。形状承担全部区分：容器是井号、组是虚线框
+ * 套两块、切换器是叠放的卡片、曲线是带两个端点方块的斜线。
  *
  * @internal
  */
@@ -10,178 +13,115 @@
 const svgProps = {
   'aria-hidden': true as const,
   fill: 'none' as const,
+  stroke: 'currentColor',
+  strokeWidth: 1.5,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
   viewBox: '0 0 24 24',
   className: 'compose-material-icon',
 }
 
-/**
- * Container：井号字形，与 Figma Frame / Rive Artboard 的通行标识一致。
- *
- * @remarks
- * 与 Rectangle 一样采用平面处理：容器的语义是“框住一片区域”，立体块反而会读成实心物体。
- */
+/** Container：井号字形，与 Figma Frame / Rive Artboard 的通行标识一致；两竖略斜，免得与网格线读成一回事。 */
 export function ComposeContainerMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-container">
-      {/* 两竖略带倾斜，避免与网格线读成同一个东西 */}
-      <path d="M9.1 3.5h2.4L9.9 20.5H7.5Z" fill="#2f7df6" />
-      <path d="M15.6 3.5H18l-1.6 17H14Z" fill="#2f7df6" />
-      {/* 两横压在竖线之上，颜色更亮以形成交叠层次 */}
-      <path d="M4.2 8.3h15.6v2.5H4.2Z" fill="#6eb0ff" />
-      <path d="M3.6 13.2h15.6v2.5H3.6Z" fill="#6eb0ff" />
+      <path d="M9.2 4.5 7.6 19.5" />
+      <path d="M16.6 4.5 15 19.5" />
+      <path d="M4.5 9.2h15" />
+      <path d="M4 15h15" />
     </svg>
   )
 }
 
 /**
- * Rectangle：平面直角矩形（与默认无圆角语义一致），非 3D。
+ * Rectangle（盒物料，已从面板退役）：带淡填充的矩形。
+ *
+ * @remarks
+ * 与 Rect 的空心轮廓刻意不同——一个是有背景与边框的面积，一个是可改形状的几何轮廓；既有文档
+ * 的场景树里两者都会出现，长得一样会让用户按名字去猜。
  */
 export function ComposeRectangleMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-rectangle">
-      <rect x="4.5" y="6.5" width="15" height="11" fill="#2f7df6" />
-      <rect
-        x="4.5"
-        y="6.5"
-        width="15"
-        height="11"
-        fill="none"
-        stroke="#9fd0ff"
-        strokeOpacity="0.55"
-        strokeWidth="1"
-      />
+      <rect x="4.5" y="6.5" width="15" height="11" fill="currentColor" fillOpacity="0.18" />
     </svg>
   )
 }
 
-/**
- * Rect：空心矩形轮廓。
- *
- * @remarks
- * 与 Panel 的实心图标刻意不同——两者在物料面板上并排，一个是可改形状的几何轮廓、一个是有
- * 背景与边框的面积，长得一样会让用户按标签去猜。
- */
+/** Rect：空心矩形轮廓，两个对角的实心小方块表示可拖的顶点。 */
 export function ComposeRectMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-rect">
-      <rect
-        x="4.5"
-        y="6.5"
-        width="15"
-        height="11"
-        fill="none"
-        stroke="#d8e2f1"
-        strokeWidth="1.4"
-      />
-      <rect x="3" y="5" width="3" height="3" fill="#d8e2f1" />
-      <rect x="18" y="16" width="3" height="3" fill="#d8e2f1" />
+      <rect x="4.5" y="6.5" width="15" height="11" />
+      <rect x="3" y="5" width="3" height="3" fill="currentColor" stroke="none" />
+      <rect x="18" y="16" width="3" height="3" fill="currentColor" stroke="none" />
     </svg>
   )
 }
 
-/** Group：两层叠框，青绿。 */
+/** Group：虚线外框套两块成员。 */
 export function ComposeGroupMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-group">
-      <rect x="3" y="4" width="12" height="10" rx="1.6" fill="#1a6b5a" opacity="0.9" />
-      <rect x="3" y="4" width="12" height="10" rx="1.6" fill="#34d399" opacity="0.35" />
-      <rect x="3" y="4" width="12" height="3.2" rx="1.2" fill="#6ee7b7" />
-      <rect
-        x="7"
-        y="9"
-        width="12"
-        height="10"
-        rx="1.6"
-        fill="#0f766e"
-        stroke="#5eead4"
-        strokeOpacity="0.5"
-        strokeWidth="0.8"
-      />
-      <rect x="7" y="9" width="12" height="3.2" rx="1.2" fill="#2dd4bf" />
-      <path d="M10 14.5h6M10 17h4" stroke="#ccfbf1" strokeOpacity="0.5" strokeWidth="1" strokeLinecap="round" />
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1.5" strokeDasharray="2.5 2" />
+      <rect x="7" y="7" width="4.5" height="4.5" />
+      <rect x="12.5" y="12.5" width="4.5" height="4.5" />
     </svg>
   )
 }
 
-/** WidgetSwitcher：叠放的卡片只亮起最前一张，紫色。 */
+/** WidgetSwitcher：叠放的卡片，只画出最前一张的完整轮廓。 */
 export function ComposeWidgetSwitcherMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-widget-switcher">
-      {/* 后两张是未激活分支，压暗表示只构造不显示 */}
-      <rect x="7.5" y="3.5" width="12" height="9" rx="1.6" fill="#4c1d95" opacity="0.35" />
-      <rect x="6" y="6" width="12" height="9" rx="1.6" fill="#5b21b6" opacity="0.55" />
-      <rect x="4.5" y="8.5" width="12" height="9" rx="1.6" fill="#7c3aed" />
-      <rect x="4.5" y="8.5" width="12" height="2.6" rx="1.2" fill="#c4b5fd" />
-      <path
-        d="M7.5 13.5h6M7.5 15.6h3.6"
-        stroke="#ede9fe"
-        strokeOpacity="0.6"
-        strokeWidth="1"
-        strokeLinecap="round"
-      />
+      <rect x="4.5" y="8.5" width="12" height="10" rx="1.5" />
+      <path d="M8 5.5h11.5V16" />
     </svg>
   )
 }
 
-/** Text：立体 T，琥珀。 */
+/** Text：衬线 T。 */
 export function ComposeTextMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-text">
-      <path d="M6 5.5h12v3.2H14.2V18.5h-4.4V8.7H6Z" fill="#92400e" transform="translate(1 1.2)" opacity="0.45" />
-      <path d="M5.5 5h12v3.2H13.7V18h-3.4V8.2H5.5Z" fill="#f59e0b" />
-      <path d="M5.5 5h12v1.4H5.5Z" fill="#fcd34d" />
-      <path d="M5.5 5h12v3.2H13.7V18h-3.4V8.2H5.5Z" fill="none" stroke="#fde68a" strokeOpacity="0.55" strokeWidth="0.7" />
+      <path d="M6 6h12" />
+      <path d="M12 6v13" />
+      <path d="M9.5 19h5" />
     </svg>
   )
 }
 
-/** Image：相框 + 山景，玫瑰/青。 */
+/** Image：相框、山景与太阳。 */
 export function ComposeImageMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-image">
-      <rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="#3f3f46" />
-      <rect x="4.5" y="5.5" width="15" height="13" rx="1.4" fill="#18181b" />
-      <path d="M4.5 15.5 9 11l3.2 3.2 2.3-2.8 4.5 4.1v1.5c0 .8-.6 1.4-1.4 1.4H5.9c-.8 0-1.4-.6-1.4-1.4Z" fill="#0d9488" />
-      <path d="M4.5 15.5 9 11l3.2 3.2 2.3-2.8 4.5 4.1" fill="#2dd4bf" opacity="0.35" />
-      <circle cx="9.2" cy="9" r="1.7" fill="#fbbf24" />
-      <rect
-        x="3.5"
-        y="4.5"
-        width="17"
-        height="15"
-        rx="2"
-        fill="none"
-        stroke="#a1a1aa"
-        strokeOpacity="0.45"
-        strokeWidth="0.7"
-      />
+      <rect x="4.5" y="5.5" width="15" height="13" rx="1" />
+      <path d="m5 17 4.5-5 3.5 3.5 2.5-2.5 3.5 4" />
+      <circle cx="15.5" cy="9.5" r="1.5" />
     </svg>
   )
 }
 
-/** SVG：菱形矢量标，品红系。 */
+/** SVG：一段贝塞尔加两根切线手柄。 */
 export function ComposeSvgMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-svg">
-      <path d="M12 3.5 20 12l-8 8.5L4 12Z" fill="#831843" opacity="0.5" transform="translate(0 1)" />
-      <path d="M12 3 20 11.5 12 20 4 11.5Z" fill="#db2777" />
-      <path d="M12 3 20 11.5 12 12.8Z" fill="#f9a8d4" opacity="0.85" />
-      <path d="M12 3 4 11.5 12 12.8Z" fill="#f472b6" opacity="0.7" />
-      <path d="M12 12.8 20 11.5 12 20Z" fill="#9d174d" />
-      <path d="M12 12.8 4 11.5 12 20Z" fill="#be185d" />
-      <path d="M12 3 20 11.5 12 20 4 11.5Z" fill="none" stroke="#fbcfe8" strokeOpacity="0.5" strokeWidth="0.7" />
+      <path d="M5 18c2-11 9 11 14-6" />
+      <circle cx="5" cy="18" r="1.5" />
+      <circle cx="19" cy="12" r="1.5" />
+      <path d="M5 18 8 10" />
+      <path d="m19 12-3 7" />
     </svg>
   )
 }
 
-
-/** Line */
+/** Line / Curve：斜线，两端各一个端点方块。 */
 export function ComposeLineMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-line">
-      <path d="M5 17 19 7" stroke="#64748b" strokeWidth="3.2" strokeLinecap="round" opacity="0.45" />
-      <path d="M5 17 19 7" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
-      <path d="M5 17 19 7" stroke="#e2e8f0" strokeWidth="0.9" strokeLinecap="round" opacity="0.55" />
+      <path d="M6 18 18 6" />
+      <rect x="4.5" y="16.5" width="3" height="3" />
+      <rect x="16.5" y="4.5" width="3" height="3" />
     </svg>
   )
 }
@@ -190,10 +130,8 @@ export function ComposeLineMaterialIcon() {
 export function ComposeArrowMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-arrow">
-      <path d="M5 16.5 16 7" stroke="#1d4ed8" strokeWidth="3" strokeLinecap="round" opacity="0.4" />
-      <path d="M5 16.5 16 7" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
-      <path d="M12.5 6.2 18.2 5.4 16.2 10.8" fill="#60a5fa" />
-      <path d="M12.5 6.2 18.2 5.4 16.2 10.8Z" fill="#93c5fd" opacity="0.5" />
+      <path d="M4.5 12h13" />
+      <path d="m13.5 8 4 4-4 4" />
     </svg>
   )
 }
@@ -202,10 +140,7 @@ export function ComposeArrowMaterialIcon() {
 export function ComposeCircleMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-circle">
-      <circle cx="12.5" cy="13" r="7" fill="#0e7490" opacity="0.4" />
-      <circle cx="12" cy="12" r="7" fill="#06b6d4" />
-      <circle cx="12" cy="12" r="7" fill="none" stroke="#a5f3fc" strokeOpacity="0.5" strokeWidth="0.8" />
-      <ellipse cx="10" cy="9.5" rx="3.2" ry="2" fill="#fff" opacity="0.28" />
+      <circle cx="12" cy="12" r="7" />
     </svg>
   )
 }
@@ -218,13 +153,11 @@ export function ComposeCircleMaterialIcon() {
 export function ComposeEchartsMaterialIcon() {
   return (
     <svg {...svgProps} data-testid="material-icon-echarts">
-      <rect x="4" y="13" width="3.5" height="6.5" rx="0.6" fill="#1d4ed8" />
-      <rect x="4" y="13" width="3.5" height="1.4" rx="0.4" fill="#60a5fa" />
-      <rect x="10" y="8.5" width="3.5" height="11" rx="0.6" fill="#7c3aed" />
-      <rect x="10" y="8.5" width="3.5" height="1.4" rx="0.4" fill="#c4b5fd" />
-      <rect x="16" y="5.5" width="3.5" height="14" rx="0.6" fill="#db2777" />
-      <rect x="16" y="5.5" width="3.5" height="1.4" rx="0.4" fill="#f9a8d4" />
-      <path d="M3.5 19.5h17" stroke="#64748b" strokeWidth="1" strokeLinecap="round" opacity="0.7" />
+      <path d="M3.5 20h17" />
+      <path d="M6.5 20v-6" />
+      <path d="M11 20V6" />
+      <path d="M15.5 20v-9" />
+      <path d="M20 20v-4" />
     </svg>
   )
 }

@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useRef,
   useState,
   type HTMLAttributes,
@@ -120,123 +119,67 @@ interface DragPreview {
 }
 
 /**
- * 主组件 / 变体 / 页面实例的等轴测立方体图标。
+ * 项目组件的单色线稿图标：等轴测立方体的三种画法。
  *
  * @remarks
- * 三个可见面使用不同明度与色相形成透视深度（顶亮、左中、右暗）。
- * 主组件：实心蓝系；变体：半透明青绿 + 侧向标记；实例：线框灰蓝（引用非本体）。
+ * 主组件是实线立方体并画出内棱；变体在右侧多两道短线（变体标记，形状先分开，颜色再分开）；
+ * 实例是虚线立方体——它引用别处的定义，自己没有实体。三者都走 `currentColor`，与物料图标
+ * 同一条规则：颜色由所在的行给出。
  *
  * @public
  */
 export function ComposeComponentAssetIcon({ kind }: {
   readonly kind: ComposeComponentDescriptor['kind'] | 'instance'
 }) {
-  // 多实例同页时 gradient id 必须唯一，否则后渲染的 defs 会覆盖填充。
-  const uid = useId().replace(/:/g, '')
   // 等轴测三面：顶 / 左前 / 右前（路径按 viewBox 24 对齐）。
-  const top = 'M12 3.2 19.6 7.4 12 11.6 4.4 7.4Z'
-  const left = 'M4.4 7.4 12 11.6 12 20.2 4.4 16Z'
-  const right = 'M19.6 7.4 12 11.6 12 20.2 19.6 16Z'
+  const outline = 'M4.4 7.4 12 3.2 19.6 7.4 19.6 16 12 20.2 4.4 16Z'
+  const edges = 'M12 11.6V20.2M4.4 7.4 12 11.6 19.6 7.4'
+  const shared = {
+    'aria-hidden': true as const,
+    fill: 'none' as const,
+    stroke: 'currentColor',
+    strokeWidth: 1.5,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    viewBox: '0 0 24 24',
+  }
 
   if (kind === 'base') {
-    const topId = `cube-base-top-${uid}`
-    const leftId = `cube-base-left-${uid}`
-    const rightId = `cube-base-right-${uid}`
     return (
       <svg
-        aria-hidden="true"
+        {...shared}
         className="compose-component-asset-icon compose-component-asset-icon--base"
         data-testid="component-library-base-icon"
-        fill="none"
-        viewBox="0 0 24 24"
       >
-        <defs>
-          <linearGradient id={topId} x1="4" x2="20" y1="3" y2="12" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#9fd0ff" />
-            <stop offset="100%" stopColor="#5aa8f0" />
-          </linearGradient>
-          <linearGradient id={leftId} x1="4" x2="12" y1="8" y2="20" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#3d8fd9" />
-            <stop offset="100%" stopColor="#2563a8" />
-          </linearGradient>
-          <linearGradient id={rightId} x1="12" x2="20" y1="8" y2="20" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#2a6fbc" />
-            <stop offset="100%" stopColor="#1a4a82" />
-          </linearGradient>
-        </defs>
-        <path d={right} fill={`url(#${rightId})`} />
-        <path d={left} fill={`url(#${leftId})`} />
-        <path d={top} fill={`url(#${topId})`} />
-        <path
-          d={`${top} ${left} ${right}`}
-          fill="none"
-          stroke="#0c2744"
-          strokeLinejoin="round"
-          strokeOpacity="0.35"
-          strokeWidth="0.6"
-        />
-        <path d="M12 11.6V20.2M4.4 7.4 12 11.6 19.6 7.4" stroke="#cfe6ff" strokeOpacity="0.22" strokeWidth="0.7" />
+        <path d={outline} />
+        <path d={edges} />
       </svg>
     )
   }
 
   if (kind === 'variant') {
-    const topId = `cube-var-top-${uid}`
-    const leftId = `cube-var-left-${uid}`
-    const rightId = `cube-var-right-${uid}`
     return (
       <svg
-        aria-hidden="true"
+        {...shared}
         className="compose-component-asset-icon compose-component-asset-icon--variant"
         data-testid="component-library-variant-icon"
-        fill="none"
-        viewBox="0 0 24 24"
       >
-        <defs>
-          <linearGradient id={topId} x1="4" x2="20" y1="3" y2="12" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#8af0c8" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#3ecf8e" stopOpacity="0.35" />
-          </linearGradient>
-          <linearGradient id={leftId} x1="4" x2="12" y1="8" y2="20" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#2db87a" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#1a7a52" stopOpacity="0.55" />
-          </linearGradient>
-          <linearGradient id={rightId} x1="12" x2="20" y1="8" y2="20" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#23966a" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#145c40" stopOpacity="0.65" />
-          </linearGradient>
-        </defs>
-        <path d={right} fill={`url(#${rightId})`} />
-        <path d={left} fill={`url(#${leftId})`} />
-        <path d={top} fill={`url(#${topId})`} />
-        <path
-          d="M4.4 7.4 12 3.2 19.6 7.4 19.6 16 12 20.2 4.4 16Z"
-          fill="none"
-          stroke="#7dffe0"
-          strokeLinejoin="round"
-          strokeOpacity="0.75"
-          strokeWidth="1.15"
-        />
-        <path d="M12 11.6V20.2M4.4 7.4 12 11.6 19.6 7.4" stroke="#b8ffe8" strokeOpacity="0.45" strokeWidth="0.9" />
-        {/* 侧向条纹：变体标记，色相独立于立方体 */}
-        <path d="M21 10.5v5.5M22.6 11.4v3.6" stroke="#e8b84a" strokeLinecap="round" strokeWidth="1.35" />
+        <path d="M3.4 7.4 11 3.2 18.6 7.4 18.6 16 11 20.2 3.4 16Z" />
+        <path d="M11 11.6V20.2M3.4 7.4 11 11.6 18.6 7.4" />
+        {/* 侧向两道短线：变体标记 */}
+        <path d="M21 10.5v5.5M22.6 11.4v3.6" />
       </svg>
     )
   }
 
   return (
     <svg
-      aria-hidden="true"
+      {...shared}
       className="compose-component-asset-icon compose-component-asset-icon--instance"
       data-testid="component-library-instance-icon"
-      fill="none"
-      viewBox="0 0 24 24"
     >
-      {/* 线框三面不同描边明度，形成空心深度 */}
-      <path d={top} fill="none" stroke="#a8c4e8" strokeLinejoin="round" strokeWidth="1.25" />
-      <path d={left} fill="none" stroke="#6a8ab0" strokeLinejoin="round" strokeWidth="1.25" />
-      <path d={right} fill="none" stroke="#4a6588" strokeLinejoin="round" strokeWidth="1.25" />
-      <path d="M12 11.6V20.2" stroke="#8aa6c8" strokeOpacity="0.7" strokeWidth="1" />
+      <path d={outline} strokeDasharray="2.5 2" />
+      <path d={edges} strokeOpacity="0.6" />
     </svg>
   )
 }
@@ -498,7 +441,7 @@ export function ComposeComponentLibraryPanel({
           <span aria-hidden="true" className="compose-component-library__icon">
             {registry.getPreset(tile.presetId)?.icon ?? <ComposeComponentAssetIcon kind="base" />}
           </span>
-          <span>{tile.label}</span>
+          <span className="compose-component-library__name">{tile.label}</span>
         </button>
       )
     }
