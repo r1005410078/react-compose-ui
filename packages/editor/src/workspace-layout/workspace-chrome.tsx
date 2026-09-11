@@ -309,9 +309,18 @@ export function WorkspaceDocumentTabs() {
     activateDocument,
     activeDocumentPanelId,
     documents,
+    entryLayerPanelIds,
+    entryOriginPanelId,
     requestDocumentClose,
     stageHostPanelId,
   } = useWorkspaceContent()
+  const layers = entryLayerPanelIds ?? []
+  /*
+   * 层不占标签条的一格：进入一个组件是当前文档上的一次导航，标签条回答的是「哪些文件开着」。
+   * 高亮因此停在来路那条——当前文档 id 照旧指向层，只有这里的条目与高亮改读来路，
+   * 少一份状态就少一处会漂移的事实来源。
+   */
+  const highlightPanelId = entryOriginPanelId ?? activeDocumentPanelId
   const listRef = useRef<HTMLDivElement>(null)
   // 未启用页面系统时固定画布是第一个、不可关闭的标签：资源文件仍能以标签打开，用户要有路回来。
   const canvasEntry: DocumentTabEntry[] = stageHostPanelId === WORKSPACE_PANEL_IDS.canvas
@@ -319,11 +328,13 @@ export function WorkspaceDocumentTabs() {
     : []
   const entries: DocumentTabEntry[] = [
     ...canvasEntry,
-    ...[...documents.values()].map((session) => ({
-      panelId: session.panelId,
-      session,
-      title: documentTitle(session, messages),
-    })),
+    ...[...documents.values()]
+      .filter((session) => !layers.includes(session.panelId))
+      .map((session) => ({
+        panelId: session.panelId,
+        session,
+        title: documentTitle(session, messages),
+      })),
   ]
 
   const focusTab = (panelId: string) => {
@@ -354,7 +365,7 @@ export function WorkspaceDocumentTabs() {
         role="tablist"
       >
         {entries.map((entry, index) => {
-          const active = entry.panelId === activeDocumentPanelId
+          const active = entry.panelId === highlightPanelId
           return (
             <div
               key={entry.panelId}

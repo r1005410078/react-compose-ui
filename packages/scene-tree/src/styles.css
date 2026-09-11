@@ -69,3 +69,77 @@
 [data-compose-ui='scene-tree'] .compose-tree__row {
   font-size: 13px;
 }
+
+/*
+ * 来路出口行（组件根）的头部态：整行铺满、不内缩、不加圆角。
+ *
+ * 普通行的选中态是两侧内缩 4px 的圆角胶囊，头部底色长得像就会被读成「这一行被选中了」——
+ * 这块画布的既有规矩是形状先分开、颜色再分开。返回控件占了行首，因此展开控件让位：
+ * 折叠组件根几乎没有用处，而两个方向相反的箭头挨在一起只会互相冒充；键盘左方向键仍然折叠它。
+ */
+[data-compose-ui='scene-tree'] .compose-tree__row[data-scene-exit='true'] {
+  /* 高度跟着虚拟行走而不是钉死 24px：宿主换 rowHeight 时这一行不该是唯一对不齐的那一行。 */
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+  background: #191d24;
+  box-shadow: inset 0 -1px 0 #242a33;
+  color: #e6edf7;
+}
+
+[data-compose-ui='scene-tree'] .compose-tree__row[data-scene-exit='true'][aria-selected='true'] {
+  background: #232a33;
+}
+
+/*
+ * 亮色主题的同一行。上面那组硬编码的深色比亮色主题的既有覆盖更具体，不补这一组的话，
+ * 亮色面板上会横着一条深色头栏。
+ */
+[data-compose-ui='scene-tree'][data-compose-theme='light']
+  .compose-tree__row[data-scene-exit='true'] {
+  background: var(--compose-surface-control);
+  box-shadow: inset 0 -1px 0 var(--compose-border);
+  color: var(--compose-text-strong);
+}
+
+[data-compose-ui='scene-tree'][data-compose-theme='light']
+  .compose-tree__row[data-scene-exit='true'][aria-selected='true'] {
+  background: var(--compose-surface-selected);
+}
+
+[data-compose-ui='scene-tree'] .compose-tree__row[data-scene-exit='true'] .compose-tree__chevron,
+[data-compose-ui='scene-tree'] .compose-tree__row[data-scene-exit='true'] .compose-tree__indent {
+  display: none;
+}
+
+[data-compose-ui='scene-tree'] .compose-tree__row[data-scene-exit='true'] .compose-tree__leading {
+  margin-left: 4px;
+}
+
+/*
+ * 新增菜单的行首图标：与物料面板的列表行同尺寸（16px）。
+ *
+ * 货架给的图标是不带尺寸的 SVG，不封尺寸时它会把整块菜单撑成一张图。颜色比文字**暗一档**，
+ * 高亮那一行才提亮——这一列是认读辅助，与名字同样亮会让菜单读成两列并重的表格。
+ *
+ * `stage` 的右键菜单有一条逐字相同的规则。两处重复是**包边界**造成的：`scene-tree` 不依赖
+ * `stage`，而这条 chrome 样式所属的菜单 Pattern 在 `components` 里不带图标槽。
+ */
+.scene-tree__menu-icon {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--compose-text-muted, #8e98a8);
+}
+
+[data-highlighted] > .scene-tree__menu-icon {
+  color: var(--compose-text-strong, #f4f7fb);
+}
+
+.scene-tree__menu-icon svg {
+  width: 16px;
+  height: 16px;
+}

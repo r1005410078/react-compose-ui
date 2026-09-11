@@ -50,6 +50,16 @@ export function IconVariant() {
   )
 }
 
+/** 打开组件：走进那份资源，与展开实例内部的三角在形状上必须可分。 */
+export function IconOpen() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16">
+      <path d="M6.5 4.5 10 8l-3.5 3.5" />
+      <path d="M2.5 2.5v11" />
+    </svg>
+  )
+}
+
 export function IconComponent() {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16">

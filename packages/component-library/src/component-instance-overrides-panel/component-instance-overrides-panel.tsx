@@ -8,6 +8,7 @@ import type { ComposeComponentInstanceUpdateResult } from '../instance-operation
 import {
   IconApply,
   IconComponent,
+  IconOpen,
   IconRefresh,
   IconRevert,
   IconVariant,
@@ -26,6 +27,14 @@ export interface ComposeComponentInstanceOverridesPanelProps {
   /** Apply 指定结构操作到直接父源；省略参数表示全部。 */
   readonly onApply: (operationIds?: readonly string[]) => void
   readonly onCreateVariant: () => void
+  /**
+   * 打开该实例引用的组件文档。
+   *
+   * @remarks
+   * 与 `onCreateVariant` 不是一件事：这条进入既有资源改定义，那条另存为新的组件库资源。
+   * 省略时不呈现该控件——宿主没有文档标签这种东西时，这个按钮无处可去。
+   */
+  readonly onOpen?: () => void
   readonly onUpdate: (discardConflicts?: boolean) => Promise<ComposeComponentInstanceUpdateResult>
   /**
    * 呈现方式。
@@ -123,6 +132,7 @@ function InstanceToolbar({
   updating,
   onApply,
   onCreateVariant,
+  onOpen,
   onUpdate,
   onRevertAll,
 }: {
@@ -130,6 +140,7 @@ function InstanceToolbar({
   readonly updating: boolean
   readonly onApply: () => void
   readonly onCreateVariant: () => void
+  readonly onOpen?: () => void
   readonly onUpdate: () => void
   readonly onRevertAll: () => void
 }) {
@@ -139,6 +150,11 @@ function InstanceToolbar({
       className="compose-instance-overrides__actions"
       role="toolbar"
     >
+      {onOpen ? (
+        <OverridesIconButton label="打开组件" onClick={onOpen}>
+          <IconOpen />
+        </OverridesIconButton>
+      ) : null}
       <OverridesIconButton disabled={updating} label="检查更新" onClick={onUpdate}>
         <IconRefresh />
       </OverridesIconButton>
@@ -180,6 +196,7 @@ export function ComposeComponentInstanceOverridesPanel({
   onChange,
   onApply,
   onCreateVariant,
+  onOpen,
   onUpdate,
   layout = 'dock',
   children,
@@ -241,6 +258,7 @@ export function ComposeComponentInstanceOverridesPanel({
       updating={updating}
       onApply={() => onApply()}
       onCreateVariant={onCreateVariant}
+      onOpen={onOpen}
       onRevertAll={revertAll}
       onUpdate={() => { void update() }}
     />

@@ -90,12 +90,21 @@ export function CanvasPanel() {
     activeDocumentPanelId,
     children,
     documents,
+    entryLayerPanelIds,
     stageHostPanelId,
     stageToolbar,
   } = useWorkspaceContent()
   const messages = useEditorMessages()
   const singleDocument = stageHostPanelId === WORKSPACE_PANEL_IDS.canvas
   const active = activeDocumentPanelId ? documents.get(activeDocumentPanelId) : undefined
+  /*
+   * 画布上此刻是一层而不是一份自己打开的文档。它不表达路径也不表达名字——「这份文档是什么」
+   * 由工具栏那行「主组件 · 名称」回答，「我在哪一层、怎么回去」由场景树的来路出口行回答。
+   * 它只回答一个是非问题：这是借来的一层，唯一的出口是返回。层不占标签条的一格，
+   * 因此少了它，场景树面板一折叠，屏幕上就没有任何东西说明这件事。
+   */
+  const entryLayer = activeDocumentPanelId !== null
+    && (entryLayerPanelIds ?? []).includes(activeDocumentPanelId)
   const assetSessions = [...documents.values()]
     .filter((session): session is ComposeAssetDocumentSession => session.kind === 'asset')
 
@@ -103,6 +112,7 @@ export function CanvasPanel() {
     <div
       className="compose-editor__canvas-panel"
       data-active-document={active?.kind ?? (singleDocument ? 'canvas' : 'none')}
+      data-entry-layer={entryLayer ? 'true' : undefined}
       data-workspace-panel="canvas"
     >
       {/*

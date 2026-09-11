@@ -60,6 +60,21 @@ export interface WorkspaceContent {
   /** 激活一个已打开的文档；标签条与重复打开都走它。 */
   activateDocument: (panelId: string) => void
   /**
+   * 此刻压在别的文档之上的层。
+   *
+   * @remarks
+   * 层是会话但**不是标签**：从场景树进入一个组件是当前文档上的一次导航，不是打开了另一份
+   * 文件。标签条把这些 panelId 从条目里剔除，因此层也没有关闭控件——离开一层的唯一出口是返回。
+   */
+  entryLayerPanelIds?: readonly string[]
+  /**
+   * 层存续期间标签条应当高亮的那一条——来路的栈底。
+   *
+   * @remarks
+   * 用户仍站在那份文档上，只是进了它内部的一层。缺席或为 `null` 时标签条照旧高亮当前文档。
+   */
+  entryOriginPanelId?: string | null
+  /**
    * 自定义物料面板对话框要用的两份目录：当前可见的基础 Preset，与资源里存在的文件夹路径。
    *
    * @remarks

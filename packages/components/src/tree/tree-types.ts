@@ -98,6 +98,13 @@ export interface TreeProps<T>
   readonly filter?: (item: T) => boolean
   /** 选择模式。 @defaultValue `"multiple"` */
   readonly selectionMode?: 'single' | 'multiple'
+  /**
+   * 自定义行首内容，排在缩进之后、展开控件之前。
+   *
+   * @remarks
+   * `renderActions` 的镜像。领域层用它挂只属于某几行的入口，Tree 自身不解释它的含义。
+   */
+  readonly renderLeading?: (context: TreeItemRenderContext<T>) => ReactNode
   /** 自定义行图标。 */
   readonly renderIcon?: (context: TreeItemRenderContext<T>) => ReactNode
   /** 自定义行标签；省略时使用 adapter label。 */

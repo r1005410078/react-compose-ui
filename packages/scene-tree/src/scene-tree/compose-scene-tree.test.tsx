@@ -650,3 +650,160 @@ describe('OpenSpec: scene-tree / 组件实例内部子树投影', () => {
     expect(onExpandedChange).toHaveBeenCalledWith(['instance'])
   })
 })
+
+describe('ComposeSceneTree 进入组件', () => {
+  const enterableNodes: readonly ComposeSceneTreeNode[] = [
+    {
+      id: 'page',
+      label: 'Page 1',
+      children: [
+        { id: 'instance', label: 'QF1', canEnter: true },
+        { id: 'red', label: 'Red rectangle' },
+      ],
+    },
+  ]
+
+  it('OpenSpec: scene-tree / 可进入节点与进入意图 / 点击进入控件', async () => {
+    const { onOperation, onSelectionChange } = renderTree({ nodes: enterableNodes })
+
+    const row = await screen.findByRole('row', { name: /QF1/ })
+    fireEvent.click(within(row).getByRole('button', { name: '进入 QF1' }))
+
+    expect(onOperation).toHaveBeenCalledExactlyOnceWith({ type: 'enter', nodeId: 'instance' })
+    expect(onSelectionChange).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: scene-tree / 可进入节点与进入意图 / 双击可进入的行', async () => {
+    const { onOperation } = renderTree({ nodes: enterableNodes })
+
+    fireEvent.doubleClick(
+      within(await screen.findByRole('row', { name: /QF1/ })).getByText('QF1'),
+    )
+
+    expect(onOperation).toHaveBeenCalledExactlyOnceWith({ type: 'enter', nodeId: 'instance' })
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: scene-tree / 可进入节点与进入意图 / 普通节点不受影响', async () => {
+    const { onOperation } = renderTree({ nodes: enterableNodes })
+
+    const row = await screen.findByRole('row', { name: /Red rectangle/ })
+    expect(within(row).queryByRole('button', { name: /进入/ })).not.toBeInTheDocument()
+
+    fireEvent.doubleClick(within(row).getByText('Red rectangle'))
+    expect(onOperation).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: scene-tree / 可进入节点与进入意图 / 右键菜单进入', async () => {
+    const { onOperation } = renderTree({ nodes: enterableNodes })
+
+    fireEvent.contextMenu(await screen.findByRole('row', { name: /QF1/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: '进入组件' }))
+
+    expect(onOperation).toHaveBeenCalledWith({ type: 'enter', nodeId: 'instance' })
+  })
+
+  it('OpenSpec: scene-tree / 来路出口行与退出意图 / 根行返回上一层', async () => {
+    const { onOperation, onSelectionChange } = renderTree({
+      nodes: [{ id: 'component-root', label: '断路器', canExit: true, children: [
+        { id: 'contact', label: '触头' },
+      ] }],
+      expandedIds: ['component-root'],
+    })
+
+    const row = await screen.findByRole('row', { name: /断路器/ })
+    fireEvent.click(within(row).getByRole('button', { name: '返回上一层' }))
+
+    expect(onOperation).toHaveBeenCalledExactlyOnceWith({
+      type: 'exit',
+      nodeId: 'component-root',
+    })
+    expect(onSelectionChange).not.toHaveBeenCalled()
+  })
+
+  it('OpenSpec: scene-tree / 来路出口行与退出意图 / 出口行铺满头部底色', async () => {
+    renderTree({
+      nodes: [{ id: 'component-root', label: '断路器', canExit: true }],
+    })
+
+    // 头部态由样式表按这个标记取，普通行不得带上它。
+    expect(await screen.findByRole('row', { name: /断路器/ }))
+      .toHaveAttribute('data-scene-exit', 'true')
+  })
+
+  it('OpenSpec: scene-tree / 来路出口行与退出意图 / 普通行没有返回控件', async () => {
+    const { onOperation } = renderTree()
+
+    const row = await screen.findByRole('row', { name: /Red rectangle/ })
+    expect(within(row).queryByRole('button', { name: '返回上一层' })).not.toBeInTheDocument()
+    expect(row).not.toHaveAttribute('data-scene-exit')
+    expect(onOperation).not.toHaveBeenCalled()
+  })
+})
+
+describe('新增菜单', () => {
+  const addMenu = [
+    { id: 'basics', title: '基础组件', items: [{ id: 'preset:rect', label: '矩形' }] },
+    { id: 'project', title: '项目组件', items: [{ id: 'component:breaker', label: 'Breaker' }] },
+  ]
+
+  it('OpenSpec: scene-tree / 新增菜单与新增意图 / 从新增菜单选中一项', async () => {
+    const { onOperation } = renderTree({ addMenu })
+    const trigger = screen.getByRole('button', { name: '新增节点' })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
+
+    fireEvent.click(trigger)
+    const item = await screen.findByRole('menuitem', { name: 'Breaker' })
+    fireEvent.click(item)
+
+    // 只发一次 add，且不携带落点——这颗按钮不指向树里的任何一行。
+    expect(onOperation).toHaveBeenCalledTimes(1)
+    expect(onOperation).toHaveBeenCalledWith({ type: 'add', itemId: 'component:breaker' })
+  })
+
+  it('OpenSpec: scene-tree / 新增菜单与新增意图 / 按按钮矩形定位而不是指针', async () => {
+    renderTree({ addMenu })
+    const trigger = screen.getByRole('button', { name: '新增节点' })
+    /*
+     * 键盘激活时事件的 clientX/clientY 是 (0,0)，照指针定位菜单会飞到视口左上角。
+     * jsdom 里布局恒为零、菜单的真实落点读不出来，因此这里钉的是**读了哪份坐标**：
+     * 点击必须去问按钮的矩形。
+     */
+    const rect = vi.spyOn(trigger, 'getBoundingClientRect')
+    fireEvent.click(trigger, { clientX: 999, clientY: 999 })
+
+    expect(rect).toHaveBeenCalled()
+    expect(await screen.findByRole('menu')).toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('OpenSpec: scene-tree / 新增菜单与新增意图 / 关闭后焦点回到按钮', async () => {
+    renderTree({ addMenu })
+    const trigger = screen.getByRole('button', { name: '新增节点' })
+    fireEvent.click(trigger)
+    await screen.findByRole('menu')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it('OpenSpec: scene-tree / 新增菜单与新增意图 / 没有新增菜单时行为不变', () => {
+    const { onOperation } = renderTree()
+    fireEvent.click(screen.getByRole('button', { name: '新增节点' }))
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(onOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'create' }),
+    )
+  })
+
+  it('OpenSpec: scene-tree / 新增菜单与新增意图 / 空货架退回既有行为', () => {
+    const { onOperation } = renderTree({ addMenu: [{ id: 'basics', title: '基础组件', items: [] }] })
+    const trigger = screen.getByRole('button', { name: '新增节点' })
+
+    // 一组条目为空的货架等于没有货架：不呈现一个按下去什么都没有的菜单。
+    expect(trigger).not.toHaveAttribute('aria-haspopup')
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(onOperation).toHaveBeenCalledWith(expect.objectContaining({ type: 'create' }))
+  })
+})

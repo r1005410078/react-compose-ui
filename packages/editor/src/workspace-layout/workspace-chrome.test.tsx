@@ -161,6 +161,39 @@ describe('WorkspaceDocumentTabs', () => {
     expect(screen.queryByRole('radio', { name: '动画' })).not.toBeInTheDocument()
   })
 
+  it('OpenSpec: editor-workspace-layout / 进入层的呈现 / 层不占标签条且高亮停在来路', () => {
+    const documents = new Map([
+      ['page-a', pageSession('page-a', 'Home')],
+      ['component-breaker', pageSession('component-breaker', 'Breaker')],
+    ])
+    /*
+     * 当前文档 id 照旧指向层——只有条目列表与高亮改读来路。层没有关闭控件：离开一层的
+     * 唯一出口是返回，而返回箭头与关闭按钮长得一样却含义不同。
+     */
+    renderTabs({
+      documents,
+      activeDocumentPanelId: 'component-breaker',
+      entryLayerPanelIds: ['component-breaker'],
+      entryOriginPanelId: 'page-a',
+    })
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]).toHaveAttribute('data-workspace-tab', 'page-a')
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('button', { name: /Breaker/ })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 进入层的呈现 / 没有层时高亮照旧跟着当前文档', () => {
+    const documents = new Map([
+      ['page-a', pageSession('page-a', 'Home')],
+      ['component-breaker', pageSession('component-breaker', 'Breaker')],
+    ])
+    renderTabs({ documents, activeDocumentPanelId: 'component-breaker', entryLayerPanelIds: [] })
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(2)
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('OpenSpec: editor-workspace-layout / 文档标签条 / 标签条上没有顶栏那三段', () => {
     // 标签条只剩文档：布局开关、工作区与设置都搬到了应用顶栏。
     renderTabs({ documents: new Map([['a', pageSession('a', 'Home')]]), activeDocumentPanelId: 'a' })

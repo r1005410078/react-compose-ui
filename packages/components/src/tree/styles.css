@@ -42,6 +42,12 @@
   overflow: hidden;
 }
 
+.compose-tree__leading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
 .compose-tree__row {
   box-sizing: border-box;
   display: flex;

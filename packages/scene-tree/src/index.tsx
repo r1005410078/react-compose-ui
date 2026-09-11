@@ -55,6 +55,26 @@ export interface ComposeSceneTreeNode {
   canToggleVisibility?: boolean
   /** 是否允许切换锁定状态。省略时允许。 */
   canToggleLocked?: boolean
+  /**
+   * 该节点能否被「进入」。
+   *
+   * @remarks
+   * 树只表达「这一行能走进去」，进去之后是什么由宿主决定——本包不认识资源、文档或组件协议。
+   * 声明后该行末位出现常驻进入控件，双击该行与右键菜单首项也发出 `enter` 意图。
+   *
+   * @defaultValue `false`
+   */
+  canEnter?: boolean
+  /**
+   * 该节点是这棵树的来路出口。
+   *
+   * @remarks
+   * 行首出现朝左的返回控件（与 {@link ComposeSceneTreeNode.canEnter} 行末朝右的箭头互为反向），
+   * 整行铺一层头部底色。返回是一步的事，因此这里不表达路径，只表达「有地方可回」。
+   *
+   * @defaultValue `false`
+   */
+  canExit?: boolean
 }
 
 /**
@@ -88,6 +108,39 @@ export type ComposeSceneTreeOperation =
       visible: boolean
     }
   | { type: 'set-locked'; nodeIds: readonly string[]; locked: boolean }
+  | { type: 'enter'; nodeId: string }
+  | { type: 'exit'; nodeId: string }
+  | { type: 'add'; itemId: string }
+
+/**
+ * 新增菜单里的一项。
+ *
+ * @remarks
+ * `id` 对 SceneTree 是**不透明**的：本包不认识资源、组件或 Preset，只把用户选中的那个 id
+ * 原样回报给宿主。
+ *
+ * @public
+ */
+export interface ComposeSceneTreeAddMenuItem {
+  readonly id: string
+  readonly label: string
+  readonly icon?: ReactNode
+}
+
+/**
+ * 新增菜单里的一组。
+ *
+ * @remarks
+ * 菜单**只有两级**（组 + 条目）：更深的层级在一条工具栏按钮下面读不动，也与宿主既有的
+ * 添加菜单保持同一个形状。
+ *
+ * @public
+ */
+export interface ComposeSceneTreeAddMenuGroup {
+  readonly id: string
+  readonly title: string
+  readonly items: readonly ComposeSceneTreeAddMenuItem[]
+}
 
 /**
  * 受控场景树组件的属性。
@@ -112,6 +165,15 @@ export interface ComposeSceneTreeProps
   onExternalDrag?: (event: ComposeSceneTreeExternalDragEvent) => void
   /** 请求把当前规范化节点选择交给宿主创建组件；组件树不理解资源或文档协议。 */
   onCreateComponentIntent?: (nodeIds: readonly string[]) => void
+  /**
+   * 新增按钮的货架菜单。
+   *
+   * @remarks
+   * 非空时新增按钮成为菜单触发器，选中一项发出 `{ type: 'add'; itemId }`；缺席或为空时按钮
+   * 行为不变（按建议插入位置发 `create`）——本包可独立嵌入，不能要求每个宿主都备一份货架。
+   * 意图**不携带落点**：这颗按钮坐在检索栏上，不指向树里的任何一行。
+   */
+  addMenu?: readonly ComposeSceneTreeAddMenuGroup[]
   /**
    * 外部创建的共享命令控制器。
    *

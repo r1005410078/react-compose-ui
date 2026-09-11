@@ -23,6 +23,16 @@ export function ChevronIcon({ expanded, ...props }: IconProps & { expanded: bool
   return <IconBase {...props}><path d={expanded ? 'm7 9 5 5 5-5' : 'm9 7 5 5-5 5'} /></IconBase>
 }
 
+/** 进入控件：比展开箭头更粗、无展开语义，与 ChevronIcon 在同一行里可分辨。 */
+export function EnterIcon(props: IconProps) {
+  return <IconBase {...props}><path d="m9 6 6 6-6 6" /></IconBase>
+}
+
+/** 来路出口行行首的返回控件，与 EnterIcon 互为反向。 */
+export function BackIcon(props: IconProps) {
+  return <IconBase {...props}><path d="m15 6-6 6 6 6" /></IconBase>
+}
+
 export function DocumentIcon(props: IconProps) {
   return <IconBase {...props}><path d="M6 3h8l4 4v14H6zM14 3v5h4" /></IconBase>
 }

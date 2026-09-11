@@ -108,6 +108,7 @@ export function Tree<T>(props: TreeProps<T>) {
     renderIcon,
     renderLabel,
     renderActions,
+    renderLeading,
     renderDragPreview,
     onItemContextMenu,
     onBackgroundContextMenu,
@@ -630,6 +631,9 @@ export function Tree<T>(props: TreeProps<T>) {
                       className="compose-tree__indent"
                       style={{ width: INDENT_BASE + (row.depth - 1) * INDENT }}
                     />
+                    {renderLeading ? (
+                      <span className="compose-tree__leading">{renderLeading(context)}</span>
+                    ) : null}
                     <button
                       aria-label={context.expanded
                         ? getCollapseLabel?.(row.item) ?? defaultCollapseLabel

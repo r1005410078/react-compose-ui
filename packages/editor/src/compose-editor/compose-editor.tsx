@@ -8,6 +8,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   composePageDisplayName,
   getComposeAnimations,
+  getComposeHierarchy,
   composePageFileName,
   isComposeFrameEntity,
   isComposeComponentMediaType,
@@ -173,7 +174,7 @@ import {
 import { WorkspaceTab } from '../workspace-layout'
 import { createComposeEditorCommands } from '../editor-controller/action-catalog'
 import type { ComposeEditorController } from '../editor-controller'
-import { useComponentCatalog, useComponentWorkspace } from '../component-workspace'
+import { useComponentCatalog, useComponentEntry, useComponentWorkspace } from '../component-workspace'
 import type { ComposeEditorComponentsConfig } from '../component-workspace'
 import { SettingsDialog } from '../editor-preferences'
 import {
@@ -749,6 +750,16 @@ export function ComposeEditor({
       return order[index + 1] ?? order[index - 1] ?? null
     })
   }, [replaceDocuments])
+  /** 某个文档会话是否还开着；来路栈据此截断，因此必须读最新的一份而不是渲染期快照。 */
+  const hasDocumentPanel = useCallback(
+    (panelId: string) => documentsRef.current.has(panelId),
+    [],
+  )
+  /** 某个文档有没有未保存的修改；返回时层的去留读它，同样必须读最新的一份。 */
+  const isDocumentDirty = useCallback(
+    (panelId: string) => documentsRef.current.get(panelId)?.dirty === true,
+    [],
+  )
   /** 激活一个已打开的文档；未启用页面系统时固定画布也算一个可激活的「文档」。 */
   const activateDocument = useCallback((panelId: string) => {
     if (documentsRef.current.has(panelId) || panelId === WORKSPACE_PANEL_IDS.canvas) {
@@ -1027,6 +1038,23 @@ export function ComposeEditor({
     replaceDocuments(next)
     setActiveDocumentPanelId(panelId)
   }, [componentWorkspace, replaceDocuments])
+
+  const componentEntry = useComponentEntry({
+    activeDocumentPanelId,
+    controller,
+    documents,
+    fixedCanvasPanelId: WORKSPACE_PANEL_IDS.canvas,
+    components: componentCatalog?.components,
+    store: componentWorkspace.store,
+    createPanelId: createComponentDocumentPanelId,
+    openComponentDocument,
+    hasDocument: hasDocumentPanel,
+    isDocumentDirty,
+    closeDocument: closeDocumentImmediately,
+    setActiveDocumentPanelId,
+    onError: setComponentNotice,
+  })
+
 
   /**
    * 组件源保存成功后同步依赖实例。
@@ -1940,6 +1968,7 @@ export function ComposeEditor({
           onApply={applySelectedInstanceOverrides}
           onChange={updateInstanceOverrides}
           onCreateVariant={createVariantFromSelectedInstance}
+          onOpen={() => { void componentEntry.enter(selectedComponentInstance.id) }}
           onUpdate={updateComponentInstance}
         >
           {({ leading, subtitle, trailing, statusSlot, banner }) => providePaintImageLibrary(
@@ -1968,6 +1997,7 @@ export function ComposeEditor({
     applySelectedInstanceOverrides,
     componentWorkspace.store,
     createVariantFromSelectedInstance,
+    componentEntry,
     editorMessages.animationMode,
     handleActiveFrameChange,
     handleVariantOverridesChange,
@@ -2392,6 +2422,69 @@ export function ComposeEditor({
     workspaceSession.palette,
   ])
 
+  /**
+   * 场景树受控属性：在既有属性上接进入与返回。
+   *
+   * @remarks
+   * 两条意图都在这里被截住而不是交给 controller：打开与切换文档标签是工作区的事，
+   * controller 不认识标签。其余意图原样转交。
+   */
+  const resolvedSceneTreeProps = useMemo<ComposeSceneTreeProps>(() => {
+    const base = sceneTree ?? controller?.sceneTreeProps ?? emptySceneTreeProps
+    /*
+     * 有来路才在根行画返回控件：退无可退时它就是一行普通的根，不该挂一个按下去什么都不做的箭头。
+     * 只打第一个根——组件文档只有一个根 Frame，而页面文档根本走不到这里（没有来路）。
+     */
+    const nodes = componentEntry.canExit && base.nodes.length > 0
+      ? [{ ...base.nodes[0]!, canExit: true }, ...base.nodes.slice(1)]
+      : base.nodes
+    return {
+      ...base,
+      nodes,
+      ...(addComponentMenu ? { addMenu: addComponentMenu.groups } : {}),
+      onOperation: (operation) => {
+        if (operation.type === 'enter') {
+          void componentEntry.enter(operation.nodeId)
+          return
+        }
+        if (operation.type === 'exit') {
+          componentEntry.exit()
+          return
+        }
+        if (operation.type === 'add') {
+          const item = addComponentMenu?.items.get(operation.itemId)
+          if (!item || !controller) return
+          /*
+           * 走与**点击物料面板瓦片**同一条路：`external.add` 不带 clientPoint，落点因此是
+           * 当前选区所在的公共容器——也就是用户在树里正指着的那一行所在的容器。
+           * 树自己不表达落点：这颗按钮坐在检索栏上，不指向任何一行。
+           */
+          controller.interactionController.send({
+            type: 'external.add',
+            item: createComponentLibraryStageItem(item),
+          })
+          /*
+           * 把落进去的那个容器展开。新对象会被选中，但选中一行看不见的行，与什么都没发生在
+           * 屏幕上没有区别——而用户此刻正看着树。
+           *
+           * 展开**选中的容器**就够：选区是容器时它就是落点；选区是叶子时落点是它的父级，
+           * 而那个父级此刻一定是展开的（否则这个叶子看不见）。只挑文档意义上的容器——
+           * 组件实例的展开是「投影内部层级」，不是这里想要的那件事。
+           */
+          const expandable = controller.selectedIds.filter((id) => {
+            const entity = controller.document.entities[id]
+            return entity !== undefined && getComposeHierarchy(entity) !== undefined
+          })
+          if (expandable.length > 0) {
+            controller.setExpandedIds([...controller.expandedIds, ...expandable])
+          }
+          return
+        }
+        base.onOperation?.(operation)
+      },
+    }
+  }, [addComponentMenu, componentEntry, controller, sceneTree])
+
   const workspacePaletteTitle = workspaceSession.palette?.title
     ?? editorMessages.workspace.componentLibrary
   const workspaceActions = useMemo<ComposeEditorWorkspaceActions>(() => ({
@@ -2540,9 +2633,7 @@ export function ComposeEditor({
       sceneGraphPanel: slots?.sceneGraph !== undefined
         ? slots.sceneGraph
         : (
-            <ComposeSceneTree
-              {...(sceneTree ?? controller?.sceneTreeProps ?? emptySceneTreeProps)}
-            />
+            <ComposeSceneTree {...resolvedSceneTreeProps} />
           ),
       componentLibraryPanel: resolvedComponentLibraryPanel,
       history: resolvedHistory,
@@ -2687,6 +2778,8 @@ export function ComposeEditor({
       activeDocumentPanelId: activeDocumentPanelId
         ?? (pages === undefined && components === undefined ? WORKSPACE_PANEL_IDS.canvas : null),
       activateDocument,
+      entryLayerPanelIds: componentEntry.layerPanelIds,
+      entryOriginPanelId: componentEntry.originPanelId,
       stageHostPanelId,
       registerDocumentSave,
       setDocumentDirty,

@@ -142,8 +142,9 @@ function useFinalControllerDisposal(controller: StageInteractionController) {
  * @remarks
  * 只读组件根的直接子项，不递归；用于在未展开时决定展开控件是否出现。
  */
-function instanceHasInnerChildren(instance: ComposeEntity): boolean {
-  const facts = readComposeComponentInstance(instance)
+function instanceHasInnerChildren(
+  facts: ReturnType<typeof readComposeComponentInstance>,
+): boolean {
   if (!facts) return false
   const rootId = facts.snapshot.document.rootIds[0]
   if (!rootId) return false
@@ -384,7 +385,11 @@ function planInstanceInnerSceneOperation(
 /** 列出一个场景树操作触及的全部节点 ID，含落点父级。 */
 function sceneOperationNodeIds(operation: ComposeSceneTreeOperation): readonly string[] {
   if (operation.type === 'delete') return operation.nodeIds
-  if (operation.type === 'rename') return [operation.nodeId]
+  if (
+    operation.type === 'rename'
+    || operation.type === 'enter'
+    || operation.type === 'exit'
+  ) return [operation.nodeId]
   if (operation.type === 'move') {
     return operation.parentId === null
       ? operation.nodeIds
@@ -398,6 +403,8 @@ function sceneOperationNodeIds(operation: ComposeSceneTreeOperation): readonly s
   if (operation.type === 'set-visibility' || operation.type === 'set-locked') {
     return operation.nodeIds
   }
+  // 新增菜单的意图不指向树里的任何一行：落点由交互控制器按选区决定。
+  if (operation.type === 'add') return []
   return operation.parentId === null ? [] : [operation.parentId]
 }
 
@@ -758,6 +765,11 @@ function sceneEntity(
   const renderer = getComposeRenderer(entity)
   const componentInstance = composition.presetId === 'component-instance'
     || renderer?.type === 'component-instance'
+  /*
+   * 只解析一次：这份事实同时回答「内部有没有可展开的子级」与「能不能进去」，而解析要走一遍
+   * 覆盖的校验与迁移，一屏几十个实例时解析两遍的开销是白花的。
+   */
+  const instanceFacts = componentInstance ? readComposeComponentInstance(entity) : null
   return {
     id: entity.id,
     label: entity.name,
@@ -783,7 +795,12 @@ function sceneEntity(
     // 实例没有 Hierarchy，但其内部层级可投影，因此仍可展开。
     canHaveChildren: hierarchy !== undefined || componentInstance,
     // 投影是惰性的：未展开时 children 尚未构建，必须显式声明才会出现展开控件。
-    ...(componentInstance ? { hasChildren: instanceHasInnerChildren(entity) } : {}),
+    ...(componentInstance ? { hasChildren: instanceHasInnerChildren(instanceFacts) } : {}),
+    /*
+     * 进入的是这个实例引用的那份资源，因此引用读不出来就没有可进的地方——此时不出控件，
+     * 好过让用户点一下再收到一句失败。
+     */
+    ...(instanceFacts !== null ? { canEnter: true } : {}),
     canRename: !locked,
     canDelete: !locked,
     canMove: !locked,

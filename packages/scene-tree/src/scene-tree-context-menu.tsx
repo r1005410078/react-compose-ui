@@ -37,27 +37,39 @@ const ROOT_MENU_ENTRIES: readonly MenuEntry[] = [
 ]
 
 interface SceneTreeContextMenuProps {
+  /** 目标节点可否进入；仅节点菜单有意义。 */
+  canEnter?: boolean
   commands: ComposeSceneTreeCommandController
   messages?: SceneTreeMessages
   nodeId: string | null
   rootProps: ComposeContextMenuRootProps
   onCreateComponentIntent?: (nodeIds: readonly string[]) => void
+  onEnter?: () => void
   selectedIds?: readonly string[]
 }
 
 /** 使用共享 ComposeContextMenu 呈现场景树领域命令。 */
 export function SceneTreeContextMenu({
+  canEnter = false,
   commands,
   messages = getSceneTreeMessages('zh-CN'),
   nodeId,
   rootProps,
   onCreateComponentIntent,
+  onEnter,
   selectedIds = [],
 }: SceneTreeContextMenuProps) {
   const entries = nodeId === null ? ROOT_MENU_ENTRIES : NODE_MENU_ENTRIES
   return (
     <ComposeContextMenu {...rootProps}>
       <ComposeContextMenuContent>
+        {/* 进入排在首项并与既有分组隔开：它离开这份树，与其余就地编辑的命令不是一类。 */}
+        {nodeId !== null && canEnter && onEnter ? (
+          <>
+            <ComposeContextMenuItem onClick={onEnter}>{messages.enterAction}</ComposeContextMenuItem>
+            <ComposeContextMenuSeparator />
+          </>
+        ) : null}
         {entries.map((entry) => {
           const enabled = commands.isEnabled(entry.command, nodeId)
           const shortcut = formatComposeKeybindings(entry.shortcut)

@@ -1489,6 +1489,34 @@
   height: 100%;
 }
 
+/*
+ * 层的模式提示：整块文档表面一圈 accent 内描边。
+ *
+ * 不依赖文字、不可点、不占纵向空间，因此它不是被否掉的那条导航条——它回答的是一个是非问题：
+ * 画布上这份是借来的一层，唯一的出口是返回。名字与来路由场景树的来路出口行回答，
+ * 「这份文档是什么」由工具栏那行「主组件 · 名称」回答。
+ *
+ * 画在**表面**而不是内容区：内容区是滚动容器，内嵌阴影画在它的 padding box 上，被滚上来的
+ * Stage 盖住。表面这一圈把工具栏那行也框进去，正合适——整块表面就是这一层。
+ *
+ * 必须走覆盖用的伪元素，不能直接给表面加 `box-shadow: inset`：内嵌阴影画在元素自己的背景
+ * 之上、**子元素背景之下**，而工具栏与内容区把表面铺满了，那圈线一个像素都露不出来（试过）。
+ * `::after` 是最后一个子元素，画在它们之上。也不用 border：表面是 flex 列，加边框会改变内容盒
+ * 并让 Stage 的 surface 尺寸抖一下。
+ */
+.compose-editor__canvas-panel[data-entry-layer='true'] > .compose-editor__component-document {
+  position: relative;
+}
+
+.compose-editor__canvas-panel[data-entry-layer='true'] > .compose-editor__component-document::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  box-shadow: inset 0 0 0 1px var(--compose-accent);
+  content: '';
+  pointer-events: none;
+}
+
 .compose-editor__asset-document {
   width: 100%;
   height: 100%;

@@ -1,4 +1,13 @@
-import { ComposeTree } from '@compose-ui/components'
+import {
+  ComposeContextMenu,
+  ComposeContextMenuContent,
+  ComposeContextMenuGroup,
+  ComposeContextMenuItem,
+  ComposeContextMenuLabel,
+  ComposeContextMenuSeparator,
+  ComposeTree,
+  useComposeContextMenu,
+} from '@compose-ui/components'
 import type {
   ComposeTreeItemAdapter,
   ComposeTreeItemRenderContext,
@@ -8,15 +17,19 @@ import {
   useComposeI18nContext,
   useComposeThemeContext,
 } from '@compose-ui/ui-context'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type {
   CSSProperties,
   KeyboardEvent,
   ReactNode,
   PointerEvent as ReactPointerEvent,
 } from 'react'
-import type { ComposeSceneTreeNode, ComposeSceneTreeProps } from '../index'
-import { CubeIcon, DocumentIcon, EyeIcon, LockIcon } from '../icons'
+import type {
+  ComposeSceneTreeAddMenuGroup,
+  ComposeSceneTreeNode,
+  ComposeSceneTreeProps,
+} from '../index'
+import { BackIcon, CubeIcon, DocumentIcon, EnterIcon, EyeIcon, LockIcon } from '../icons'
 import { SceneTreeContextMenu } from '../scene-tree-context-menu'
 import { SceneTreeToolbar } from '../scene-tree-toolbar'
 import { useComposeSceneTreeCommands } from '../use-scene-tree-commands'
@@ -64,6 +77,20 @@ function toSceneMoveIndex(
   const nextSibling = remaining[normalizedIndex]
   if (!nextSibling) return siblings.length
   return siblings.findIndex((node) => node.id === nextSibling.id)
+}
+
+function findSceneNode(
+  nodes: readonly ComposeSceneTreeNode[],
+  nodeId: string,
+): ComposeSceneTreeNode | undefined {
+  const stack = [...nodes]
+  while (stack.length > 0) {
+    const node = stack.pop()
+    if (!node) continue
+    if (node.id === nodeId) return node
+    if (node.children) stack.push(...node.children)
+  }
+  return undefined
 }
 
 interface NodeActionProps {
@@ -117,6 +144,7 @@ export function ComposeSceneTree({
   onOperation,
   onExternalDrag,
   onCreateComponentIntent,
+  addMenu,
   commands: providedCommands,
   className,
   style,
@@ -164,6 +192,48 @@ export function ComposeSceneTree({
       : undefined,
     [interaction.query.length, visibleIds],
   )
+
+  const contextMenuNode = useMemo(
+    () => interaction.contextMenu.payload === null
+      ? undefined
+      : findSceneNode(nodes, interaction.contextMenu.payload),
+    [interaction.contextMenu.payload, nodes],
+  )
+
+  /*
+   * 新增按钮的货架菜单。复用共享右键菜单：WAI-ARIA 的菜单语义、键盘与焦点陷阱全部白拿，
+   * 不为一颗工具栏按钮另造一个下拉 Primitive。
+   */
+  const addMenuGroups: readonly ComposeSceneTreeAddMenuGroup[] = useMemo(
+    () => (addMenu ?? []).filter((group) => group.items.length > 0),
+    [addMenu],
+  )
+  const addMenuController = useComposeContextMenu<null>()
+  const addTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const { close: closeAddMenu, openAt: openAddMenu } = addMenuController
+  const handleAdd = useCallback((trigger: HTMLButtonElement) => {
+    if (addMenuGroups.length === 0) {
+      commands.execute('create-suggested')
+      return
+    }
+    /*
+     * 按**按钮矩形**而不是指针坐标定位：键盘激活时事件的 clientX/clientY 是 (0,0)，
+     * 照指针算菜单会飞到视口左上角。
+     */
+    const rect = trigger.getBoundingClientRect()
+    addTriggerRef.current = trigger
+    openAddMenu({ x: rect.left, y: rect.bottom }, null)
+  }, [addMenuGroups.length, commands, openAddMenu])
+  /*
+   * 焦点返回由这里补：`openAt` 只在右键事件那条路上记返回目标，而这颗按钮不是右键。
+   */
+  const addMenuRootProps = useMemo(() => ({
+    ...addMenuController.rootProps,
+    onOpenChange: (open: boolean) => {
+      addMenuController.rootProps.onOpenChange?.(open)
+      if (!open) addTriggerRef.current?.focus()
+    },
+  }), [addMenuController.rootProps])
 
   useEffect(() => () => externalCleanupRef.current?.(), [])
 
@@ -282,13 +352,15 @@ export function ComposeSceneTree({
       } as CSSProperties}
     >
       <SceneTreeToolbar
+        addMenu={addMenuGroups.length > 0}
+        addMenuOpen={addMenuController.open}
         caseSensitive={interaction.caseSensitive}
         error={interaction.searchResult.error ? messages.invalidRegex : null}
         messages={messages}
         query={interaction.query}
         regex={interaction.regex}
         wholeWord={interaction.wholeWord}
-        onAdd={() => commands.execute('create-suggested')}
+        onAdd={handleAdd}
         onCaseSensitiveChange={() => interaction.setCaseSensitive((value) => !value)}
         onQueryChange={interaction.setQuery}
         onRegexChange={() => interaction.setRegex((value) => !value)}
@@ -307,11 +379,18 @@ export function ComposeSceneTree({
         getExpandLabel={() => messages.expand}
         getItemAttributes={(context) => ({
           'data-scene-node-id': context.id,
+          ...(context.item.canExit === true ? { 'data-scene-exit': 'true' } : {}),
           onPointerDown: (event) => startExternalDrag(event, context.item),
           onKeyDown: (event) => {
             if (!shouldUseSceneKeyboard(event)) return
             const rowIndex = interaction.rows.findIndex((row) => row.node.id === context.id)
             interaction.handleKeyDown(event, rowIndex)
+          },
+          onDoubleClick: (event) => {
+            if (context.item.canEnter !== true) return
+            // 行内控件自己就是动作入口，双击它们不表达「进入这一行」。
+            if ((event.target as HTMLElement).closest('button, input') !== null) return
+            onOperation?.({ type: 'enter', nodeId: context.id })
           },
         })}
         items={nodes}
@@ -346,10 +425,29 @@ export function ComposeSceneTree({
               >
                 <LockIcon className="st:stroke-current st:stroke-[1.6]" locked={locked} />
               </NodeAction>
+              {/* 进入排在可见性与锁定之后：那两个作用于树内，进入离开这份树。 */}
+              {context.item.canEnter === true ? (
+                <NodeAction
+                  disabled={false}
+                  label={messages.enter(context.item.label)}
+                  onClick={() => onOperation?.({ type: 'enter', nodeId: context.id })}
+                >
+                  <EnterIcon className="st:stroke-current st:stroke-[1.8]" />
+                </NodeAction>
+              ) : null}
             </>
           )
         }}
         renderDragPreview={(_items, content) => content}
+        renderLeading={(context) => context.item.canExit === true ? (
+          <NodeAction
+            disabled={false}
+            label={messages.back}
+            onClick={() => onOperation?.({ type: 'exit', nodeId: context.id })}
+          >
+            <BackIcon className="st:stroke-current st:stroke-[1.9]" />
+          </NodeAction>
+        ) : null}
         renderIcon={renderContextIcon}
         renderLabel={(context) => interaction.editingId === context.id ? (
           <input
@@ -389,10 +487,54 @@ export function ComposeSceneTree({
         })}
         onSelectionChange={onSelectionChange}
       />
+      {addMenuGroups.length > 0 ? (
+        <ComposeContextMenu {...addMenuRootProps}>
+          {/*
+            * 货架可以很长（项目组件加上每一个资源文件夹），不封顶时菜单会高过视口，被定位器
+            * 整体顶到屏幕上沿——那时按钮附近一项都看不到。
+            *
+            * `--available-height` 必须带一个具体的回退值：那个变量是定位器**算完之后**才写上
+            * 去的，而定位器是按元素此刻的布局高度挑的位置——首次测量时它还不存在，`max-height`
+            * 整条失效，于是又按未封顶的高度选位。回退值同时也是这里真正想要的上限。
+            */}
+          <ComposeContextMenuContent
+            style={{
+              maxHeight: 'min(60vh, var(--available-height, 60vh))',
+              overflowY: 'auto',
+            }}
+          >
+            {addMenuGroups.map((group, groupIndex) => (
+              <ComposeContextMenuGroup key={group.id}>
+                {groupIndex > 0 ? <ComposeContextMenuSeparator /> : null}
+                <ComposeContextMenuLabel>{group.title}</ComposeContextMenuLabel>
+                {group.items.map((item) => (
+                  <ComposeContextMenuItem
+                    key={item.id}
+                    onClick={() => {
+                      closeAddMenu()
+                      onOperation?.({ type: 'add', itemId: item.id })
+                    }}
+                  >
+                    {item.icon ? (
+                      <span aria-hidden="true" className="scene-tree__menu-icon">{item.icon}</span>
+                    ) : null}
+                    {item.label}
+                  </ComposeContextMenuItem>
+                ))}
+              </ComposeContextMenuGroup>
+            ))}
+          </ComposeContextMenuContent>
+        </ComposeContextMenu>
+      ) : null}
       <SceneTreeContextMenu
+        canEnter={contextMenuNode?.canEnter === true}
         commands={commands}
         messages={messages}
         nodeId={interaction.contextMenu.payload}
+        onEnter={() => {
+          const nodeId = interaction.contextMenu.payload
+          if (nodeId !== null) onOperation?.({ type: 'enter', nodeId })
+        }}
         onCreateComponentIntent={onCreateComponentIntent}
         rootProps={interaction.contextMenu.rootProps}
         selectedIds={interaction.contextMenu.payload !== null

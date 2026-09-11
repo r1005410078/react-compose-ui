@@ -281,6 +281,21 @@ function planSetLocked(
 }
 
 /**
+ * 进入、返回与货架新增都不产生任何文档命令。
+ *
+ * @remarks
+ * 进入与返回只请求宿主切换活动文档，不是一次编辑。货架新增确实会建东西，但那条路走的是交互
+ * 控制器的 `external.add`（与点击物料面板瓦片同一条），落点由选区决定，与场景树的落点算法
+ * 无关，因此这里同样不规划任何命令。
+ *
+ * 三者仍在映射表里各占一格：表以 `ComposeSceneTreeOperation` 的判别键构建，明写「跳过」
+ * 比让这一格不存在更清楚。
+ */
+function planNavigationOnly(): SceneOperationResult {
+  return { status: 'skipped' }
+}
+
+/**
  * 把场景树的"根级"落点解析为文档中的落点。
  *
  * @remarks
@@ -385,6 +400,9 @@ const SCENE_OPERATION_PLANNERS: SceneOperationPlanners = {
   duplicate: planDuplicate,
   'set-visibility': planSetVisibility,
   'set-locked': planSetLocked,
+  enter: planNavigationOnly,
+  exit: planNavigationOnly,
+  add: planNavigationOnly,
 }
 
 /**
