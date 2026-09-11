@@ -52,6 +52,40 @@ export interface ComposePreviewSurfaceOptions extends Pick<ComposePreviewProps,
   readonly targetKind?: ComposePreviewTargetKind
   readonly navigation?: ComposeNavigationPort
   readonly livePage?: { readonly pageKey: string; readonly page: ComposePageFile }
+  /**
+   * 默认屏幕与默认取景，两个形态各取一档。
+   *
+   * @remarks
+   * `target` 是模态形态：默认屏幕 = 目标自身尺寸，取景四周留出台面余量。
+   * `viewport` 是整屏形态：默认屏幕 = **台面本身**（也就是视口），取景零留白，
+   * 因此默认呈现的就是真实像素——那正是整屏存在的全部理由。
+   *
+   * @defaultValue 'target'
+   */
+  readonly framing?: ComposePreviewFraming
+  /** 从另一个形态交接过来的状态；只作为初值，此后由本会话自己持有。 */
+  readonly initial?: ComposePreviewHandoff
+}
+
+/** 默认屏幕与默认取景的档位。 @internal */
+export type ComposePreviewFraming = 'target' | 'viewport'
+
+/**
+ * 两个预览形态之间交接的那三样。
+ *
+ * @remarks
+ * `@compose-ui/preview` **不跨形态记忆它们**：宿主是唯一同时看得见两个形态的人，
+ * 让预览自己记需要一个两边都挂着的单例。切换请求把它交出去，宿主原样回传给另一个形态。
+ *
+ * @public
+ */
+export interface ComposePreviewHandoff {
+  /** 当前目标场景。 */
+  readonly frameId?: string
+  /** 当前屏幕尺寸；缺省表示用另一个形态自己的默认值。 */
+  readonly screenSize?: ComposeSize
+  /** 当前播放头（ms）；缺省表示还没有人手动接管过播放。 */
+  readonly playheadMs?: number
 }
 
 /** 一块可选的预览目标场景。 */
@@ -85,6 +119,13 @@ export interface ComposePreviewSurfaceValue {
   readonly targetSize: ComposeSize
   readonly screenSize: ComposeSize
   readonly setScreenSize: (size: ComposeSize) => void
+  /** 当前屏幕是不是这一档的默认值（目标自身尺寸 / 实际视口），chrome 据此写读数。 */
+  readonly screenIsDefault: boolean
+  /** 回到这一档的默认屏幕，并重新取景。 */
+  readonly resetScreen: () => void
+  readonly framing: ComposePreviewFraming
+  /** 交接给另一个形态的那三样。 */
+  readonly handoff: () => ComposePreviewHandoff
   readonly fitScale: { readonly x: number, readonly y: number } | null
   readonly resize: {
     readonly session: ComposeScreenResizeSession
@@ -103,7 +144,6 @@ export interface ComposePreviewSurfaceValue {
   readonly content: ComposePreviewSurfaceContent
 }
 
-const INITIAL_PLAYHEAD: ComposePreviewPlayheadState = { timeMs: 0, direction: 1 }
 const INITIAL_VIEWPORT: ComposeCanvasViewport = { zoom: 1, offset: { x: 0, y: 0 } }
 
 /**
@@ -125,9 +165,11 @@ export function useComposePreviewSurface({
   pageLoader,
   selectedFrameId,
   targetKind = 'scene',
+  framing = 'target',
+  initial,
 }: ComposePreviewSurfaceOptions): ComposePreviewSurfaceValue {
   // 预览目标永远是一个场景：null 表示跟随宿主给出的激活场景，用户显式选过之后才固定。
-  const [target, setTarget] = useState<string | null>(null)
+  const [target, setTarget] = useState<string | null>(initial?.frameId ?? null)
   // 页面预览模式下当前页面由 ComposePageHost 加载，会话只是跟着它换场景列表与动画宿主。
   const [hostPage, setHostPage] = useState<{
     readonly pageKey: string | null
@@ -172,13 +214,22 @@ export function useComposePreviewSurface({
   const targetEntity = resolvedFrameId ? activeDocument?.entities[resolvedFrameId] : undefined
   const targetSize = getComposeFrame(targetEntity)?.size ?? COMPOSE_DEFAULT_FRAME_SIZE
 
-  // 屏幕尺寸：null 表示跟随目标自身尺寸，用户改过之后才固定。
-  const [screenSize, setScreenSize] = useState<ComposeSize | null>(null)
-  const resolvedScreenSize = screenSize ?? targetSize
+  // 屏幕尺寸：null 表示跟随这一档的默认值，用户改过之后才固定。
+  const [screenSize, setScreenSize] = useState<ComposeSize | null>(initial?.screenSize ?? null)
+  const stageSize = useComposeHostBoxSize(stageRef, active)
+  /*
+   * 整屏的默认屏幕是**实际视口**，而且它是一个模式不是一个值——打开时量一次存成固定值的
+   * 症状是拖动窗口之后读数还写着旧的数，而屏幕上早就变了。台面还没量出来时退回目标尺寸：
+   * 那一帧没有视口可言，而取景本来就要等到量出来才动。
+   */
+  const defaultScreenSize = framing === 'viewport' && stageSize
+    ? { width: stageSize.width, height: stageSize.height }
+    : targetSize
+  const resolvedScreenSize = screenSize ?? defaultScreenSize
   const fit = defaultFitForTargetKind(targetKind)
   const fitScale = composeFitScale(fit, targetSize, resolvedScreenSize)
-
-  const stageSize = useComposeHostBoxSize(stageRef, active)
+  // 整屏台面就是视口，留白等于把 1:1 变成 98%——而「默认就是真像素」正是它存在的理由。
+  const fitPadding = framing === 'viewport' ? 0 : undefined
   const [viewport, setViewport] = useState<ComposeCanvasViewport>(INITIAL_VIEWPORT)
   /*
    * 取景重算是一次性动作而不是一个持续生效的模式。它只由四件事触发：会话开始、换目标、
@@ -189,7 +240,7 @@ export function useComposePreviewSurface({
   const requestFit = () => { setPendingFit(true) }
 
   if (active && pendingFit) {
-    const next = fitPreviewViewport(resolvedScreenSize, stageSize)
+    const next = fitPreviewViewport(resolvedScreenSize, stageSize, fitPadding)
     if (next) {
       setViewport(next)
       setPendingFit(false)
@@ -204,11 +255,14 @@ export function useComposePreviewSurface({
   const [playing, setPlaying] = useState(false)
   // 手动会话是否已接管播放头：未接管时 ComposePreview 按脚本绑定驱动（或停在 0 ms），
   // 用户第一次按播放即接管，会话结束时归还。
-  const [manualEngaged, setManualEngaged] = useState(false)
+  const [manualEngaged, setManualEngaged] = useState(initial?.playheadMs !== undefined)
   // 权威播放头放 ref：rAF 回调里直接推进，direction 等 ping-pong 状态不挤进渲染状态；
   // state 只保留渲染需要的 timeMs，每次开始播放时在事件处理器里与 ref 对齐。
-  const playhead = useRef(INITIAL_PLAYHEAD)
-  const [playheadMs, setPlayheadMs] = useState(0)
+  const playhead = useRef<ComposePreviewPlayheadState>({
+    timeMs: initial?.playheadMs ?? 0,
+    direction: 1,
+  })
+  const [playheadMs, setPlayheadMs] = useState(initial?.playheadMs ?? 0)
 
   // 会话结束即复位播放与取景（渲染期 prev-adjust 模式，不在 effect 里 setState；
   // ref 留到下次播放开始时在事件处理器里对齐，渲染期不写 ref）。
@@ -221,7 +275,33 @@ export function useComposePreviewSurface({
       setPlayheadMs(0)
       setScreenSize(null)
     }
-    else setPendingFit(true)
+    else {
+      /*
+       * 会话开始时套用交接状态。**不能只靠 useState 初值**：弹框常驻挂载（关闭时渲染 null），
+       * 初值只在整个宿主生命周期里跑一次，从整屏退回来那一次根本到不了。整屏形态挂载即 active，
+       * 走的才是初值那条路——两条都要，各自覆盖一种形态。
+       */
+      setTarget(initial?.frameId ?? null)
+      setScreenSize(initial?.screenSize ?? null)
+      setPlayheadMs(initial?.playheadMs ?? 0)
+      setManualEngaged(initial?.playheadMs !== undefined)
+      setPendingFit(true)
+    }
+  }
+
+  /*
+   * 整屏形态里视口一变就要重新取景。
+   *
+   * **不分默认档与固定分辨率**：那个形态没有平移也没有缩放控件，取景完全是派生的，
+   * 没有「用户自己的取景」可以保护。挑着 1280 × 720 把窗口从 1920 拖到 1280 时，
+   * 不重算的话画板还停在 offset 320 上——一半在屏幕外。模态形态相反，那里的取景是用户
+   * 用滚轮和适应窗口摆出来的，窗口变化不该动它。
+   */
+  const stageKey = stageSize ? `${stageSize.width}x${stageSize.height}` : ''
+  const [lastStageKey, setLastStageKey] = useState(stageKey)
+  if (lastStageKey !== stageKey) {
+    setLastStageKey(stageKey)
+    if (framing === 'viewport') setPendingFit(true)
   }
 
   // 换目标即回到该目标自身的尺寸：上一块场景的屏幕尺寸对这一块没有意义。
@@ -290,6 +370,17 @@ export function useComposePreviewSurface({
     targetSize,
     screenSize: resolvedScreenSize,
     setScreenSize,
+    screenIsDefault: screenSize === null,
+    resetScreen: () => {
+      setScreenSize(null)
+      setPendingFit(true)
+    },
+    framing,
+    handoff: () => ({
+      frameId: resolvedFrameId,
+      screenSize: resolvedScreenSize,
+      ...(manualEngaged ? { playheadMs } : {}),
+    }),
     fitScale,
     resize,
     viewport,

@@ -53,6 +53,8 @@ export type ComposePreviewZoomIntent = 'in' | 'out' | 'reset'
  * 之后看到的既不是它交付出去的样子，也不是任何人见过的样子；要看细节用放大按钮，那是
  * 用户的显式选择。这是对画布「适配选择」的有意偏离——那里适配的是编辑目标，不是交付形态。
  *
+ * @param padding - 屏幕四周留出的台面余量（px）。整屏形态传 0：那里台面就是视口，留白等于
+ * 把 1:1 变成 98%，而「默认就是真像素」正是那个形态存在的理由。
  * @returns 台面还没量出来（宽高为 0）时返回 `null`，表示不该改变取景：除以 0 会给出
  * `Infinity`，钳制之后是上限而不是「不动」。
  * @internal
@@ -60,12 +62,13 @@ export type ComposePreviewZoomIntent = 'in' | 'out' | 'reset'
 export function fitPreviewViewport(
   screenSize: ComposeSize,
   stageSize: ComposeHostBoxSize | null,
+  padding: number = STAGE_PADDING,
 ): ComposeCanvasViewport | null {
   if (!stageSize || stageSize.width <= 0 || stageSize.height <= 0) return null
   if (screenSize.width <= 0 || screenSize.height <= 0) return null
   const available = {
-    width: Math.max(1, stageSize.width - STAGE_PADDING * 2),
-    height: Math.max(1, stageSize.height - STAGE_PADDING * 2),
+    width: Math.max(1, stageSize.width - padding * 2),
+    height: Math.max(1, stageSize.height - padding * 2),
   }
   const zoom = Math.min(
     1,

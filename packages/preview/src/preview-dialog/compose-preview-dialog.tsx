@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { ComposeNavigationPort, ComposePageFile } from '@compose-ui/core'
 import type { ComposePreviewProps } from '../compose-preview'
 import { ComposePreviewSurface, useComposePreviewSurface } from '../preview-surface'
+import type { ComposePreviewHandoff } from '../preview-surface'
 import {
   buildScreenSizeOptions,
   formatScreenMapping,
@@ -56,6 +57,8 @@ export interface ComposePreviewDialogMessages {
   readonly close: string
   /** 键盘关闭提示；渲染成关闭按钮的 tooltip，不再单占一行页脚。 */
   readonly closeHint: string
+  /** 切换到整屏形态的无障碍名称；宿主未提供该动作时不出现这个控件。 */
+  readonly enterFullscreenForm: string
   /** 开始播放动画的无障碍名称；文档无动画时不出现播放控件。 */
   readonly play: string
   /** 暂停动画播放的无障碍名称。 */
@@ -84,6 +87,7 @@ const DEFAULT_MESSAGES: ComposePreviewDialogMessages = {
   exitFullscreen: 'Exit fullscreen preview',
   close: 'Close preview',
   closeHint: 'Press Esc to close preview',
+  enterFullscreenForm: 'Open fullscreen preview',
   play: 'Play animation',
   pause: 'Pause animation',
 }
@@ -141,6 +145,29 @@ export interface ComposePreviewDialogProps extends Pick<ComposePreviewProps,
    * 同一条契约：只在画布上正在编辑的就是那一页时提供。
    */
   readonly livePage?: { readonly pageKey: string; readonly page: ComposePageFile }
+  /**
+   * 用户请求切换到整屏形态。
+   *
+   * @remarks
+   * 提供时对话框呈现对应控件，不提供时不呈现。它**只是一个请求**——路由归宿主，
+   * `@compose-ui/preview` 不认识 URL。载荷里带着当前的场景、屏幕尺寸与播放头，宿主退出
+   * 整屏时把它原样传回来即可还原；预览自己不跨形态记忆这三样。
+   *
+   * 整屏形态 MUST 与编辑器同一个浏览上下文：既有规则要求页面预览包含尚未保存的改动，
+   * 而新标签页读不到宿主手上的 live 文档。
+   */
+  readonly onRequestFullscreenForm?: (state: ComposePreviewHandoff) => void
+  /**
+   * 放在关闭那一组之前的次级动作。
+   *
+   * @remarks
+   * 「在新标签页打开」属于这里：它要知道怎么落盘、URL 长什么样，这两件事只有宿主知道。
+   * 宿主提供它时 MUST 先落盘，并 MUST 在控件上说明这件事——静默地呈现上次保存的内容
+   * 是这条契约明确拒绝的做法。
+   */
+  readonly secondaryActions?: React.ReactNode
+  /** 从整屏形态交接回来的场景、屏幕尺寸与播放头；每次打开时套用。 */
+  readonly initialState?: ComposePreviewHandoff
   /** 覆盖由标题派生的 Dialog 无障碍名称。 */
   readonly dialogLabel?: string
   /** 覆盖默认英文文案的本地化内容。 */
@@ -159,6 +186,17 @@ function FullscreenIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4" />
+    </svg>
+  )
+}
+
+/** 箭头从方框里指出去：切到整屏形态。与浏览器全屏那颗形状必须分开——它们做的不是一件事。 */
+function FullscreenFormIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M14 4h6v6" />
+      <path d="M20 4 13 11" />
+      <path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
     </svg>
   )
 }
@@ -212,6 +250,9 @@ export function ComposePreviewDialog({
   selectedFrameId,
   targetKind = 'scene',
   dialogLabel,
+  initialState,
+  onRequestFullscreenForm,
+  secondaryActions,
   document: composeDocument,
   page,
   layoutRuntime,
@@ -235,6 +276,7 @@ export function ComposePreviewDialog({
   const surface = useComposePreviewSurface({
     active: open,
     assetResolver,
+    initial: initialState,
     document: composeDocument,
     layoutRuntime,
     layoutSnapshot,
@@ -444,7 +486,19 @@ export function ComposePreviewDialog({
             >
               <FullscreenIcon />
             </button>
+            {/* 两个形态之间唯一的桥；宿主没给这个动作就不画它。 */}
+            {onRequestFullscreenForm ? (
+              <button
+                aria-label={messages.enterFullscreenForm}
+                data-testid="compose-preview-dialog-fullscreen-form"
+                type="button"
+                onClick={() => onRequestFullscreenForm(surface.handoff())}
+              >
+                <FullscreenFormIcon />
+              </button>
+            ) : null}
             <span aria-hidden="true" className="compose-preview-dialog__rule" />
+            {secondaryActions}
             <button
               aria-label={messages.close}
               ref={closeButton}

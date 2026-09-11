@@ -20,3 +20,9 @@ export {
   type ComposePreviewDialogProps,
   type ComposePreviewTargetKind,
 } from './preview-dialog'
+export {
+  ComposePreviewPage,
+  type ComposePreviewPageMessages,
+  type ComposePreviewPageProps,
+} from './preview-page'
+export type { ComposePreviewHandoff } from './preview-surface'
