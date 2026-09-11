@@ -132,11 +132,20 @@
     font-size: 11px;
   }
 
-  /* 状态条 + 搜索工具带同一 chrome 层，避免标题与搜索之间再插割裂横条。 */
+  /*
+   * 状态条 + 搜索工具带同一 chrome 层，避免标题与搜索之间再插割裂横条。
+   *
+   * 它必须压在列分隔线（`z-index: 8`）之上：分隔线是**属性网格**的列把手，而 chrome 不是网格
+   * 的一部分。分隔线的 `top` 是按 `--pp-toolbar-height` 这个名义值算的，chrome 里还有一条状态
+   * 条，因此它的真实底边比那个值低——分隔线于是伸进 chrome 里，把落在它那一列 x 上的按钮整个
+   * 挡住。症状是「工具带上某一颗按钮点不动」，而是哪一颗取决于这一行放了几颗，宿主往里塞一颗
+   * 新按钮就会换一颗中招。按真实高度重算 `top` 修不动这一条：状态条的高度不是 token，还随
+   * 宿主注入的 chrome 变。
+   */
   .property-panel__chrome {
     position: sticky;
     top: 0;
-    z-index: 6;
+    z-index: 9;
     display: grid;
     gap: 0;
     border-bottom: 1px solid #0b0c0c;
