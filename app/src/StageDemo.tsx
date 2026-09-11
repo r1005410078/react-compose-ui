@@ -532,7 +532,15 @@ export function StageDemoWorkspace() {
   // 预览目标只有场景一种。默认取页面的激活场景；标签上的播放按钮可以直接指定另一块，
   // 用户在对话框的场景选择器里也能改。
   const [previewFrameId, setPreviewFrameId] = useState<string | null>(null)
-  const activeFrameId = activePage?.page.activeFrameId
+  /*
+   * **画布上现在是哪一份文档，只有一个答案。**
+   *
+   * 页面会话与组件会话互不相干，打开组件不会清掉页面会话；`runtime` 早就按
+   * 「组件优先」算过这个答案，只是没有用在预览上。不这么做的症状是：打开组件再按预览，
+   * 看到的是上一个页面——页面模式一旦成立就会完全取代传入的 `document`。
+   */
+  const previewingComponent = activeComponent !== null
+  const activeFrameId = (previewingComponent ? undefined : activePage?.page.activeFrameId)
     ?? controller.document.rootIds[0]
     ?? null
   const previewTargetFrameId = previewFrameId ?? activeFrameId
@@ -544,7 +552,7 @@ export function StageDemoWorkspace() {
    * 使预览包含尚未保存的改动。没有打开任何页面时不进入页面预览——那时画布上的文档不属于
    * 任何页面，导航没有起点。
    */
-  const livePage = activePage
+  const livePage = activePage && !previewingComponent
     ? { pageKey: activePage.pageKey, page: { ...activePage.page, document: controller.document } }
     : undefined
   useEffect(() => {
@@ -598,7 +606,21 @@ export function StageDemoWorkspace() {
         messages={{
           title: '预览',
           target: '预览场景',
-          scale: '预览缩放',
+          screenSize: '屏幕尺寸',
+          targetSizeGroupScene: '场景尺寸',
+          targetSizeGroupComponent: '组件尺寸',
+          commonScreensGroupScene: '常见屏幕',
+          commonScreensGroupComponent: '摆进这么大的屏里看',
+          customSizeName: '自定义',
+          screenWidth: '屏幕宽度',
+          screenHeight: '屏幕高度',
+          swapOrientation: '横竖互换',
+          resizeScreen: '拖动改屏幕尺寸',
+          zoomIn: '放大',
+          zoomOut: '缩小',
+          fitToWindow: '适应窗口',
+          zoomLevel: '当前缩放',
+          screenMapping: '屏幕与目标尺寸',
           enterFullscreen: '全屏预览',
           exitFullscreen: '退出全屏预览',
           close: '关闭预览',
@@ -608,6 +630,7 @@ export function StageDemoWorkspace() {
         navigation={livePage ? navigationSession : undefined}
         open={previewOpen}
         pageLoader={pageLoader}
+        targetKind={previewingComponent ? 'component' : 'scene'}
         registry={registry}
         onOpenChange={setPreviewOpen}
       />

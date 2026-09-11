@@ -179,6 +179,97 @@ function registry() {
   })
 }
 
+/**
+ * 桩掉宿主盒子的布局尺寸。
+ *
+ * @remarks
+ * jsdom 不做布局，`offsetWidth` / `offsetHeight` 恒为 0，而 `fit` 的缩放正是由这两个值
+ * 算出来的。本渲染路径里只有 `useComposeHostBoxSize` 读它们，因此在 prototype 上给一个
+ * 常量足够精确。
+ */
+function stubHostBox(width: number, height: number): () => void {
+  const original = {
+    width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
+    height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
+  }
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => width })
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => height })
+  return () => {
+    if (original.width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', original.width)
+    if (original.height) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original.height)
+  }
+}
+
+describe('ComposePreview fit', () => {
+  it('OpenSpec: compose-preview / Preview 配置与兼容 / fit 缩放整棵子树', () => {
+    // 800 × 600 的 Frame 放进 400 × 300 的宿主盒子：等比 0.5。
+    const restore = stubHostBox(400, 300)
+    try {
+      render(
+        <ComposePreview document={document()} fit="contain" frameId="desktop" registry={registry()} />,
+      )
+      const frame = screen.getByTestId('compose-preview-frame')
+      expect(frame.style.transform).toBe('scale(0.5, 0.5)')
+      // 盒子本身**不变**：fit 是缩放而不是改尺寸。改盒子只会让绝对定位的后代溢出，
+      // 这正是本变更前那份实现的毛病。
+      expect(frame.style.width).toBe('800px')
+      expect(frame.style.height).toBe('600px')
+      // 后代跟着整体 transform 走，自己不带缩放，相对位置因此一个像素都不变。
+      expect(screen.getByTestId('compose-preview-entity-group').style.transform)
+        .not.toContain('scale')
+    }
+    finally { restore() }
+  })
+
+  it('OpenSpec: compose-preview / Preview 配置与兼容 / Host-supplied fit', () => {
+    const restore = stubHostBox(400, 600)
+    try {
+      const { rerender } = render(
+        <ComposePreview document={document()} fit="contain" frameId="desktop" registry={registry()} />,
+      )
+      // contain 取两轴较小者、cover 取较大者、fill 两轴各自缩放。
+      expect(screen.getByTestId('compose-preview-frame').style.transform).toBe('scale(0.5, 0.5)')
+      rerender(
+        <ComposePreview document={document()} fit="cover" frameId="desktop" registry={registry()} />,
+      )
+      expect(screen.getByTestId('compose-preview-frame').style.transform).toBe('scale(1, 1)')
+      rerender(
+        <ComposePreview document={document()} fit="fill" frameId="desktop" registry={registry()} />,
+      )
+      expect(screen.getByTestId('compose-preview-frame').style.transform).toBe('scale(0.5, 1)')
+    }
+    finally { restore() }
+  })
+
+  it('fit 默认为 none 时不缩放，也不量宿主盒子', () => {
+    const restore = stubHostBox(400, 300)
+    try {
+      render(<ComposePreview document={document()} frameId="desktop" registry={registry()} />)
+      const frame = screen.getByTestId('compose-preview-frame')
+      expect(frame.style.transform).toBe('')
+      expect(frame.style.width).toBe('800px')
+    }
+    finally { restore() }
+  })
+
+  it('alignment 决定 transform-origin', () => {
+    const restore = stubHostBox(400, 300)
+    try {
+      render(
+        <ComposePreview
+          alignment="top-left"
+          document={document()}
+          fit="contain"
+          frameId="desktop"
+          registry={registry()}
+        />,
+      )
+      expect(screen.getByTestId('compose-preview-frame').style.transformOrigin).toBe('left top')
+    }
+    finally { restore() }
+  })
+})
+
 describe('ComposePreview', () => {
   it('OpenSpec: hug-content-layout / Preview 独立解析 Hug / 异步 Runtime 使用 Registry measurement', async () => {
     const base = document()

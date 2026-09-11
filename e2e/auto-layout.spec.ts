@@ -444,9 +444,10 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
   })
 
   await editor.getByRole('button', { name: '打开预览' }).click()
-  await page.getByRole('dialog', { name: '文档预览对话框' })
-    .getByRole('combobox', { name: '预览缩放' })
-    .selectOption('1')
+  const previewDialog = page.getByRole('dialog', { name: '文档预览对话框' })
+  // 这里比的是 boundingBox（视觉像素），因此要把视图缩放钉回 100%——预览默认按窗口取景。
+  await page.keyboard.press('Control+0')
+  await expect(previewDialog.getByTestId('compose-preview-dialog-zoom')).toHaveText('100%')
   const preview = page.getByTestId('compose-preview-frame')
   const previewTextBox = await preview.getByText('Text', { exact: true }).boundingBox()
   expect(previewTextBox).not.toBeNull()

@@ -43,6 +43,50 @@ function stubAnimationFrames() {
   }
 }
 
+/**
+ * 桩掉指针捕获。
+ *
+ * @remarks
+ * jsdom 不实现 Pointer Capture API，而拖手柄按下时就要取得捕获——不桩掉整条手势在第一步
+ * 就抛错。
+ */
+function stubPointerCapture(): () => void {
+  const proto = HTMLElement.prototype as unknown as Record<string, unknown>
+  const original = {
+    set: proto.setPointerCapture,
+    release: proto.releasePointerCapture,
+    has: proto.hasPointerCapture,
+  }
+  proto.setPointerCapture = () => undefined
+  proto.releasePointerCapture = () => undefined
+  proto.hasPointerCapture = () => true
+  return () => {
+    proto.setPointerCapture = original.set
+    proto.releasePointerCapture = original.release
+    proto.hasPointerCapture = original.has
+  }
+}
+
+/**
+ * 桩掉台面的布局尺寸。
+ *
+ * @remarks
+ * jsdom 不做布局，`offsetWidth` / `offsetHeight` 恒为 0，而取景正是由台面尺寸算出来的；
+ * 不桩掉时 `fitPreviewViewport` 一律返回 null（宁可不动，也不要按零除算出 Infinity）。
+ */
+function stubStageBox(width: number, height: number): () => void {
+  const original = {
+    width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
+    height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
+  }
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => width })
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => height })
+  return () => {
+    if (original.width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', original.width)
+    if (original.height) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original.height)
+  }
+}
+
 const container: ComposeEntity = {
   id: 'container',
   name: 'Container',
@@ -163,13 +207,139 @@ describe('ComposePreviewDialog', () => {
     expect(screen.getByTestId('compose-preview-frame')).toBeInTheDocument()
   })
 
-  it('OpenSpec: compose-preview / Preview Dialog 视图控制 / 调整预览缩放', () => {
+  it('OpenSpec: compose-preview / Preview Dialog 视图控制 / 调整视图缩放', () => {
     renderDialog()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Preview scale' }), {
-      target: { value: '0.5' },
+    // 视图缩放只改取景：画板在屏幕上的像素变了，屏幕尺寸本身一个数都不动。
+    expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('100%')
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+    expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('120%')
+    expect(screen.getByTestId('compose-preview-dialog-screen-width')).toHaveValue(640)
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }))
+    expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('100%')
+  })
+
+  it('OpenSpec: compose-preview / 预览屏幕尺寸 / 默认屏幕等于目标自身尺寸', () => {
+    renderDialog()
+
+    // Frame 是 640 × 360：屏幕默认就是它，因此 1:1。
+    expect(screen.getByTestId('compose-preview-dialog-screen-width')).toHaveValue(640)
+    expect(screen.getByTestId('compose-preview-dialog-screen-height')).toHaveValue(360)
+    expect(screen.getByTestId('compose-preview-dialog-size-pill')).toHaveTextContent('640 × 360 · 1:1')
+    expect(screen.getByTestId('compose-preview-dialog-artboard')).toHaveStyle({ width: '640px' })
+  })
+
+  it('OpenSpec: compose-preview / 预览屏幕尺寸 / 选择另一块屏', () => {
+    const { onOpenChange } = renderDialog()
+    void onOpenChange
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Screen size' }), {
+      target: { value: '1920x1080' },
     })
-    expect(screen.getByTestId('compose-preview-dialog-artboard')).toHaveStyle('--compose-preview-dialog-scale: 0.5')
+    expect(screen.getByTestId('compose-preview-dialog-screen-width')).toHaveValue(1920)
+    // 640 × 360 映射进 1920 × 1080：等比 300%，但场景填的是这块屏。
+    expect(screen.getByTestId('compose-preview-dialog-size-pill'))
+      .toHaveTextContent('1920 × 1080 ← 640 × 360 · 300%')
+    // 文档一个字节都不动。
+    expect(document.entities[rootFrame.id]).toBe(rootFrame)
+  })
+
+  it('OpenSpec: compose-preview / 预览屏幕尺寸 / 目标尺寸不在清单上时标为自定义', () => {
+    renderDialog()
+
+    // 640 × 360 不匹配任何常见分辨率，因此第一组那一项标自定义而不是伪造一个通名。
+    const options = screen.getAllByRole('option')
+      .filter((option) => option.textContent?.startsWith('640 × 360'))
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('640 × 360 · Custom · 16:9')
+    // 第二组仍然完整列出清单。
+    expect(screen.getByRole('option', { name: /1920 × 1080 · Full HD · 16:9/ })).toBeInTheDocument()
+  })
+
+  it('宽高输入是自定义尺寸的入口，改完下拉落在自定义那一项上', () => {
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('compose-preview-dialog-screen-width'), {
+      target: { value: '800' },
+    })
+    expect(screen.getByRole('combobox', { name: 'Screen size' })).toHaveValue('')
+    expect(screen.getByTestId('compose-preview-dialog-artboard')).toHaveStyle({ width: '800px' })
+  })
+
+  it('横竖互换只给场景，组件不出现', () => {
+    renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: 'Swap orientation' }))
+    expect(screen.getByTestId('compose-preview-dialog-screen-width')).toHaveValue(360)
+    expect(screen.getByTestId('compose-preview-dialog-screen-height')).toHaveValue(640)
+    cleanup()
+
+    renderDialog({ targetKind: 'component' })
+    // 88 × 132 换成 132 × 88 不是任何人会提的请求。
+    expect(screen.queryByRole('button', { name: 'Swap orientation' })).not.toBeInTheDocument()
+  })
+
+  it('OpenSpec: compose-preview / 受控 Preview Dialog / 组件目标不被拉伸填满屏幕', () => {
+    renderDialog({ targetKind: 'component' })
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Screen size' }), {
+      target: { value: '1920x1080' },
+    })
+    // 组件是屏上的一个零件：原大摆着，不缩放。
+    expect(screen.getByTestId('compose-preview-frame').style.transform).toBe('')
+    expect(screen.getByTestId('compose-preview-dialog-size-pill'))
+      .toHaveTextContent('1920 × 1080 ← 640 × 360 · 1:1')
+  })
+
+  it('OpenSpec: compose-preview / 预览屏幕尺寸 / 从选择器换屏幕尺寸后重新取景', () => {
+    const restore = stubStageBox(800, 600)
+    try {
+      renderDialog()
+      // 640 × 360 放得下，取景上限是 100%——适应窗口不放大。
+      expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('100%')
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Screen size' }), {
+        target: { value: '1920x1080' },
+      })
+      // 换一块放不下的屏：本帧的取景是按旧尺寸算的，等下一次交互会先给用户一帧错误的取景。
+      expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('38%')
+
+      // 但它是一次性的：此后用户自己缩放不再被覆盖。
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+      expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('46%')
+    }
+    finally { restore() }
+  })
+
+  it('OpenSpec: compose-preview / 拖动改屏幕尺寸与吸附 / 拖动吸附到清单里的分辨率', () => {
+    const restore = stubPointerCapture()
+    try {
+      renderDialog()
+      const handle = screen.getByTestId('compose-preview-dialog-resize-handle')
+
+      fireEvent.pointerDown(handle, { button: 0, clientX: 0, clientY: 0, pointerId: 1 })
+      // 从 640 × 360 拖到 1278 × 718：落在 1280 × 720 的容差内。
+      fireEvent.pointerMove(handle, { clientX: 638, clientY: 358, pointerId: 1 })
+      expect(screen.getByTestId('compose-preview-dialog-screen-width')).toHaveValue(1280)
+      expect(handle).toHaveAttribute('data-snapped', 'true')
+      expect(screen.getByTestId('compose-preview-dialog-size-pill')).toHaveTextContent('HD')
+
+      fireEvent.pointerUp(handle, { clientX: 638, clientY: 358, pointerId: 1 })
+      expect(handle).not.toHaveAttribute('data-snapped')
+      expect(screen.getByTestId('compose-preview-dialog-screen-width')).toHaveValue(1280)
+    }
+    finally { restore() }
+  })
+
+  it('拖动不改变取景——重新取景会让画板纹丝不动，拖了等于没有反馈', () => {
+    const restore = stubPointerCapture()
+    try {
+      renderDialog()
+      const handle = screen.getByTestId('compose-preview-dialog-resize-handle')
+      fireEvent.pointerDown(handle, { button: 0, clientX: 0, clientY: 0, pointerId: 1 })
+      fireEvent.pointerMove(handle, { clientX: 400, clientY: 200, pointerId: 1 })
+      expect(screen.getByTestId('compose-preview-dialog-zoom')).toHaveTextContent('100%')
+    }
+    finally { restore() }
   })
 
   it('OpenSpec: compose-preview / 预览对话框动画播放 / 无动画时不显示播放控件', () => {
@@ -273,11 +443,13 @@ function pageModeFixture() {
       aside: label('aside', 'Detail aside'),
       'detail-main': createComposeFrameEntity({
         id: 'detail-main',
+        name: '详情主场景',
         childIds: ['headline'],
         size: { width: 400, height: 300 },
       }),
       'detail-alt': createComposeFrameEntity({
         id: 'detail-alt',
+        name: '详情副场景',
         childIds: ['aside'],
         size: { width: 400, height: 300 },
       }),
@@ -335,7 +507,15 @@ function pageModeFixture() {
       renderer: ({ props }) => <span>{String(props.text)}</span>,
     }],
   })
-  return { navigation, pageLoader, registry: pageRegistry }
+  const pageSnapshot: ComposeLayoutSnapshot = {
+    revision: 1,
+    boxes: Object.fromEntries(
+      [...Object.keys(homeDocument.entities), ...Object.keys(detailDocument.entities)]
+        .map((id) => [id, { x: 0, y: 0, width: 400, height: 300, positioning: 'absolute' as const }]),
+    ),
+    diagnostics: [],
+  }
+  return { navigation, pageLoader, pages, registry: pageRegistry, pageSnapshot }
 }
 
 describe('OpenSpec: compose-preview / 受控 Preview Dialog（页面预览）', () => {
@@ -363,6 +543,73 @@ describe('OpenSpec: compose-preview / 受控 Preview Dialog（页面预览）', 
     })
     expect(screen.getAllByRole('option').map((option) => option.getAttribute('value')))
       .toContain('detail-alt')
+  })
+
+  it('OpenSpec: compose-preview / 受控 Preview Dialog / 场景名取自当前预览的文档', async () => {
+    const { navigation, pageLoader, registry: pageRegistry } = pageModeFixture()
+    render(
+      <ComposePreviewDialog
+        navigation={navigation}
+        open
+        pageLoader={pageLoader}
+        registry={pageRegistry}
+        onOpenChange={vi.fn()}
+      />,
+    )
+
+    const cta = await screen.findByRole('button', { name: 'cta' })
+    await act(async () => { fireEvent.click(cta) })
+    // 名字必须来自目标页面的文档。读成宿主正在编辑的那一份时这里会退化成裸 id。
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: '详情主场景' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('option', { name: '详情副场景' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: compose-preview / 受控 Preview Dialog / 页面预览内跳转（过程中不出现目标不存在）', async () => {
+    const { navigation, pageLoader, registry: pageRegistry, pageSnapshot, pages } = pageModeFixture()
+    render(
+      <ComposePreviewDialog
+        layoutSnapshot={pageSnapshot}
+        livePage={{ pageKey: 'home', page: pages.home! }}
+        navigation={navigation}
+        open
+        pageLoader={pageLoader}
+        registry={pageRegistry}
+        onOpenChange={vi.fn()}
+      />,
+    )
+    const cta = await screen.findByRole('button', { name: 'cta' })
+    await act(async () => { fireEvent.click(cta) })
+    await waitFor(() => { expect(screen.getByText('Detail page')).toBeTruthy() })
+
+    // 在详情页显式选中第二块场景，再跳回首页——首页没有这块场景。
+    fireEvent.change(screen.getByRole('combobox', { name: 'Preview scene' }), {
+      target: { value: 'detail-alt' },
+    })
+    await waitFor(() => { expect(screen.getByText('Detail aside')).toBeTruthy() })
+
+    /*
+     * 这里必须观测**过程**而不是终态：错误态只存在于「PageHost 已经渲染新页面、而对话框的
+     * onPageChange 还没回灌」那一帧，它会被后续渲染盖掉，终态断言两种实现都能通过。
+     *
+     * 回的这一页是 live 页，因此 PageHost **不经过加载态**、同一帧就渲染出内容——而加载态
+     * 恰好会顺手把显式目标清掉。换句话说这个缺陷只在有 live 页时现形，而那正是编辑器里
+     * 每一次预览的形态。
+     */
+    const seen: string[] = []
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => {
+        record.addedNodes.forEach((node) => { seen.push(node.textContent ?? '') })
+      })
+    })
+    observer.observe(window.document.body, { childList: true, subtree: true })
+    try {
+      await act(async () => { navigation.reset('home') })
+      await waitFor(() => { expect(screen.getByRole('button', { name: 'cta' })).toBeTruthy() })
+      expect(seen.some((text) => text.includes('不存在或不是 Frame'))).toBe(false)
+    }
+    finally { observer.disconnect() }
   })
 
   it('未提供导航端口保持兼容', () => {

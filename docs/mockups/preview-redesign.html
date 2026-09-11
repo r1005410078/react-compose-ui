@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>预览的两种形态</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+<style>
+/* 取值直接来自 packages/ui-context/src/providers.tsx 的 dark 主题，
+   设计稿与产品共用同一套 token，落地时不需要再翻译一遍。 */
+:root {
+  --ws: #0a0c0f;
+  --panel: #101216;
+  --raised: #181b20;
+  --sunken: #15181d;
+  --control: #1d2025;
+  --hover: #292e36;
+  --selected: #1b395f;
+  --border: #303640;
+  --border-strong: #414853;
+  --text: #e6edf7;
+  --text-strong: #f4f7fb;
+  --muted: #8e98a8;
+  --subtle: #aeb7c4;
+  --accent: #3687ff;
+  --focus: #4d9cff;
+  --danger: #ff9c9c;
+  --amber: #e9a23b;
+  --ok: #4ec9a0;
+  --wire: #ff3b30;
+  --shadow: rgb(0 0 0 / 45%);
+
+  /* 预览台面：比编辑器桌面再暗一档，因为它不是 chrome，是"页面之外"。 */
+  --stage: #14161a;
+  --checker-a: #3a3f47;
+  --checker-b: #2b2f35;
+
+  --sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 56px 24px 96px;
+  background: var(--ws);
+  color: var(--text);
+  font: 400 14px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { max-width: 1060px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+
+/* ——— 文档级排版 ——— */
+.eyebrow {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1 {
+  margin: 14px 0 0;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+.lede { margin: 14px 0 0; max-width: 64ch; color: var(--subtle); font-size: 15px; }
+.lede b { color: var(--text-strong); font-weight: 600; }
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+h2 .num {
+  display: inline-block;
+  width: 22px;
+  font: 500 12px/1 var(--mono);
+  color: var(--muted);
+}
+.sub { margin: 0 0 22px 22px; max-width: 66ch; color: var(--muted); font-size: 13px; }
+section { display: flex; flex-direction: column; }
+
+code, .m { font-family: var(--mono); font-size: 0.88em; }
+code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--control);
+  color: var(--subtle);
+}
+b.k { color: var(--text-strong); font-weight: 600; }
+
+/* ——— 诊断清单 ——— */
+.findings { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.f {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 210px;
+  gap: 0 16px;
+  padding: 13px 16px;
+  background: var(--panel);
+  align-items: baseline;
+}
+.f-id { font: 500 11px/1.5 var(--mono); color: var(--muted); }
+.f-what { color: var(--text); }
+.f-what em { display: block; margin-top: 3px; font-style: normal; font-size: 12.5px; color: var(--muted); }
+.f-where { font: 400 11px/1.5 var(--mono); color: var(--subtle); word-break: break-all; text-align: right; }
+.f[data-sev="hi"] { box-shadow: inset 3px 0 0 var(--danger); }
+.f[data-sev="mid"] { box-shadow: inset 3px 0 0 var(--amber); }
+.f[data-sev="lo"] { box-shadow: inset 3px 0 0 var(--border-strong); }
+
+/* ——— 分工两栏 ——— */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.col[data-primary="true"] { border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--panel)), var(--panel) 58%); }
+.col h3 { margin: 0; font-size: 15px; font-weight: 650; color: var(--text-strong); display: flex; align-items: center; gap: 9px; }
+.tag {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font: 500 10px/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  background: var(--control);
+  color: var(--muted);
+}
+.tag[data-kind="auth"] { background: color-mix(in srgb, var(--accent) 22%, transparent); color: #9dc4ff; }
+.q { margin: 0; font-size: 13.5px; color: var(--text); }
+.q::before { content: "「"; color: var(--muted); }
+.q::after { content: "」"; color: var(--muted); }
+.kv { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 7px 12px; font-size: 12.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; color: var(--subtle); }
+.kv dd b { color: var(--text-strong); font-weight: 600; }
+
+/* ——— 设计稿外框 ——— */
+.shot { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--ws); box-shadow: 0 22px 60px var(--shadow); }
+.shot-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--raised); font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.05em; }
+.shot-bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+
+/* ——— 预览弹框本体 ——— */
+.dlg-host { position: relative; padding: 34px; background: repeating-linear-gradient(135deg, #0d0f13 0 9px, #0b0d11 9px 18px); }
+.dlg-host::after { position: absolute; inset: 0; content: ""; background: rgb(4 6 9 / 58%); backdrop-filter: blur(2px); }
+.dlg {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: 0 30px 90px rgb(0 0 0 / 62%);
+}
+
+.dlg-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--raised);
+}
+.crumb { display: flex; align-items: center; gap: 2px; }
+.crumb button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--subtle);
+  font: 500 12.5px/1 var(--sans);
+  cursor: pointer;
+}
+.crumb button:hover { background: var(--hover); color: var(--text-strong); }
+.crumb button[data-cur="true"] { color: var(--text-strong); }
+.crumb .sep { color: var(--muted); font-size: 12px; }
+.caret { width: 7px; height: 7px; border-right: 1.4px solid currentColor; border-bottom: 1.4px solid currentColor; transform: translateY(-2px) rotate(45deg); opacity: 0.72; }
+
+.head-spacer { flex: 1; }
+.tools { display: flex; align-items: center; gap: 4px; }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--control);
+  color: var(--subtle);
+  font: 500 12px/1 var(--sans);
+  cursor: pointer;
+}
+.pill:hover { background: var(--hover); color: var(--text-strong); }
+.pill .val { font-family: var(--mono); font-size: 11.5px; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); color: var(--text-strong); }
+.icon-btn[data-on="true"] { background: var(--selected); color: #cfe2ff; }
+.icon-btn svg, .pill svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.rule { width: 1px; height: 18px; margin: 0 3px; background: var(--border); }
+.swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border-strong); }
+.swatch[data-fill="checker"] { background-image: linear-gradient(45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--checker-a) 75%), linear-gradient(-45deg, var(--checker-b) 75%, var(--checker-a) 75%); background-size: 8px 8px; background-position: 0 0, 0 4px, 4px -4px, -4px 0; background-color: var(--checker-b); }
+
+/* 台面：安静、无网格、无渐晕之外的任何装饰 */
+.dlg-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 40px 40px 88px;
+  background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, var(--stage) 62%);
+}
+
+.artboard {
+  position: relative;
+  /* 真实页面没有圆角，因此这里一律不给圆角、不裁角；分离靠投影与 outline。 */
+  border-radius: 0;
+  outline: 1px solid rgb(255 255 255 / 9%);
+  box-shadow: 0 20px 52px rgb(0 0 0 / 55%);
+  /* 透明 = 棋盘。默认不补白底。 */
+  background-image: linear-gradient(45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--checker-a) 75%), linear-gradient(-45deg, var(--checker-b) 75%, var(--checker-a) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-color: var(--checker-b);
+}
+.size-pill {
+  position: absolute;
+  right: 0;
+  bottom: -26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgb(10 12 15 / 88%);
+  color: var(--subtle);
+  font: 500 11px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.size-pill b { color: var(--text-strong); font-weight: 600; }
+.size-pill .warn { color: var(--amber); }
+
+/* 时间轴：只在目标场景有动画时出现 */
+.scrub {
+  position: absolute;
+  right: 40px;
+  bottom: 14px;
+  left: 40px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(13 15 19 / 92%);
+  backdrop-filter: blur(6px);
+}
+.scrub .track { position: relative; flex: 1; height: 3px; border-radius: 2px; background: var(--border-strong); }
+.scrub .track i { position: absolute; top: 0; left: 0; width: 31%; height: 100%; border-radius: 2px; background: var(--accent); }
+.scrub .track u { position: absolute; top: 50%; left: 31%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #dce9ff; box-shadow: 0 0 0 1px rgb(0 0 0 / 45%); }
+.scrub .t { font: 500 11px/1 var(--mono); color: var(--subtle); font-variant-numeric: tabular-nums; }
+.scrub .t b { color: var(--text-strong); font-weight: 600; }
+
+/* ——— 画板内的示例大屏内容（1# 储能单元） ——— */
+.scene { position: relative; width: 100%; height: 100%; color: #dbe6f2; font-size: 11px; }
+.scene-title { position: absolute; top: 22px; left: 26px; font-size: 15px; font-weight: 650; letter-spacing: 0.01em; color: #f2f7ff; }
+.scene-title span { margin-left: 9px; font: 400 10px/1 var(--mono); color: #7f93ab; letter-spacing: 0.08em; }
+.kpis { position: absolute; top: 58px; left: 26px; display: flex; gap: 10px; }
+.kpi { width: 104px; padding: 9px 11px; border: 1px solid rgb(120 150 190 / 26%); border-radius: 4px; background: rgb(16 26 40 / 88%); }
+.kpi dt { font-size: 9px; letter-spacing: 0.06em; color: #7f93ab; }
+.kpi dd { margin: 4px 0 0; font: 600 16px/1 var(--mono); color: #eaf2ff; font-variant-numeric: tabular-nums; }
+.kpi dd small { font: 400 9px/1 var(--sans); color: #7f93ab; margin-left: 3px; }
+.oneline { position: absolute; right: 26px; bottom: 22px; }
+
+.legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 22px; padding: 18px 20px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 10px 10px; background: var(--panel); }
+.legend > div { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 12.5px; color: var(--subtle); }
+.pin {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #041022;
+  font: 700 10px/1 var(--mono);
+}
+.legend b { color: var(--text-strong); font-weight: 600; }
+.pin-abs { position: absolute; z-index: 3; box-shadow: 0 0 0 3px rgb(10 12 15 / 78%); }
+
+/* ——— 整屏预览稿 ——— */
+.full-host { position: relative; display: grid; place-items: center; height: 372px; padding: 30px; background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, var(--stage) 62%); }
+.floatbar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: rgb(14 17 21 / 94%);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 58%);
+}
+.floatbar .rule { height: 20px; }
+.floatbar .crumb { position: relative; }
+.back-btn { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 7px; border: 0; border-radius: 7px; background: var(--selected); color: #d6e6ff; font: 500 12px/1 var(--sans); cursor: pointer; }
+.back-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rest-note { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 3px 9px; border-radius: 5px; background: rgb(10 12 15 / 8%); color: rgb(230 237 247 / 46%); font: 400 11px/1.5 var(--sans); }
+
+/* ——— 底色三连 ——— */
+.grounds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ground-card { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--panel); }
+.ground-card .cap { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--subtle); }
+.ground-card .cap b { color: var(--text-strong); font-weight: 600; }
+.ground-card .cap .m { color: var(--muted); }
+.ground-preview { display: grid; place-items: center; height: 128px; padding: 16px; background: var(--stage); }
+.mini {
+  width: 176px;
+  height: 99px;
+  outline: 1px solid rgb(255 255 255 / 9%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 45%);
+  position: relative;
+}
+.mini[data-g="checker"] { background-image: linear-gradient(45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--checker-a) 75%), linear-gradient(-45deg, var(--checker-b) 75%, var(--checker-a) 75%); background-size: 12px 12px; background-position: 0 0, 0 6px, 6px -6px, -6px 0; background-color: var(--checker-b); }
+.mini[data-g="white"] { background: #fff; }
+.mini[data-g="dark"] { background: #0b1220; }
+.mini-ink { position: absolute; inset: 0; }
+.mini-ink .t { position: absolute; top: 11px; left: 13px; font: 600 8px/1 var(--sans); color: #eaf2ff; }
+.mini[data-g="white"] .mini-ink .t { color: #eaf2ff; }
+.mini-ink .box { position: absolute; top: 26px; left: 13px; width: 52px; height: 26px; border: 1px solid rgb(120 150 190 / 40%); border-radius: 2px; background: rgb(16 26 40 / 88%); }
+
+/* ——— 重构结构 ——— */
+.arch { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.arch-full { grid-column: 1 / -1; }
+.node { padding: 14px 16px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+.node[data-core="true"] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--panel)), var(--panel) 62%); }
+.node h4 { margin: 0 0 8px; font: 600 13px/1.3 var(--sans); color: var(--text-strong); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.node h4 .m { font-weight: 400; font-size: 11px; color: var(--muted); }
+.node ul { margin: 0; padding-left: 16px; color: var(--subtle); font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+.node ul li::marker { color: var(--muted); }
+
+/* ——— 落地顺序 ——— */
+.steps { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--border); }
+.step { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 13px 16px; background: var(--panel); }
+.step-n { font: 600 12px/1.5 var(--mono); color: var(--accent); }
+.step-b { color: var(--text); font-size: 13px; }
+.step-b em { display: block; margin-top: 3px; font-style: normal; font-size: 12px; color: var(--muted); }
+.step-t { font: 500 11px/1.5 var(--mono); color: var(--muted); white-space: nowrap; }
+
+
+/* ——— 调研对照 ——— */
+.research { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rc { padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.rc[data-kind="keep"] { box-shadow: inset 3px 0 0 var(--ok); }
+.rc[data-kind="diverge"] { box-shadow: inset 3px 0 0 var(--accent); }
+.rc h4 { margin: 0 0 10px; font: 600 13px/1.3 var(--sans); color: var(--text-strong); display: flex; align-items: center; gap: 8px; }
+.rc h4 .m { font: 400 11px/1 var(--mono); color: var(--muted); }
+.rc ol, .rc ul { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--subtle); }
+.rc li::marker { color: var(--muted); }
+.rc li b { color: var(--text-strong); font-weight: 600; }
+.srcs { margin-top: 12px; font-size: 11.5px; color: var(--muted); }
+.srcs a { color: var(--subtle); text-decoration: none; border-bottom: 1px solid var(--border-strong); }
+.srcs a:hover { color: var(--text-strong); }
+
+/* ——— 两个问题 ——— */
+.two-q { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.qcard { padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); display: flex; flex-direction: column; gap: 10px; }
+.qcard .qh { font: 600 14px/1.3 var(--sans); color: var(--text-strong); }
+.qcard .qh small { display: block; margin-top: 4px; font: 400 12px/1.4 var(--sans); color: var(--muted); }
+.qcard .qbits { display: flex; flex-wrap: wrap; gap: 6px; }
+.bit { padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--control); font: 500 11.5px/1.5 var(--sans); color: var(--subtle); }
+.qcard .qeff { font-size: 12.5px; color: var(--subtle); }
+.qcard .qeff b { color: var(--text-strong); font-weight: 600; }
+.verdict { margin-top: 12px; padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 10px; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--panel)), var(--panel) 66%); font-size: 13px; color: var(--text); }
+.verdict b { color: var(--text-strong); font-weight: 650; }
+
+/* ——— 屏幕尺寸菜单 ——— */
+.menu {
+  position: absolute;
+  z-index: 6;
+  width: 268px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--raised);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 62%);
+}
+.menu-h { padding: 7px 9px 5px; font: 500 10px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.menu-sep { height: 1px; margin: 5px 3px; background: var(--border); }
+.mi {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  gap: 9px;
+  align-items: center;
+  padding: 6px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.mi:hover { background: var(--hover); }
+.mi[data-cur="true"] { background: var(--selected); }
+.mi .tick { color: var(--accent); font-size: 11px; }
+.mi[data-cur="true"] .tick { color: #cfe2ff; }
+.mi .res { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.mi .nm { font-size: 11.5px; color: var(--muted); }
+.mi .ar { font: 400 11px/1 var(--mono); color: var(--muted); min-width: 40px; text-align: right; }
+.mi[data-cur="true"] .nm, .mi[data-cur="true"] .ar { color: #a8c6f0; }
+.mi[data-plain="true"] { grid-template-columns: 16px 1fr auto; color: var(--subtle); }
+
+.numfield {
+  display: inline-grid;
+  min-width: 54px;
+  height: 28px;
+  padding: 0 7px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--control);
+  color: var(--text-strong);
+  font: 500 11.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.numsep { color: var(--muted); font-size: 11px; }
+
+/* ——— 视图缩放（台面左下角） ——— */
+.zoomctl {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(13 15 19 / 92%);
+}
+.zoomctl button { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: var(--subtle); font: 500 13px/1 var(--sans); cursor: pointer; }
+.zoomctl button:hover { background: var(--hover); color: var(--text-strong); }
+.zoomctl .z { min-width: 46px; padding: 0 4px; text-align: center; font: 500 11.5px/1 var(--mono); color: var(--text-strong); font-variant-numeric: tabular-nums; }
+
+/* ——— 拖动吸附示意 ——— */
+.dragfig { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.dragpane { position: relative; display: grid; place-items: center; height: 268px; padding: 34px; background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, var(--stage) 62%); }
+.dragpane .tagline { position: absolute; top: 12px; left: 14px; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; color: var(--muted); }
+.screen {
+  position: relative;
+  outline: 1px solid rgb(255 255 255 / 9%);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 50%);
+  background: #0b1220;
+}
+.ghost { position: absolute; border: 1px dashed rgb(230 237 247 / 28%); pointer-events: none; }
+.handle { position: absolute; right: -4px; bottom: -4px; width: 9px; height: 9px; border: 1.4px solid #0a0c0f; border-radius: 2px; background: #dce9ff; }
+.handle[data-snapped="true"] { background: var(--amber); }
+.snapmark { position: absolute; width: 15px; height: 15px; border: 1.6px solid var(--amber); pointer-events: none; }
+.readout {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: rgb(10 12 15 / 94%);
+  font: 500 11px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.readout[data-snapped="true"] { border-color: color-mix(in srgb, var(--amber) 62%, var(--border)); }
+.readout .nm { color: var(--amber); }
+.readout .nm[data-scene="true"] { color: #9dc4ff; }
+.readout .dim { color: var(--muted); }
+.cursor { position: absolute; z-index: 5; width: 14px; height: 18px; pointer-events: none; }
+.letterbox { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, #232833 0 5px, #12151b 5px 10px); }
+.lb-tag { position: absolute; left: 50%; transform: translateX(-50%); font: 400 9px/1 var(--mono); color: rgb(230 237 247 / 52%); }
+
+/* ——— 场景 / 组件 菜单对照 ——— */
+.menufig { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.menupane { display: flex; flex-direction: column; gap: 14px; align-items: center; padding: 22px 18px 24px; background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, var(--stage) 62%); }
+.menupane .tagline { align-self: flex-start; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; color: var(--muted); }
+.menupane .menu { position: static; width: 272px; }
+.menupane .note { align-self: stretch; font-size: 12px; color: var(--subtle); }
+.menupane .note b { color: var(--text-strong); font-weight: 600; }
+.mi .off { font-size: 11.5px; color: var(--amber); }
+
+/* ——— 对照表 ——— */
+.cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cmp th, .cmp td { padding: 11px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.cmp thead th { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--raised); }
+.cmp tbody th { width: 122px; font-weight: 500; color: var(--text-strong); }
+.cmp td { color: var(--subtle); }
+.cmp td b { color: var(--text-strong); font-weight: 600; }
+.cmp tr:last-child th, .cmp tr:last-child td { border-bottom: 0; }
+.cmp-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+
+/* ——— 吸附规则 ——— */
+.rules { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--border); }
+.rule-row { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 16px; padding: 12px 16px; background: var(--panel); align-items: baseline; }
+.rule-row dt { font: 500 12px/1.5 var(--sans); color: var(--text-strong); }
+.rule-row dd { margin: 0; font-size: 12.5px; color: var(--subtle); }
+.rule-row dd b { color: var(--text-strong); font-weight: 600; }
+
+footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+
+@media (max-width: 860px) {
+  .split, .grounds, .arch, .research, .two-q, .dragfig { grid-template-columns: 1fr; }
+  .legend { grid-template-columns: 1fr; }
+  .f { grid-template-columns: 26px minmax(0, 1fr); }
+  .f-where { grid-column: 2; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="eyebrow">@compose-ui/preview · 设计稿</div>
+  <h1>预览的两种形态</h1>
+  <p class="lede">
+    今天只有一条预览入口——那个模态弹框，而它同时在做两件互相冲突的事：既想当<b>随手一看</b>，
+    又想当<b>交付长什么样</b>。更根上的一处是：它那个缩放下拉把<b>「这块屏多大」</b>和
+    <b>「我把它看多大」</b>混成了一个控件——UE4 的 UMG Designer 把这两件事分给了两个控件，
+    分开之后「适应 68%」这个说法自己就不成立了。下面先看调研，再把两个问题拆开，
+    然后是九条各有出处的保真度缺陷与两个形态的设计稿。
+  </p>
+</header>
+
+<section>
+  <h2><span class="num">01</span>调研：UE4 的 UMG Designer 怎么做</h2>
+  <p class="sub">它是「在编辑器里预览一块固定分辨率的界面」这个问题被磨得最久的一份答案，先照着盘一遍。</p>
+  <div class="research">
+    <div class="rc" data-kind="keep">
+      <h4>照抄 <span class="m">四条</span></h4>
+      <ol>
+        <li><b>右上角一个 Screen Size 下拉</b>，每一项是<b>描述 + 宽 + 高 + 宽高比</b>四样，不是一串裸数字。</li>
+        <li><b>直接拖画布边角就能改预览分辨率</b>，拖动中<b>吸附到清单里的分辨率</b>——不必先去开菜单。</li>
+        <li><b>Custom</b> 手输任意宽高；清单是快捷入口，不是取值约束。</li>
+        <li><b>当前分辨率与缩放常驻显示</b>在 Designer 上，不用点开任何东西才知道自己在看多大。</li>
+      </ol>
+    </div>
+    <div class="rc" data-kind="diverge">
+      <h4>有意偏离 <span class="m">五条，各自有理由</span></h4>
+      <ul>
+        <li><b>不按设备类别分组</b>。UE4 要覆盖手机／平板／主机／电视，分组是必需的；我们的用户全在工控与大屏上，分完只剩一组，那就是噪音。清单是一条扁平列表。</li>
+        <li><b>吸附目标是整份分辨率，不是两条独立的轴</b>。仓库已经就这件事判过一次：「宽命中而高不命中不算匹配——预设是一整个分辨率」。因此它是尺寸空间里的一个<b>二维点</b>（特征点捕捉），不是两条对齐参考线。</li>
+        <li><b>场景自身的尺寸是最高优先级的吸附目标</b>。UE4 的 widget 分辨率无关，没有「自己的尺寸」这回事；我们的场景有，而「拖回 1:1」正是最常要落的那一次。优先级<b>严格先于距离</b>，与既有捕捉次序同一条规矩。</li>
+        <li><b>吸附容差取屏幕距离，不取分辨率差</b>。与极轴那条逐字相同的理由：同样 40px 的分辨率差，在 25% 与 100% 视图下是完全不同的手感。复用既有的 <code>snapRadius</code>。</li>
+        <li><b>不做 ini 扩展</b>。UE4 的清单要追每年的新机型，我们这六档十年没动；真要扩就改 core 那个常量，不为它造一层配置。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="srcs">
+    来源：<a href="https://allarsblog.com/2017/10/01/custom-ue4-umg-screen-sizes-configuration/">Allar · Custom UE4 UMG "Screen Sizes" Configuration</a> ·
+    <a href="https://forums.unrealengine.com/t/how-to-set-up-custom-canvas-panel-resolution-to-snap-to/263654">Epic 论坛 · canvas panel resolution to snap to</a> ·
+    <a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-best-practices-in-unreal-engine">Epic · UMG Best Practices</a> ·
+    <a href="https://unreal-garden.com/tutorials/ui-resolution/">Unreal Garden · Resolution-independent UIs</a>
+  </p>
+</section>
+
+<section>
+  <h2><span class="num">02</span>一个控件里混着两个问题</h2>
+  <p class="sub">这是「适应 68%」读起来别扭的根因。两个问题的答案互不相干，却共用了一个下拉。</p>
+  <div class="two-q">
+    <div class="qcard">
+      <div class="qh">这块屏多大？<small>被预览的那块屏幕的分辨率</small></div>
+      <div class="qbits"><span class="bit">头部 · 屏幕尺寸下拉</span><span class="bit">拖画布边角（吸附）</span><span class="bit">自定义宽高</span></div>
+      <div class="qeff">改变<b>被预览的东西</b>：屏幕变成 1366 × 768 之后，1920 × 1080 的场景就要按 <code>fit</code> 映射进去、四周留黑边——这正是它在现场那台显示器上的样子。</div>
+    </div>
+    <div class="qcard">
+      <div class="qh">我把它看多大？<small>我在对话框里的取景</small></div>
+      <div class="qbits"><span class="bit">台面左下角 · 缩放</span><span class="bit">滚轮</span><span class="bit">Ctrl + 0 回 100%</span></div>
+      <div class="qeff">只改变<b>我的取景</b>，不改变任何被预览的东西。台面因此复用 <code>core</code> 的视口代数——与两块画布同一个底座，滚轮、缩放、平移一行新概念都不引入。</div>
+    </div>
+  </div>
+  <div class="verdict">
+    <b>「适应」既不是前者也不是后者，它是一个动作</b>——按一下，把当前这块屏取景到窗口里，与画布上的「适配选择／适配容器」同一类。
+    做成一个常驻档位，就等于让用户永远停在一个非 1:1 的状态里还不知道。所以它从下拉里移出去，变成缩放控件旁的一个按钮，以及双击尺寸胶囊的那一下。
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span>为什么现在不符</h2>
+  <p class="sub">红条是保真度缺陷（用户看到的不是真的），琥珀条是功能缺陷（会看到错的），灰条是打磨。</p>
+  <div class="findings">
+
+    <div class="f" data-sev="hi">
+      <div class="f-id">F1</div>
+      <div class="f-what">画板与 Preview 根都被强制刷成白底
+        <em>场景默认背景是 <code>transparent</code>（core 的显式决定：「编辑器不替用户填一个他迟早要改的颜色」）。于是同一块场景在画布上是深色、在预览里是白色，而用户无从判断哪个是真的。这就是「背景默认色不对」。</em>
+      </div>
+      <div class="f-where">preview-dialog/styles.css<br />__artboard { background: #fff }</div>
+    </div>
+
+    <div class="f" data-sev="hi">
+      <div class="f-id">F2</div>
+      <div class="f-what"><code>zoom: 0.75</code> 会在该比例下<b class="k">重新布局</b>
+        <em>文字度量、亚像素取整与换行位置都跟 100% 不是同一份结果——缩小的预览与真实输出<b class="k">在像素上确实不同</b>。要看起来一样只能先按真实尺寸布局、再整体 <code>transform: scale()</code>。</em>
+      </div>
+      <div class="f-where">compose-preview-dialog.tsx<br />--compose-preview-dialog-scale</div>
+    </div>
+
+    <div class="f" data-sev="hi">
+      <div class="f-id">F3</div>
+      <div class="f-what">默认缩放是 75%，而且屏幕上没有任何地方写着这件事
+        <em>用户以为自己在看 1:1。缩放可以不是 1:1，但<b class="k">必须印出来</b>。</em>
+      </div>
+      <div class="f-where">useState&lt;PreviewDialogScale&gt;('0.75')</div>
+    </div>
+
+    <div class="f" data-sev="hi">
+      <div class="f-id">F4</div>
+      <div class="f-what">画板 12px 圆角 + <code>overflow: hidden</code> + 白色 1px 外圈
+        <em>真实页面四个角是直的。圆角把角上的真实内容切掉了，白外圈还在深色场景边缘加了一道不存在的亮边。</em>
+      </div>
+      <div class="f-where">__artboard { border-radius: 12px }</div>
+    </div>
+
+    <div class="f" data-sev="hi">
+      <div class="f-id">F5</div>
+      <div class="f-what">对话框硬上限 1280×820，台面还有 <code>clamp(20px,4vw,56px)</code> 内边距
+        <em>一块 1920×1080 的场景在 100% 下根本放不进去，只能滚动着看。而它的交付形态是整屏。</em>
+      </div>
+      <div class="f-where">.compose-preview-dialog { height: min(820px, 100%) }</div>
+    </div>
+
+    <div class="f" data-sev="mid">
+      <div class="f-id">F6</div>
+      <div class="f-what">场景选择器的名字读错了文档
+        <em>列表来自当前页（<code>activeDocument</code>），名字却从<b class="k">正在编辑的那份文档</b>取。跳到别的页面后整列退化成裸 id。</em>
+      </div>
+      <div class="f-where">composeDocument?.entities[id]?.name</div>
+    </div>
+
+    <div class="f" data-sev="mid">
+      <div class="f-id">F7</div>
+      <div class="f-what">跳转后闪一帧「Preview 目标 X 不存在或不是 Frame」
+        <em>对话框把 <code>frameId</code> 显式传给 PageHost，而显式 id <b class="k">按约定不回退</b>；<code>hostPage</code> 要等 effect 才更新，于是新页面 ready 的那一帧拿到的是上一页的 frameId。</em>
+      </div>
+      <div class="f-where">resolvePreviewFrameId(document, frameId, …)</div>
+    </div>
+
+    <div class="f" data-sev="mid">
+      <div class="f-id">F10</div>
+      <div class="f-what">打开组件再按预览，看到的是上一个<b class="k">页面</b>
+        <em>页面模式一旦成立就<b class="k">静默压过</b>传入的 <code>document</code>（<code>activeDocument = hostPage.page?.document</code>）。而宿主手上是两份互不相干的会话事实——<code>activePage</code> 与 <code>activeComponent</code> 各自独立，打开组件不会清掉页面会话，于是画布上是组件、预览里是页面。缺的是「画布上现在是哪一份文档」这**一个**答案。</em>
+      </div>
+      <div class="f-where">compose-preview-dialog.tsx<br />const pageMode = navigation !== undefined &amp;&amp; …</div>
+    </div>
+
+    <div class="f" data-sev="lo">
+      <div class="f-id">F8</div>
+      <div class="f-what">场景选择器那套 CSS 是死的
+        <em>样式写的是 <code>button[aria-pressed]</code>，markup 早就是 <code>&lt;select&gt;</code>。同一行里左边是浏览器原生控件、右边是定制控件。</em>
+      </div>
+      <div class="f-where">.compose-preview-dialog__target button</div>
+    </div>
+
+    <div class="f" data-sev="lo">
+      <div class="f-id">F9</div>
+      <div class="f-what">协议里的 <code>fit</code> / <code>alignment</code> 从没被用上；页脚恒占一行讲「按 Esc 关闭」
+        <em>对话框绕过 <code>fit</code> 自己用 <code>zoom</code>；那句提示只在第一次有用，却永久占着高度。</em>
+      </div>
+      <div class="f-where">ComposePreviewProps.fit</div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span>两个形态，各自只回答一个问题</h2>
+  <p class="sub">判据是<b class="k">这一次预览要回答哪个问题</b>。今天的弹框两个都想答，于是两个都答得不准。</p>
+  <div class="split">
+    <div class="col">
+      <h3>弹框 <span class="tag">取景</span></h3>
+      <p class="q">我刚改的这个，动起来对不对？</p>
+      <dl class="kv">
+        <dt>默认</dt><dd>适应窗口，<b>并把当前比例印在画板角上</b></dd>
+        <dt>它有</dt><dd>时间轴与逐帧拖动、场景/页面切换、Esc 即回</dd>
+        <dt>它没有</dt><dd>整屏、1:1 的真实取景（放不下就是放不下）</dd>
+        <dt>不卸载</dt><dd>编辑上下文原样留着，选区与撤销栈不动</dd>
+      </dl>
+    </div>
+    <div class="col" data-primary="true">
+      <h3>整屏 <span class="tag" data-kind="auth">权威</span></h3>
+      <p class="q">交付出去之后，它长什么样？</p>
+      <dl class="kv">
+        <dt>默认</dt><dd><b>1:1、整屏、零 chrome</b>，静息态一个按钮都不画</dd>
+        <dt>它有</dt><dd>真实跳转、真实滚动、真实像素；F11 直接投到大屏上</dd>
+        <dt>它没有</dt><dd>时间轴刮擦——那是编辑动作，不是交付形态</dd>
+        <dt>不卸载</dt><dd><b>同标签页路由</b>，编辑器留在原地</dd>
+      </dl>
+    </div>
+  </div>
+  <p class="sub" style="margin: 16px 0 0;">
+    整屏<b class="k">必须是同标签页路由</b>，不能是新开一个标签页：既有硬规则是「页面预览必须包含未保存的改动」，
+    而新标签页读不到编辑器手上的 live 文档，它只能拿到上次保存的那一份。
+    「在新标签页打开」仍然给，但它是次级动作，并且要先落盘——这一点在按钮上说清楚，而不是静默地给出旧内容。
+  </p>
+</section>
+
+<section>
+  <h2><span class="num">05</span>设计稿 · 弹框</h2>
+  <p class="sub">头部一行收掉今天的三行（标题行 + 目标行 + 页脚）；台面安静、无网格；画板不切角、不补底。</p>
+
+  <div class="shot">
+    <div class="shot-bar"><span class="dot"></span>ComposePreviewDialog · 取景形态</div>
+    <div class="dlg-host">
+      <div class="dlg">
+
+        <div class="dlg-head">
+          <nav class="crumb">
+            <button type="button">储能总览<span class="caret"></span></button>
+            <span class="sep">›</span>
+            <button type="button" data-cur="true">1# 储能单元<span class="caret"></span></button>
+          </nav>
+          <div class="head-spacer"></div>
+          <div class="tools">
+            <button class="pill" type="button" title="页面底色">
+              <span class="swatch" data-fill="checker"></span><span class="val">透明</span><span class="caret"></span>
+            </button>
+            <button class="pill" type="button" title="屏幕尺寸">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="1.5" /><path d="M9 20h6" /></svg>
+              <span class="val">1920 × 1080 · Full HD · 16:9</span><span class="caret"></span>
+            </button>
+            <span class="numfield">1920</span><span class="numsep">×</span><span class="numfield">1080</span>
+            <button class="icon-btn" type="button" title="横竖互换">
+              <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3" /></svg>
+            </button>
+            <span class="rule"></span>
+            <button class="icon-btn" type="button" title="整屏预览">
+              <svg viewBox="0 0 24 24"><path d="M14 4h6v6" /><path d="M20 4 13 11" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>
+            </button>
+            <span class="rule"></span>
+            <button class="icon-btn" type="button" title="关闭（Esc）">
+              <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="dlg-stage">
+          <span class="pin pin-abs" style="top: -16px; left: 14px;">1</span>
+          <span class="pin pin-abs" style="top: -16px; right: 354px;">2</span>
+          <span class="pin pin-abs" style="top: -16px; right: 48px;">4</span>
+
+
+          <div class="artboard" style="width: 560px; height: 315px;">
+            <span class="pin pin-abs" style="top: -9px; left: -9px;">5</span>
+            <div class="scene">
+              <div class="scene-title">1# 储能单元 · 一次接线<span>PCS-01</span></div>
+              <div class="kpis">
+                <dl class="kpi"><dt>SOC</dt><dd>76.4<small>%</small></dd></dl>
+                <dl class="kpi"><dt>有功</dt><dd>-1240<small>kW</small></dd></dl>
+                <dl class="kpi"><dt>电池簇</dt><dd>12<small>/12</small></dd></dl>
+              </div>
+              <svg class="oneline" width="196" height="132" viewBox="0 0 196 132" aria-label="一次接线示意">
+                <g stroke="#ff3b30" stroke-width="2" fill="none" stroke-linecap="butt">
+                  <path d="M24 16v22" /><path d="M24 62v24" /><path d="M24 110v10h148" /><path d="M172 120V78" />
+                </g>
+                <g stroke="#8fa6c0" stroke-width="1.4" fill="rgb(16 26 40 / 92%)">
+                  <rect x="12" y="38" width="24" height="24" rx="2" />
+                  <rect x="12" y="86" width="24" height="24" rx="2" />
+                  <rect x="150" y="42" width="44" height="36" rx="2" />
+                </g>
+                <g fill="#7f93ab" font-family="JetBrains Mono, monospace" font-size="8">
+                  <text x="42" y="54">QF1</text><text x="42" y="102">QS1</text><text x="156" y="36">PCS</text>
+                </g>
+                <g fill="#ff3b30"><circle cx="24" cy="16" r="2.6" /><circle cx="172" cy="78" r="2.6" /></g>
+              </svg>
+            </div>
+            <div class="size-pill"><b>1920 × 1080</b> · 场景原尺寸 · 1:1</div>
+          </div>
+
+          <div class="zoomctl">
+            <span class="pin pin-abs" style="top: -9px; left: -9px;">3</span>
+            <button type="button" title="缩小">−</button>
+            <span class="z">68%</span>
+            <button type="button" title="放大">+</button>
+            <button type="button" title="适应窗口">
+              <svg viewBox="0 0 24 24" style="width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5" /></svg>
+            </button>
+          </div>
+
+          <div class="scrub" style="left: 138px;">
+            <span class="pin pin-abs" style="top: -9px; left: -9px;">6</span>
+            <button class="icon-btn" type="button" style="width: 22px; height: 22px;">
+              <svg viewBox="0 0 24 24"><path d="M8 5.5v13M16 5.5v13" /></svg>
+            </button>
+            <span class="t"><b>1.24</b>s</span>
+            <span class="track"><i></i><u></u></span>
+            <span class="t">4.00s · 循环</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="legend">
+      <div style="grid-column: 1 / -1;"><span class="pin" style="background: var(--amber);">!</span><span><b>v1 用原生 <code>&lt;select&gt;</code> 加两个数字输入，不做自绘菜单。</b><code>@compose-ui/preview</code> 不依赖组件库，自绘一套 WAI-ARIA 菜单在这个包里必然是半成品，而仓库明写「不能只加 ARIA 属性而缺少交互语义」。原生下拉白拿全部键盘语义，<code>&lt;optgroup&gt;</code> 承担两组分组，每一项的三段信息合成一行文字；<b>宽高输入就是自定义入口</b>——它同时是读数与编辑器，因此菜单里不再需要一个「自定义…」动作。下面第 07 节画的是这两组的<b>内容</b>，不是它的渲染形态。</span></div>
+      <div><span class="pin">1</span><span><b>面包屑就是目标</b>：页面 › 场景，两级都可点开切换。页面那级只在宿主给了导航端口时出现。顺手修掉 F6——名字从当前页的文档取。</span></div>
+      <div><span class="pin">2</span><span><b>屏幕尺寸</b>：下拉、宽高输入、横竖互换与拖角是同一份状态的四个入口。清单直接读 core 的 <code>COMPOSE_SCENE_SIZE_PRESETS</code>，与画布上尺寸胶囊、Inspector 是同一份——三处各写一份必然漂移。<b>场景自己的尺寸单独列在最上面一组</b>，因为「回到 1:1」是最常要的那一次点击。宽高比是算出来的，不进协议。</span></div>
+      <div><span class="pin">3</span><span><b>视图缩放只改取景</b>，不改被预览的任何东西。台面复用 <code>core</code> 的视口代数：滚轮缩放、空格平移、<code>Ctrl+0</code> 回 100%。最右那一颗是「适应窗口」——它是<b>动作</b>而不是档位。</span></div>
+      <div><span class="pin">4</span><span><b>「整屏预览」在这里</b>：两个形态之间唯一的桥。点它切到整屏，Esc 回到弹框原来的场景、屏幕尺寸与播放头。</span></div>
+      <div><span class="pin">5</span><span><b>画板不再撒谎</b>：无圆角、无白外圈、不补底色；透明处画棋盘。尺寸胶囊常驻<b>屏幕尺寸</b>，与场景尺寸一致时写「场景原尺寸 · 1:1」，不一致时改写映射关系（见下一节）。</span></div>
+      <div><span class="pin">6</span><span><b>时间轴只在目标场景有动画时出现</b>。今天只有一个播放按钮，看不出播到哪儿、也没法回到某一刻。动画按场景独立，因此它跟着面包屑的场景走。</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">06</span>拖边角改屏幕尺寸 · 吸附</h2>
+  <p class="sub">不必先开菜单：直接抓画板的角往里拖，经过清单里的分辨率时吸住，读数转琥珀并写出它的通名。</p>
+
+  <div class="dragfig">
+    <div class="dragpane">
+      <div class="tagline">拖动中 · 吸附命中</div>
+      <div class="screen" style="width: 178px; height: 100px;">
+        <div class="ghost" style="top: 0; left: 0; width: 250px; height: 141px;"></div>
+        <span class="lb-tag" style="top: -15px; left: 254px; transform: none; white-space: nowrap;">场景 1920 × 1080</span>
+        <div class="scene">
+          <div class="scene-title" style="top: 9px; left: 11px; font-size: 8px;">1# 储能单元<span style="font-size: 6px; margin-left: 5px;">PCS-01</span></div>
+        </div>
+        <span class="snapmark" style="right: -7px; bottom: -7px;"></span>
+        <span class="handle" data-snapped="true"></span>
+        <svg class="cursor" style="right: -12px; bottom: -16px;" viewBox="0 0 14 18" aria-hidden="true">
+          <path d="M1 1v14l3.4-3.4h5z" fill="#f4f7fb" stroke="#0a0c0f" stroke-width="1.2" stroke-linejoin="round" />
+        </svg>
+        <span class="readout" data-snapped="true" style="right: -132px; bottom: -44px;">1366 × 768 <span class="dim">~16:9</span></span>
+      </div>
+    </div>
+
+    <div class="dragpane">
+      <div class="tagline">松手之后 · 屏幕 ≠ 场景</div>
+      <div class="screen" style="width: 240px; height: 150px; background: #05070b;">
+        <div class="letterbox" style="top: 0; height: 7px;"></div>
+        <div class="letterbox" style="bottom: 0; height: 7px;"></div>
+        <span class="lb-tag" style="top: -1px;">留黑</span>
+        <div style="position: absolute; top: 7px; right: 0; bottom: 7px; left: 0; background: #0b1220;">
+          <div class="scene">
+            <div class="scene-title" style="top: 11px; left: 13px; font-size: 9px;">1# 储能单元 · 一次接线<span style="font-size: 7px; margin-left: 6px;">PCS-01</span></div>
+            <div class="kpis" style="top: 34px; left: 13px; gap: 6px;">
+              <dl class="kpi" style="width: 60px; padding: 5px 7px;"><dt style="font-size: 7px;">SOC</dt><dd style="font-size: 11px;">76.4<small style="font-size: 7px;">%</small></dd></dl>
+              <dl class="kpi" style="width: 60px; padding: 5px 7px;"><dt style="font-size: 7px;">有功</dt><dd style="font-size: 11px;">-1240</dd></dl>
+              <dl class="kpi" style="width: 60px; padding: 5px 7px;"><dt style="font-size: 7px;">电池簇</dt><dd style="font-size: 11px;">12<small style="font-size: 7px;">/12</small></dd></dl>
+            </div>
+          </div>
+        </div>
+        <div class="size-pill" style="right: 0; bottom: -26px;">屏幕 <b>1440 × 900</b> ← 场景 1920 × 1080 · 等比 <b>75%</b></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="sub" style="margin: 18px 0 10px;">
+    屏幕与场景不一致时，场景按 <code>fit</code> 映射进屏幕——<b class="k">协议里那个从没被用上的 <code>fit</code> 终于被用上了</b>（修 F9）。
+    默认 <code>contain</code>：等比放进去、居中、剩下的部分画页面底色。这就是它在现场那台 16:10 显示器上真实的样子，而不是一个百分比读数。
+  </p>
+
+  <dl class="rules">
+    <div class="rule-row"><dt>吸附目标</dt><dd><b>场景自身尺寸 &gt; 清单里的六档</b>。优先级<b>严格先于距离</b>：场景尺寸更远也赢——「回到 1:1」不该被一档碰巧更近的分辨率抢走。与既有捕捉次序同一条规矩。</dd></div>
+    <div class="rule-row"><dt>判据</dt><dd><b>屏幕距离</b>，复用既有的 <code>snapRadius</code>（按视图缩放折算），<b>不是分辨率差</b>。同样 40px 的分辨率差，在 25% 与 100% 视图下手感天差地别——与极轴用屏幕距离而不是角度差是逐字相同的理由。</dd></div>
+    <div class="rule-row"><dt>粒度</dt><dd><b>整份分辨率</b>，是尺寸空间里的一个二维点，不是两条独立的轴参考线。沿用 <code>findComposeSceneSizePreset</code> 已经判过的那条：「宽命中而高不命中不算匹配」。</dd></div>
+    <div class="rule-row"><dt>记号</dt><dd>命中时手柄与读数<b>转琥珀并套一个方框</b>，同时写出通名；没命中就是普通读数。与画布上的捕捉标记同形同色，<b>形状先分开、颜色再分开</b>。</dd></div>
+    <div class="rule-row"><dt>锚定</dt><dd><b>对角锚定</b>：拖右下角时左上角不动，与画布上 resize 手柄逐字相同的语义——用户已经会了。松手<b>不重新居中</b>，那会让屏幕在松手瞬间跳一下。<code>Shift</code> 锁宽高比，<code>Alt</code> 从中心缩放，两条都是通用手势，不为它们造新词。</dd></div>
+    <div class="rule-row"><dt>回到原尺寸</dt><dd>双击尺寸胶囊 = 回到场景尺寸并重新居中，与菜单最上面那一组是同一个动作。</dd></div>
+    <div class="rule-row"><dt>不写文档</dt><dd><b>预览里拖的是屏幕，不是场景。</b><code>ComposePreviewDialog</code> 不得改动传入的 <code>ComposeDocument</code>，这是既有约束。要改场景尺寸请去画布上的尺寸胶囊——那一条走 <code>entity.frame.size.set</code>，进撤销历史。两个长得像的矩形做不同的事，必须在屏幕上分得开：预览的画板<b>没有八个手柄，只有一个角</b>，读数也一直写着「屏幕」。</dd></div>
+  </dl>
+
+  <div class="node" style="margin-top: 14px;">
+    <h4>两个待定 <span class="m">需要你拍板</span></h4>
+    <ul>
+      <li><b class="k">要不要往清单里加拼接屏？</b>现有六档全是单屏（1280×720 … 3840×2160）。储能／光伏现场的大屏经常是 <code>3840 × 1080</code> 双拼、<code>5760 × 1080</code> 三拼，而这两档在任何通用清单里都没有。加它们要改 core 那个已被用例逐项断言的常量——判据是<b class="k">你们的客户现场到底有没有拼接屏</b>，这个我答不了。</li>
+      <li><b class="k">画布上的场景 resize 要不要也吸附到同一份清单？</b>同一套吸附数学、同一份清单、同一个读数，但那一条<b class="k">是文档编辑</b>（<code>entity.frame.size.set</code>，可撤销）。它与本节正交，可以单独排期。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">07</span>目标是组件时</h2>
+  <p class="sub">
+    组件<b class="k">不发布到屏幕上</b>，它被放进场景里当零件。所以第一组不叫「场景尺寸」，
+    而它几乎永远不会命中任何预设——组件根的尺寸是提取那一刻的<b class="k">选区包围盒</b>
+    （<code>createComponentExtractionPlan</code> 的 <code>safeBounds</code>），一个刀闸符号就是 88 × 132。
+  </p>
+
+  <div class="menufig">
+    <div class="menupane">
+      <div class="tagline">目标 = 场景</div>
+      <div class="menu">
+        <div class="menu-h">场景尺寸</div>
+        <div class="mi" data-cur="true"><span class="tick">✓</span><span class="res">1920 × 1080</span><span class="nm">Full HD</span><span class="ar">16:9</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-h">常见屏幕</div>
+        <div class="mi"><span class="tick"></span><span class="res">1280 × 720</span><span class="nm">HD</span><span class="ar">16:9</span></div>
+        <div class="mi"><span class="tick"></span><span class="res">1366 × 768</span><span class="nm"></span><span class="ar">~16:9</span></div>
+        <div class="mi"><span class="tick"></span><span class="res">2560 × 1440</span><span class="nm">QHD</span><span class="ar">16:9</span></div>
+        <div class="menu-sep"></div>
+        <div class="mi" data-plain="true"><span class="tick"></span><span>输入尺寸…</span><span class="ar">W × H</span></div>
+        <div class="mi" data-plain="true"><span class="tick">⇄</span><span>横竖互换</span><span class="ar">1080 × 1920</span></div>
+      </div>
+      <p class="note">场景<b>就是那块屏的全部内容</b>，因此换一块屏时它按 <code>contain</code> 等比填进去。</p>
+    </div>
+
+    <div class="menupane">
+      <div class="tagline">目标 = 组件</div>
+      <div class="menu">
+        <div class="menu-h">组件尺寸</div>
+        <div class="mi" data-cur="true"><span class="tick">✓</span><span class="res">88 × 132</span><span class="off">自定义</span><span class="ar">~2:3</span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-h">摆进这么大的屏里看</div>
+        <div class="mi"><span class="tick"></span><span class="res">1280 × 720</span><span class="nm">HD</span><span class="ar">16:9</span></div>
+        <div class="mi"><span class="tick"></span><span class="res">1366 × 768</span><span class="nm"></span><span class="ar">~16:9</span></div>
+        <div class="mi"><span class="tick"></span><span class="res">2560 × 1440</span><span class="nm">QHD</span><span class="ar">16:9</span></div>
+        <div class="menu-sep"></div>
+        <div class="mi" data-plain="true"><span class="tick"></span><span>输入尺寸…</span><span class="ar">W × H</span></div>
+      </div>
+      <p class="note">组件<b>只是屏上的一个零件</b>，因此换一块屏时它按 <code>none</code> 原大摆在中间——把一个 88 × 132 的符号拉伸去填满 1920 × 1080 是荒唐的。</p>
+    </div>
+  </div>
+
+  <p class="sub" style="margin: 18px 0 10px;">
+    上面两张图画的是<b class="k">两组的内容</b>；v1 把它们渲染成原生 <code>&lt;select&gt;</code> 的两个
+    <code>&lt;optgroup&gt;</code>，每一项合成一行文字（<code>1920 × 1080 · Full HD · 16:9</code>）。
+    真正的差别不在第一行的文案，在<b class="k">默认 <code>fit</code> 按目标种类分流</b>。其余三处跟着它走：
+  </p>
+
+  <div class="cmp-wrap">
+    <table class="cmp">
+      <thead>
+        <tr><th></th><th>目标 = 场景</th><th>目标 = 组件</th></tr>
+      </thead>
+      <tbody>
+        <tr><th>第一组标题</th><td>场景尺寸</td><td>组件尺寸</td></tr>
+        <tr><th>该项读作</th><td><code>1920 × 1080 · Full HD · 16:9</code><br />命中预设，有通名</td><td><code>88 × 132 · 自定义 · ~2:3</code><br /><b>查不到通名</b>，因此标自定义</td></tr>
+        <tr><th>默认 <code>fit</code></th><td><b>contain</b>：等比填满这块屏，四周留黑</td><td><b>none</b>：原大摆在屏幕中央</td></tr>
+        <tr><th>常见屏幕那组</th><td>换一块屏看这张大屏怎么缩</td><td>看这个符号<b>摆进大屏里有多小</b>——标签还读不读得清。今天要回答它只能先在页面上放一个实例</td></tr>
+        <tr><th>横竖互换</th><td>有：屏幕有方向</td><td><b>不出现</b>：88 × 132 换成 132 × 88 不是任何人会提的请求</td></tr>
+        <tr><th>尺寸胶囊</th><td><code>1920 × 1080 · 场景原尺寸 · 1:1</code></td><td><code>88 × 132 · 组件原尺寸 · 1:1</code><br />挑了屏之后：<code>屏幕 1920 × 1080 · 组件 88 × 132 · 原大</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="node" style="margin-top: 14px;">
+    <h4>两条推论 <span class="m">都是「不要为组件开特例」</span></h4>
+    <ul>
+      <li><b class="k">「自定义」是查表查不到的结果，不是组件的特例。</b>把场景设成 <code>1000 × 800</code> 时，场景预览的第一项同样读作自定义——<code>findComposeSceneSizePreset</code> 返回 <code>null</code>、<code>formatComposeSceneSizePresetLabel</code> 不留空括号，这两条既有规则已经把答案定好了，一行新逻辑都不用写。组件只是<b class="k">几乎恒</b>落在这一档。</li>
+      <li><b class="k">底部那个动作因此改叫「输入尺寸…」。</b>一个词描述状态（这个尺寸不在清单上）、一个词描述动作（打开两个输入框），两者共用「自定义」会让菜单里出现两个同名而含义不同的东西——这块画布上正在反复躲的就是这一类。</li>
+    </ul>
+  </div>
+
+  <div class="node" style="margin-top: 12px;">
+    <h4>但这些都要先修 F10 <span class="m">否则组件预览根本打不开</span></h4>
+    <ul>
+      <li>今天打开组件再按预览，看到的是上一个<b class="k">页面</b>：页面模式一旦成立就静默压过传入的 <code>document</code>，而宿主手上的 <code>activePage</code> 与 <code>activeComponent</code> 是两份互不相干的会话，打开组件不会清掉页面会话。</li>
+      <li>修法不是在对话框里加一个开关，是让宿主交出<b class="k">一个</b>答案：<b class="k">画布上现在是哪一份文档</b>。目标种类（场景／组件）从那一个答案读出来，上面整张表都挂在它上面。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">08</span>设计稿 · 整屏</h2>
+  <p class="sub">静息态零 chrome——这是它存在的全部理由。指针移动时下方浮出控制条，停两秒再隐去。</p>
+
+  <div class="shot">
+    <div class="shot-bar"><span class="dot"></span>ComposePreviewPage · 权威形态（同标签页路由，编辑器不卸载）</div>
+    <div class="full-host">
+      <div class="rest-note"><span class="pin pin-abs" style="top: 2px; left: -26px;">8</span>静息两秒后：下面这条控制条整条隐去，屏幕上只剩页面本身</div>
+      <div class="artboard" data-g="dark" style="width: 480px; height: 270px; background-image: none; background-color: #0b1220;">
+        <div class="scene">
+          <div class="scene-title" style="top: 18px; left: 22px;">1# 储能单元 · 一次接线<span>PCS-01</span></div>
+          <div class="kpis" style="top: 50px; left: 22px;">
+            <dl class="kpi"><dt>SOC</dt><dd>76.4<small>%</small></dd></dl>
+            <dl class="kpi"><dt>有功</dt><dd>-1240<small>kW</small></dd></dl>
+            <dl class="kpi"><dt>电池簇</dt><dd>12<small>/12</small></dd></dl>
+          </div>
+        </div>
+        <span class="pin pin-abs" style="bottom: -30px; right: 122px;">6</span>
+        <div class="size-pill" style="right: 0; bottom: -26px;"><b>1920 × 1080</b> · 实际屏幕 · 1:1</div>
+      </div>
+
+      <div class="floatbar">
+        <button class="back-btn" type="button">
+          <span class="pin pin-abs" style="top: -14px; left: -11px;">5</span>
+          <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" /></svg>返回编辑器
+        </button>
+        <span class="rule"></span>
+        <nav class="crumb">
+          <span class="pin pin-abs" style="top: -14px; left: -6px;">7</span>
+          <button type="button">储能总览<span class="caret"></span></button>
+          <span class="sep">›</span>
+          <button type="button" data-cur="true">1# 储能单元<span class="caret"></span></button>
+        </nav>
+        <span class="rule"></span>
+        <button class="pill" type="button"><span class="swatch" style="background: #0b1220;"></span><span class="val">深底</span><span class="caret"></span></button>
+        <button class="pill" type="button" title="屏幕尺寸">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="1.5" /><path d="M9 20h6" /></svg>
+          <span class="val">实际屏幕</span><span class="caret"></span>
+        </button>
+        <button class="icon-btn" type="button" title="全屏">
+          <svg viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4" /></svg>
+        </button>
+      </div>
+    </div>
+    <div class="legend">
+      <div><span class="pin">5</span><span><b>返回是一等动作</b>：零 chrome 意味着没有出口，所以控制条呼出时第一个位置留给它。Esc 与浏览器返回键同样生效，回到的是刚才那个编辑状态——编辑器根本没卸载。</span></div>
+      <div><span class="pin">6</span><span><b>这里的默认屏幕是「实际屏幕」</b>——浏览器视口本身，因此默认就是 1:1 的真像素。同一个菜单在这里仍然有用：现场那台是 1366 × 768，而我手上这台是 2560 × 1440，挑一档就在真屏幕里套出那块屏，四周留黑。胶囊与弹框那一个是同一个组件。</span></div>
+      <div><span class="pin">7</span><span><b>跳转在这里是真的</b>：<code>Interaction</code> 的 <code>navigate</code> 换的是预览内部的当前页，面包屑跟着走，浏览器返回键退的是预览内的返回栈。</span></div>
+      <div><span class="pin">8</span><span><b>没有时间轴</b>：动画按它自己的 <code>autoplay</code> 与脚本绑定跑。要刮擦时间轴就回弹框——那是编辑动作。</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">09</span>底色：默认不该是白</h2>
+  <p class="sub">
+    交付页面的底是<b class="k">宿主的</b>，预览无从知道。今天的做法是<b class="k">默默替它答了「白」</b>——
+    而这个产品的大屏九成挂在深色底上。正确的做法是把这个不确定<b class="k">显示出来</b>，并给一个就地试的开关。
+  </p>
+  <div class="grounds">
+    <div class="ground-card">
+      <div class="ground-preview">
+        <div class="mini" data-g="checker"><div class="mini-ink"><div class="t">1# 储能单元</div><div class="box"></div></div></div>
+      </div>
+      <div class="cap"><span><b>透明</b> · 默认</span><span class="m">棋盘 = 这里没有墨</span></div>
+    </div>
+    <div class="ground-card">
+      <div class="ground-preview">
+        <div class="mini" data-g="dark"><div class="mini-ink"><div class="t">1# 储能单元</div><div class="box"></div></div></div>
+      </div>
+      <div class="cap"><span><b>深底</b></span><span class="m">一键试宿主深色底</span></div>
+    </div>
+    <div class="ground-card">
+      <div class="ground-preview">
+        <div class="mini" data-g="white"><div class="mini-ink"><div class="t">1# 储能单元</div><div class="box"></div></div></div>
+      </div>
+      <div class="cap"><span><b>白底</b></span><span class="m">今天唯一的、且沉默的取值</span></div>
+    </div>
+  </div>
+  <div class="node" style="margin-top: 14px;">
+    <h4>三条边界 <span class="m">照搬 fit / alignment 那条既有判断</span></h4>
+    <ul>
+      <li><b class="k">帧内一律按文档画</b>，预览不为任何 Entity 补一个文档里没有的底色。</li>
+      <li><b class="k">透明处画棋盘</b>，不画白——白是一个看起来像内容的谎，而棋盘是一句实话。</li>
+      <li><b class="k">「页面底色」是会话状态</b>，与 <code>fit</code> / <code>alignment</code> 同一条边界：属于播放侧，MUST NOT 写进文档、不进撤销历史。宿主真的知道交付底色时，用一个 prop 直接给出来，那时预览就画它——答案已知就不必再问。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">10</span>重构：抽一层 Surface，两个形态都只是它的 chrome</h2>
+  <p class="sub">
+    今天 <code>ComposePreviewDialog</code> 一个文件里同时握着：目标解析、页面宿主、播放会话、缩放、全屏、chrome。
+    照原样再加一个整屏形态，前五样会被抄第二遍——而抄漏的那一份，症状就是「两个预览不一样」。
+  </p>
+  <div class="arch">
+    <div class="node arch-full" data-core="true">
+      <h4>ComposePreviewSurface<span class="m">新增 · 无 chrome</span></h4>
+      <ul>
+        <li>解析目标：页面模式走 <code>ComposePageHost</code>，文档模式走 <code>ComposePreview</code>；对外只暴露「当前页 + 当前场景 + 可选场景列表」</li>
+        <li><b class="k">屏幕</b>：屏幕尺寸（默认 = 场景尺寸）+ <code>fit</code> / <code>alignment</code>，把场景映射进这块屏；尺寸来自 core 的 <code>COMPOSE_SCENE_SIZE_PRESETS</code>，拖边角改它并吸附</li>
+        <li><b class="k">视图</b>：复用 <code>core</code> 的视口代数（滚轮 / 平移 / <code>Ctrl+0</code>）+ <code>transform: scale()</code>（<b class="k">不是 <code>zoom</code></b>，修 F2）；屏幕与视图是两份互不影响的状态，并各自上报读数</li>
+        <li>底色：棋盘 / 纯色 / 宿主指定，画在帧外与透明处，帧内一个像素都不碰</li>
+        <li>播放会话：播放头、播放模式、rAF 生命周期</li>
+        <li>目标回退：<b class="k">页面变化时同一帧内重解目标</b>，不经 effect——修 F7</li>
+      </ul>
+    </div>
+    <div class="node">
+      <h4>ComposePreviewDialog<span class="m">保留 · 改造</span></h4>
+      <ul>
+        <li>Surface + 模态 chrome（面包屑、时间轴、Esc、遮罩）</li>
+        <li>默认屏幕 = 场景尺寸（因此默认 1:1），视图取「适应窗口」一次</li>
+        <li>删掉页脚、<code>zoom</code>、画板圆角与白外圈、那套死 CSS</li>
+      </ul>
+    </div>
+    <div class="node">
+      <h4>ComposePreviewPage<span class="m">新增</span></h4>
+      <ul>
+        <li>Surface 铺满视口 + 自动隐藏控制条</li>
+        <li>默认屏幕 = 实际视口，视图 1:1；挑了别的屏幕尺寸就在真屏幕里套出那块屏</li>
+        <li>宿主负责路由；<b class="k">不卸载编辑器</b>，因此 live 文档照旧在手上</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">11</span>落地顺序</h2>
+  <p class="sub">前三步不动结构，当天就能让弹框「符」；结构改动排在后面，因为它要先有一条能跑的纵向流程。</p>
+  <div class="steps">
+    <div class="step"><span class="step-n">1</span><span class="step-b">修保真度四条：白底、<code>zoom</code>、圆角与白外圈、缩放读数<em>F1–F4。纯 CSS 与一个 state 默认值，不动任何协议。</em></span><span class="step-t">改</span></div>
+    <div class="step"><span class="step-n">2</span><span class="step-b">修两条缺陷：场景名读错文档、跳转后闪错误态<em>F6–F7。后者把目标解析挪进渲染期的 prev-adjust，与 PageHost 里已有的那处同一种写法。</em></span><span class="step-t">修</span></div>
+    <div class="step"><span class="step-n">3</span><span class="step-b">把缩放下拉换成「屏幕尺寸 + 视图缩放」两个控件<em>清单复用 core 既有常量；<code>fit</code> 终于被用上（F9）。这一步就让「适应」这个档位消失。</em></span><span class="step-t">改</span></div>
+    <div class="step"><span class="step-n">4</span><span class="step-b">宿主交出「画布上是哪一份文档」这一个答案，修 F10<em>目标种类（场景／组件）从它读出来，第 07 节整张表都挂在它上面。</em></span><span class="step-t">修</span></div>
+    <div class="step"><span class="step-n">5</span><span class="step-b">拖边角改屏幕尺寸，带吸附<em>吸附数学是纯函数，Vitest 直接钉；优先级、容差与记号按上一节那七条。</em></span><span class="step-t">新能力</span></div>
+    <div class="step"><span class="step-n">6</span><span class="step-b">抽 <code>ComposePreviewSurface</code>，把弹框改成它的 chrome<em>行为逐条不变，既有用例全绿即为通过。</em></span><span class="step-t">重构</span></div>
+    <div class="step"><span class="step-n">7</span><span class="step-b">新增 <code>ComposePreviewPage</code> 与宿主路由<em>OpenSpec 变更：新增公共 API + 新能力，按流程先提案。</em></span><span class="step-t">新能力</span></div>
+    <div class="step"><span class="step-n">8</span><span class="step-b">底色开关与时间轴刮擦<em>各自独立，可以排在 7 之后任意时间。</em></span><span class="step-t">增强</span></div>
+  </div>
+</section>
+
+<footer>
+  设计稿 · 2026-09-11 · 配色与控件尺寸取自 <span class="m">packages/ui-context/src/providers.tsx</span> 的 dark 主题，落地时不需要再翻译一遍。
+</footer>
+
+</div>
+</body>
+</html>

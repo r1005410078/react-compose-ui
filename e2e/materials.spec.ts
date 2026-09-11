@@ -63,7 +63,6 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
   expect(containerId).not.toBeNull()
   await editor.getByRole('button', { name: '打开预览' }).click()
   const dialog = page.getByRole('dialog', { name: '文档预览对话框' })
-  await dialog.getByRole('combobox', { name: '预览缩放' }).selectOption('1')
   // 预览目标是场景选择器，默认就是激活场景；这里只有一块场景，无需切换。
   await expect(dialog.getByRole('combobox', { name: '预览场景' })).toBeVisible()
   const preview = dialog.getByTestId(`compose-preview-entity-${containerId}`)

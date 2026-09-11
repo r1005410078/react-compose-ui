@@ -18,4 +18,5 @@ export {
   ComposePreviewDialog,
   type ComposePreviewDialogMessages,
   type ComposePreviewDialogProps,
+  type ComposePreviewTargetKind,
 } from './preview-dialog'

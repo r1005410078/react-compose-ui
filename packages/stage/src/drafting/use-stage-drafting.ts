@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
+  COMPOSE_SNAP_RADIUS,
   applyComposeFieldOverride,
   composeCurveSegments,
   composePointToFields,
@@ -104,7 +105,7 @@ export interface StageDraftingOptions {
   /** 当前选择集；命令的「先选后执行」与「选择对象」步骤都读它。 */
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
-  /** 捕捉的屏幕半径（CSS 像素）。 @defaultValue 12 */
+  /** 捕捉的屏幕半径（CSS 像素）。 @defaultValue {@link COMPOSE_SNAP_RADIUS} */
   readonly snapRadius?: number
   /**
    * 角度约束；给出即受控，由宿主持有。
@@ -151,7 +152,6 @@ export interface StageDraftingOptions {
   readonly isGeometryEditable?: (entityId: string) => boolean
 }
 
-const DEFAULT_SNAP_RADIUS = 12
 
 /**
  * 极轴的默认增量角。
@@ -214,7 +214,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     activeFrameId,
     selectedIds,
     onSelectedIdsChange,
-    snapRadius = DEFAULT_SNAP_RADIUS,
+    snapRadius = COMPOSE_SNAP_RADIUS,
     angleConstraint: controlledAngle,
     onAngleConstraintChange,
     polarIncrement = DEFAULT_POLAR_INCREMENT,

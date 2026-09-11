@@ -62,9 +62,11 @@ export {
   COMPOSE_DEFAULT_FRAME_SIZE,
   COMPOSE_DEFAULT_SCENE_APPEARANCE,
   COMPOSE_SCENE_SIZE_PRESETS,
+  COMPOSE_SNAP_RADIUS,
   createComposeFrame,
   createComposeFrameEntity,
   findComposeSceneSizePreset,
+  formatComposeAspectRatio,
   formatComposeSceneSize,
   formatComposeSceneSizePresetLabel,
   getComposeFrame,
@@ -74,8 +76,14 @@ export {
   listComposeFrameIds,
   promoteComposeEntityToFrame,
   resolveOwningFrameId,
+  snapComposeScreenSize,
 } from './frame'
-export type { ComposeSceneSizePreset } from './frame'
+export type {
+  ComposeSceneSizePreset,
+  ComposeScreenSizeSnapCandidate,
+  ComposeScreenSizeSnapOptions,
+  ComposeScreenSizeSnapResult,
+} from './frame'
 export {
   COMPOSE_GROUP_PRESET_ID,
   createComposeGroupEntitySeed,

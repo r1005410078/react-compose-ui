@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 
+import { useRef } from 'react'
 import {
   ComposeEntityBorderLayer,
   ComposeEntityPaintLayer,
@@ -43,6 +44,7 @@ import type {
   ComposeScriptModuleLoader,
 } from '@compose-ui/script-runtime'
 import { composeEntityInteractionProps } from '../entity-interaction'
+import { composeFitScale, useComposeHostBoxSize } from '../host-box'
 import { useComposeAnimationPlayback } from '../playback/use-animation-playback'
 import { useComposePreviewLayout } from './use-layout-runtime'
 
@@ -281,7 +283,14 @@ function PreviewEntity({
  *
  * @public
  */
-/** 把 fit 与 alignment 归约为 Frame 外层包裹盒的样式。 */
+/**
+ * 把 fit 与 alignment 归约为 Frame 外层包裹盒的样式。
+ *
+ * @remarks
+ * 包裹盒只负责**摆位**，缩放由 Frame 自己的 `transform` 承担。`transform` 不改变元素在
+ * 布局里占的尺寸，因此 flex 对齐的是未缩放的盒子；配上同一侧的 `transform-origin`，
+ * 缩放之后的结果仍然贴在那一侧。
+ */
 function frameFitStyle(
   fit: ComposePreviewFit,
   alignment: ComposePreviewAlignment,
@@ -300,6 +309,7 @@ function frameFitStyle(
           height: '100%',
           justifyContent: justify,
           alignItems: align,
+          // cover 缩放之后大于宿主盒子，溢出必须裁掉，否则它会盖住画板之外的东西。
           overflow: fit === 'cover' ? 'hidden' : undefined,
         },
     transformOrigin: `${horizontal === 'left' ? 'left' : horizontal === 'right' ? 'right' : 'center'} `
@@ -341,9 +351,12 @@ function ComposePreviewReady({
   const entity = targetFrameId ? document.entities[targetFrameId] : undefined
   const frame = getComposeFrame(entity)
   const fitStyle = frameFitStyle(fit, alignment)
+  const hostRef = useRef<HTMLDivElement>(null)
+  const hostSize = useComposeHostBoxSize(hostRef, fit !== 'none')
+  const scale = frame ? composeFitScale(fit, frame.size, hostSize) : null
   const content = entity && frame
     ? (
-        <div style={fitStyle.wrapper}>
+        <div ref={hostRef} style={fitStyle.wrapper}>
           <div
             data-compose-frame={entity.id}
             data-testid="compose-preview-frame"
@@ -352,21 +365,17 @@ function ComposePreviewReady({
               ...composeEntityOverflowStyle(entity),
               position: 'relative',
               // Frame.size 是尺寸的唯一事实来源；布局盒只决定它内部子级的位置。
+              // 它**不随 fit 改变**：`fit` 是缩放而不是改尺寸。后代是绝对定位的，改这个盒子
+              // 的宽高（`max-width` / `width: 100%`）只会让它们溢出或被裁掉，不会跟着缩。
               width: frame.size.width,
               height: frame.size.height,
               flex: 'none',
-              ...(fit === 'fill'
-                ? { width: '100%', height: '100%' }
-                : fit === 'contain' || fit === 'cover'
-                  ? {
-                      maxWidth: fit === 'contain' ? '100%' : undefined,
-                      maxHeight: fit === 'contain' ? '100%' : undefined,
-                      minWidth: fit === 'cover' ? '100%' : undefined,
-                      minHeight: fit === 'cover' ? '100%' : undefined,
-                      objectFit: fit,
-                      transformOrigin: fitStyle.transformOrigin,
-                    }
-                  : {}),
+              ...(scale
+                ? {
+                    transform: `scale(${scale.x}, ${scale.y})`,
+                    transformOrigin: fitStyle.transformOrigin,
+                  }
+                : {}),
             }}
             {...composeEntityInteractionProps(entity, navigation)}
           >

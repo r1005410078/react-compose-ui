@@ -31,8 +31,9 @@
 .compose-preview-dialog__header {
   display: grid;
   min-height: 64px;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  gap: 16px;
   padding: 0 16px 0 20px;
   border-bottom: 1px solid rgb(155 171 198 / 18%);
   background: linear-gradient(180deg, rgb(31 40 56 / 94%), rgb(21 27 38 / 94%));
@@ -54,7 +55,8 @@
 }
 
 .compose-preview-dialog__title svg,
-.compose-preview-dialog__actions svg {
+.compose-preview-dialog__actions svg,
+.compose-preview-dialog__target svg {
   width: 20px;
   height: 20px;
   fill: none;
@@ -64,16 +66,56 @@
   stroke-width: 1.8;
 }
 
+/* 目标组：场景 · 屏幕尺寸 · 宽高输入 · 横竖互换。 */
 .compose-preview-dialog__target {
-  padding: 3px;
-  border: 1px solid rgb(153 172 203 / 26%);
-  border-radius: 9px;
-  background: rgb(7 11 18 / 30%);
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.compose-preview-dialog__target select,
+.compose-preview-dialog__actions select {
+  height: 32px;
+  max-width: 100%;
+  padding: 0 25px 0 10px;
+  appearance: none;
+  border: 1px solid rgb(153 172 203 / 25%);
+  border-radius: 7px;
+  outline: 0;
+  background: rgb(7 11 18 / 28%) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23aeb9ca' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center / 10px 6px;
+  color: #e8edf6;
+  cursor: pointer;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.compose-preview-dialog__size-fields {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8290a6;
+  font-size: 12px;
+}
+
+.compose-preview-dialog__size-fields input {
+  width: 62px;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid rgb(153 172 203 / 25%);
+  border-radius: 7px;
+  outline: 0;
+  background: rgb(7 11 18 / 28%);
+  color: #e8edf6;
+  font-family: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .compose-preview-dialog__target button,
 .compose-preview-dialog__actions button {
   display: inline-grid;
+  width: 32px;
   min-height: 32px;
   place-items: center;
   border: 0;
@@ -83,61 +125,9 @@
   cursor: pointer;
 }
 
-.compose-preview-dialog__target button {
-  min-width: 112px;
-  padding: 0 12px;
-  font-size: 13px;
-}
-
-.compose-preview-dialog__target button[aria-pressed='true'] {
-  background: #354158;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 25%), 0 1px 0 rgb(255 255 255 / 10%) inset;
-  color: #f7f9fc;
-}
-
-.compose-preview-dialog__target button:disabled {
-  color: #657187;
-  cursor: not-allowed;
-}
-
 .compose-preview-dialog__actions {
   justify-content: end;
   gap: 6px;
-}
-
-.compose-preview-dialog__actions label {
-  position: relative;
-}
-
-.compose-preview-dialog__actions label::after {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid #aeb9ca;
-  border-bottom: 1.5px solid #aeb9ca;
-  content: '';
-  pointer-events: none;
-  transform: translateY(-65%) rotate(45deg);
-}
-
-.compose-preview-dialog__actions select {
-  width: 82px;
-  height: 32px;
-  padding: 0 25px 0 10px;
-  appearance: none;
-  border: 1px solid rgb(153 172 203 / 25%);
-  border-radius: 7px;
-  outline: 0;
-  background: rgb(7 11 18 / 28%);
-  color: #e8edf6;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.compose-preview-dialog__actions button {
-  width: 32px;
 }
 
 .compose-preview-dialog__actions button + button {
@@ -146,47 +136,162 @@
   border-radius: 0;
 }
 
-.compose-preview-dialog__target button:not(:disabled):hover,
+.compose-preview-dialog__target button:hover,
 .compose-preview-dialog__actions button:hover,
-.compose-preview-dialog__actions select:hover {
+.compose-preview-dialog__target select:hover,
+.compose-preview-dialog__target input:hover {
   background-color: rgb(118 138 172 / 18%);
   color: #fff;
 }
 
 .compose-preview-dialog__target button:focus-visible,
 .compose-preview-dialog__actions button:focus-visible,
-.compose-preview-dialog__actions select:focus-visible {
+.compose-preview-dialog__target select:focus-visible,
+.compose-preview-dialog__target input:focus-visible,
+.compose-preview-dialog__zoom button:focus-visible,
+.compose-preview-dialog__resize:focus-visible {
   outline: 2px solid #81a8ff;
   outline-offset: 2px;
 }
 
+/*
+ * 台面：安静、无网格。网格会让它读起来像一块设计工具的画布，而这里要表达的正好相反——
+ * 台面**不是页面的一部分**。
+ */
 .compose-preview-dialog__stage {
-  display: grid;
+  position: relative;
   min-width: 0;
   min-height: 0;
-  place-items: center;
-  overflow: auto;
-  padding: clamp(20px, 4vw, 56px);
-  background-color: #202a38;
-  background-image:
-    linear-gradient(rgb(255 255 255 / 2%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px),
-    radial-gradient(ellipse at top, rgb(69 85 112 / 42%), transparent 64%);
-  background-size: 24px 24px, 24px 24px, auto;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, #14161a 62%);
 }
 
+/*
+ * 画板就是被预览的那块屏。
+ *
+ * **不给圆角、不裁角、不加外圈描边、不补底色**：真实页面四个角是直的，角上的内容是真的；
+ * 补一层底色会让透明背景的场景在这里读成白色，而画布上它是深色——同一份文档两处不一样，
+ * 用户无从判断哪个是真的。透明由棋盘表示，它是一句实话。
+ */
 .compose-preview-dialog__artboard {
-  flex: none;
-  overflow: hidden;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 18px 44px rgb(4 8 14 / 45%), 0 0 0 1px rgb(255 255 255 / 48%);
-  zoom: var(--compose-preview-dialog-scale);
+  position: absolute;
+  box-shadow: 0 20px 52px rgb(0 0 0 / 55%);
+  background-color: #2b2f35;
+  background-image:
+    linear-gradient(45deg, #3a3f47 25%, transparent 25%),
+    linear-gradient(-45deg, #3a3f47 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #3a3f47 75%),
+    linear-gradient(-45deg, #2b2f35 75%, #3a3f47 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
-.compose-preview-dialog__artboard [data-compose-ui='preview'] {
-  overflow: hidden;
-  background: white;
+/*
+ * 屏幕盒子：`ComposePreview` 的 `fit` 量的就是它。
+ *
+ * 视图缩放挂在这里的 `transform` 上而**不是 CSS `zoom`**：后者会让浏览器在该比例下重新
+ * 布局，文字度量与换行位置与 100% 不是同一份结果——缩小的预览会与真实输出在像素上不同。
+ * `offsetWidth` 不受 `transform` 影响，因此 `fit` 量到的仍是这块屏的真实尺寸。
+ */
+.compose-preview-dialog__screen {
+  transform-origin: 0 0;
+}
+
+.compose-preview-dialog__resize {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid #0a0c0f;
+  border-radius: 3px;
+  background: #dce9ff;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.compose-preview-dialog__resize[data-snapped='true'] {
+  background: #e9a23b;
+}
+
+.compose-preview-dialog__size-pill {
+  position: absolute;
+  right: 0;
+  bottom: -28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
+  border: 1px solid rgb(155 171 198 / 22%);
+  border-radius: 5px;
+  background: rgb(10 12 15 / 88%);
+  color: #aeb9ca;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.compose-preview-dialog__size-pill b {
+  color: #e9a23b;
+  font-weight: 600;
+}
+
+.compose-preview-dialog__size-pill[data-snapped='true'] {
+  border-color: rgb(233 162 59 / 62%);
+  color: #f4f7fb;
+}
+
+.compose-preview-dialog__zoom {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgb(155 171 198 / 20%);
+  border-radius: 8px;
+  background: rgb(13 15 19 / 92%);
+}
+
+.compose-preview-dialog__zoom button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #aeb9ca;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.compose-preview-dialog__zoom button:hover {
+  background: rgb(118 138 172 / 18%);
+  color: #fff;
+}
+
+.compose-preview-dialog__zoom button svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.compose-preview-dialog__zoom output {
+  min-width: 48px;
+  padding: 0 4px;
+  color: #f4f7fb;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .compose-preview-dialog__footer {
@@ -209,33 +314,20 @@
   border: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .compose-preview-dialog__backdrop {
     padding: 12px;
   }
 
   .compose-preview-dialog__header {
     min-height: 56px;
-    grid-template-columns: auto 1fr auto;
+    gap: 8px;
     padding: 0 10px 0 14px;
   }
 
-  .compose-preview-dialog__target {
-    justify-self: center;
-  }
-
+  /* 窄屏先收起宽高输入与横竖互换：下拉与拖手柄都能改屏幕尺寸，它们是第二与第三个入口。 */
+  .compose-preview-dialog__size-fields,
   .compose-preview-dialog__target button {
-    min-width: auto;
-    padding: 0 8px;
-    font-size: 12px;
-  }
-
-  .compose-preview-dialog__actions label,
-  .compose-preview-dialog__actions > button:first-of-type {
     display: none;
-  }
-
-  .compose-preview-dialog__stage {
-    padding: 20px;
   }
 }
