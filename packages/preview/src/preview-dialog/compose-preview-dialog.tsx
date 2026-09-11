@@ -75,7 +75,7 @@ export interface ComposePreviewDialogMessages {
   readonly exitFullscreen: string
   /** 关闭操作的无障碍名称。 */
   readonly close: string
-  /** 键盘关闭提示。 */
+  /** 键盘关闭提示；渲染成关闭按钮的 tooltip，不再单占一行页脚。 */
   readonly closeHint: string
   /** 开始播放动画的无障碍名称；文档无动画时不出现播放控件。 */
   readonly play: string
@@ -166,15 +166,6 @@ export interface ComposePreviewDialogProps extends Pick<ComposePreviewProps,
   readonly dialogLabel?: string
   /** 覆盖默认英文文案的本地化内容。 */
   readonly messages?: Partial<ComposePreviewDialogMessages>
-}
-
-function PreviewIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.75" />
-    </svg>
-  )
 }
 
 function CloseIcon() {
@@ -498,11 +489,12 @@ export function ComposePreviewDialog({
         role="dialog"
       >
         <header className="compose-preview-dialog__header">
-          <div className="compose-preview-dialog__title">
-            <PreviewIcon />
-            <span id={titleId}>{messages.title}</span>
-          </div>
+          {/*
+            * 场景名就是这个弹框的标题，因此标题文案退成对话框的可访问名称而不占一行。
+            * 它仍然要渲染出来：`aria-labelledby` 指向的元素必须真的在文档里。
+            */}
           <div className="compose-preview-dialog__target">
+            <span className="compose-preview-dialog__sr-only" id={titleId}>{messages.title}</span>
             <label>
               <span className="compose-preview-dialog__sr-only">{messages.target}</span>
               <select
@@ -517,6 +509,8 @@ export function ComposePreviewDialog({
                 ))}
               </select>
             </label>
+          </div>
+          <div className="compose-preview-dialog__tools">
             <label>
               <span className="compose-preview-dialog__sr-only">{messages.screenSize}</span>
               <select
@@ -581,6 +575,7 @@ export function ComposePreviewDialog({
             {targetKind === 'scene' ? (
               <button
                 aria-label={messages.swapOrientation}
+                className="compose-preview-dialog__swap"
                 data-testid="compose-preview-dialog-swap"
                 type="button"
                 onClick={() => {
@@ -591,8 +586,8 @@ export function ComposePreviewDialog({
                 <SwapIcon />
               </button>
             ) : null}
-          </div>
-          <div className="compose-preview-dialog__actions">
+            {/* 三组：改这块屏 · 看这块屏 · 离开。 */}
+            <span aria-hidden="true" className="compose-preview-dialog__rule" />
             {animation ? (
               <button
                 aria-label={playing ? messages.pause : messages.play}
@@ -610,7 +605,14 @@ export function ComposePreviewDialog({
             >
               <FullscreenIcon />
             </button>
-            <button aria-label={messages.close} ref={closeButton} type="button" onClick={() => onOpenChange(false)}>
+            <span aria-hidden="true" className="compose-preview-dialog__rule" />
+            <button
+              aria-label={messages.close}
+              ref={closeButton}
+              title={messages.closeHint}
+              type="button"
+              onClick={() => onOpenChange(false)}
+            >
               <CloseIcon />
             </button>
           </div>
@@ -725,7 +727,6 @@ export function ComposePreviewDialog({
             </button>
           </div>
         </div>
-        <footer className="compose-preview-dialog__footer">{messages.closeHint}</footer>
       </div>
     </div>,
     document.body,

@@ -225,6 +225,8 @@ b.k { color: var(--text-strong); font-weight: 600; }
 .icon-btn[data-on="true"] { background: var(--selected); color: #cfe2ff; }
 .icon-btn svg, .pill svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .rule { width: 1px; height: 18px; margin: 0 3px; background: var(--border); }
+/* 本稿画着、v1 未落地的控件；虚线琥珀圈是这张图上唯一的「还没做」记号。 */
+[data-soon="true"] { outline: 1px dashed rgb(233 162 59 / 60%); outline-offset: 2px; }
 .swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border-strong); }
 .swatch[data-fill="checker"] { background-image: linear-gradient(45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--checker-a) 75%), linear-gradient(-45deg, var(--checker-b) 75%, var(--checker-a) 75%); background-size: 8px 8px; background-position: 0 0, 0 4px, 4px -4px, -4px 0; background-color: var(--checker-b); }
 
@@ -240,9 +242,8 @@ b.k { color: var(--text-strong); font-weight: 600; }
 
 .artboard {
   position: relative;
-  /* 真实页面没有圆角，因此这里一律不给圆角、不裁角；分离靠投影与 outline。 */
+  /* 真实页面没有圆角也没有外圈，因此这里一律不给圆角、不裁角、不描边；分离只靠投影。 */
   border-radius: 0;
-  outline: 1px solid rgb(255 255 255 / 9%);
   box-shadow: 0 20px 52px rgb(0 0 0 / 55%);
   /* 透明 = 棋盘。默认不补白底。 */
   background-image: linear-gradient(45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--checker-a) 75%), linear-gradient(-45deg, var(--checker-b) 75%, var(--checker-a) 75%);
@@ -737,6 +738,7 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
 <section>
   <h2><span class="num">05</span>设计稿 · 弹框</h2>
   <p class="sub">头部一行收掉今天的三行（标题行 + 目标行 + 页脚）；台面安静、无网格；画板不切角、不补底。</p>
+  <p class="sub"><b class="k">琥珀虚线圈 = 本稿画着、v1 未落地</b>：面包屑的页面那一级、页面底色、整屏形态与时间轴各自是独立的后续变更，见第 10 节。其余部分已按本图落地。</p>
 
   <div class="shot">
     <div class="shot-bar"><span class="dot"></span>ComposePreviewDialog · 取景形态</div>
@@ -745,13 +747,13 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
 
         <div class="dlg-head">
           <nav class="crumb">
-            <button type="button">储能总览<span class="caret"></span></button>
+            <button type="button" data-soon="true">储能总览<span class="caret"></span></button>
             <span class="sep">›</span>
             <button type="button" data-cur="true">1# 储能单元<span class="caret"></span></button>
           </nav>
           <div class="head-spacer"></div>
           <div class="tools">
-            <button class="pill" type="button" title="页面底色">
+            <button class="pill" type="button" data-soon="true" title="页面底色">
               <span class="swatch" data-fill="checker"></span><span class="val">透明</span><span class="caret"></span>
             </button>
             <button class="pill" type="button" title="屏幕尺寸">
@@ -763,7 +765,7 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
               <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3" /></svg>
             </button>
             <span class="rule"></span>
-            <button class="icon-btn" type="button" title="整屏预览">
+            <button class="icon-btn" type="button" data-soon="true" title="整屏预览">
               <svg viewBox="0 0 24 24"><path d="M14 4h6v6" /><path d="M20 4 13 11" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>
             </button>
             <span class="rule"></span>
@@ -816,7 +818,7 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
             </button>
           </div>
 
-          <div class="scrub" style="left: 138px;">
+          <div class="scrub" data-soon="true" style="left: 138px;">
             <span class="pin pin-abs" style="top: -9px; left: -9px;">6</span>
             <button class="icon-btn" type="button" style="width: 22px; height: 22px;">
               <svg viewBox="0 0 24 24"><path d="M8 5.5v13M16 5.5v13" /></svg>
