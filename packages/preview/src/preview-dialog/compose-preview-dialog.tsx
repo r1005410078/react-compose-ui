@@ -1,36 +1,15 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
-import type { CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  COMPOSE_DEFAULT_FRAME_SIZE,
-  getComposeAnimations,
-  getComposeFrame,
-} from '@compose-ui/core'
-import type {
-  ComposeCanvasViewport,
-  ComposeNavigationPort,
-  ComposeNavigationSnapshot,
-  ComposePageFile,
-  ComposeSize,
-} from '@compose-ui/core'
-import { ComposePreview } from '../compose-preview'
-import { ComposePageHost } from '../page-host'
+import type { ComposeNavigationPort, ComposePageFile } from '@compose-ui/core'
 import type { ComposePreviewProps } from '../compose-preview'
-import { composeFitScale, useComposeHostBoxSize } from '../host-box'
-import { advanceComposePreviewPlayhead } from '../playback/playback-model'
-import type { ComposePreviewPlayheadState } from '../playback/playback-model'
-import { useAnimationFrameLoop } from '../playback/use-animation-frame-loop'
+import { ComposePreviewSurface, useComposePreviewSurface } from '../preview-surface'
 import {
   buildScreenSizeOptions,
-  defaultFitForTargetKind,
-  fitPreviewViewport,
   formatScreenMapping,
   screenSizeValue,
   swapScreenSize,
-  zoomPreviewViewport,
 } from './screen-size'
 import type { ComposePreviewTargetKind } from './screen-size'
-import { useComposeScreenResize } from './use-screen-resize'
 import './styles.css'
 
 /** ComposePreviewDialog 的可本地化文案。 @public */
@@ -215,17 +194,14 @@ function PauseIcon() {
     </svg>
   )
 }
-
-const INITIAL_PLAYHEAD: ComposePreviewPlayheadState = { timeMs: 0, direction: 1 }
-const INITIAL_VIEWPORT: ComposeCanvasViewport = { zoom: 1, offset: { x: 0, y: 0 } }
-
 /**
  * 在模态画板中输出完整文档或指定 Container 的只读预览。
  *
  * @remarks
- * Dialog 的可见性由 `open` 与 `onOpenChange` 控制。**屏幕尺寸**（被预览的那块屏有多大）与
- * **视图缩放**（它在对话框里画多大）是两份互不影响的会话状态，都不会改变传入的
- * ComposeDocument。
+ * Dialog 的可见性由 `open` 与 `onOpenChange` 控制。会话本身（目标、屏幕、视图、播放）住在
+ * `useComposePreviewSurface`，与整屏形态**共用同一份实现**；本组件只提供模态 chrome。
+ * **屏幕尺寸**（被预览的那块屏有多大）与**视图缩放**（它在对话框里画多大）是两份互不影响
+ * 的状态，都不会改变传入的 ComposeDocument。
  *
  * @public
  */
@@ -253,134 +229,25 @@ export function ComposePreviewDialog({
   const shell = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const focusBeforeOpen = useRef<HTMLElement | null>(null)
-  // 预览目标永远是一个场景：null 表示跟随宿主给出的激活场景，用户显式选过之后才固定。
-  const [target, setTarget] = useState<string | null>(null)
-  const [fullscreen, setFullscreen] = useState(false)
-  // 页面预览模式下当前页面由 ComposePageHost 加载，对话框只是跟着它换场景列表与动画宿主。
-  const [hostPage, setHostPage] = useState<{
-    readonly pageKey: string | null
-    readonly page: ComposePageFile | null
-  }>({ pageKey: null, page: null })
-
-  // 页面预览需要两个端口同时在场：只有导航端口而没有加载端口时无法取回任何页面，
-  // 此时退回文档预览比渲染一个永远空白的宿主诚实。
-  const pageMode = navigation !== undefined && pageLoader !== undefined
-  /*
-   * 导航快照要**自己订阅**而不是等 `onPageChange` 回灌：后者经过一次 effect 才到达，
-   * 而 ComposePageHost 在同一帧就已经渲染新页面了。那一帧里用旧页面的 frameId 当显式目标
-   * 传下去，`resolvePreviewFrameId` 对显式目标不回退，于是闪一帧「目标不存在」。
-   */
-  const navigationSnapshot = useSyncExternalStore(
-    navigation?.subscribe ?? noopSubscribe,
-    navigation?.getSnapshot ?? emptySnapshot,
-  )
-  const currentPageKey = pageMode ? navigationSnapshot.currentPageKey : null
-  // 跳转后丢弃显式选择：上一页选中的场景 id 在新页面里没有意义。
-  const [targetPageKey, setTargetPageKey] = useState<string | null>(currentPageKey)
-  if (targetPageKey !== currentPageKey) {
-    setTargetPageKey(currentPageKey)
-    setTarget(null)
-  }
-
-  const activeDocument = pageMode ? hostPage.page?.document : composeDocument
-  const activePage = pageMode ? hostPage.page ?? undefined : page
-  const activeDefaultFrameId = pageMode ? hostPage.page?.activeFrameId ?? null : selectedFrameId
-
-  // 场景列表就是文档的根 Frame；目标解析顺序：用户显式选择 → 宿主给的激活场景 → 第一个根 Frame。
-  const sceneIds = activeDocument
-    ? activeDocument.rootIds.filter((id) => getComposeFrame(activeDocument.entities[id]))
-    : []
-  const resolvedFrameId = (target && sceneIds.includes(target) ? target : null)
-    ?? (activeDefaultFrameId && sceneIds.includes(activeDefaultFrameId) ? activeDefaultFrameId : null)
-    ?? sceneIds[0]
-    ?? undefined
-
-  // 尺寸的唯一事实来源是 Frame.size；目标还没解析出来时用默认画板尺寸占位，
-  // 让取景与布局有一个有限的数可用（内容本身由 ComposePreview 自己报错）。
-  const targetEntity = resolvedFrameId ? activeDocument?.entities[resolvedFrameId] : undefined
-  const targetSize = getComposeFrame(targetEntity)?.size ?? COMPOSE_DEFAULT_FRAME_SIZE
-
-  // 屏幕尺寸：null 表示跟随目标自身尺寸，用户改过之后才固定。
-  const [screenSize, setScreenSize] = useState<ComposeSize | null>(null)
-  const resolvedScreenSize = screenSize ?? targetSize
-  const fit = defaultFitForTargetKind(targetKind)
-  const fitScale = composeFitScale(fit, targetSize, resolvedScreenSize)
-
   const stageRef = useRef<HTMLDivElement>(null)
-  const stageSize = useComposeHostBoxSize(stageRef, open)
-  const [viewport, setViewport] = useState<ComposeCanvasViewport>(INITIAL_VIEWPORT)
-  /*
-   * 取景重算是一次性动作而不是一个持续生效的模式。它只由四件事触发：打开对话框、换目标、
-   * 从下拉换一块屏、按「适应窗口」。**拖手柄与输入框都不触发**——拖动期间重新取景会让画板
-   * 在屏幕上纹丝不动，拖了等于没有反馈；输入框逐字提交同理。
-   */
-  const [pendingFit, setPendingFit] = useState(true)
-  const requestFit = () => { setPendingFit(true) }
+  const [fullscreen, setFullscreen] = useState(false)
 
-  if (open && pendingFit) {
-    const next = fitPreviewViewport(resolvedScreenSize, stageSize)
-    if (next) {
-      setViewport(next)
-      setPendingFit(false)
-    }
-  }
-
-  // 基础能力阶段与编辑器一致：预览播放第一条动画；多动画选择留给后续提案。
-  // 清单归属 Frame：预览播放的是当前目标 Frame 自己的时间线。
-  const animationHostFrameId = resolvedFrameId
-  const animation = activeDocument && animationHostFrameId
-    ? getComposeAnimations(activeDocument, animationHostFrameId)[0]
-    : undefined
-  const [playing, setPlaying] = useState(false)
-  // 手动会话是否已接管播放头：未接管时 ComposePreview 按脚本绑定驱动（或停在 0 ms），
-  // 用户第一次按播放即接管，关闭对话框归还。
-  const [manualEngaged, setManualEngaged] = useState(false)
-  // 权威播放头放 ref：rAF 回调里直接推进，direction 等 ping-pong 状态不挤进渲染状态；
-  // state 只保留渲染需要的 timeMs，每次开始播放时在事件处理器里与 ref 对齐。
-  const playhead = useRef(INITIAL_PLAYHEAD)
-  const [playheadMs, setPlayheadMs] = useState(0)
-
-  // 关闭对话框即复位播放与取景会话（渲染期 prev-adjust 模式，不在 effect 里 setState；
-  // ref 留到下次播放开始时在事件处理器里对齐，渲染期不写 ref）。
-  const [wasOpen, setWasOpen] = useState(open)
-  if (wasOpen !== open) {
-    setWasOpen(open)
-    if (!open) {
-      setPlaying(false)
-      setManualEngaged(false)
-      setPlayheadMs(0)
-      setScreenSize(null)
-    }
-    else setPendingFit(true)
-  }
-
-  // 换目标即回到该目标自身的尺寸：上一块场景的屏幕尺寸对这一块没有意义。
-  const [lastTargetId, setLastTargetId] = useState(resolvedFrameId)
-  if (lastTargetId !== resolvedFrameId) {
-    setLastTargetId(resolvedFrameId)
-    setScreenSize(null)
-    setPendingFit(true)
-  }
-
-  const resize = useComposeScreenResize({
-    screenSize: resolvedScreenSize,
-    targetSize,
-    zoom: viewport.zoom,
-    onChange: setScreenSize,
-  })
-
-  // 手动播放循环与 ComposePreview 的脚本驱动共用同一份 rAF 生命周期管理。
-  useAnimationFrameLoop(open && playing && animation !== undefined, (delta) => {
-    if (!animation) return
-    const advanced = advanceComposePreviewPlayhead(
-      playhead.current,
-      delta,
-      animation.durationMs,
-      animation.playbackMode,
-    )
-    playhead.current = advanced.state
-    setPlayheadMs(advanced.state.timeMs)
-    if (advanced.done) setPlaying(false)
+  const surface = useComposePreviewSurface({
+    active: open,
+    assetResolver,
+    document: composeDocument,
+    layoutRuntime,
+    layoutSnapshot,
+    livePage,
+    navigation,
+    page,
+    pageLoader,
+    registry,
+    scriptModuleLoader,
+    scriptScope,
+    selectedFrameId,
+    stageRef,
+    targetKind,
   })
 
   useEffect(() => {
@@ -403,6 +270,7 @@ export function ComposePreviewDialog({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
+  const zoom = surface.zoom
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -413,31 +281,17 @@ export function ComposePreviewDialog({
       // Ctrl/Cmd + 0：回到 100%，与画布同一个键位。
       if (event.key === '0' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault()
-        setViewport((current) => zoomPreviewViewport(current, stageSize, 'reset'))
+        zoom('reset')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-    // 台面尺寸进依赖：`Ctrl+0` 绕台面中心缩放，尺寸变了就要重新挂一次，代价只是一次
-    // window 监听器的换绑。
-  }, [onOpenChange, open, stageSize])
+  }, [onOpenChange, open, zoom])
 
   if (!open || typeof window === 'undefined') return null
 
-  /*
-   * 页面模式下**只传用户的显式选择**，不传派生出来的回退值。
-   *
-   * 对话框手上的 `activeDocument` 经 `onPageChange` 回灌，比 `ComposePageHost` 慢一拍，
-   * 因此它派生出来的回退目标属于**上一页**；而显式目标按约定不回退，传下去就是新页面
-   * 那一帧的「目标不存在」。不传时 PageHost 自己回退到该页的 `activeFrameId`——那本来
-   * 就是这一档该有的答案。显式选择再额外验一次它属于当前这一页：跳转那一帧里它还是旧的。
-   */
-  const explicitTarget = target && targetPageKey === currentPageKey && sceneIds.includes(target)
-    ? target
-    : undefined
-  const previewFrameId = pageMode ? explicitTarget : resolvedFrameId
-  const screenOptions = buildScreenSizeOptions(targetSize, messages.customSizeName)
-  const currentScreenValue = screenSizeValue(resolvedScreenSize)
+  const screenOptions = buildScreenSizeOptions(surface.targetSize, messages.customSizeName)
+  const currentScreenValue = screenSizeValue(surface.screenSize)
   const knownScreenValues = new Set([
     screenOptions.target.value,
     ...screenOptions.presets.map((option) => option.value),
@@ -452,23 +306,10 @@ export function ComposePreviewDialog({
     }
     void element.requestFullscreen().catch(() => undefined)
   }
-  const togglePlayback = () => {
-    if (playing) {
-      setPlaying(false)
-      return
-    }
-    // 以渲染状态为准对齐 ref：关闭复位后 ref 可能还停在旧时刻。
-    // play-once 播完停在末尾：再次播放从头开始。
-    const resumeMs = animation && playheadMs < animation.durationMs ? playheadMs : 0
-    playhead.current = { timeMs: resumeMs, direction: 1 }
-    setPlayheadMs(resumeMs)
-    setManualEngaged(true)
-    setPlaying(true)
-  }
   const commitScreenAxis = (axis: 'width' | 'height', raw: string) => {
     const value = Number.parseFloat(raw)
     if (!Number.isFinite(value) || value <= 0) return
-    setScreenSize({ ...resolvedScreenSize, [axis]: Math.round(value) })
+    surface.setScreenSize({ ...surface.screenSize, [axis]: Math.round(value) })
   }
 
   return createPortal(
@@ -499,13 +340,11 @@ export function ComposePreviewDialog({
               <span className="compose-preview-dialog__sr-only">{messages.target}</span>
               <select
                 data-testid="compose-preview-dialog-scene"
-                value={resolvedFrameId ?? ''}
-                onChange={(event) => setTarget(event.target.value)}
+                value={surface.frameId ?? ''}
+                onChange={(event) => surface.selectScene(event.target.value)}
               >
-                {sceneIds.map((id) => (
-                  <option key={id} value={id}>
-                    {activeDocument?.entities[id]?.name ?? id}
-                  </option>
+                {surface.scenes.map((scene) => (
+                  <option key={scene.id} value={scene.id}>{scene.name}</option>
                 ))}
               </select>
             </label>
@@ -521,15 +360,15 @@ export function ComposePreviewDialog({
                     ? screenOptions.target
                     : screenOptions.presets.find((item) => item.value === event.target.value)
                   if (!option) return
-                  setScreenSize(option.size)
-                  requestFit()
+                  surface.setScreenSize(option.size)
+                  surface.requestFit()
                 }}
               >
                 {/* 当前尺寸是手输或拖出来的自定义值时，下拉需要一个能落脚的空值项，
                     否则受控 select 会退回第一项，读起来像用户换了一块屏。 */}
                 {knownScreenValues.has(currentScreenValue) ? null : (
                   <option value="">
-                    {`${resolvedScreenSize.width} × ${resolvedScreenSize.height} · ${messages.customSizeName}`}
+                    {`${surface.screenSize.width} × ${surface.screenSize.height} · ${messages.customSizeName}`}
                   </option>
                 )}
                 <optgroup
@@ -557,7 +396,7 @@ export function ComposePreviewDialog({
                 min={1}
                 step={1}
                 type="number"
-                value={resolvedScreenSize.width}
+                value={surface.screenSize.width}
                 onChange={(event) => commitScreenAxis('width', event.target.value)}
               />
               <span aria-hidden="true">×</span>
@@ -567,7 +406,7 @@ export function ComposePreviewDialog({
                 min={1}
                 step={1}
                 type="number"
-                value={resolvedScreenSize.height}
+                value={surface.screenSize.height}
                 onChange={(event) => commitScreenAxis('height', event.target.value)}
               />
             </div>
@@ -579,8 +418,8 @@ export function ComposePreviewDialog({
                 data-testid="compose-preview-dialog-swap"
                 type="button"
                 onClick={() => {
-                  setScreenSize(swapScreenSize(resolvedScreenSize))
-                  requestFit()
+                  surface.setScreenSize(swapScreenSize(surface.screenSize))
+                  surface.requestFit()
                 }}
               >
                 <SwapIcon />
@@ -588,14 +427,14 @@ export function ComposePreviewDialog({
             ) : null}
             {/* 三组：改这块屏 · 看这块屏 · 离开。 */}
             <span aria-hidden="true" className="compose-preview-dialog__rule" />
-            {animation ? (
+            {surface.animation ? (
               <button
-                aria-label={playing ? messages.pause : messages.play}
-                aria-pressed={playing}
+                aria-label={surface.playing ? messages.pause : messages.play}
+                aria-pressed={surface.playing}
                 type="button"
-                onClick={togglePlayback}
+                onClick={surface.togglePlayback}
               >
-                {playing ? <PauseIcon /> : <PlayIcon />}
+                {surface.playing ? <PauseIcon /> : <PlayIcon />}
               </button>
             ) : null}
             <button
@@ -617,89 +456,49 @@ export function ComposePreviewDialog({
             </button>
           </div>
         </header>
-        <div className="compose-preview-dialog__stage" ref={stageRef}>
-          <div
-            className="compose-preview-dialog__artboard"
-            data-testid="compose-preview-dialog-artboard"
-            style={{
-              left: viewport.offset.x,
-              top: viewport.offset.y,
-              width: resolvedScreenSize.width * viewport.zoom,
-              height: resolvedScreenSize.height * viewport.zoom,
-            }}
-          >
-            <div
-              className="compose-preview-dialog__screen"
-              style={{
-                width: resolvedScreenSize.width,
-                height: resolvedScreenSize.height,
-                transform: `scale(${viewport.zoom})`,
-              } as CSSProperties}
-            >
-              {pageMode && navigation && pageLoader
-                ? (
-                    <ComposePageHost
-                      animationTimeMs={manualEngaged ? playheadMs : undefined}
-                      assetResolver={assetResolver}
-                      fit={fit}
-                      frameId={previewFrameId}
-                      layoutRuntime={animation ? undefined : layoutRuntime}
-                      layoutSnapshot={animation ? undefined : layoutSnapshot}
-                      navigation={navigation}
-                      onPageChange={(nextPage, nextPageKey) => {
-                        setHostPage({ page: nextPage, pageKey: nextPageKey })
-                      }}
-                      livePage={livePage}
-                      pageLoader={pageLoader}
-                      registry={registry}
-                      scriptModuleLoader={scriptModuleLoader}
-                    />
-                  )
-                : (
-                    <ComposePreview
-                      animationTimeMs={manualEngaged ? playheadMs : undefined}
-                      assetResolver={assetResolver}
-                      document={activeDocument}
-                      fit={fit}
-                      page={activePage}
-                      layoutRuntime={animation ? undefined : layoutRuntime}
-                      layoutSnapshot={animation ? undefined : layoutSnapshot}
-                      pageLoader={pageLoader}
-                      registry={registry}
-                      scriptModuleLoader={scriptModuleLoader}
-                      scriptScope={scriptScope}
-                      frameId={previewFrameId}
-                    />
-                  )}
-            </div>
-            <button
-              aria-label={messages.resizeScreen}
-              className="compose-preview-dialog__resize"
-              data-snapped={resize.session.snapped ? 'true' : undefined}
-              data-testid="compose-preview-dialog-resize-handle"
-              type="button"
-              onPointerDown={resize.onPointerDown}
-              onPointerMove={resize.onPointerMove}
-              onPointerUp={resize.onPointerUp}
-            />
-            <span
-              aria-label={messages.screenMapping}
-              className="compose-preview-dialog__size-pill"
-              data-snapped={resize.session.snapped ? 'true' : undefined}
-              data-testid="compose-preview-dialog-size-pill"
-            >
-              {formatScreenMapping(resolvedScreenSize, targetSize, fitScale?.x ?? 1)}
-              {resize.session.snapped?.preset?.name
-                ? <b>{resize.session.snapped.preset.name}</b>
-                : null}
-            </span>
-          </div>
+        <div className="compose-preview-surface__stage" ref={stageRef}>
+          <ComposePreviewSurface
+            artboardTestId="compose-preview-dialog-artboard"
+            assetResolver={assetResolver}
+            layoutRuntime={layoutRuntime}
+            layoutSnapshot={layoutSnapshot}
+            pageLoader={pageLoader}
+            registry={registry}
+            scriptModuleLoader={scriptModuleLoader}
+            scriptScope={scriptScope}
+            value={surface}
+            artboardOverlay={(
+              <>
+                <button
+                  aria-label={messages.resizeScreen}
+                  className="compose-preview-dialog__resize"
+                  data-snapped={surface.resize.session.snapped ? 'true' : undefined}
+                  data-testid="compose-preview-dialog-resize-handle"
+                  type="button"
+                  onPointerDown={surface.resize.onPointerDown}
+                  onPointerMove={surface.resize.onPointerMove}
+                  onPointerUp={surface.resize.onPointerUp}
+                />
+                <span
+                  aria-label={messages.screenMapping}
+                  className="compose-preview-dialog__size-pill"
+                  data-snapped={surface.resize.session.snapped ? 'true' : undefined}
+                  data-testid="compose-preview-dialog-size-pill"
+                >
+                  {formatScreenMapping(surface.screenSize, surface.targetSize, surface.fitScale?.x ?? 1)}
+                  {surface.resize.session.snapped?.preset?.name
+                    ? <b>{surface.resize.session.snapped.preset.name}</b>
+                    : null}
+                </span>
+              </>
+            )}
+          />
           <div className="compose-preview-dialog__zoom">
             <button
               aria-label={messages.zoomOut}
               data-testid="compose-preview-dialog-zoom-out"
               type="button"
-              onClick={() => setViewport((current) => zoomPreviewViewport(current, stageSize, 'out'))}
+              onClick={() => surface.zoom('out')}
             >
               −
             </button>
@@ -707,13 +506,13 @@ export function ComposePreviewDialog({
               aria-label={messages.zoomLevel}
               data-testid="compose-preview-dialog-zoom"
             >
-              {`${Math.round(viewport.zoom * 100)}%`}
+              {`${Math.round(surface.viewport.zoom * 100)}%`}
             </output>
             <button
               aria-label={messages.zoomIn}
               data-testid="compose-preview-dialog-zoom-in"
               type="button"
-              onClick={() => setViewport((current) => zoomPreviewViewport(current, stageSize, 'in'))}
+              onClick={() => surface.zoom('in')}
             >
               +
             </button>
@@ -721,7 +520,7 @@ export function ComposePreviewDialog({
               aria-label={messages.fitToWindow}
               data-testid="compose-preview-dialog-fit"
               type="button"
-              onClick={requestFit}
+              onClick={surface.requestFit}
             >
               <FitIcon />
             </button>
@@ -731,27 +530,4 @@ export function ComposePreviewDialog({
     </div>,
     document.body,
   )
-}
-
-/** 没有导航端口时喂给 `useSyncExternalStore` 的空订阅；它永不发布。 */
-function noopSubscribe(): () => void {
-  return () => undefined
-}
-
-/**
- * 没有导航端口时的空快照。
- *
- * @remarks
- * 必须返回**同一个对象**：`useSyncExternalStore` 每次渲染都会比较快照引用，每次新建
- * 会让它判定为「外部状态一直在变」而无限重渲染。
- */
-const EMPTY_NAVIGATION_SNAPSHOT: ComposeNavigationSnapshot = Object.freeze({
-  current: null,
-  currentPageKey: null,
-  canGoBack: false,
-  issue: null,
-})
-
-function emptySnapshot(): ComposeNavigationSnapshot {
-  return EMPTY_NAVIGATION_SNAPSHOT
 }

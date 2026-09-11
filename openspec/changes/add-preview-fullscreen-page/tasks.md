@@ -2,15 +2,15 @@
 
 ## 1. 第 6 步：抽 `ComposePreviewSurface`（纯重构，行为逐条不变）
 
-- [ ] 1.1 新建 `packages/preview/src/preview-surface/`，把目标解析（页面/文档两模、场景列表、
+- [x] 1.1 新建 `packages/preview/src/preview-surface/`，把目标解析（页面/文档两模、场景列表、
       显式目标不回退）从 `compose-preview-dialog.tsx` 搬进 `use-preview-surface.ts`
-- [ ] 1.2 屏幕（尺寸、`fit`、拖角吸附）与视图（缩放、取景、`Ctrl+0`）一并搬进同一个 Hook
-- [ ] 1.3 播放会话（播放头、播放模式、rAF 生命周期、手动接管）搬进同一个 Hook
-- [ ] 1.4 新建 `compose-preview-surface.tsx`：只画台面、画板、屏幕与 `ComposePreview` /
+- [x] 1.2 屏幕（尺寸、`fit`、拖角吸附）与视图（缩放、取景、`Ctrl+0`）一并搬进同一个 Hook
+- [x] 1.3 播放会话（播放头、播放模式、rAF 生命周期、手动接管）搬进同一个 Hook
+- [x] 1.4 新建 `compose-preview-surface.tsx`：只画台面、画板、屏幕与 `ComposePreview` /
       `ComposePageHost`，不含任何 chrome
-- [ ] 1.5 `compose-preview-dialog.tsx` 改成「Hook + Surface + 模态 chrome」
-- [ ] 1.6 **`preview-surface` 不进 `src/index.tsx`**；边界用例断言它不在公共导出里
-- [ ] 1.7 验收：`bun run --cwd packages/preview test` 69 条全绿且**一条都不改写**——
+- [x] 1.5 `compose-preview-dialog.tsx` 改成「Hook + Surface + 模态 chrome」
+- [x] 1.6 **`preview-surface` 不进 `src/index.tsx`**；边界用例断言它不在公共导出里
+- [x] 1.7 验收：`bun run --cwd packages/preview test` 69 条全绿且**一条都不改写**——
       需要改写用例即说明行为变了，那不是这一步该做的事
 
 ## 2. 第 7 步：`ComposePreviewPage`

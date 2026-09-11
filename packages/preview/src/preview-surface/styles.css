@@ -1,0 +1,46 @@
+/*
+ * 两个预览形态共用的三层：台面 > 画板 > 屏幕。chrome 一律不在这里。
+ */
+
+/*
+ * 台面：安静、无网格。网格会让它读起来像一块设计工具的画布，而这里要表达的正好相反——
+ * 台面**不是页面的一部分**。
+ */
+.compose-preview-surface__stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, #14161a 62%);
+}
+
+/*
+ * 画板就是被预览的那块屏。
+ *
+ * **不给圆角、不裁角、不加外圈描边、不补底色**：真实页面四个角是直的，角上的内容是真的；
+ * 补一层底色会让透明背景的场景在这里读成白色，而画布上它是深色——同一份文档两处不一样，
+ * 用户无从判断哪个是真的。透明由棋盘表示，它是一句实话。
+ */
+.compose-preview-surface__artboard {
+  position: absolute;
+  box-shadow: 0 20px 52px rgb(0 0 0 / 55%);
+  background-color: #2b2f35;
+  background-image:
+    linear-gradient(45deg, #3a3f47 25%, transparent 25%),
+    linear-gradient(-45deg, #3a3f47 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #3a3f47 75%),
+    linear-gradient(-45deg, #2b2f35 75%, #3a3f47 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+/*
+ * 屏幕盒子：`ComposePreview` 的 `fit` 量的就是它。
+ *
+ * 视图缩放挂在这里的 `transform` 上而**不是 CSS `zoom`**：后者会让浏览器在该比例下重新
+ * 布局，文字度量与换行位置与 100% 不是同一份结果——缩小的预览会与真实输出在像素上不同。
+ * `offsetWidth` 不受 `transform` 影响，因此 `fit` 量到的仍是这块屏的真实尺寸。
+ */
+.compose-preview-surface__screen {
+  transform-origin: 0 0;
+}
