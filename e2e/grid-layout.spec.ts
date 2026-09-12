@@ -122,3 +122,93 @@ test('OpenSpec: basic-materials / 几何 Inspector 的网格档 / 格坐标可�
   await expect.poll(async () => (await children.nth(0).boundingBox())!.x)
     .toBeGreaterThan(before!.x + 100)
 })
+
+/**
+ * 画布拖拽：全程跟手、兄弟当场让位、松手落格。
+ *
+ * @remarks
+ * 这条覆盖的是 Inspector 那条路径**覆盖不到**的两件事，而它们各自都曾经是真缺陷：
+ *
+ * 1. **手势不能被自己的预览打断。**网格 move 的求解文档会随目标格在「有兄弟要让位」与
+ *    「没有」之间来回，每一次「没有」都是一次 `clearPreview`；而清理预览若发布一份数值相同、
+ *    `revision` 加一的新提交态，手势会话的空间基线（document 恒等 + revision 恒等）就会判定
+ *    失效并中止手势。症状是拖到某一行时卡片突然弹回原位、此后再也不跟手，而用户还没松手。
+ *
+ * 2. **推挤必须看得见。**预览求解文档若只写被推挤的兄弟、不写被拖的那一张，交给 Runtime 的
+ *    就是一个「没人占着那个格子」的格局，Runtime 自己那趟求解的重力会把兄弟原样浮回去，
+ *    一帧之内撤销推挤。屏幕上的结果是「兄弟纹丝不动」，而用户没法判断这一下该不该松手。
+ *
+ * 因此断言要逐段取样：只断「松手之后落进格子」对上面两条都绿。
+ */
+test('OpenSpec: stage / 网格容器的画布反馈 / 拖动全程跟手、兄弟当场让位、松手落格', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
+
+  const container = stage.getByTestId('stage-container')
+  const children = container.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(2)
+  await selectContainer(editor)
+  await enableGrid(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+
+  const first = children.nth(0)
+  const second = children.nth(1)
+  const a0 = (await first.boundingBox())!
+  const b0 = (await second.boundingBox())!
+
+  // 空心矩形只有那一圈描边可点；选中之后它的盒才归它，中间才拖得动。
+  await page.mouse.click(b0.x + b0.width / 2, b0.y + 1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  const start = { x: b0.x + b0.width / 2, y: b0.y + b0.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+
+  // 往左上那张卡的列上拖：目标格被占，兄弟必须当场让位。
+  await page.mouse.move(start.x - 200, start.y + 20, { steps: 6 })
+  await expect.poll(async () => (await first.boundingBox())!.y)
+    .toBeGreaterThan(a0.y + 30)
+  const shadow = stage.getByTestId('stage-drop-grid-cell')
+  await expect(shadow).toHaveCount(1)
+
+  /*
+   * 继续往下拖过好几行，**逐段**断言卡片仍然跟着光标走。弹回的那个缺陷正是在越过某一行时
+   * 发作的，只在起点与终点取样会整段跳过它。
+   */
+  for (const dy of [60, 100, 140]) {
+    await page.mouse.move(start.x - 200, start.y + dy, { steps: 3 })
+    const moving = (await second.boundingBox())!
+    expect(Math.round(moving.x - b0.x)).toBeCloseTo(-200, -1)
+    expect(moving.y).toBeGreaterThan(b0.y + dy - 40)
+  }
+
+  /*
+   * 途中**拖回原位再拖走**：回到原位那一刻谁都不用让位，求解文档因此为空，走的是
+   * `clearPreview`。清理预览若发布一份 `revision` 加一的新提交态，手势会在这里被自己的预览
+   * 判成失效——之后无论怎么动卡片都不再跟手。这一段是那条修复唯一的判别性取样点，其余各段
+   * 的求解文档都非空，碰不到它。
+   */
+  await page.mouse.move(start.x + 2, start.y + 2, { steps: 4 })
+  await page.mouse.move(start.x - 160, start.y + 120, { steps: 6 })
+  const revived = (await second.boundingBox())!
+  expect(Math.round(revived.x - b0.x)).toBeCloseTo(-160, -1)
+
+  // 松手落进格子：落点由同一个求解器决定，因此它对齐到列而不是停在光标处。
+  await page.mouse.up()
+  const dropped = (await second.boundingBox())!
+  expect(Math.abs(dropped.x - a0.x)).toBeLessThan(2)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  // 一次撤销把两张卡一起带回去。
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect.poll(async () => (await first.boundingBox())!.y).toBeCloseTo(a0.y, 0)
+  await expect.poll(async () => (await second.boundingBox())!.x).toBeCloseTo(b0.x, 0)
+})
