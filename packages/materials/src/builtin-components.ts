@@ -32,6 +32,11 @@ import {
   createLayoutMissingInspectorContent,
 } from './flex-layout'
 import {
+  createGridInspector,
+  createGridInspectorHeaderActions,
+  createLayoutInspectorDispatch,
+} from './grid-layout'
+import {
   createAppearanceInspector,
   createConstraintsInspector,
   createCurveInspector,
@@ -150,8 +155,16 @@ export function createComposeBuiltinComponentDefinitions(
       createDefault: createDefaultComposeFlexLayout,
       validate: isValidComposeLayout,
       inspectorDefaultExpanded: true,
-      inspector: createLayoutInspector(idFactory),
-      inspectorHeaderActions: createLayoutInspectorHeaderActions(idFactory),
+      // Layout 是判别联合，因此分组的正文与标题栏都按 `type` 分派——它们回答同一个问题
+      // （这个容器怎么排它的子级），共用一个分组而不是各占一个 Component Key。
+      inspector: createLayoutInspectorDispatch(
+        createLayoutInspector(idFactory),
+        createGridInspector(idFactory),
+      ),
+      inspectorHeaderActions: createLayoutInspectorDispatch(
+        createLayoutInspectorHeaderActions(idFactory),
+        createGridInspectorHeaderActions(idFactory),
+      ),
       missingInspector: {
         isVisible: (entity) => entity.components.Hierarchy !== undefined,
         actions: createLayoutMissingInspectorActions(idFactory),

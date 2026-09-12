@@ -1,11 +1,16 @@
 import {
+  composeGridContentHeight,
+  getComposeGridItem,
   getComposeHierarchy,
   getComposeFrame,
   getComposeLayout,
   getComposeLayoutItem,
   getComposeRenderer,
+  isComposeGridLayout,
+  projectComposeGridCell,
   resolveComposeAppearance,
   resolveComposeWires,
+  solveComposeGrid,
   type ComposeAlignContent,
   type ComposeAlignItems,
   type ComposeAxisSizing,
@@ -17,6 +22,8 @@ import {
   type ComposeLayoutDiagnostic,
   type ComposeLayoutMeasurementDiagnostic,
   type ComposeLayoutMeasurementPort,
+  type ComposeGridCell,
+  type ComposeGridMetrics,
   type ComposeLayoutSnapshot,
   type ComposeMeasureConstraint,
 } from '@compose-ui/core'
@@ -420,13 +427,19 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     this.measuredEntityIds.delete(entity.id)
     const item = getComposeLayoutItem(entity)
     const parentLayout = parent && getComposeLayout(parent)
+    // 格中子级的盒**就是**格矩形：轴尺寸模式与 Hug 测量都不参与求解（见 applyGridLayouts）。
+    // 这里先把它摆成绝对定位且不装测量回调，避免第一趟白测一次宿主 DOM——结果反正会被覆盖。
+    const isGridChild = isComposeGridLayout(parentLayout)
+      && getComposeGridItem(entity) !== undefined
     const isFlow = item.positioning === 'flow' && parentLayout !== undefined
     const parentDirection = parentLayout?.flexDirection ?? 'row'
     const rowMainAxis = parentDirection === 'row' || parentDirection === 'row-reverse'
 
     node.setBoxSizing(yoga.BOX_SIZING_BORDER_BOX)
-    node.setPositionType(isFlow ? yoga.POSITION_TYPE_RELATIVE : yoga.POSITION_TYPE_ABSOLUTE)
-    if (!isFlow) {
+    node.setPositionType(isFlow && !isGridChild
+      ? yoga.POSITION_TYPE_RELATIVE
+      : yoga.POSITION_TYPE_ABSOLUTE)
+    if (!isFlow && !isGridChild) {
       node.setPosition(yoga.EDGE_LEFT, item.offset.x)
       node.setPosition(yoga.EDGE_TOP, item.offset.y)
     }
@@ -436,7 +449,10 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     node.setMargin(yoga.EDGE_LEFT, item.margin.left)
     node.setAlignSelf(align(yoga, item.alignSelf))
     const frame = getComposeFrame(entity)
-    if (frame) {
+    if (isGridChild) {
+      // 位置与尺寸由 applyGridLayouts 在第一趟求解之后写入：列宽要等容器内容宽可知。
+    }
+    else if (frame) {
       // Frame.size 是该 Entity 尺寸的唯一事实来源，覆盖 LayoutItem 的任何推导结果。
       node.setWidth(frame.size.width)
       node.setHeight(frame.size.height)
@@ -445,10 +461,10 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       this.applyAxis(node, 'width', item.width, rowMainAxis, isFlow)
       this.applyAxis(node, 'height', item.height, !rowMainAxis, isFlow)
     }
-    if (isFlow && item.width.mode === 'fill' && !rowMainAxis) {
+    if (isFlow && !isGridChild && item.width.mode === 'fill' && !rowMainAxis) {
       node.setAlignSelf(yoga.ALIGN_STRETCH)
     }
-    if (isFlow && item.height.mode === 'fill' && rowMainAxis) {
+    if (isFlow && !isGridChild && item.height.mode === 'fill' && rowMainAxis) {
       node.setAlignSelf(yoga.ALIGN_STRETCH)
     }
     // 交叉轴 Hug 不再强制 flex-start：Hug 在 Yoga 侧本就是未设置尺寸（auto），保留
@@ -460,7 +476,15 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       node.setBorder(edge, appearance.borderWidth)
     }
     const layout = getComposeLayout(entity)
-    if (layout) {
+    if (isComposeGridLayout(layout)) {
+      // 网格容器只写内边距：格子的位置由 applyGridLayouts 直接算成绝对坐标，Yoga 的 flex
+      // 属性对它没有意义，而 grid Layout 上根本没有 flexDirection 这些字段。
+      node.setPadding(yoga.EDGE_TOP, layout.padding.top)
+      node.setPadding(yoga.EDGE_RIGHT, layout.padding.right)
+      node.setPadding(yoga.EDGE_BOTTOM, layout.padding.bottom)
+      node.setPadding(yoga.EDGE_LEFT, layout.padding.left)
+    }
+    else if (layout) {
       node.setFlexDirection(direction(yoga, layout.flexDirection))
       node.setFlexWrap(wrap(yoga, layout.flexWrap))
       node.setAlignContent(align(yoga, layout.alignContent))
@@ -476,6 +500,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
 
     const hierarchy = getComposeHierarchy(entity)
     const usesIntrinsicMeasurement = getComposeRenderer(entity)
+      && !isGridChild
       && !(layout && hierarchy)
       && (item.width.mode === 'hug' || item.height.mode === 'hug')
     if (usesIntrinsicMeasurement) {
@@ -618,11 +643,93 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     if (dirty) this.calculateAndPublish()
   }
 
+  /**
+   * 网格预解算：把格坐标解成绝对矩形并写进 Yoga 节点。
+   *
+   * @remarks
+   * **必须排在第一趟 `calculateLayout` 之后**：列宽由容器**内容宽**推出，而那个值要等容器
+   * 自己被求解出来才知道。改写之后容器与子级都脏了，因此调用方要再求解一趟。
+   *
+   * 只有文档里真有网格容器时才发生第二趟——没有网格的文档一分钱都不多付。
+   *
+   * Yoga 的绝对定位子级以父级的**内边距盒**（border 之内、padding 之外）为原点，与既有
+   * Absolute 子级同一套语义，因此这里要自己把 padding 加进落点。
+   *
+   * @returns 是否改写过任何节点；为 true 时调用方 MUST 重新求解。
+   */
+  private applyGridLayouts(): boolean {
+    const yoga = this.yoga!
+    let changed = false
+    this.nodes.forEach((node, entityId) => {
+      const entity = this.document.entities[entityId]
+      if (!entity) return
+      const layout = getComposeLayout(entity)
+      if (!isComposeGridLayout(layout)) return
+      const hierarchy = getComposeHierarchy(entity)
+      if (!hierarchy) return
+
+      const borderX = node.getComputedBorder(yoga.EDGE_LEFT)
+        + node.getComputedBorder(yoga.EDGE_RIGHT)
+      const contentWidth = Math.max(
+        0,
+        node.getComputedWidth() - borderX - layout.padding.left - layout.padding.right,
+      )
+      const metrics: ComposeGridMetrics = {
+        columns: layout.columns,
+        rowHeight: layout.rowHeight,
+        rowGap: layout.rowGap,
+        columnGap: layout.columnGap,
+        contentWidth,
+      }
+
+      const cells: ComposeGridCell[] = []
+      hierarchy.childIds.forEach((childId) => {
+        const child = this.document.entities[childId]
+        const item = child && getComposeGridItem(child)
+        if (!child || !item) return
+        cells.push({ id: childId, x: item.x, y: item.y, w: item.w, h: item.h })
+      })
+      const solved = solveComposeGrid(cells, {
+        columns: layout.columns,
+        float: layout.float,
+      })
+
+      solved.forEach((cell) => {
+        const childNode = this.nodes.get(cell.id)
+        if (!childNode) return
+        const rect = projectComposeGridCell(cell, metrics)
+        childNode.setPosition(yoga.EDGE_LEFT, layout.padding.left + rect.x)
+        childNode.setPosition(yoga.EDGE_TOP, layout.padding.top + rect.y)
+        childNode.setWidth(rect.width)
+        childNode.setHeight(rect.height)
+        changed = true
+      })
+
+      // 绝对定位的子级不撑父级，因此 Hug 高度必须显式写回——否则一块放满卡片的板子高度是 0。
+      // 每趟都无条件重写，不依赖样式增量缓存：缓存跳过的是 applyEntityStyle，不是这里。
+      if (getComposeLayoutItem(entity).height.mode === 'hug') {
+        const borderY = node.getComputedBorder(yoga.EDGE_TOP)
+          + node.getComputedBorder(yoga.EDGE_BOTTOM)
+        node.setHeight(
+          composeGridContentHeight(solved, metrics)
+          + layout.padding.top
+          + layout.padding.bottom
+          + borderY,
+        )
+        changed = true
+      }
+    })
+    return changed
+  }
+
   private calculateAndPublish() {
     if (!this.yoga || !this.root || this.disposed) return
     try {
       const extent = this.rootExtent()
       this.root.calculateLayout(extent.width, extent.height, this.yoga.DIRECTION_LTR)
+      if (this.applyGridLayouts()) {
+        this.root.calculateLayout(extent.width, extent.height, this.yoga.DIRECTION_LTR)
+      }
       const previousBoxes = this.state.status === 'ready' ? this.state.snapshot.boxes : undefined
       const boxes: Record<string, ComposeLayoutSnapshot['boxes'][string]> = {}
       this.nodes.forEach((node, entityId) => {

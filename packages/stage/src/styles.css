@@ -384,6 +384,33 @@
   pointer-events: none;
 }
 
+/*
+ * 网格占位影子：虚线描边加淡填充，与 reparent 的实线加粗框分得开——两者同时可能出现
+ * （拖进另一个容器里的某一格），实线说「进这个容器」，虚线说「占这一格」。
+ */
+.compose-stage__drop-grid-cell {
+  fill: rgb(54 135 255 / 14%);
+  stroke: #4d9cff;
+  stroke-width: 1.6;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+/*
+ * 网格格线：列带与行线。两者都很淡——它是底纹不是标注，在它上面还要读得清卡片里的内容。
+ * 列带用填充而不是描边，因为「一列有多宽」本身就是要表达的信息；行线只标分隔，一条线足够。
+ */
+.compose-stage__grid-column {
+  fill: rgb(54 135 255 / 5.5%);
+  pointer-events: none;
+}
+
+.compose-stage__grid-row {
+  stroke: rgb(54 135 255 / 22%);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
 .compose-stage__line-selection-axis {
   fill: none;
   pointer-events: none;

@@ -110,10 +110,12 @@ describe('内建 Component inspectors', () => {
       />,
     )
 
-    expect(screen.getByText('使用自动布局')).toBeInTheDocument()
-    expect(screen.getByText('自动排列子项，并统一控制方向、间距、换行与对齐。'))
+    // 标题与正文同时覆盖两种布局：只讲其中一种会让另一种在这个入口上不可发现。
+    expect(screen.getByText('排列子项')).toBeInTheDocument()
+    expect(screen.getByText('让容器接管子项的位置：按一条轴自动排列，或摆到一块网格上。'))
       .toBeInTheDocument()
     expect(screen.getByText('添加后可随时移除')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加网格' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '添加自动布局' }))
     expect((dispatch.mock.lastCall?.[0] as EditorCommand).type).toBe(BUILTIN_COMMAND_TYPES.batch)
 
@@ -129,7 +131,7 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('button', { name: '添加自动布局' })).toBeDisabled()
   })
 
-  it('OpenSpec: 自动布局显式启用 / 布局加号只提供 Auto Layout 菜单项', () => {
+  it('OpenSpec: basic-materials / 网格按需启用 / 布局加号同时列出两种布局', () => {
     const dispatch = vi.fn()
     const Actions = missingInspectorActionsOf('Layout')
     const container = entity({ Hierarchy: { childIds: [] } })
@@ -153,10 +155,11 @@ describe('内建 Component inspectors', () => {
     expect(trigger).toHaveTextContent('+')
     fireEvent.click(trigger)
     const menu = screen.getByRole('menu', { name: '布局类型' })
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1)
+    // 两种布局都在这一个菜单里——它从第一天起就是菜单，只是一直只有一项。
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(2)
     expect(within(menu).getByRole('menuitem', { name: 'Auto Layout display: flex' }))
       .toBeInTheDocument()
-    expect(screen.queryByText(/Grid/)).not.toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: '网格 12 列' })).toBeInTheDocument()
 
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Auto Layout display: flex' }))
     expect((dispatch.mock.lastCall?.[0] as EditorCommand).type).toBe(BUILTIN_COMMAND_TYPES.batch)

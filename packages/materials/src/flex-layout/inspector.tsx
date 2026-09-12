@@ -27,6 +27,7 @@ import {
   planEnableComposeAutoLayout,
   planRemoveComposeAutoLayout,
 } from './layout-mode-commands'
+import { planEnableComposeGridLayout } from '../grid-layout/grid-mode-commands'
 
 function createLayoutCommand(
   idFactory: InspectorIdFactory,
@@ -58,30 +59,59 @@ function createLayoutCommand(
 export function createLayoutMissingInspectorActions(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeMissingComponentInspectorProps> {
-  return function LayoutMissingInspectorActions({ document, entity, dispatch, readOnly }) {
+  return function LayoutMissingInspectorActions({
+    document,
+    entity,
+    dispatch,
+    layoutSnapshot,
+    readOnly,
+  }) {
     const zh = useZh()
     const availability = document && !readOnly
       ? planEnableComposeAutoLayout(document, entity.id, () => 'layout-availability-probe')
       : null
+    const gridAvailability = document && !readOnly
+      ? planEnableComposeGridLayout(document, entity.id, layoutSnapshot, () => 'grid-availability-probe')
+      : null
     return (
       <LayoutActionMenu
         disabled={readOnly || !document}
-        items={[{
-          label: 'Auto Layout display: flex',
-          disabled: !availability?.ok,
-          title: availability && !availability.ok ? availability.issue.message : undefined,
-          content: (
-            <>
-              <span>Auto Layout</span>
-              <code>display: flex</code>
-            </>
-          ),
-          onSelect: () => {
-            if (!document) return
-            const plan = planEnableComposeAutoLayout(document, entity.id, idFactory)
-            if (plan.ok) dispatch(plan.command)
+        items={[
+          {
+            label: 'Auto Layout display: flex',
+            disabled: !availability?.ok,
+            title: availability && !availability.ok ? availability.issue.message : undefined,
+            content: (
+              <>
+                <span>Auto Layout</span>
+                <code>display: flex</code>
+              </>
+            ),
+            onSelect: () => {
+              if (!document) return
+              const plan = planEnableComposeAutoLayout(document, entity.id, idFactory)
+              if (plan.ok) dispatch(plan.command)
+            },
           },
-        }]}
+          {
+            label: zh ? '网格 12 列' : 'Grid 12 columns',
+            disabled: !gridAvailability?.ok,
+            title: gridAvailability && !gridAvailability.ok
+              ? gridAvailability.issue.message
+              : undefined,
+            content: (
+              <>
+                <span>{zh ? '网格' : 'Grid'}</span>
+                <code>{zh ? '12 列' : '12 cols'}</code>
+              </>
+            ),
+            onSelect: () => {
+              if (!document) return
+              const plan = planEnableComposeGridLayout(document, entity.id, layoutSnapshot, idFactory)
+              if (plan.ok) dispatch(plan.command)
+            },
+          },
+        ]}
         menuLabel={zh ? '布局类型' : 'Layout type'}
         trigger="+"
         triggerLabel={zh ? '添加布局' : 'Add layout'}
@@ -94,7 +124,13 @@ export function createLayoutMissingInspectorActions(
 export function createLayoutMissingInspectorContent(
   idFactory: InspectorIdFactory,
 ): ComponentType<ComposeMissingComponentInspectorProps> {
-  return function LayoutMissingInspectorContent({ document, entity, dispatch, readOnly }) {
+  return function LayoutMissingInspectorContent({
+    document,
+    entity,
+    dispatch,
+    layoutSnapshot,
+    readOnly,
+  }) {
     const zh = useZh()
     const availability = document && !readOnly
       ? planEnableComposeAutoLayout(document, entity.id, () => 'layout-availability-probe')
@@ -105,6 +141,15 @@ export function createLayoutMissingInspectorContent(
       : !document
         ? (zh ? '文档尚未就绪' : 'Document is not ready')
         : availability && !availability.ok ? availability.issue.message : undefined
+    const gridAvailability = document && !readOnly
+      ? planEnableComposeGridLayout(document, entity.id, layoutSnapshot, () => 'grid-availability-probe')
+      : null
+    const gridDisabled = !gridAvailability?.ok
+    const gridDisabledReason = readOnly
+      ? (zh ? '锁定容器不能启用网格' : 'Locked containers cannot enable grid')
+      : !document
+        ? (zh ? '文档尚未就绪' : 'Document is not ready')
+        : gridAvailability && !gridAvailability.ok ? gridAvailability.issue.message : undefined
     return (
       <div className="flex-layout-inspector__empty-guide">
         <svg
@@ -119,12 +164,16 @@ export function createLayoutMissingInspectorContent(
           <rect height="15" rx="1" width="16" x="48" y="23" />
           <path d="M3 30.5h5M64 30.5h5M3 30.5l3-3M3 30.5l3 3M69 30.5l-3-3M69 30.5l-3 3" />
         </svg>
+        {/*
+          * 标题与正文要同时覆盖两种布局：只讲其中一种，另一种在这个入口上就不可发现，
+          * 而这张卡是新手唯一会读的说明。
+          */}
         <div className="flex-layout-inspector__empty-copy">
-          <strong>{zh ? '使用自动布局' : 'Use Auto Layout'}</strong>
+          <strong>{zh ? '排列子项' : 'Arrange children'}</strong>
           <p>
             {zh
-              ? '自动排列子项，并统一控制方向、间距、换行与对齐。'
-              : 'Arrange children and control direction, gap, wrapping, and alignment.'}
+              ? '让容器接管子项的位置：按一条轴自动排列，或摆到一块网格上。'
+              : 'Let the container place children: along one axis, or on a grid.'}
           </p>
           <div className="flex-layout-inspector__empty-actions">
             <button
@@ -138,8 +187,20 @@ export function createLayoutMissingInspectorContent(
                 if (plan.ok) dispatch(plan.command)
               }}
             >
-              <span aria-hidden="true">＋</span>
-              {zh ? '添加自动布局' : 'Add Auto Layout'}
+              {zh ? '自动布局' : 'Auto Layout'}
+            </button>
+            <button
+              aria-label={zh ? '添加网格' : 'Add grid'}
+              disabled={gridDisabled}
+              title={gridDisabledReason}
+              type="button"
+              onClick={() => {
+                if (!document || gridDisabled) return
+                const plan = planEnableComposeGridLayout(document, entity.id, layoutSnapshot, idFactory)
+                if (plan.ok) dispatch(plan.command)
+              }}
+            >
+              {zh ? '网格' : 'Grid'}
             </button>
             <span>{zh ? '添加后可随时移除' : 'Remove it at any time'}</span>
           </div>

@@ -1,11 +1,13 @@
 import type { ComposeEntitySeed } from '@compose-ui/component-registry'
 import {
+  isComposeGridLayout,
   adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
   getComposeSpatialTransform,
   type ComposeCurve,
   type ComposeEntity,
-  type ComposeFlexLayout,
+  type ComposeGridItem,
+  type ComposeLayout,
   type JsonObject,
   type JsonValue,
 } from '@compose-ui/core'
@@ -18,13 +20,18 @@ import type { StagePoint, StageRect } from '@compose-ui/stage-engine'
  * 目标父级是 Auto Layout 容器时（传入 `parentLayout`），新 Entity 以 Flow 进入排队并按
  * 交叉轴采纳规则改写尺寸——与画布 reparent 的 `targetManagesFlow` 判定一致，避免同一个
  * 「放进容器」动作在拖入创建与拖动换父两条路径上得到不同结果。
+ *
+ * 目标父级是**网格**容器时改走 `gridPlacement`：交叉轴采纳是 Flex 专属（格中子级的轴尺寸
+ * 模式在求解里被忽略），而落在哪一格由调用方用 core 的 `findComposeGridVacancy` 算出——
+ * 那要读兄弟的格坐标，本函数只拿得到一个 seed。
  * @internal
  */
 export function entityFromSeed(
   seed: ComposeEntitySeed,
   id: string,
   center: StagePoint,
-  parentLayout?: ComposeFlexLayout,
+  parentLayout?: ComposeLayout,
+  gridPlacement?: ComposeGridItem,
 ): ComposeEntity {
   const transform = getComposeSpatialTransform({ id: '__seed__', ...seed })
   const placed = {
@@ -40,9 +47,14 @@ export function entityFromSeed(
     components: {
       ...structuredClone(seed.components),
       Transform: { rotation: transform.rotation },
-      LayoutItem: parentLayout
-        ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
-        : placed,
+      LayoutItem: isComposeGridLayout(parentLayout)
+        ? { ...placed, positioning: 'flow' }
+        : parentLayout
+          ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
+          : placed,
+      ...(isComposeGridLayout(parentLayout) && gridPlacement
+        ? { GridItem: gridPlacement }
+        : {}),
     },
   }
 }

@@ -32,7 +32,10 @@ import {
   getComposeComposition,
   getComposeCurve,
   getComposeCurveFill,
+  getComposeGridItem,
+  getComposeLayout,
   isComposeClosedCurve,
+  isComposeGridLayout,
   type ComposeLayoutSnapshot,
   type ComposeSize,
 } from '@compose-ui/core'
@@ -80,6 +83,7 @@ import {
   isStageSelectionRotatable,
   resolveStageResizeHandles,
   resolveStageScreenModel,
+  resolveStageGridLines,
   resolveStageSelectionConstraints,
   StageWorldUnderlay,
   unlockedStageIds,
@@ -403,6 +407,7 @@ function ComposeStageReady({
     sceneLayoutSnapshot,
   } = useStagePreviewDocuments({
     document,
+    dropTarget: interaction.dropTarget,
     interactionPhase: interaction.phase,
     layoutPreviewSnapshot,
     layoutRuntime,
@@ -430,6 +435,41 @@ function ComposeStageReady({
   })
 
   const hiddenEntityIds = useStageHiddenEntityIds(document, normalizedSelection)
+
+  /*
+   * 格线显形的判据：**用户此刻正在提出与格子有关的问题**。
+   *
+   * 三种情形——网格容器自己被选中（正在调列数行高）、手指按在格中子级上（按下即显形，
+   * 不等拖动开始）、或落点就在某块网格上（从别处拖进来）。静息时一条线都不画：一张图上多块
+   * 网格全画着格线，是几十条与当前操作无关的线，而用户还没在找格子。
+   *
+   * 这与端口「不常驻、命令取点期间按符号整组显现」是同一条判断。
+   */
+  const gridLineContainerIds = useMemo(() => {
+    const ids = new Set<string>()
+    const addIfGrid = (entityId: string | null | undefined) => {
+      if (!entityId) return
+      const entity = document.entities[entityId]
+      if (entity && isComposeGridLayout(getComposeLayout(entity))) ids.add(entityId)
+    }
+    const index = createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds)
+    normalizedSelection.forEach((entityId) => {
+      addIfGrid(entityId)
+      // 选中或按住格中子级时，画它所在的那块板子。
+      if (getComposeGridItem(document.entities[entityId])) addIfGrid(index.getParentId(entityId))
+    })
+    if (interaction.dropTarget?.kind === 'grid-cell') ids.add(interaction.dropTarget.containerId)
+    return [...ids]
+  }, [document, hiddenEntityIds, interaction.dropTarget, layoutSnapshot, normalizedSelection])
+
+  const gridLines = useMemo(() => {
+    if (gridLineContainerIds.length === 0) return []
+    const index = createStageSceneIndex(document, layoutSnapshot, hiddenEntityIds)
+    return gridLineContainerIds.flatMap((containerId) => {
+      const lines = resolveStageGridLines(index, containerId, viewport)
+      return lines ? [lines] : []
+    })
+  }, [document, gridLineContainerIds, hiddenEntityIds, layoutSnapshot, viewport])
 
   // 落点几何用未经 preview 变形的原始文档：拖动中的目标已被移开，兄弟与容器的真实位置
   // 才是插入线该贴的地方。
@@ -1302,7 +1342,11 @@ function ComposeStageReady({
             ? createVisualGridStyle(document.canvas.grid, viewport)
             : { display: 'none' }}
         />
-        <StageWorldUnderlay frameBounds={frameBounds} worldOriginScreen={worldOriginScreen} />
+        <StageWorldUnderlay
+          frameBounds={frameBounds}
+          gridLines={gridLines}
+          worldOriginScreen={worldOriginScreen}
+        />
         <StageSceneLayer
           assetResolver={assetResolver}
           document={previewDocument}

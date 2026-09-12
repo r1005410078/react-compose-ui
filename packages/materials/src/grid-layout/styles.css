@@ -1,0 +1,22 @@
+/*
+ * 列数指示条：跟着列数实时变段。用 flex 平分而不是按列宽算——它表达的是「几列」，
+ * 不是「每列多宽」，后者由画布上的格线回答。
+ */
+.grid-layout-inspector__column-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  margin: 2px 0 0;
+  padding: 0 var(--compose-space-2, 8px);
+}
+
+.grid-layout-inspector__column-bar > i {
+  flex: 1;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--compose-accent, #3687ff) 30%, transparent);
+}
+
+/* 段数超过可读下限时退成一条实心带：假装数得清比不数更糟。 */
+.grid-layout-inspector__column-bar > i.is-dense {
+  background: color-mix(in srgb, var(--compose-accent, #3687ff) 22%, transparent);
+}

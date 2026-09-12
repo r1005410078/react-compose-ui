@@ -105,6 +105,39 @@ export interface ComposeLayoutItem extends JsonObject {
   readonly alignSelf: 'auto' | 'flex-start' | 'center' | 'flex-end' | 'stretch' | 'baseline'
 }
 
+/**
+ * 网格容器中子级的格坐标与格跨度。
+ *
+ * @remarks
+ * 可选 Component，**缺席即不在格中**——与 `Ports`、`Curve`、`Frame` 是同一条判断。
+ * 单位是**格**而不是像素：像素坐标已经由 `LayoutItem.offset` 表达，两者混用是一个只有读过
+ * 源码的人才知道的暗坑，而症状（位置差了几十倍）看起来像求解缺陷不像单位缺陷。
+ *
+ * 只在父级拥有 {@link ComposeGridLayout} 时有意义。父级不是网格容器时它**不让文档非法**
+ * （切换布局类型是一次编辑，中间态不应阻断保存），但求解忽略它。
+ *
+ * 格中子级的 `LayoutItem.positioning` 是 `flow`：它确实参与父级排布，**怎么排**由父级
+ * Layout 的类型决定。这让「根级与 free parent 下必须 Absolute」那条既有校验规则原样成立。
+ *
+ * 用 `JsonObject &` 交叉而不是 `extends`：索引签名的 `JsonValue` 不接受 `undefined`，而两个
+ * 最小跨度都是可选的；`ComposeWire` 与 `ComposeAppearance` 出于同样原因采用这种写法。
+ * @public
+ */
+export type ComposeGridItem = JsonObject & {
+  /** 起始列，不为负的整数。 */
+  readonly x: number
+  /** 起始行，不为负的整数。 */
+  readonly y: number
+  /** 列跨度，不小于 1 的整数。 */
+  readonly w: number
+  /** 行跨度，不小于 1 的整数。 */
+  readonly h: number
+  /** 可选的最小列跨度，缩放时不得小于它。 */
+  readonly minW?: number
+  /** 可选的最小行跨度，缩放时不得小于它。 */
+  readonly minH?: number
+}
+
 /** Preset 基础组合和已附加能力的持久化 Authoring 数据。 @public */
 export interface ComposeComposition extends JsonObject {
   readonly presetId: string | null
@@ -202,8 +235,48 @@ export interface ComposeFlexLayout extends JsonObject {
   readonly columnGap: number
 }
 
-/** 容器可选的布局数据；当前仅支持 Flex。 @public */
-export type ComposeLayout = ComposeFlexLayout
+/**
+ * 容器可选的网格布局 Authoring 数据。
+ *
+ * @remarks
+ * 对标 GridStack：一块 `columns` 列的板子，子级按 {@link ComposeGridItem} 的格坐标摆放，
+ * 挡住谁就把谁向下推，让出来的空洞被下方子级自动填上。
+ *
+ * **列宽不在这里**——它由容器内容宽、`columns` 与 `columnGap` 推出。同一份事实存两处必然
+ * 漂移，而容器宽度会随宿主变。行高相反由作者给定：「一行有多高」是设计决定。
+ *
+ * @public
+ */
+export interface ComposeGridLayout extends JsonObject {
+  readonly type: 'grid'
+  /** 列数，不小于 1 的整数。 */
+  readonly columns: number
+  /** 单行高度，连续逻辑像素。 */
+  readonly rowHeight: number
+  readonly padding: ComposeEdges
+  readonly rowGap: number
+  readonly columnGap: number
+  /**
+   * 重力开关。
+   *
+   * @remarks
+   * `false`（默认）表示空洞被下方子级自动填上；`true` 表示子级停在作者放的行上，中间允许留空。
+   * 取 GridStack 的字段名与默认值——「故意留一行空白当分隔」是真实用法，因此做成开关而不是写死。
+   */
+  readonly float: boolean
+}
+
+/**
+ * 容器可选的布局数据。
+ *
+ * @remarks
+ * 按 `type` 判别的联合。读取方 MUST 先分派再取字段——`type` 缺失或不是已知成员时校验直接
+ * 拒绝，**不回退到 `flex`**：回退会让一份写坏的 grid 文档静默渲染成一条轴上的序列，而用户
+ * 无从得知。
+ *
+ * @public
+ */
+export type ComposeLayout = ComposeFlexLayout | ComposeGridLayout
 
 /** Container 单轴的溢出行为。 @public */
 export type ComposeOverflowMode = 'visible' | 'clip' | 'scroll'
@@ -294,6 +367,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   hierarchy: 'Hierarchy',
   widgetSwitcher: 'WidgetSwitcher',
   layout: 'Layout',
+  gridItem: 'GridItem',
   clip: 'Clip',
   frame: 'Frame',
   animations: 'Animations',
@@ -525,6 +599,7 @@ export type DocumentValidationIssueCode =
   | 'layout-item.invalid'
   | 'geometry-constraints.invalid'
   | 'layout.invalid'
+  | 'grid-item.invalid'
   | 'appearance.invalid'
   | 'appearance.invalid-paint'
   | 'renderer.invalid'

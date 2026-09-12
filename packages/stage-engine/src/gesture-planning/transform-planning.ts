@@ -1,16 +1,20 @@
 import {
   BUILTIN_COMMAND_TYPES,
+  composeGridColumnWidth,
+  getComposeGridItem,
   getComposeLayoutItem,
   getComposeLock,
   getComposeRenderer,
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
   type ComposeDocument,
+  type ComposeGridItem,
   type ComposeLayoutSnapshot,
+  type JsonValue,
 } from '@compose-ui/core'
 import { toComposeTransform, unionRects, type ResizeHandle, type StageRect, type StageTransform } from '../geometry'
 import { describeTransform } from '../commands'
-import type { StageSceneIndex } from '../hit-testing'
+import { resolveStageGridContext, solveStageGrid, type StageSceneIndex } from '../hit-testing'
 import type { StageInteractionEffect } from '../interaction-controller'
 
 /** 变换手势的三种语义；决定约束查询与提交规划的分支。 @public */
@@ -107,6 +111,110 @@ export type StageFinishedTransform =
  *
  * @public
  */
+/**
+ * 规划一次格中子级的缩放提交。
+ *
+ * @remarks
+ * 缩放写的是**格跨度**而不是像素尺寸：盒就是格矩形，把求解出来的像素写回 `LayoutItem` 会
+ * 造出第二份事实，而它下一帧就会被预解算覆盖掉。
+ *
+ * 拖到的边吸到最近的格线（`Math.round`，与移动落点取「所在的格」不同——缩放判据是「这条边
+ * 离哪条格线更近」，而移动判据是「左上角压住了哪一格」）。`minW` / `minH` 在这里钳制。
+ *
+ * 缩放同样推挤：拉宽挡住了谁，谁就下移，并与目标写在同一条 batch 里。
+ *
+ * @returns 目标不在网格里时为 `null`，由调用方退回既有的通用提交。
+ */
+function planGridResizeCommit(input: {
+  readonly document: ComposeDocument
+  readonly index: StageSceneIndex
+  readonly finished: Extract<StageFinishedTransform, { type: 'resize' }>
+  readonly idFactory: () => string
+}): StageInteractionEffect | null {
+  const { document, index, finished, idFactory } = input
+  const entityIds = Object.keys(finished.transforms)
+  const entityId = entityIds[0]
+  // 多选缩放在网格里的语义（整块等比还是逐张）尚未定，v1 只处理单个目标，其余退回通用路径。
+  if (!entityId || entityIds.length !== 1) return null
+  const item = getComposeGridItem(document.entities[entityId])
+  if (!item) return null
+  const containerId = index.getParentId(entityId)
+  const context = containerId ? resolveStageGridContext(index, containerId) : null
+  if (!containerId || !context) return null
+
+  const transform = finished.transforms[entityId]!
+  const columnStep = composeGridColumnWidth(context.metrics) + context.metrics.columnGap
+  const rowStep = context.metrics.rowHeight + context.metrics.rowGap
+  const changesWidth = finished.handle.includes('e') || finished.handle.includes('w')
+  const changesHeight = finished.handle.includes('n') || finished.handle.includes('s')
+  const spanFrom = (pixels: number, step: number, min: number) => (step > 0
+    ? Math.max(min, Math.round((pixels + context.metrics.columnGap) / step))
+    : min)
+  const w = changesWidth
+    ? Math.min(
+        context.layout.columns,
+        spanFrom(transform.width, columnStep, Math.max(1, item.minW ?? 1)),
+      )
+    : item.w
+  const h = changesHeight
+    ? spanFrom(transform.height, rowStep, Math.max(1, item.minH ?? 1))
+    : item.h
+  // 拖西/北侧手柄时起点也跟着动：用变换后的左上角重新取格，否则卡片会向反方向长出去。
+  const local = index.getWorldMatrix(containerId) && toGridOrigin(index, containerId, context, transform)
+  const x = local ? Math.min(Math.max(0, local.x), Math.max(0, context.layout.columns - w)) : item.x
+  const y = local ? Math.max(0, local.y) : item.y
+  if (w === item.w && h === item.h && x === item.x && y === item.y) return null
+
+  const solved = solveStageGrid(index, containerId, context, { id: entityId, x, y, w, h })
+  const commandId = idFactory()
+  const commands = solved.flatMap((cell) => {
+    const before = getComposeGridItem(document.entities[cell.id])
+    if (before && before.x === cell.x && before.y === cell.y
+      && before.w === cell.w && before.h === cell.h) return []
+    const value: ComposeGridItem = { ...(before ?? {}), x: cell.x, y: cell.y, w: cell.w, h: cell.h }
+    return [{
+      id: `${commandId}:${cell.id}:grid-item`,
+      type: BUILTIN_COMMAND_TYPES.updateComponent,
+      payload: { entityId: cell.id, key: 'GridItem', value },
+    }]
+  })
+  if (commands.length === 0) return null
+  return {
+    type: 'command.dispatch',
+    command: {
+      id: commandId,
+      type: BUILTIN_COMMAND_TYPES.batch,
+      payload: { commands: commands as unknown as JsonValue },
+      meta: {
+        label: describeTransform(document, [{ entityId, transform }], 'resize'),
+        source: 'stage',
+        targetIds: solved.map((cell) => cell.id),
+      },
+    },
+  }
+}
+
+/** 把缩放后的世界左上角换算成格坐标。 */
+function toGridOrigin(
+  index: StageSceneIndex,
+  containerId: string,
+  context: ReturnType<typeof resolveStageGridContext>,
+  transform: StageTransform,
+): { readonly x: number; readonly y: number } | null {
+  if (!context) return null
+  const columnStep = composeGridColumnWidth(context.metrics) + context.metrics.columnGap
+  const rowStep = context.metrics.rowHeight + context.metrics.rowGap
+  const box = index.layoutSnapshot.boxes[containerId]
+  const containerWorld = index.getWorldBounds(containerId)
+  if (!box || !containerWorld) return null
+  const localX = transform.x - containerWorld.x - context.contentOrigin.x
+  const localY = transform.y - containerWorld.y - context.contentOrigin.y
+  return {
+    x: columnStep > 0 ? Math.max(0, Math.round(localX / columnStep)) : 0,
+    y: rowStep > 0 ? Math.max(0, Math.round(localY / rowStep)) : 0,
+  }
+}
+
 export function planTransformCommit(options: {
   readonly document: ComposeDocument
   readonly layoutSnapshot: ComposeLayoutSnapshot
@@ -115,6 +223,10 @@ export function planTransformCommit(options: {
   readonly idFactory: () => string
 }): StageInteractionEffect | null {
   const { document, layoutSnapshot, index, finished, idFactory } = options
+  if (finished.type === 'resize' && index) {
+    const grid = planGridResizeCommit({ document, index, finished, idFactory })
+    if (grid) return grid
+  }
   const stageUpdates = Object.entries(finished.transforms)
     .filter(([entityId]) => {
       if (finished.type !== 'move') return true

@@ -1,4 +1,6 @@
 import type { StagePoint } from '@compose-ui/stage-engine'
+import { StageGridLinesLayer } from './stage-grid-lines-layer'
+import type { StageGridLines } from './stage-grid-lines'
 import type { StageFrameScreenBounds } from './stage-screen-geometry'
 
 /** 世界原点图标的半边长；用于把 16×16 的图标中心对准原点。 */
@@ -19,6 +21,13 @@ export interface StageWorldUnderlayProps {
   readonly frameBounds: readonly StageFrameScreenBounds[]
   /** 世界原点的屏幕坐标。 */
   readonly worldOriginScreen: StagePoint
+  /**
+   * 要画格线的网格容器。
+   *
+   * @remarks
+   * 画在这一层而不是覆盖层：格线是底纹不是标注，压在卡片上会让每张卡横着几条线。
+   */
+  readonly gridLines?: readonly StageGridLines[]
 }
 
 /**
@@ -42,10 +51,12 @@ export interface StageWorldUnderlayProps {
  */
 export function StageWorldUnderlay({
   frameBounds,
+  gridLines = [],
   worldOriginScreen,
 }: StageWorldUnderlayProps) {
   return (
     <svg aria-hidden="true" className="compose-stage__world-overlay">
+      <StageGridLinesLayer lines={gridLines} />
       {frameBounds.map((frame) => (
         <g key={frame.frameId}>
           <rect

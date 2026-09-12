@@ -1,10 +1,18 @@
 import {
+  getComposeGridItem,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
   getComposeLock,
+  isComposeGridLayout,
+  projectComposeGridCell,
 } from '@compose-ui/core'
 import { applyMatrix, invertMatrix, type StagePoint, type StageRect } from '../geometry'
+import {
+  resolveStageGridCell,
+  resolveStageGridContext,
+  solveStageGrid,
+} from './grid-drop'
 import type { StageSceneIndex } from './scene-index'
 
 /**
@@ -17,6 +25,19 @@ import type { StageSceneIndex } from './scene-index'
  */
 export type StageDropTarget =
   | { readonly kind: 'reparent'; readonly containerId: string }
+  | {
+      /**
+       * 落进一个网格容器的某一格。
+       *
+       * @remarks
+       * 它同时表达重排与 reparent——网格里「放到哪儿」只有一个答案，就是格坐标；父级变没变
+       * 由提交方比较 `containerId` 与当前父级得出，不需要第二个 kind。
+       */
+      readonly kind: 'grid-cell'
+      readonly containerId: string
+      readonly x: number
+      readonly y: number
+    }
   | {
       readonly kind: 'reorder'
       readonly containerId: string
@@ -202,6 +223,9 @@ function resolveInsertIndex(input: {
   const local = localPoint(index, containerId, worldPoint)
   if (!layout || !local) return null
 
+  // 网格容器在 resolveSameContainerReorder 就分流走了；这里再挡一次，让「插到第几个」这个
+  // 问题永远只对 Flex 提出——它在网格里根本没有答案。
+  if (isComposeGridLayout(layout)) return null
   const { isRow, reversed } = mainAxisOf(layout)
   const pointer = isRow ? local.x : local.y
   const cross = isRow ? local.y : local.x
@@ -262,18 +286,54 @@ function pointInsideBox(index: StageSceneIndex, entityId: string, worldPoint: St
     && local.y >= 0 && local.y <= box.height)
 }
 
+/**
+ * 网格容器的落点。
+ *
+ * @remarks
+ * 多选一起拖时按**选区的包围盒左上角**取格：逐个算会让选区内部的卡片互相推挤，而用户拖的
+ * 是一整块。v1 只把**第一个**目标写成格坐标，其余跟随——多选在网格里的完整语义（整块平移
+ * 且内部相对位置不变）需要一条判别性用例先钉住，留在后续变更。
+ */
+function resolveGridDropTarget(input: {
+  readonly index: StageSceneIndex
+  readonly containerId: string
+  readonly draggedIds: readonly string[]
+  readonly worldPoint: StagePoint
+  readonly draggedBounds?: StageRect
+}): StageDropTarget | null {
+  const { index, containerId, draggedIds, worldPoint, draggedBounds } = input
+  const context = resolveStageGridContext(index, containerId)
+  if (!context) return null
+  const leadId = draggedIds[0]
+  if (!leadId) return null
+  const span = getComposeGridItem(index.document.entities[leadId])?.w ?? 1
+  const cell = resolveStageGridCell({
+    index,
+    containerId,
+    context,
+    worldPoint,
+    draggedBounds,
+    span,
+  })
+  return cell ? { kind: 'grid-cell', containerId, x: cell.x, y: cell.y } : null
+}
+
 function resolveSameContainerReorder(input: {
   readonly index: StageSceneIndex
   readonly containerId: string
   readonly draggedIds: readonly string[]
   readonly worldPoint: StagePoint
+  readonly draggedBounds?: StageRect
 }): StageDropTarget | null {
-  const { index, containerId, draggedIds, worldPoint } = input
+  const { index, containerId, draggedIds, worldPoint, draggedBounds } = input
   const container = index.document.entities[containerId]
   const hierarchy = container ? getComposeHierarchy(container) : null
   if (!container || !hierarchy) return null
   const layout = getComposeLayout(container)
   if (!layout) return null
+  if (isComposeGridLayout(layout)) {
+    return resolveGridDropTarget({ index, containerId, draggedIds, worldPoint, draggedBounds })
+  }
   const allFlow = draggedIds.every((id) => {
     const entity = index.document.entities[id]
     return entity && getComposeLayoutItem(entity).positioning === 'flow'
@@ -312,8 +372,16 @@ export function resolveStageDropTarget(input: {
   readonly worldPoint: StagePoint
   readonly zoom: number
   readonly modifiers?: StageDropModifiers
+  /**
+   * 被拖选区在预览变换之后的世界包围盒。
+   *
+   * @remarks
+   * 只有网格落点用得到：格坐标取盒的左上角而不是指针，否则抓住卡片中间拖会让它整体偏掉一个
+   * 抓取偏移。Flow 重排照旧只看指针——那边的判据是「指针越过了哪个兄弟的中点」。
+   */
+  readonly draggedBounds?: StageRect
 }): StageDropTarget | null {
-  const { index, draggedIds, worldPoint, zoom, modifiers } = input
+  const { index, draggedIds, worldPoint, zoom, modifiers, draggedBounds } = input
   if (draggedIds.length === 0) return null
 
   if (modifiers?.space) {
@@ -324,7 +392,13 @@ export function resolveStageDropTarget(input: {
     const container = index.document.entities[locked]
     if (!container || getComposeLock(container).locked) return null
     if (!pointInsideBox(index, locked, worldPoint)) return null
-    return resolveSameContainerReorder({ index, containerId: locked, draggedIds, worldPoint })
+    return resolveSameContainerReorder({
+      index,
+      containerId: locked,
+      draggedIds,
+      worldPoint,
+      draggedBounds,
+    })
   }
 
   const containerId = index.containerAtPoint(worldPoint, draggedIds)
@@ -335,10 +409,20 @@ export function resolveStageDropTarget(input: {
 
   const staysInPlace = draggedIds.every((id) => index.getParentId(id) === containerId)
   if (staysInPlace) {
-    return resolveSameContainerReorder({ index, containerId, draggedIds, worldPoint })
+    return resolveSameContainerReorder({
+      index,
+      containerId,
+      draggedIds,
+      worldPoint,
+      draggedBounds,
+    })
   }
 
   if (!modifiers?.alt && !isDeepInside(index, containerId, worldPoint, zoom)) return null
+  // 拖进网格容器同样落到格上：目标格就是它松手之后的位置，与同容器内拖动没有区别。
+  if (isComposeGridLayout(getComposeLayout(container))) {
+    return resolveGridDropTarget({ index, containerId, draggedIds, worldPoint, draggedBounds })
+  }
   return { kind: 'reparent', containerId }
 }
 
@@ -353,6 +437,11 @@ export function resolveStageDropTarget(input: {
 export type StageDropIndicator =
   | { readonly kind: 'reparent'; readonly bounds: StageRect }
   | { readonly kind: 'reorder'; readonly start: StagePoint; readonly end: StagePoint }
+  | {
+      /** 网格占位影子：松手之后那张卡会占住的格矩形，已换算到世界坐标。 */
+      readonly kind: 'grid-cell'
+      readonly bounds: StageRect
+    }
 
 /**
  * 把落点判定换算成可渲染的世界几何。
@@ -371,12 +460,48 @@ export function resolveStageDropIndicator(input: {
     return bounds ? { kind: 'reparent', bounds } : null
   }
 
+  if (target.kind === 'grid-cell') {
+    const context = resolveStageGridContext(index, target.containerId)
+    const matrix = index.getWorldMatrix(target.containerId)
+    const leadId = draggedIds[0]
+    if (!context || !matrix || !leadId) return null
+    const item = getComposeGridItem(index.document.entities[leadId])
+    const override = {
+      id: leadId,
+      x: target.x,
+      y: target.y,
+      w: item?.w ?? 1,
+      h: item?.h ?? 1,
+    }
+    // 影子画在**求解之后**的位置：重力会把它继续往上拉，而影子承诺的正是松手后的结果。
+    const solved = solveStageGrid(index, target.containerId, context, override)
+    const settled = solved.find((cell) => cell.id === leadId) ?? override
+    const rect = projectComposeGridCell(settled, context.metrics)
+    const topLeft = applyMatrix(matrix, {
+      x: context.contentOrigin.x + rect.x,
+      y: context.contentOrigin.y + rect.y,
+    })
+    const bottomRight = applyMatrix(matrix, {
+      x: context.contentOrigin.x + rect.x + rect.width,
+      y: context.contentOrigin.y + rect.y + rect.height,
+    })
+    return {
+      kind: 'grid-cell',
+      bounds: {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y,
+      },
+    }
+  }
+
   const container = index.document.entities[target.containerId]
   const hierarchy = container ? getComposeHierarchy(container) : null
   const layout = container ? getComposeLayout(container) : null
   const box = index.layoutSnapshot.boxes[target.containerId]
   const matrix = index.getWorldMatrix(target.containerId)
-  if (!hierarchy || !layout || !box || !matrix) return null
+  if (!hierarchy || !layout || !box || !matrix || isComposeGridLayout(layout)) return null
 
   const { isRow, reversed } = mainAxisOf(layout)
   const slots = collectFlowSlots({

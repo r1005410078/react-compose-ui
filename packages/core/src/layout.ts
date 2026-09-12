@@ -9,6 +9,7 @@ import type {
   ComposeLayoutItem,
   ComposeJustifyContent,
   ComposeLayout,
+  ComposeGridLayout,
 } from './document-types'
 
 const FLEX_DIRECTIONS = new Set<ComposeFlexDirection>([
@@ -49,6 +50,16 @@ const ALIGN_ITEMS_VALUES = new Set<ComposeAlignItems>([
   'stretch',
   'baseline',
 ])
+
+const GRID_LAYOUT_FIELDS = [
+  'type',
+  'columns',
+  'rowHeight',
+  'padding',
+  'rowGap',
+  'columnGap',
+  'float',
+] as const
 
 const FLEX_LAYOUT_FIELDS = [
   'type',
@@ -106,18 +117,9 @@ function collectEdgesIssues(
   })
 }
 
-/**
- * 收集 Layout 候选值的字段级问题。
- *
- * @internal
- */
-export function collectComposeLayoutValidationIssues(
-  value: unknown,
+function collectFlexLayoutIssues(
+  value: LayoutRecord,
 ): readonly ComposeLayoutValidationIssue[] {
-  if (!isRecord(value)) {
-    return [{ path: [], message: 'Layout 必须是对象' }]
-  }
-
   const issues: ComposeLayoutValidationIssue[] = []
   const knownFields = new Set<string>(FLEX_LAYOUT_FIELDS)
   Object.keys(value).forEach((key) => {
@@ -126,9 +128,6 @@ export function collectComposeLayoutValidationIssues(
     }
   })
 
-  if (value.type !== 'flex') {
-    issues.push({ path: ['type'], message: 'type 必须是 flex' })
-  }
   if (!FLEX_DIRECTIONS.has(value.flexDirection as ComposeFlexDirection)) {
     issues.push({ path: ['flexDirection'], message: 'flexDirection 无效' })
   }
@@ -153,6 +152,59 @@ export function collectComposeLayoutValidationIssues(
   return issues
 }
 
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+}
+
+function collectGridLayoutIssues(
+  value: LayoutRecord,
+): readonly ComposeLayoutValidationIssue[] {
+  const issues: ComposeLayoutValidationIssue[] = []
+  const knownFields = new Set<string>(GRID_LAYOUT_FIELDS)
+  Object.keys(value).forEach((key) => {
+    if (!knownFields.has(key)) {
+      issues.push({ path: [key], message: `未知字段 ${key}` })
+    }
+  })
+
+  if (!positiveInteger(value.columns)) {
+    issues.push({ path: ['columns'], message: 'columns 必须是不小于 1 的整数' })
+  }
+  if (!finitePositive(value.rowHeight)) {
+    issues.push({ path: ['rowHeight'], message: 'rowHeight 必须是有限正数' })
+  }
+  collectEdgesIssues(value.padding, ['padding'], issues)
+  for (const key of ['rowGap', 'columnGap'] as const) {
+    if (!finiteNonNegative(value[key])) {
+      issues.push({ path: [key], message: `${key} 必须是有限非负数` })
+    }
+  }
+  if (typeof value.float !== 'boolean') {
+    issues.push({ path: ['float'], message: 'float 必须是布尔值' })
+  }
+  return issues
+}
+
+/**
+ * 收集 Layout 候选值的字段级问题。
+ *
+ * @remarks
+ * 按 `type` 分派。未知 `type` 直接拒绝且 **MUST NOT 回退到 `flex`**：回退会让一份写坏的
+ * grid 文档静默渲染成一条轴上的序列，而用户无从得知自己的板子为什么变成了一列。
+ *
+ * @internal
+ */
+export function collectComposeLayoutValidationIssues(
+  value: unknown,
+): readonly ComposeLayoutValidationIssue[] {
+  if (!isRecord(value)) {
+    return [{ path: [], message: 'Layout 必须是对象' }]
+  }
+  if (value.type === 'flex') return collectFlexLayoutIssues(value)
+  if (value.type === 'grid') return collectGridLayoutIssues(value)
+  return [{ path: ['type'], message: 'type 必须是 flex 或 grid' }]
+}
+
 /** 创建独立的 Flex Layout 默认值。 @public */
 export function createDefaultComposeFlexLayout(): ComposeFlexLayout {
   return {
@@ -166,6 +218,35 @@ export function createDefaultComposeFlexLayout(): ComposeFlexLayout {
     rowGap: 0,
     columnGap: 0,
   }
+}
+
+/**
+ * 创建独立的网格 Layout 默认值。
+ *
+ * @remarks
+ * 12 列能被 2/3/4/6 整除，因此「两栏」「三栏」「四栏」都能整齐排开；行高 48 与间距 6 是
+ * 仪表盘卡片的常见一档。`float` 取 `false`，即空洞自动填上——那是 GridStack 的默认值，
+ * 也是「拖走一张卡、下面的自己补上来」这条最常被依赖的行为。
+ *
+ * @public
+ */
+export function createDefaultComposeGridLayout(): ComposeGridLayout {
+  return {
+    type: 'grid',
+    columns: 12,
+    rowHeight: 48,
+    padding: createComposeEdges(16),
+    rowGap: 6,
+    columnGap: 6,
+    float: false,
+  }
+}
+
+/** 判断未知输入是否为网格 Layout。 @public */
+export function isComposeGridLayout(
+  value: ComposeLayout | undefined,
+): value is ComposeGridLayout {
+  return value?.type === 'grid'
 }
 
 /** 判断未知输入是否为完整、严格的 Compose Layout。 @public */
