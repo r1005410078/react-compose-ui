@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>导线的几种状态</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page-bg: #f4f6f9;
+    --page-panel: #ffffff;
+    --page-ink: #141a22;
+    --page-muted: #5a6472;
+    --page-line: #dde3ec;
+    --page-accent: #1f6feb;
+    --page-todo: #b45309;
+
+    /* 画布 token —— 取自 packages/stage/src/styles.css 与 ui-context 的深色主题 */
+    --canvas: #11151b;
+    --canvas-border: #2c3542;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0d1117;
+      --page-panel: #151b23;
+      --page-ink: #e6edf7;
+      --page-muted: #99a3b2;
+      --page-line: #262f3b;
+      --page-accent: #4d9cff;
+      --page-todo: #f59e0b;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #0d1117;
+    --page-panel: #151b23;
+    --page-ink: #e6edf7;
+    --page-muted: #99a3b2;
+    --page-line: #262f3b;
+    --page-accent: #4d9cff;
+    --page-todo: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: 'IBM Plex Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { max-width: var(--measure); color: var(--page-muted); margin: 0; }
+
+  h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 4px; }
+  .section-head p { max-width: var(--measure); margin: 0; color: var(--page-muted); }
+
+  .answers { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .answer {
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .answer .q {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+  .answer .a { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .answer .why { font-size: 13.5px; color: var(--page-muted); line-height: 1.6; }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      var(--canvas);
+    border: 1px solid var(--canvas-border);
+  }
+  .stage svg { display: block; width: 100%; height: auto; }
+
+  /* 本稿画着、尚未落地的部分；琥珀虚线圈是这张图上唯一的「还没做」记号。 */
+  .stage.todo { outline: 2px dashed var(--page-todo); outline-offset: 3px; }
+
+  .step { display: flex; flex-direction: column; gap: 12px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-n {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--page-accent);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+  .step-title { font-weight: 600; letter-spacing: -0.01em; }
+  .step-note { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .step-note code, p code, td code, li code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--page-accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 40px; }
+
+  .pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .pair figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .pair figcaption { font-size: 13.5px; color: var(--page-muted); }
+  .pair figcaption b { color: var(--page-ink); font-weight: 600; }
+  .trio { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 620px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--page-line); vertical-align: top; }
+  th {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+    font-weight: 500;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  .swatch {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: -1px;
+    border: 1px solid rgb(128 128 128 / 35%);
+  }
+
+  .reject {
+    border-left: 3px solid var(--page-line);
+    padding: 2px 0 2px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reject h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .reject p { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+
+  .callout {
+    background: color-mix(in srgb, var(--page-accent) 7%, var(--page-panel));
+    border: 1px solid color-mix(in srgb, var(--page-accent) 26%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .callout.todo {
+    background: color-mix(in srgb, var(--page-todo) 8%, var(--page-panel));
+    border-color: color-mix(in srgb, var(--page-todo) 34%, transparent);
+  }
+  .callout strong { font-weight: 600; }
+  .callout p { margin: 0; font-size: 14px; max-width: var(--measure); }
+
+  footer {
+    border-top: 1px solid var(--page-line);
+    padding-top: 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SDD 补充 · 导线交互</div>
+    <h1>导线的几种状态</h1>
+    <p class="lede">
+      一条导线在画布上有六种形态，这份稿子把它们并排画出来，重点是<strong>顶点模式</strong>——
+      它与别的曲线不一样，因为导线只走横平竖直。画布片段按 Stage 的真实 token 1:1 绘制；
+      <strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿画着、尚未落地</strong>——全稿只有最后两节的提案那一半。
+    </p>
+  </header>
+
+  <section>
+    <div class="answers">
+      <div class="answer">
+        <div class="q">点一下选中的是什么</div>
+        <div class="a">整条连接</div>
+        <div class="why">
+          两个接线点之间的全部，含拐点。Entity 的边界本来就落在接线点上——接线时被搭的那条会被断成两条。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">顶点模式能改什么</div>
+        <div class="a">端点与段，不含拐点</div>
+        <div class="why">
+          正交折线上的内部拐点两根轴各被一条相邻段钉死，没有自由度。改形状靠拖整段。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">Delete 删掉什么</div>
+        <div class="a">整条连接</div>
+        <div class="why">
+          与 AutoCAD Electrical 的 <code>AETRIM</code> 同义：修剪到最近的接线点为止，不再需要的节点一并删除。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <strong>四支墨回答四个不同的问题，因此不共用颜色</strong>
+    <p>
+      <span class="swatch" style="background:#ff3b30"></span><strong>导线红 #ff3b30</strong>——一次回路的墨，线宽 2；
+      <span class="swatch" style="background:#38bdf8"></span><strong>端口 / 已绑 #38bdf8</strong>——「这里可以接 / 这里接上了」；
+      <span class="swatch" style="background:#3687ff"></span><strong>accent #3687ff</strong>——「这是选中的 / 将要产出的」；
+      <span class="swatch" style="background:#f2545b"></span><strong>热夹点 #f2545b</strong>——「有一次编辑正在进行」；
+      <span class="swatch" style="background:#ffa53c"></span><strong>捕捉橙 #ffa53c</strong>——「吸上了没有」。
+      失效的绑定用琥珀而不是红：导线自己就是红的，红记号画在红线上等于没画。
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>六个状态</h2>
+      <p>从画布上一条安静的导线，到正在画的那一条。</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-head"><span class="step-n">01</span><span class="step-title">空闲</span></div>
+        <div class="stage"><svg viewBox="0 0 880 380" role="img" aria-label="空闲的导线"><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="110" y="120" width="110" height="96" rx="3"/><path d="M220 144h10"/><path d="M220 168h10"/><path d="M220 192h10"/></g><text x="165" y="173" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="620" y="214" width="110" height="96" rx="3"/><path d="M620 238h-10"/><path d="M620 262h-10"/><path d="M620 286h-10"/></g><text x="675" y="267" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text><path d="M240 168H430V262H610" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/></svg></div>
+        <p class="step-note">画布上什么 chrome 都没有。唯一的例外是<strong>失效的绑定</strong>——它是缺陷而不是未完成，因此不选中也画（琥珀实心端点），其余记号一律要用户先问。</p>
+      </div>
+      <div class="step">
+        <div class="step-head"><span class="step-n">02</span><span class="step-title">选中：画几何轮廓，不画包围盒</span></div>
+        <div class="stage"><svg viewBox="0 0 880 380" role="img" aria-label="选中的导线"><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="110" y="120" width="110" height="96" rx="3"/><path d="M220 144h10"/><path d="M220 168h10"/><path d="M220 192h10"/></g><text x="165" y="173" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="620" y="214" width="110" height="96" rx="3"/><path d="M620 238h-10"/><path d="M620 262h-10"/><path d="M620 286h-10"/></g><text x="675" y="267" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text><path d="M240 168H430V262H610" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M240 168H430V262H610" fill="none" stroke="#3687ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="240" cy="168" r="4.5" fill="#38bdf8"/><circle cx="610" cy="262" r="4.5" fill="#38bdf8"/><text x="240" y="140" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">已绑 KA1:2</text><text x="610" y="292" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">已绑 XT2:1</text><g transform="translate(0 336)"><rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif"></text></g></svg></div>
+        <p class="step-note">一条对角线的包围盒里绝大部分是空的，那个矩形宣称了对象并不占据的面积。两端各画一个接线状态记号——已绑实心、自由是空心虚线环。此刻 <code>Delete</code> 删掉的是<strong>整条连接</strong>，也就是两个接线点之间的全部，含三段与两个拐点。</p>
+      </div>
+      <div class="step">
+        <div class="step-head"><span class="step-n">03</span><span class="step-title">顶点模式 · 等着抓</span></div>
+        <div class="stage"><svg viewBox="0 0 880 380" role="img" aria-label="顶点模式，等着抓"><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="110" y="120" width="110" height="96" rx="3"/><path d="M220 144h10"/><path d="M220 168h10"/><path d="M220 192h10"/></g><text x="165" y="173" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="620" y="214" width="110" height="96" rx="3"/><path d="M620 238h-10"/><path d="M620 262h-10"/><path d="M620 286h-10"/></g><text x="675" y="267" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text><path d="M240 168H430V262H610" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M240 168H430V262H610" fill="none" stroke="#3687ff" stroke-width="1" stroke-opacity="0.7" stroke-dasharray="4 3"/><rect x="235.5" y="163.5" width="9" height="9" fill="#181b20" stroke="#3687ff" stroke-width="1.5"/><rect x="605.5" y="257.5" width="9" height="9" fill="#181b20" stroke="#3687ff" stroke-width="1.5"/><rect x="326.5" y="164.75" width="17" height="6.5" rx="1.5" fill="#181b20" fill-opacity="0.55" stroke="#3687ff" stroke-width="1.5"/><rect x="426.75" y="206.5" width="6.5" height="17" rx="1.5" fill="#181b20" fill-opacity="0.55" stroke="#3687ff" stroke-width="1.5"/><rect x="511.5" y="258.75" width="17" height="6.5" rx="1.5" fill="#181b20" fill-opacity="0.55" stroke="#3687ff" stroke-width="1.5"/><g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M258 106h46M316 106h46M310 54v46M310 112v46"/><rect x="304" y="100" width="12" height="12" fill="none" stroke-opacity="0.7"/></g><g transform="translate(0 336)"><rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif"></text></g><text x="444" y="158" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">拐点上没有方块</text></svg></div>
+        <p class="step-note">双击进入。盒手柄与选区盒一并让位，轮廓改由可编辑路径层画（1px 虚线）。<strong>两个端点是方块，三段各一个条形</strong>——而两个内部拐点一个方块都没有：正交折线上它们的两根轴各被一条相邻段钉死，没有自由度，留一个拖不动的方块比不留更糟。既没点亮也没拖动，因此十字线与拾取框都画。</p>
+      </div>
+      <div class="step">
+        <div class="step-head"><span class="step-n">04</span><span class="step-title">顶点模式 · 点亮</span></div>
+        <div class="stage"><svg viewBox="0 0 880 380" role="img" aria-label="点亮一个段夹点"><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="110" y="120" width="110" height="96" rx="3"/><path d="M220 144h10"/><path d="M220 168h10"/><path d="M220 192h10"/></g><text x="165" y="173" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="620" y="214" width="110" height="96" rx="3"/><path d="M620 238h-10"/><path d="M620 262h-10"/><path d="M620 286h-10"/></g><text x="675" y="267" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text><path d="M240 168H430V262H610" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M240 168H430V262H610" fill="none" stroke="#3687ff" stroke-width="1" stroke-opacity="0.7" stroke-dasharray="4 3"/><rect x="235.5" y="163.5" width="9" height="9" fill="#181b20" stroke="#3687ff" stroke-width="1.5"/><rect x="605.5" y="257.5" width="9" height="9" fill="#181b20" stroke="#3687ff" stroke-width="1.5"/><rect x="326.5" y="164.75" width="17" height="6.5" rx="1.5" fill="#181b20" fill-opacity="0.55" stroke="#3687ff" stroke-width="1.5"/><rect x="426.75" y="206.5" width="6.5" height="17" rx="1.5" fill="#f2545b" fill-opacity="1" stroke="#f2545b" stroke-width="1.5"/><rect x="511.5" y="258.75" width="17" height="6.5" rx="1.5" fill="#181b20" fill-opacity="0.55" stroke="#3687ff" stroke-width="1.5"/><g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M434 246h46M492 246h46M486 194v46M486 252v46"/></g><g transform="translate(0 336)"><rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定新位置:</text></g><text x="430" y="200" font-size="12" fill="#f2545b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">点亮：下一次按下就是取点</text></svg></div>
+        <p class="step-note">按下去没动就松手：会话留着、夹点点亮（<code>GRIPHOT</code>）。此刻框让位——「等着抓点什么」那件事已经发生，框只会挡住落点。再点一下画布或<strong>键入一个坐标</strong>都提交同一条 <code>entity.curve.set</code>；<code>Escape</code> 先熄灭，再按一次才退出。</p>
+      </div>
+      <div class="step">
+        <div class="step-head"><span class="step-n">05</span><span class="step-title">顶点模式 · 拖一段</span></div>
+        <div class="stage"><svg viewBox="0 0 880 380" role="img" aria-label="拖段夹点只沿垂直方向"><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="110" y="120" width="110" height="96" rx="3"/><path d="M220 144h10"/><path d="M220 168h10"/><path d="M220 192h10"/></g><text x="165" y="173" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="620" y="214" width="110" height="96" rx="3"/><path d="M620 238h-10"/><path d="M620 262h-10"/><path d="M620 286h-10"/></g><text x="675" y="267" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text><path d="M240 168H430V262H610" fill="none" stroke="#6b2a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9" stroke-dasharray="5 4"/><path d="M240 168H520V262H610" fill="none" stroke="#3687ff" stroke-width="1" stroke-opacity="0.7" stroke-dasharray="4 3"/><path d="M240 168H520V262H610" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><rect x="516.75" y="206.5" width="6.5" height="17" rx="1.5" fill="#f2545b" fill-opacity="1" stroke="#f2545b" stroke-width="1.5"/><path d="M520 215V296" stroke="#8b97a8" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.9"/><g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M468 296h46M526 296h46M520 244v46M520 302v46"/></g><text x="508" y="282" font-size="12" fill="#7d8797" text-anchor="end" font-family="'IBM Plex Sans SC', sans-serif">平行分量被丢掉</text><text x="430" y="150" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">原来在这里</text><g transform="translate(0 336)"><rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定新位置:</text></g></svg></div>
+        <p class="step-note">导线的段夹点<strong>只沿垂直于该段的方向平移</strong>：光标在右下，而这一段是竖直的，于是只有水平那一半生效。平行平移会让两头的相邻段各自变斜——它们与这一段垂直，共用的那个端点一沿段方向走就不再对齐。相邻两段只是伸缩，两个端点一动不动，整条线仍然横平竖直。</p>
+      </div>
+      <div class="step">
+        <div class="step-head"><span class="step-n">06</span><span class="step-title">取点中：每点一下就落地</span></div>
+        <div class="stage"><svg viewBox="0 0 880 380" role="img" aria-label="画导线，每点一下就落地"><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="110" y="120" width="110" height="96" rx="3"/><path d="M220 144h10"/><path d="M220 168h10"/><path d="M220 192h10"/></g><text x="165" y="173" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">KA1</text><g stroke="#dfe7f3" stroke-width="1.6" fill="none"><rect x="620" y="214" width="110" height="96" rx="3"/><path d="M620 238h-10"/><path d="M620 262h-10"/><path d="M620 286h-10"/></g><text x="675" y="267" font-size="14" fill="#dfe7f3" font-family="'IBM Plex Mono', ui-monospace, monospace" text-anchor="middle">XT2</text><path d="M240 168H430V262" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M430 262H610" fill="none" stroke="#3687ff" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1" stroke-dasharray="5 4"/><rect x="603" y="255" width="14" height="14" fill="#ffa53c" fill-opacity="0.16" stroke="#ffa53c" stroke-width="1.4"/><g fill="none" stroke="#38bdf8" stroke-width="1.6"><circle cx="610" cy="238" r="4.5"/><circle cx="610" cy="262" r="4.5"/><circle cx="610" cy="286" r="4.5"/></g><g stroke="#e6edf7" stroke-width="1" stroke-opacity="0.85"><path d="M558 262h46M616 262h46M610 210v46M610 268v46"/></g><text x="335" y="152" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">已落地：真的 Entity</text><text x="520" y="246" font-size="12" fill="#3687ff" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">待定的那一段</text><g transform="translate(0 336)"><rect x="12" y="0" width="856" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">指定下一点（回车结束）或 [放弃(U)]:</text></g></svg></div>
+        <p class="step-note">第二个点就把这条线建出来，之后每取一个点扩它一个顶点——产出仍然是<strong>一个</strong> Entity。预览因此只画<strong>待定的那一段</strong>：已落地的部分是真的 Entity、由渲染器画，再画一遍就是同一条线画两遍。从第二个点起角度约束钉死成正交；光标进入符号的够及范围时，它的全部端口一起显现。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>顶点模式：三种夹点，三件不同的事</h2>
+      <p>形状先分开、颜色再分开——两个夹点长得一样而按下去做的事不同，是最难自己发现的一类缺陷。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>夹点</th><th>形状</th><th>做什么</th><th>导线上</th><th>普通曲线上</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>端点顶点</td>
+            <td>方块</td>
+            <td>移动这一端，落在端口上即改接线</td>
+            <td>出。方向相对<strong>相邻顶点</strong>量，那一段因此始终是横的或竖的</td>
+            <td>出，跟随会话级角度约束</td>
+          </tr>
+          <tr>
+            <td>内部拐点</td>
+            <td>方块</td>
+            <td>移动这个顶点</td>
+            <td><strong>不出</strong>。两根轴各被一条相邻段钉死，一个自由度都没有</td>
+            <td>出，两个方向都能拖</td>
+          </tr>
+          <tr>
+            <td>段夹点</td>
+            <td>沿段方向的条形</td>
+            <td>平移这一整段，相邻段跟着伸缩，顶点数不变</td>
+            <td>出。<strong>只沿垂直于该段的方向</strong>，且这一档不钉角度约束</td>
+            <td>出，两个方向都能平移</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="step-note">
+      加一个拐点的入口不在这张表里：在段上<strong>双击</strong>插入顶点。删一个拐点在导线上今天没有入口——
+      它只在相邻两段共线时才合法，否则删完必然产出一段斜线。
+    </p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>搭接：一条线搭在另一条上</h2>
+      <p>落点吸在对方线身上的那一下就是接线，它当场改变两条线的文档形态。</p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="正要搭上去"><path d="M60 70H360" fill="none" stroke="#3687ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.28"/><path d="M60 70H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="120" y="50" font-size="12" fill="#3687ff" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">A 整条高亮</text><path d="M210 160V70" fill="none" stroke="#3687ff" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1" stroke-dasharray="5 4"/><rect x="203" y="63" width="14" height="14" fill="#ffa53c" fill-opacity="0.16" stroke="#ffa53c" stroke-width="1.4"/><text x="228" y="150" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">B 正要搭上去</text></svg></div>
+        <figcaption><b>之前</b>：A 是一条线。B 的落点吸在 A 的线身上，捕捉标记亮起，对方整条高亮。</figcaption>
+      </figure>
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="搭上之后"><path d="M60 70H210" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M210 70H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M210 70V160" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="210" cy="70" r="5" fill="#ff3b30"/><text x="210" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">节点：三条支路</text></svg></div>
+        <figcaption><b>之后</b>：建一个节点，<b>A 被断成两条</b>，三条支路各绑到节点的端口。同一个事务，撤销一步回到之前。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>删掉搭上去的那条</h2>
+      <p>这一节是<strong>提案</strong>，不是现状。</p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="今天：留下一个没有分支的点"><path d="M60 70H210" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M210 70H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="210" cy="70" r="5" fill="#ff3b30"/><text x="210" y="48" font-size="12" fill="#f59e0b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">没有分支的点 + 两条线</text></svg></div>
+        <figcaption><b>今天</b>：节点的支路从 3 降到 2，而规则在 2 的时候保留节点并照常画点。
+        图上留下一个<b>没有分支的实心点</b>，底下是两条独立的线——场景树里两行，整体挪它要框选两条。
+        画一次接线再删掉，图<b>回不到原样</b>。</figcaption>
+      </figure>
+      <figure>
+        <div class="stage todo"><svg viewBox="0 0 420 200" role="img" aria-label="提案：合并回一条"><path d="M60 70H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="210" y="48" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">合并回一条</text></svg></div>
+        <figcaption><b>提案</b>：支路降到 2 时把两条支路合并成一条、删掉节点。
+        两条导线在一点相接、而那一点上没有第三样东西时，它们<b>就是</b>一条导线。
+        Altium 的 Optimize Wires 与 <code>AETRIM</code>「不再需要的连接点一并删除」是同一条。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>同一张图，三种文档</h2>
+      <p>画法今天会泄漏进文档——这是上面那条合并规则要一并收掉的。</p>
+    </div>
+    <div class="trio">
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="一次画 A→B→C"><path d="M80 60H300V150" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="80" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">A</text><text x="300" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">B</text><text x="316" y="154" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">C</text><text x="210" y="186" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">一条 · B 处没有点</text></svg></div>
+        <figcaption><b>一次画</b> A→B→C：一条三顶点导线，B 处没有点。<code>Delete</code> 删掉整条。</figcaption>
+      </figure>
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="两次画，第二次吸在 B 上"><path d="M80 60H300" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M300 60V150" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="300" cy="60" r="5" fill="#ff3b30"/><text x="80" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">A</text><text x="300" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">B</text><text x="316" y="154" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">C</text><text x="210" y="186" font-size="12" fill="#f59e0b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">两条 + 一个两通点</text></svg></div>
+        <figcaption><b>两次画</b>，第二次起点吸在 B 上：两条 + 一个两通节点，图上多一个实心点。<code>Delete</code> 只删其中一条。</figcaption>
+      </figure>
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="两次画，第二次键入 B 的坐标"><path d="M80 60H300" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M300 60V150" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="80" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">A</text><text x="300" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">B</text><text x="316" y="154" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">C</text><circle cx="300" cy="60" r="10" fill="none" stroke="#f59e0b" stroke-width="1.4" stroke-dasharray="3 3"/><text x="210" y="186" font-size="12" fill="#f59e0b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">两条 · 假接头</text></svg></div>
+        <figcaption><b>两次画</b>，第二次键入坐标：两条，<b>彼此没有任何连接</b>。键入的坐标永远不绑——
+        这是一个假接头，符号一挪就裂开，而屏幕上与上面两种几乎一样。</figcaption>
+      </figure>
+    </div>
+    <div class="callout todo">
+      <strong>一条规则同时收掉这两节</strong>
+      <p>
+        两条导线在一点相接、而那一点上没有第三样东西时合并成一条。两处触发：取点落在另一条导线的
+        <strong>自由端</strong>上时不建节点、直接续成一条；节点的支路降到 <strong>2</strong> 时合并两条支路并删掉节点。
+        代价说在明处：合并会让其中一个 Entity 消失，场景树里那一行会不见。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>被否掉的做法</h2>
+    </div>
+
+    <div class="reject">
+      <h3>一把剪刀工具</h3>
+      <p>
+        进模式、光标变剪刀、此后每一下点击都在删（LTspice 的 <code>F5</code>）。模式在这套交互里是
+        被明确拒绝的那一类——它必须是<strong>对象作用域</strong>且有明确的进出。真要一个剪断入口，
+        它该落在段夹点点亮之后的 <code>Delete</code> 上，不需要新词也不需要新光标。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>拆成两点一段（KiCad 式向下归一）</h3>
+      <p>
+        KiCad 把每一段直线存成一条独立的 wire，因此画法不影响文档。那一条在它那里成立，是因为它的
+        <strong>连通性是几何判定的</strong>——提净表靠坐标，两段端点重合就是同一个 net。我们的连通性是
+        <strong>绑定</strong>：端点重合不是连接。拆成两点一段之后，每个拐点要么变成假接头，要么得塞一个
+        节点，而那是每个拐角画一个实心点——GB/T 4728.3 里点只表示 T 接。
+      </p>
+    </div>
+
+    <div class="reject">
+      <h3>拖拐点时连带挪相邻顶点</h3>
+      <p>
+        让相邻顶点各跟着走一根轴，形状就能保持横平竖直。但相邻顶点若是已经接在端子上的那一端会被
+        拽下来，而求解下一帧又把它拉回端口，走线当场又变斜。真答案是自动路由，而那要回答
+        「拐点该拐在哪儿」——那个答案要考虑障碍物。
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    画导线：<code>docs/mockups/drafting-wire.html</code> ·
+    规范：<code>openspec/specs/stage/spec.md</code>「曲线几何编辑会话」、
+    <code>openspec/specs/stage-engine/spec.md</code>「导线每取一个点就落地」「取点落在导线上即接入节点」
+  </footer>
+
+</div>
+
+</body>
+</html>
