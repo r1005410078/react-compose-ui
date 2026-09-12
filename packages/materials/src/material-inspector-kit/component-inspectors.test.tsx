@@ -206,6 +206,71 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('248.91')
   })
 
+  it('OpenSpec: basic-materials / 属性面板按几何约束决定只读 / 尺寸被锁死时宽高只读', () => {
+    /*
+     * 只加命令层的拒绝会造出一个比原来更差的状态：输入框接受了、图上没变，而面板没有任何
+     * 东西说明为什么。只读走的是与锁定同一条 `readOnly` 通道，不另造一套呈现。
+     */
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity({
+      GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
+    })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: '尺寸宽度' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '尺寸高度' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '旋转' })).toHaveAttribute('readonly')
+    // `movable` 仍是 true：挪接头是接线图上的常规操作。
+    expect(screen.getByRole('spinbutton', { name: '位置 X' })).not.toBeDisabled()
+  })
+
+  it('OpenSpec: basic-materials / 属性面板按几何约束决定只读 / 不动的那一端锁位置', () => {
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity({
+      GeometryConstraints: { movable: false, resize: 'free', rotatable: true },
+    })
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.getByRole('spinbutton', { name: '位置 X' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '位置 Y' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '尺寸宽度' })).not.toBeDisabled()
+  })
+
+  it('OpenSpec: basic-materials / 属性面板按几何约束决定只读 / 没有声明约束时都可改', () => {
+    // 只断上面两条时，「把所有 Entity 的几何都锁成只读」同样绿。
+    const Inspector = inspectorOf('LayoutItem')
+    const target = entity()
+    render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={target}
+        readOnly={false}
+        value={target.components.LayoutItem!}
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: '尺寸宽度' })).not.toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '旋转' })).not.toHaveAttribute('readonly')
+    expect(screen.getByRole('spinbutton', { name: '位置 X' })).not.toBeDisabled()
+  })
+
   it('OpenSpec: basic-materials / Inspector 数值显示精度 / 只是失焦不提交', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')

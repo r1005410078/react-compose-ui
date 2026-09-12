@@ -81,7 +81,7 @@ function curvePreset(
   extra: {
     readonly fallbackSize?: { readonly width: number; readonly height: number }
     readonly fallbackAppearance?: ComposeAppearance
-    /** 额外的 Component；节点靠它带上自己的那一个端口。 */
+    /** 额外的 Component；节点靠它带上自己的那一个端口与几何约束。 */
     readonly components?: (size: { readonly width: number; readonly height: number }) => JsonObject
   } = {},
 ): ComposeEntityPreset {
@@ -113,7 +113,8 @@ function curvePreset(
  *
  * 曾经还补一个 `GeometryConstraints` 关掉 resize，理由是「盒缩放该不该等比缩放几何点还没
  * 定」。**现在定了**：盒自由，几何按 `viewBox` 与盒的比例呈现，因此手柄回来，走的是所有
- * Entity 共用的那一条缩放路径。
+ * Entity 共用的那一条缩放路径。**节点是这条的唯一例外，而理由完全不同**——不是「还没想
+ * 清楚」，是它的尺寸由线宽推出、不是作者写下的量，而改它会静默弄坏绑定的落点。
  *
  * `paletteHidden` 分两档。`'toolbar'` 是「工具栏已提供入口」，与物料本身无关：Arrow 与 Circle
  * 各有一条绘图命令，Curve 没有——这一档**按当前工作区的货架**求值，因此页面工作区（默认货架
@@ -244,6 +245,22 @@ export function createCurveMaterial(
                 position: { x: size.width / 2, y: size.height / 2 },
               }],
             },
+            /*
+             * 节点的尺寸**不是作者写下的量**：直径由导线线宽推出，因此八个手柄改的是一个
+             * 读不出含义的数。更要紧的是端口——上面那个 `position` 在建它的这一刻烘成盒心，
+             * 而 `getComposeEntityPorts` 原样读出、不按盒缩放：拉扁之后圆点的视觉中心挪了，
+             * 支路却还汇聚在旧的局部坐标上，屏幕上与「接着」逐像素相同，直到用户挪一下符号
+             * 才现形。**「端口恒在盒心」这条不变量是由「盒改不了」推出来的**，放开 `resize`
+             * 的人 MUST 同时回答端口怎么跟。
+             *
+             * 走 `GeometryConstraints` 而不是在画布上按 presetId 挡手柄：`SCALE`、`MIRROR`、
+             * 方向键、属性面板、粘贴各是一条路，而这个字段在命令层就被 `entity.transform.set`
+             * 尊重，因此一次全部收口，且没有一条路径需要认识节点。
+             *
+             * `movable` 保持 true——挪接头是接线图上的常规操作；`rotatable` 关掉，一个圆转了
+             * 等于没转，而屏幕上不该出现一个鼠标动了也没反应的控件。
+             */
+            GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
           }),
         },
       ),

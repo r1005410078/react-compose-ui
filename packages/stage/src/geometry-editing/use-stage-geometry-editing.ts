@@ -1,5 +1,4 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { getComposeCurve, getComposeLock } from '@compose-ui/core'
 import {
   applyStageCurveGrip,
   isStageInteriorVertexGrip,
@@ -18,6 +17,7 @@ import type {
   StagePoint,
 } from '@compose-ui/stage-engine'
 import type { ComposeStageEditablePathChange, ComposeStageTool } from '../types'
+import { isComposeEntityGeometryEditable } from './geometry-editable'
 
 /**
  * 把一个**已经解算过**的世界落点应用到某个夹点上。
@@ -180,10 +180,10 @@ export function useStageGeometryEditing(
     armable: boolean
   } | null>(null)
 
-  const isGeometryEditable = useCallback((candidate: string) => {
-    const entity = geometry.document.entities[candidate]
-    return Boolean(entity && getComposeCurve(entity) && !getComposeLock(entity).locked)
-  }, [geometry])
+  const isGeometryEditable = useCallback(
+    (candidate: string) => isComposeEntityGeometryEditable(geometry.document.entities[candidate]),
+    [geometry],
+  )
 
   const exit = useCallback(() => {
     setTarget(null)

@@ -22,6 +22,7 @@ import {
   formatComposeNumber,
   roundComposeGeometry,
   resolveComposeAppearance,
+  resolveComposeGeometryConstraints,
   resolveComposeOverflow,
   type ComposeAppearance,
   type ComposeAxisSizing,
@@ -596,6 +597,16 @@ export function createLayoutItemInspector(
       : hierarchy ? Boolean(getComposeLayout(entity)) : Boolean(getComposeRenderer(entity))
     const box = layoutSnapshot?.boxes[entity.id]
     const transform = getComposeSpatialTransform(entity)
+    /*
+     * `GeometryConstraints` 此前只有命令层在读。只加那一层的拒绝会造出一个比原来更差的
+     * 状态——输入框接受了、图上没变，而面板没有任何东西说明为什么；这与「敲了没反应与敲错
+     * 在屏幕上无法区分」是同一条判断。只读因此走与锁定**同一条** `readOnly` 通道，不为
+     * 约束另造一套呈现：两者对用户是同一句话。
+     *
+     * 这条对**任何**声明了约束的 Entity 成立，不是接线点的特例。
+     */
+    const constraints = resolveComposeGeometryConstraints(entity)
+    const sizeLocked = constraints.resize === 'none'
     const schema = useMemo<v.GenericSchema<BasicGeometryValue>>(() => {
       const sizingModes = fillAllowed
         ? (hugAllowed ? ['fixed', 'fill', 'hug'] as const : ['fixed', 'fill'] as const)
@@ -605,7 +616,10 @@ export function createLayoutItemInspector(
           v.number(),
           v.finite(zh ? '旋转必须是有限数字' : 'Rotation must be finite'),
           v.title(zh ? '旋转' : 'Rotation'),
-          v.metadata({ propertyPanel: { editor: 'angle' } }),
+          v.metadata({ propertyPanel: {
+            editor: 'angle',
+            ...(constraints.rotatable ? {} : { readOnly: true }),
+          } }),
         ),
         pivot: v.pipe(
           v.picklist(PIVOT_ANCHOR_VALUES),
@@ -672,7 +686,10 @@ export function createLayoutItemInspector(
           ...detachField,
           position: v.pipe(v.custom<BasicPositionValue>(isBasicPositionValue),
             v.title(zh ? '位置' : 'Position'), v.metadata({
-            propertyPanel: { editor: 'basic-geometry-position' },
+            propertyPanel: {
+              editor: 'basic-geometry-position',
+              ...(constraints.movable ? {} : { readOnly: true }),
+            },
           })),
           ...sharedFields,
         }) as unknown as v.GenericSchema<BasicGeometryValue>
@@ -690,7 +707,17 @@ export function createLayoutItemInspector(
         })),
         ...sharedFields,
       }) as unknown as v.GenericSchema<BasicGeometryValue>
-    }, [detachAllowed, fillAllowed, hugAllowed, isGridChild, item.positioning, parentLayout, zh])
+    }, [
+      constraints.movable,
+      constraints.rotatable,
+      detachAllowed,
+      fillAllowed,
+      hugAllowed,
+      isGridChild,
+      item.positioning,
+      parentLayout,
+      zh,
+    ])
     const placementValue = gridItem
       ? {
           gridCell: { x: gridItem.x, y: gridItem.y },
@@ -836,7 +863,9 @@ export function createLayoutItemInspector(
         computedHeight: box?.height ?? item.height.value,
         computedWidth: box?.width ?? item.width.value,
         fillAllowed,
-        sizeReadOnly: isGridChild,
+        // 格中子级的盒就是格矩形；`resize: 'none'` 则是尺寸根本不是作者写下的量。
+        // 两者对这一格是同一句话，因此共用同一个标记。
+        sizeReadOnly: isGridChild || sizeLocked,
         hugAllowed,
         zh,
       }}>

@@ -256,6 +256,42 @@ describe('entity.curve.set 漏斗', () => {
       curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: Number.POSITIVE_INFINITY, y: 1 } },
     }).status).toBe('rejected')
   })
+
+  it('OpenSpec: compose-document / 曲线几何经由单一写入漏斗 / 尺寸锁死时拒绝', () => {
+    /*
+     * 这条漏斗写 `Curve` 的同时**重算盒**，因此它是 `resize: 'none'` 唯一的漏洞：
+     * `entity.transform.set` 那条既有拒绝完全没参与，拖一下夹点就把盒改了。
+     */
+    const runtime = createTransactionRuntime({
+      document: documentFixture({
+        'curve-1': curveEntity({ x: 10, y: 20 }, { x: 110, y: 80 }, {
+          GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
+        }),
+      }),
+    })
+    const result = dispatchCurve(runtime, {
+      entityId: 'curve-1',
+      curve: { kind: 'line', start: { x: 200, y: 300 }, end: { x: 260, y: 340 } },
+    })
+    expect(result.status).toBe('rejected')
+    if (result.status !== 'rejected') return
+    // 可判别：与锁定、目标非曲线、几何非法各自分得开。
+    expect(result.issues[0]!.code).toBe('curve.constraint')
+    expect(getComposeCurve(runtime.document.entities['curve-1']!)).toEqual({
+      kind: 'line',
+      start: { x: 0, y: 0 },
+      end: { x: 100, y: 60 },
+    })
+  })
+
+  it('不带约束的曲线照旧写得进', () => {
+    // 只断前一条时，「把所有曲线都挡住了」同样绿。
+    const runtime = runtimeWithCurve()
+    expect(dispatchCurve(runtime, {
+      entityId: 'curve-1',
+      curve: { kind: 'line', start: { x: 200, y: 300 }, end: { x: 260, y: 340 } },
+    }).status).toBe('committed')
+  })
 })
 
 describe('弧与多段线词汇', () => {

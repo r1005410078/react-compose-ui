@@ -1087,6 +1087,16 @@ function setCurveHandler(): CommandHandler {
         return issue('curve.missing', `Entity ${entityId} 不是曲线`)
       }
       if (getComposeLock(entity).locked) return issue('entity.locked', `Entity ${entityId} 已锁定`)
+      /*
+       * 本漏斗写 `Curve` 的同时**重算 `LayoutItem` 的尺寸与 offset**，那是它作为唯一漏斗的
+       * 定义的一部分——因此它是 `resize: 'none'` 唯一的漏洞：`entity.transform.set` 那条既有
+       * 拒绝按操作分类（move/resize/rotate）判断，根本不经过这里，拖一下夹点就把盒改了。
+       *
+       * 无条件拒绝而不是「盒变了才拒绝」：这条命令的盒是几何的派生量，写几何就是写盒。
+       */
+      if (resolveComposeGeometryConstraints(entity).resize === 'none') {
+        return issue('curve.constraint', `Entity ${entityId} 禁止修改 size`)
+      }
       const candidate = valueAt(command.payload, 'curve')
       if (!isValidComposeCurve(candidate)) {
         return issue('curve.invalid-geometry', 'entity.curve.set 几何无效')

@@ -479,6 +479,30 @@ describe('junction Preset', () => {
     // 节点藏起来的理由是它自己的（拖出来的节点不连着任何导线），与工具栏货架无关。
     expect(DEFAULT_COMPOSE_JUNCTION_PRESET.paletteHidden).toBe('always')
   })
+
+  it('改不了尺寸也转不了，但照旧能挪', () => {
+    // 直径由线宽推出，因此它不是作者写下的量；八个手柄在改一个没有意义的数，而拉扁之后
+    // 端口还停在旧的局部坐标上（`Ports.position` 建时烘死、读取不按盒缩放），三条支路
+    // 与「接着」逐像素相同却已经不在中心。挪接头是常规操作，因此 `movable` 保持 true。
+    const created = registry.createSeed('junction')
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    expect(created.seed.components.GeometryConstraints).toEqual({
+      movable: true,
+      resize: 'none',
+      rotatable: false,
+    })
+  })
+
+  it('其余四个曲线起点照旧自由', () => {
+    // 本变更只作用于节点：「盒自由、几何按 viewBox 与盒的比例呈现」那条决定原样成立。
+    for (const id of ['curve', 'arrow', 'circle', 'rect', 'wire']) {
+      const created = registry.createSeed(id)
+      expect(created.ok).toBe(true)
+      if (!created.ok) return
+      expect(created.seed.components.GeometryConstraints).toBeUndefined()
+    }
+  })
 })
 
 /*
