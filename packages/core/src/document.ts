@@ -19,6 +19,7 @@ import {
 } from './layout'
 import { isComposeColor, isValidComposePaint } from './paint'
 import { collectComposeInteractionValidationIssues } from './interaction'
+import { collectComposeGridItemValidationIssues } from './grid-item'
 import { collectComposePortsValidationIssues } from './ports'
 import { collectComposeWireValidationIssues, getComposeWire } from './wire'
 import { collectComposeCurveValidationIssues } from './curve'
@@ -880,6 +881,20 @@ function validateEntity(
       )
     }
   }
+  // GridItem 可挂在任意 Entity 上：父级不是网格容器时它不让文档非法——切换布局类型是一次
+  // 编辑，中间态不应阻断保存；求解那一侧忽略它即可。
+  const gridItem = components[COMPOSE_BUILTIN_COMPONENT_KEYS.gridItem]
+  if (gridItem !== undefined) {
+    const gridItemPath = [
+      ...path,
+      'components',
+      COMPOSE_BUILTIN_COMPONENT_KEYS.gridItem,
+    ] as const
+    collectComposeGridItemValidationIssues(gridItem).forEach((issue) => {
+      addIssue(issues, 'grid-item.invalid', [...gridItemPath, ...issue.path], issue.message)
+    })
+  }
+
   // Ports 同样可与任意 Entity 组合：端口是 Entity 的能力，不是某一种物料的能力。
   const ports = components[COMPOSE_BUILTIN_COMPONENT_KEYS.ports]
   if (ports !== undefined) {

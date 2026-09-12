@@ -13,10 +13,31 @@ export {
   adoptComposeCrossAxisSizing,
   createDefaultComposeLayoutItem,
   createDefaultComposeFlexLayout,
+  createDefaultComposeGridLayout,
+  isComposeGridLayout,
   createFixedComposeAxisSizing,
   isValidComposeLayoutItem,
   isValidComposeLayout,
 } from './layout'
+export {
+  collectComposeGridItemValidationIssues,
+  createComposeGridItem,
+  getComposeGridItem,
+  isValidComposeGridItem,
+} from './grid-item'
+export {
+  composeGridCellAtPoint,
+  composeGridColumnWidth,
+  composeGridContentHeight,
+  projectComposeGridCell,
+  solveComposeGrid,
+} from './grid-geometry'
+export type {
+  ComposeGridCell,
+  ComposeGridMetrics,
+  ComposeGridRect,
+  ComposeGridSolveOptions,
+} from './grid-geometry'
 export {
   isValidComposeTransform,
   isValidComposeSpatialTransform,
@@ -388,6 +409,8 @@ export type {
   ComposeAlignItems,
   ComposeFlexDirection,
   ComposeFlexLayout,
+  ComposeGridLayout,
+  ComposeGridItem,
   ComposeFlexWrap,
   ComposeJustifyContent,
   DocumentValidationIssue,

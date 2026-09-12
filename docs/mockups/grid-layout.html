@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>仪表盘网格</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+<style>
+/* 取值直接来自 packages/ui-context/src/providers.tsx 的 dark 主题，
+   设计稿与产品共用同一套 token，落地时不需要再翻译一遍。 */
+:root {
+  --ws: #0a0c0f;
+  --panel: #101216;
+  --raised: #181b20;
+  --sunken: #15181d;
+  --control: #1d2025;
+  --hover: #292e36;
+  --selected: #1b395f;
+  --border: #303640;
+  --border-strong: #414853;
+  --text: #e6edf7;
+  --text-strong: #f4f7fb;
+  --muted: #8e98a8;
+  --subtle: #aeb7c4;
+  --accent: #3687ff;
+  --focus: #4d9cff;
+  --danger: #ff9c9c;
+  --amber: #e9a23b;
+  --ok: #4ec9a0;
+  --snap: #ffa53c;
+  --shadow: rgb(0 0 0 / 45%);
+
+  /* 画布台面：与 Stage 的工作区同一档 */
+  --stage: #14161a;
+
+  --sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 56px 24px 96px;
+  background: var(--ws);
+  color: var(--text);
+  font: 400 14px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { max-width: 1060px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+
+/* ——— 文档级排版 ——— */
+.eyebrow {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1 {
+  margin: 14px 0 0;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+.lede { margin: 14px 0 0; max-width: 64ch; color: var(--subtle); font-size: 15px; }
+.lede b { color: var(--text-strong); font-weight: 600; }
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+h2 .num {
+  display: inline-block;
+  width: 22px;
+  font: 500 12px/1 var(--mono);
+  color: var(--muted);
+}
+h3 { margin: 0; font-size: 15px; font-weight: 650; color: var(--text-strong); display: flex; align-items: center; gap: 9px; }
+.sub { margin: 0 0 22px 22px; max-width: 70ch; color: var(--muted); font-size: 13px; }
+section { display: flex; flex-direction: column; }
+
+code, .m { font-family: var(--mono); font-size: 0.88em; }
+code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--control);
+  color: var(--subtle);
+}
+b.k { color: var(--text-strong); font-weight: 600; }
+em.q { font-style: normal; color: var(--text-strong); }
+
+.tag {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font: 500 10px/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  background: var(--control);
+  color: var(--muted);
+}
+.tag[data-kind="yes"] { background: color-mix(in srgb, var(--ok) 20%, transparent); color: #86ddbf; }
+.tag[data-kind="no"] { background: color-mix(in srgb, var(--danger) 18%, transparent); color: #ffb9b9; }
+.tag[data-kind="ask"] { background: color-mix(in srgb, var(--amber) 20%, transparent); color: #f0bd73; }
+
+/* ——— 两栏 ——— */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.col[data-primary="true"] { border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--panel)), var(--panel) 58%); }
+.col p { margin: 0; font-size: 13px; color: var(--subtle); }
+.col p b { color: var(--text-strong); font-weight: 600; }
+
+/* ——— 画布台面 ——— */
+.stage-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--ws); box-shadow: 0 22px 60px var(--shadow); }
+.stage-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--raised); font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.05em; }
+.stage-bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+.stage-bar .spacer { flex: 1; }
+.stage { padding: 18px; background: radial-gradient(120% 90% at 50% 0%, #191c21 0%, var(--stage) 62%); }
+.stage svg { display: block; width: 100%; height: auto; }
+
+/* ——— 分步 ——— */
+.steps { display: flex; flex-direction: column; gap: 26px; }
+.step { display: flex; flex-direction: column; gap: 12px; }
+.step-head { display: flex; align-items: baseline; gap: 10px; }
+.step-n {
+  display: inline-grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  background: var(--control);
+  font: 600 11px/1 var(--mono);
+  color: var(--subtle);
+}
+.step-title { font-size: 15px; font-weight: 650; color: var(--text-strong); }
+.step-note { margin: 0 0 0 32px; max-width: 72ch; font-size: 13px; color: var(--muted); }
+.step-note b { color: var(--text-strong); font-weight: 600; }
+
+/* ——— 编号批注 ——— */
+.pins { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.pins > div { display: flex; gap: 11px; font-size: 13px; color: var(--subtle); }
+.pin {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 18px; height: 18px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font: 600 10.5px/1 var(--mono);
+}
+.pins b { color: var(--text-strong); font-weight: 600; }
+
+/* ——— 表 ——— */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+td { color: var(--subtle); }
+td b { color: var(--text-strong); font-weight: 600; }
+tbody tr:last-child td { border-bottom: 0; }
+.tbl { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel); }
+
+/* ——— 清单 ——— */
+ul.reasons { margin: 0; padding: 0 0 0 20px; display: flex; flex-direction: column; gap: 11px; font-size: 13.5px; color: var(--subtle); }
+ul.reasons li b.k { display: inline; }
+
+/* ——— 属性面板 ——— */
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.inspector {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel);
+  font-size: 12.5px;
+  box-shadow: 0 18px 44px var(--shadow);
+}
+.ins-title { padding: 9px 12px; border-bottom: 1px solid var(--border); background: var(--raised); font: 500 11px/1 var(--mono); letter-spacing: 0.05em; color: var(--muted); }
+.grp { border-bottom: 1px solid var(--border); }
+.grp:last-child { border-bottom: 0; }
+.grp-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--sunken); }
+.grp-head .name { font-weight: 600; color: var(--text-strong); font-size: 12.5px; }
+.grp-head .spacer { flex: 1; }
+.grp-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 9px; }
+.row { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; gap: 10px; }
+.row > .lbl { color: var(--muted); }
+.fld {
+  display: flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--control);
+  font-family: var(--mono); font-size: 11.5px; color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.fld .unit { color: var(--muted); font-size: 10.5px; margin-left: auto; }
+.fld[data-ro="true"] { background: transparent; border-style: dashed; color: var(--muted); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg { display: flex; gap: 3px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--control); }
+.seg > span { flex: 1; text-align: center; padding: 4px 0; border-radius: 5px; color: var(--muted); font-size: 11.5px; cursor: default; }
+.seg > span[data-on="true"] { background: var(--selected); color: #cfe2ff; font-weight: 600; }
+.sw { display: inline-flex; align-items: center; gap: 8px; }
+.sw i { width: 28px; height: 16px; border-radius: 9px; background: var(--border-strong); position: relative; flex: none; }
+.sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: none; }
+.sw[data-on="true"] i { background: var(--accent); }
+.sw[data-on="true"] i::after { left: 14px; background: #fff; }
+.sw span { color: var(--subtle); font-size: 12px; }
+.hint { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.hint b { color: var(--subtle); font-weight: 600; }
+
+
+/* ——— 属性栏：缺席态引导 ——— */
+.ins-empty { display: flex; flex-direction: column; gap: 9px; align-items: center; text-align: center; padding: 18px 14px; }
+.ins-empty > svg { width: 76px; height: 46px; stroke: var(--border-strong); fill: none; stroke-width: 1.3; stroke-linecap: round; }
+.ins-empty strong { font-size: 13px; color: var(--text-strong); }
+.ins-empty p { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+.ins-empty .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; margin-top: 3px; }
+.ins-empty .btns[data-one="true"] { grid-template-columns: 1fr; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--control); color: var(--subtle); font-size: 12px; }
+.btn[data-primary="true"] { border-color: color-mix(in srgb, var(--accent) 52%, var(--border)); background: color-mix(in srgb, var(--accent) 16%, var(--control)); color: #cfe2ff; }
+.ins-empty .foot { font-size: 10.5px; color: var(--muted); }
+
+/* ——— 属性栏：标题栏动作 ——— */
+.hd-acts { display: flex; align-items: center; gap: 5px; }
+.hd-acts .st { padding: 2px 6px; border-radius: 4px; background: var(--control); font: 500 10px/1.5 var(--mono); color: var(--subtle); }
+.hd-acts .ib { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; color: var(--muted); font-size: 12px; }
+
+/* ——— 属性栏：锚定菜单 ——— */
+.menu { margin: 9px 0 0; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--raised); box-shadow: 0 14px 34px var(--shadow); overflow: hidden; }
+.menu > div { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12px; color: var(--subtle); border-bottom: 1px solid var(--border); }
+.menu > div:last-child { border-bottom: 0; }
+.menu > div[data-new="true"] { background: color-mix(in srgb, var(--accent) 13%, transparent); color: #cfe2ff; }
+.menu > div[data-danger="true"] { color: #ffb9b9; }
+.menu code { margin-left: auto; font-size: 10px; }
+
+/* ——— 列数条 ——— */
+.colbar { display: flex; gap: 2px; height: 13px; margin-top: 6px; }
+.colbar i { flex: 1; border-radius: 2px; background: color-mix(in srgb, var(--accent) 30%, var(--control)); }
+
+/* ——— 三档分支 ——— */
+.branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.branch { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.branch > h4 { margin: 0; padding: 9px 11px; border-bottom: 1px solid var(--border); background: var(--sunken); font-size: 12px; font-weight: 600; color: var(--text-strong); display: flex; align-items: center; gap: 7px; }
+.branch > h4 code { font-size: 10px; }
+.branch[data-new="true"] { border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); }
+.branch[data-new="true"] > h4 { background: color-mix(in srgb, var(--accent) 12%, var(--sunken)); color: #cfe2ff; }
+.branch ul { margin: 0; padding: 9px 11px; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.branch li { display: flex; align-items: center; gap: 7px; color: var(--subtle); }
+.branch li::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--border-strong); flex: none; }
+.branch li[data-hit="true"] { color: #cfe2ff; }
+.branch li[data-hit="true"]::before { background: var(--accent); }
+.branch li[data-ro="true"] { color: var(--muted); }
+.branch li[data-ro="true"]::before { background: transparent; border: 1px solid var(--border-strong); }
+.branch li small { margin-left: auto; font: 400 10px/1 var(--mono); color: var(--muted); }
+
+/* 本稿画着、尚未拍板的部分 */
+[data-soon="true"] { outline: 1px dashed rgb(233 162 59 / 60%); outline-offset: 3px; }
+
+/* ——— 拍板卡片 ——— */
+.decide { display: flex; flex-direction: column; gap: 14px; }
+.dec {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 0 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.dec-n { font: 600 12px/1.6 var(--mono); color: var(--amber); }
+.dec h3 { margin-bottom: 6px; }
+.dec p { margin: 0 0 8px; font-size: 13px; color: var(--subtle); }
+.dec p:last-child { margin-bottom: 0; }
+.dec .mine { padding: 9px 12px; border-radius: 7px; background: var(--sunken); font-size: 12.5px; color: var(--subtle); }
+.dec .mine b { color: var(--text-strong); font-weight: 600; }
+
+footer { margin-top: 12px; padding-top: 22px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="eyebrow">@compose-ui/core · 交互设计稿 · 待评审</div>
+  <h1>仪表盘网格</h1>
+  <p class="lede">
+    这一稿只回答一件事：<b>「GridStack 式网格」在这个产品里具体是什么交互</b>。
+    不是 CSS Grid 的模板声明（<code>grid-template-areas</code> 那一套），而是一块 12 列的板子——
+    卡片被拖到格子上，挡住谁就把谁<b>推下去</b>，让出来的空洞被下面的卡片<b>自动填上</b>。
+    协议、成本与落地顺序不在本稿，等这一稿对齐之后进 OpenSpec 提案。
+  </p>
+</header>
+
+<!-- ============================================================ 01 -->
+<section>
+  <h2><span class="num">01</span>先说清楚它用在哪</h2>
+  <p class="sub">如果这一节说的场景不对，后面全都不用看了。</p>
+  <div class="split">
+    <div class="col">
+      <h3>接线图 <span class="tag" data-kind="no">用不上</span></h3>
+      <p>
+        端子的位置是<b>客观事实</b>——继电器的第 3 号脚就在那儿，不能因为旁边多了一个符号就被推走。
+        这一侧靠的是绝对坐标、对象捕捉与正交约束，已经做完了。
+      </p>
+      <p>网格在这里不但没用，还是有害的：任何"自动让位"都会把一张画对的图变成画错的图。</p>
+    </div>
+    <div class="col" data-primary="true">
+      <h3>大屏的仪表盘区域 <span class="tag" data-kind="yes">就是它</span></h3>
+      <p>
+        一块区域里摆 6 张卡片：实时功率、告警列表、趋势曲线、环境温湿度……
+        实施工程师在客户现场被要求"把告警挪到左上角、趋势拉宽一点"，
+        <b>他要的是拖一下就重排，不是一个一个算坐标</b>。
+      </p>
+      <p>
+        卡片之间<b>没有客观的相对位置</b>，只有"谁在上面、谁更宽"。
+        这正是 GridStack 存在的理由，也是 CSS 绝对定位不好使的地方。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <h2><span class="num">02</span>一块板子的解剖</h2>
+  <p class="sub">容器上挂一个 <code>Layout</code>，type 是 <code>grid</code>（flex 的兄弟）。子级各自带一个 <code>GridItem</code>，记 <code>{x, y, w, h}</code>，单位是<b class="k">格</b>。</p>
+
+  <div class="stage-wrap">
+    <div class="stage-bar"><span class="dot"></span>画布 · 静息态<span class="spacer"></span>ZOOM 100%</div>
+    <div class="stage">
+      <svg viewBox="0 0 880 300" role="img" aria-label="一个 12 列网格容器，里面摆着五张卡片">
+        <!-- 容器 -->
+        <rect x="60" y="30" width="752" height="242" rx="4" fill="#12151a" stroke="#303640" stroke-width="1"/>
+
+        <!-- 卡片 -->
+        <g fill="#1d2025" stroke="#414853" stroke-width="1">
+          <rect x="76"    y="46"  width="236"   height="102" rx="3"/>
+          <rect x="318"   y="46"  width="236"   height="102" rx="3"/>
+          <rect x="560"   y="46"  width="236"   height="102" rx="3"/>
+          <rect x="76"    y="154" width="417.5" height="102" rx="3"/>
+          <rect x="499.5" y="154" width="296.5" height="102" rx="3"/>
+        </g>
+        <g font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">
+          <text x="88"  y="64">实时功率</text>
+          <text x="330" y="64">告警</text>
+          <text x="572" y="64">环境</text>
+          <text x="88"  y="172">发电趋势</text>
+          <text x="511" y="172">设备列表</text>
+        </g>
+        <g font-family="JetBrains Mono, monospace" font-size="10" fill="#5d6675">
+          <text x="88"  y="140">4 × 2</text>
+          <text x="330" y="140">4 × 2</text>
+          <text x="572" y="140">4 × 2</text>
+          <text x="88"  y="248">7 × 2</text>
+          <text x="511" y="248">5 × 2</text>
+        </g>
+
+        <!-- 标注：列宽 -->
+        <g stroke="#3687ff" stroke-width="1" fill="none" stroke-dasharray="3 3" opacity="0.85">
+          <path d="M76 284v-16M130.5 284v-16"/>
+        </g>
+        <path d="M76 278h54.5" stroke="#3687ff" stroke-width="1"/>
+        <path d="M80 275l-4 3 4 3M126.5 275l4 3-4 3" stroke="#3687ff" stroke-width="1" fill="none"/>
+        <text x="140" y="282" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#7fb0ff">列宽 = (容器宽 − 内边距 − 间距) ÷ 12，算出来的</text>
+
+        <!-- 标注：行高 -->
+        <g stroke="#4ec9a0" stroke-width="1" fill="none" stroke-dasharray="3 3" opacity="0.8">
+          <path d="M812 46h20M812 94h20"/>
+        </g>
+        <path d="M826 46v48" stroke="#4ec9a0" stroke-width="1"/>
+        <path d="M823 50l3-4 3 4M823 90l3 4 3-4" stroke="#4ec9a0" stroke-width="1" fill="none"/>
+        <text x="836" y="74" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6fd8b4">行高</text>
+        <text x="836" y="86" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#6fd8b4">48px</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="pins">
+    <div><span class="pin">1</span><span><b>列宽是算出来的，行高是给定的。</b>容器变宽，格子跟着变宽、卡片跟着变宽；行高恒定 <code>48px</code>。这是 GridStack 的行为，对大屏也是对的——大屏的宽度会因为投屏设备变，而"一行有多高"是作者的设计决定。</span></div>
+    <div><span class="pin">2</span><span><b>静息态什么都不多画。</b>没有格线、没有格点、没有任何与当前操作无关的装饰。这抄的是仓库里端口的那条判断——端口不常驻，用户还没在找接线点的时候，那几十个记号只是噪音。</span></div>
+    <div><span class="pin">3</span><span><b>列数默认 12，可改。</b>12 能被 2/3/4/6 整除，所以"两栏""三栏""四栏"都能整齐排开，这是 Bootstrap 以来的默认答案。<b>不做响应式列数收缩</b>——大屏的分辨率是作者用 <code>Frame.size</code> 定死的，没有"手机上变一栏"这回事。</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <h2><span class="num">03</span>拖动的四个状态</h2>
+  <p class="sub">这是整份稿子的核心。把「环境」那张卡从右上角拖到左下角。</p>
+
+  <div class="steps">
+
+    <!-- 状态 1 -->
+    <div class="step">
+      <div class="step-head"><span class="step-n">01</span><span class="step-title">还没碰它</span></div>
+      <p class="step-note">见上一节。<b>格线不画</b>——这块板子此刻和一个普通容器在屏幕上没有区别，因为用户还没有提出与格子有关的问题。</p>
+    </div>
+
+    <!-- 状态 2 -->
+    <div class="step">
+      <div class="step-head"><span class="step-n">02</span><span class="step-title">按下卡片的那一刻，格线显形</span></div>
+      <div class="stage-wrap">
+        <div class="stage-bar"><span class="dot"></span>画布 · 按下<span class="spacer"></span>格线显形</div>
+        <div class="stage">
+          <svg viewBox="0 0 880 300" role="img" aria-label="按下卡片后容器显示 12 条列带与行线">
+            <rect x="60" y="30" width="752" height="242" rx="4" fill="#12151a" stroke="#3687ff" stroke-width="1.2"/>
+            <!-- 列带 -->
+            <g fill="#3687ff" fill-opacity="0.055">
+              <rect x="76" y="46" width="54.5" height="210"/><rect x="136.5" y="46" width="54.5" height="210"/>
+              <rect x="197" y="46" width="54.5" height="210"/><rect x="257.5" y="46" width="54.5" height="210"/>
+              <rect x="318" y="46" width="54.5" height="210"/><rect x="378.5" y="46" width="54.5" height="210"/>
+              <rect x="439" y="46" width="54.5" height="210"/><rect x="499.5" y="46" width="54.5" height="210"/>
+              <rect x="560" y="46" width="54.5" height="210"/><rect x="620.5" y="46" width="54.5" height="210"/>
+              <rect x="681" y="46" width="54.5" height="210"/><rect x="741.5" y="46" width="54.5" height="210"/>
+            </g>
+            <!-- 行线 -->
+            <g stroke="#3687ff" stroke-opacity="0.22" stroke-width="1">
+              <path d="M76 100h720M76 154h720M76 208h720"/>
+            </g>
+            <!-- 卡片 -->
+            <g fill="#1d2025" stroke="#414853" stroke-width="1">
+              <rect x="76" y="46" width="236" height="102" rx="3"/>
+              <rect x="318" y="46" width="236" height="102" rx="3"/>
+              <rect x="76" y="154" width="417.5" height="102" rx="3"/>
+              <rect x="499.5" y="154" width="296.5" height="102" rx="3"/>
+            </g>
+            <!-- 被按下的卡片 -->
+            <rect x="560" y="46" width="236" height="102" rx="3" fill="#1d2025" stroke="#3687ff" stroke-width="1.6"/>
+            <g font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">
+              <text x="88" y="64">实时功率</text><text x="330" y="64">告警</text>
+              <text x="88" y="172">发电趋势</text><text x="511" y="172">设备列表</text>
+            </g>
+            <text x="572" y="64" font-family="Inter, sans-serif" font-size="11.5" fill="#cfe2ff">环境</text>
+            <!-- 光标 -->
+            <path d="M666 92l0 22 5-5 4 8 4-2-4-8 7 0z" fill="#f4f7fb" stroke="#0a0c0f" stroke-width="1"/>
+          </svg>
+        </div>
+      </div>
+      <p class="step-note">
+        列带 + 行线，都很淡。判据是<b>指针按下</b>而不是"选中"——选中一张卡片是为了改它的颜色时，格线同样是噪音。
+        选中<b>容器本身</b>时也画，那时用户正在调列数与行高，格线就是他的问题的答案。
+      </p>
+    </div>
+
+    <!-- 状态 3 -->
+    <div class="step">
+      <div class="step-head"><span class="step-n">03</span><span class="step-title">拖动中 —— 三样东西同时在</span></div>
+      <div class="stage-wrap">
+        <div class="stage-bar"><span class="dot"></span>画布 · 拖动中<span class="spacer" ></span>落点 0,2 · 4×2</div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="拖动中：卡片跟手、占位影子吸在格子上、被挡住的卡片向下让位">
+            <rect x="60" y="30" width="752" height="350" rx="4" fill="#12151a" stroke="#3687ff" stroke-width="1.2"/>
+            <g fill="#3687ff" fill-opacity="0.055">
+              <rect x="76" y="46" width="54.5" height="318"/><rect x="136.5" y="46" width="54.5" height="318"/>
+              <rect x="197" y="46" width="54.5" height="318"/><rect x="257.5" y="46" width="54.5" height="318"/>
+              <rect x="318" y="46" width="54.5" height="318"/><rect x="378.5" y="46" width="54.5" height="318"/>
+              <rect x="439" y="46" width="54.5" height="318"/><rect x="499.5" y="46" width="54.5" height="318"/>
+              <rect x="560" y="46" width="54.5" height="318"/><rect x="620.5" y="46" width="54.5" height="318"/>
+              <rect x="681" y="46" width="54.5" height="318"/><rect x="741.5" y="46" width="54.5" height="318"/>
+            </g>
+            <g stroke="#3687ff" stroke-opacity="0.22" stroke-width="1">
+              <path d="M76 100h720M76 154h720M76 208h720M76 262h720M76 316h720"/>
+            </g>
+
+            <!-- 没动的卡片 -->
+            <g fill="#1d2025" stroke="#414853" stroke-width="1">
+              <rect x="76" y="46" width="236" height="102" rx="3"/>
+              <rect x="318" y="46" width="236" height="102" rx="3"/>
+              <rect x="499.5" y="154" width="296.5" height="102" rx="3"/>
+            </g>
+            <g font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">
+              <text x="88" y="64">实时功率</text><text x="330" y="64">告警</text><text x="511" y="172">设备列表</text>
+            </g>
+
+            <!-- 被推下去的卡片 + 位移箭头 -->
+            <rect x="76" y="262" width="417.5" height="102" rx="3" fill="#1d2025" stroke="#414853" stroke-width="1"/>
+            <text x="88" y="280" font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">发电趋势</text>
+            <g stroke="#8e98a8" stroke-width="1.2" fill="none" opacity="0.55" stroke-dasharray="4 3">
+              <rect x="76" y="154" width="417.5" height="102" rx="3"/>
+            </g>
+            <g stroke="#8e98a8" stroke-width="1.4" fill="none" opacity="0.8">
+              <path d="M284 214v36"/><path d="M279 244l5 6 5-6"/>
+            </g>
+
+            <!-- 占位影子 -->
+            <rect x="76" y="154" width="236" height="102" rx="3" fill="#3687ff" fill-opacity="0.14" stroke="#4d9cff" stroke-width="1.6" stroke-dasharray="6 4"/>
+            <text x="88" y="214" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#8fc0ff">0, 2 · 4 × 2</text>
+
+            <!-- 跟手的卡片 -->
+            <g opacity="0.92">
+              <rect x="152" y="126" width="236" height="102" rx="3" fill="#242930" stroke="#4d9cff" stroke-width="1.6"/>
+              <text x="164" y="144" font-family="Inter, sans-serif" font-size="11.5" fill="#cfe2ff">环境</text>
+            </g>
+            <path d="M268 172l0 22 5-5 4 8 4-2-4-8 7 0z" fill="#f4f7fb" stroke="#0a0c0f" stroke-width="1"/>
+          </svg>
+        </div>
+      </div>
+      <div class="pins">
+        <div><span class="pin">1</span><span><b>跟手的那张卡不吸附。</b>它就在光标下面，抬起一档、带阴影。<b>吸附的是影子不是卡</b>——卡一旦吸格，拖动就会一顿一顿，而这块画布上别的手势（resize、夹点）也都是"几何吸、光标不吸"。</span></div>
+        <div><span class="pin">2</span><span><b>占位影子回答「松手会变成什么」。</b>虚线 + 淡蓝底，吸在格子上，角上印着落点与格数。这和取点命令的预览几何是同一条规则的又一个实例。</span></div>
+        <div><span class="pin">3</span><span><b>被挡住的卡片真的移动，不是画个虚线框。</b>「发电趋势」占着 0,2 那一片，影子压上来，它就整块下移一行——<b>动画式地、实时地</b>。原位留一个淡虚线残影，这样"它从哪来"是看得见的。</span></div>
+        <div><span class="pin">4</span><span><b>没被挡住的一动不动。</b>「设备列表」在 7..12 列，影子只占 0..4，它就不动。推挤是<b>碰撞驱动</b>的，不是整块重排——否则拖一张卡会让满屏卡片一起抖。</span></div>
+        <div><span class="pin">5</span><span><b>容器自己长高了。</b>它是 Hug，行数变多就跟着长。要固定高度就把它设成 Fixed，超出部分由既有的 <code>Overflow: scroll</code> 承担。</span></div>
+      </div>
+    </div>
+
+    <!-- 状态 4 -->
+    <div class="step">
+      <div class="step-head"><span class="step-n">04</span><span class="step-title">松手</span></div>
+      <div class="stage-wrap">
+        <div class="stage-bar"><span class="dot"></span>画布 · 已提交<span class="spacer"></span>1 条事务 · 撤销一步全回去</div>
+        <div class="stage">
+          <svg viewBox="0 0 880 420" role="img" aria-label="松手后卡片落进影子的位置，被推开的卡片停在新位置">
+            <rect x="60" y="30" width="752" height="350" rx="4" fill="#12151a" stroke="#3687ff" stroke-width="1.2"/>
+            <g fill="#3687ff" fill-opacity="0.055">
+              <rect x="76" y="46" width="54.5" height="318"/><rect x="136.5" y="46" width="54.5" height="318"/>
+              <rect x="197" y="46" width="54.5" height="318"/><rect x="257.5" y="46" width="54.5" height="318"/>
+              <rect x="318" y="46" width="54.5" height="318"/><rect x="378.5" y="46" width="54.5" height="318"/>
+              <rect x="439" y="46" width="54.5" height="318"/><rect x="499.5" y="46" width="54.5" height="318"/>
+              <rect x="560" y="46" width="54.5" height="318"/><rect x="620.5" y="46" width="54.5" height="318"/>
+              <rect x="681" y="46" width="54.5" height="318"/><rect x="741.5" y="46" width="54.5" height="318"/>
+            </g>
+            <g stroke="#3687ff" stroke-opacity="0.22" stroke-width="1">
+              <path d="M76 100h720M76 154h720M76 208h720M76 262h720M76 316h720"/>
+            </g>
+            <g fill="#1d2025" stroke="#414853" stroke-width="1">
+              <rect x="76" y="46" width="236" height="102" rx="3"/>
+              <rect x="318" y="46" width="236" height="102" rx="3"/>
+              <rect x="499.5" y="154" width="296.5" height="102" rx="3"/>
+              <rect x="76" y="262" width="417.5" height="102" rx="3"/>
+            </g>
+            <!-- 落定并保持选中 -->
+            <rect x="76" y="154" width="236" height="102" rx="3" fill="#1d2025" stroke="#3687ff" stroke-width="1.6"/>
+            <g fill="#3687ff" stroke="#0a0c0f" stroke-width="1">
+              <rect x="72" y="150" width="7" height="7"/><rect x="190.5" y="150" width="7" height="7"/><rect x="309" y="150" width="7" height="7"/>
+              <rect x="72" y="202" width="7" height="7"/><rect x="309" y="202" width="7" height="7"/>
+              <rect x="72" y="253" width="7" height="7"/><rect x="190.5" y="253" width="7" height="7"/><rect x="309" y="253" width="7" height="7"/>
+            </g>
+            <g font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">
+              <text x="88" y="64">实时功率</text><text x="330" y="64">告警</text>
+              <text x="511" y="172">设备列表</text><text x="88" y="280">发电趋势</text>
+            </g>
+            <text x="88" y="172" font-family="Inter, sans-serif" font-size="11.5" fill="#cfe2ff">环境</text>
+          </svg>
+        </div>
+      </div>
+      <p class="step-note">
+        影子变实体，卡片吸进去，八个手柄回来。
+        <b>整次手势是一条事务</b>——"环境移到 0,2" 和 "发电趋势下移一行" 写在同一条 batch 里，
+        撤销一步两个一起回去。拆成两条的话用户要按两次撤销，而他只做了一个动作。
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <h2><span class="num">04</span>重力：空洞会被自动填上</h2>
+  <p class="sub">GridStack 的 <code>float: false</code>（默认）。删掉中间那张卡，下面的自动上浮。这是网格与"带吸附的绝对定位"最本质的区别。</p>
+
+  <div class="split">
+    <div class="col">
+      <h3>删掉「发电趋势」之前</h3>
+      <svg viewBox="0 0 420 200" role="img" aria-label="三行卡片，中间一行整宽">
+        <rect x="20" y="20" width="380" height="156" rx="4" fill="#12151a" stroke="#303640"/>
+        <g fill="#1d2025" stroke="#414853">
+          <rect x="32" y="32" width="165" height="40" rx="3"/><rect x="203" y="32" width="165" height="40" rx="3"/>
+          <rect x="32" y="124" width="165" height="40" rx="3"/><rect x="203" y="124" width="165" height="40" rx="3"/>
+        </g>
+        <rect x="32" y="78" width="336" height="40" rx="3" fill="#2a1f22" stroke="#ff9c9c" stroke-width="1.4" stroke-dasharray="5 3"/>
+        <g font-family="Inter, sans-serif" font-size="10.5" fill="#8e98a8">
+          <text x="42" y="56">实时功率</text><text x="213" y="56">告警</text>
+          <text x="42" y="148">环境</text><text x="213" y="148">设备列表</text>
+        </g>
+        <text x="42" y="102" font-family="Inter, sans-serif" font-size="10.5" fill="#ffb9b9">发电趋势 · 删除</text>
+      </svg>
+    </div>
+    <div class="col" data-primary="true">
+      <h3>之后 —— 下面两张自己上来了</h3>
+      <svg viewBox="0 0 420 200" role="img" aria-label="删除后下面两张卡片上浮一行，容器收缩">
+        <rect x="20" y="20" width="380" height="110" rx="4" fill="#12151a" stroke="#3687ff"/>
+        <g fill="#1d2025" stroke="#414853">
+          <rect x="32" y="32" width="165" height="40" rx="3"/><rect x="203" y="32" width="165" height="40" rx="3"/>
+        </g>
+        <g fill="#1d2025" stroke="#4d9cff" stroke-width="1.3">
+          <rect x="32" y="78" width="165" height="40" rx="3"/><rect x="203" y="78" width="165" height="40" rx="3"/>
+        </g>
+        <g font-family="Inter, sans-serif" font-size="10.5" fill="#8e98a8">
+          <text x="42" y="56">实时功率</text><text x="213" y="56">告警</text>
+        </g>
+        <g font-family="Inter, sans-serif" font-size="10.5" fill="#cfe2ff">
+          <text x="42" y="102">环境</text><text x="213" y="102">设备列表</text>
+        </g>
+        <g stroke="#4d9cff" stroke-width="1.2" fill="none" opacity="0.8">
+          <path d="M115 140v-14M110 130l5-6 5 6"/><path d="M286 140v-14M281 130l5-6 5 6"/>
+        </g>
+        <text x="140" y="146" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#7fb0ff">上浮一行，容器跟着收缩</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="pins">
+    <div><span class="pin">1</span><span><b>重力是开关，默认开。</b>关掉（GridStack 的 <code>float: true</code>）时卡片停在作者放的行上，中间允许留空。做成开关而不是写死，是因为"故意留一行空白当分隔"是真实用法。</span></div>
+    <div><span class="pin">2</span><span><b>只往上浮，不往左靠。</b>列是作者的构图意图（这张在左、那张在右），行不是。GridStack 的重力也只有一个方向，这不是简化。</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <h2><span class="num">05</span>Resize：手柄照旧，读数换成格</h2>
+  <p class="sub">八个手柄一个不少，但边缘吸到格线上，而且同样会推挤。</p>
+  <div class="stage-wrap">
+    <div class="stage-bar"><span class="dot"></span>画布 · 缩放中<span class="spacer"></span>东手柄</div>
+    <div class="stage">
+      <svg viewBox="0 0 880 420" role="img" aria-label="拖动东侧手柄把卡片从 7 格拉到 8 格，右边的卡片被推到下一行">
+        <rect x="60" y="30" width="752" height="350" rx="4" fill="#12151a" stroke="#3687ff" stroke-width="1.2"/>
+        <g fill="#3687ff" fill-opacity="0.055">
+          <rect x="76" y="46" width="54.5" height="318"/><rect x="136.5" y="46" width="54.5" height="318"/>
+          <rect x="197" y="46" width="54.5" height="318"/><rect x="257.5" y="46" width="54.5" height="318"/>
+          <rect x="318" y="46" width="54.5" height="318"/><rect x="378.5" y="46" width="54.5" height="318"/>
+          <rect x="439" y="46" width="54.5" height="318"/><rect x="499.5" y="46" width="54.5" height="318"/>
+          <rect x="560" y="46" width="54.5" height="318"/><rect x="620.5" y="46" width="54.5" height="318"/>
+          <rect x="681" y="46" width="54.5" height="318"/><rect x="741.5" y="46" width="54.5" height="318"/>
+        </g>
+        <g stroke="#3687ff" stroke-opacity="0.22" stroke-width="1">
+          <path d="M76 100h720M76 154h720M76 208h720M76 262h720M76 316h720"/>
+        </g>
+        <g fill="#1d2025" stroke="#414853" stroke-width="1">
+          <rect x="76" y="46" width="236" height="102" rx="3"/>
+          <rect x="318" y="46" width="236" height="102" rx="3"/>
+          <rect x="560" y="46" width="236" height="102" rx="3"/>
+        </g>
+        <g font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">
+          <text x="88" y="64">实时功率</text><text x="330" y="64">告警</text><text x="572" y="64">环境</text>
+        </g>
+
+        <!-- 被推下去的 -->
+        <rect x="499.5" y="262" width="296.5" height="102" rx="3" fill="#1d2025" stroke="#414853"/>
+        <text x="511" y="280" font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">设备列表</text>
+        <g stroke="#8e98a8" stroke-width="1.2" fill="none" opacity="0.5" stroke-dasharray="4 3">
+          <rect x="499.5" y="154" width="296.5" height="102" rx="3"/>
+        </g>
+        <g stroke="#8e98a8" stroke-width="1.4" fill="none" opacity="0.8">
+          <path d="M648 214v36"/><path d="M643 244l5 6 5-6"/>
+        </g>
+
+        <!-- 被缩放的卡：原尺寸 + 吸到 8 格的预览 -->
+        <rect x="76" y="154" width="417.5" height="102" rx="3" fill="#1d2025" stroke="#414853"/>
+        <text x="88" y="172" font-family="Inter, sans-serif" font-size="11.5" fill="#8e98a8">发电趋势</text>
+        <rect x="76" y="154" width="478" height="102" rx="3" fill="#3687ff" fill-opacity="0.12" stroke="#4d9cff" stroke-width="1.6" stroke-dasharray="6 4"/>
+        <g fill="#3687ff" stroke="#0a0c0f" stroke-width="1">
+          <rect x="72" y="150" width="7" height="7"/><rect x="311.5" y="150" width="7" height="7"/><rect x="550.5" y="150" width="7" height="7"/>
+          <rect x="72" y="202" width="7" height="7"/><rect x="550.5" y="202" width="7" height="7"/>
+          <rect x="72" y="253" width="7" height="7"/><rect x="311.5" y="253" width="7" height="7"/><rect x="550.5" y="253" width="7" height="7"/>
+        </g>
+
+        <!-- 光标与读数 -->
+        <path d="M530 196h-14M534 196h14M520 192l-5 4 5 4M544 192l5 4-5 4" stroke="#f4f7fb" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <g transform="translate(566 210)">
+          <rect width="86" height="24" rx="3" fill="#101820" stroke="#4d9cff" stroke-width="1.5"/>
+          <text x="11" y="16.5" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#ffffff">8 × 2</text>
+          <text x="56" y="16.5" font-family="JetBrains Mono, monospace" font-size="11" fill="#7d8797">格</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <div class="pins">
+    <div><span class="pin">1</span><span><b>读数的单位是格，不是像素。</b>"8 × 2 格"。像素值在这里是派生的、会随容器宽度变的，印出来只会误导。</span></div>
+    <div><span class="pin">2</span><span><b>缩放同样推挤。</b>拉宽到 8 格挡住了「设备列表」，它下移一行。这与拖动共用<b>同一个求解器</b>，不是两套规则。</span></div>
+    <div><span class="pin">3</span><span><b>最小/最大是格数</b>，写在 <code>GridItem</code> 上。一张趋势图可以声明"最少 4 格宽"，拖不下去。</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <h2><span class="num">06</span>边界：它和 Auto Layout 不一样的地方</h2>
+  <p class="sub">同一个手势在两种容器里含义不同。这不是不一致，是两种布局各自的自然语义——但必须说出来。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th style="width:26%">同一件事</th><th style="width:37%">Auto Layout（flex）</th><th>网格（grid）</th></tr></thead>
+      <tbody>
+        <tr><td><b>拖一个子级</b></td><td>只能改<b>顺序</b>；坐标由排布算出来，拖动不写 offset</td><td>改它的<b>坐标</b> <code>x, y</code>。这是主要操作</td></tr>
+        <tr><td><b>子级的尺寸</b></td><td>每轴 fixed / fill / hug 三选一</td><td><b>没有自由度</b>，盒 = 格矩形。几何分组的「尺寸」降为只读，见第 07 节</td></tr>
+        <tr><td><b>兄弟实时让位</b></td><td>只有 resize 时</td><td><b>move 和 resize 都要</b>。这是 GridStack 的灵魂，见第 10 节</td></tr>
+        <tr><td><b>拖出容器</b></td><td colspan="2"><b>两边一样</b>：<code>GridItem</code> 删掉、转 absolute、几何烘焙成世界落点——沿用既有的"移出 Layout 时烘焙 Absolute 几何"</td></tr>
+        <tr><td><b>拖进容器</b></td><td>插到某个顺序位</td><td>落在光标所在的那一格；被占了就把原住户推下去</td></tr>
+        <tr><td><b>容器自己的高</b></td><td colspan="2"><b>两边一样</b>：Hug 跟着内容长，Fixed + <code>Overflow: scroll</code> 固定住</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <h2><span class="num">07</span>属性栏配置</h2>
+  <p class="sub">
+    现有的「布局」分组有<b class="k">五个部分</b>：缺席态的 + 菜单、缺席态的引导卡、分组标题栏的状态与动作、字段区、实时预览。
+    上一版我只画了字段区。逐个过一遍，并且<b class="k">改正一处</b>——子级那一半我原来画错了。
+  </p>
+
+  <!-- 7.1 -->
+  <h3 style="margin:0 0 4px 22px;font-size:14px;">7.1　还没有布局时</h3>
+  <p class="sub">那个 + 菜单从第一天起就是<b class="k">菜单</b>（<code>LayoutActionMenu</code>，复数 <code>items</code>），只是一直只有一项。现在它真的有第二项了。</p>
+
+  <div class="panels">
+    <div>
+      <div class="inspector">
+        <div class="ins-title">现在</div>
+        <div class="grp">
+          <div class="grp-head"><span class="name">布局</span><span class="spacer"></span>
+            <span class="hd-acts"><span class="ib">＋</span></span>
+          </div>
+          <div class="ins-empty">
+            <svg aria-hidden="true" viewBox="0 0 72 44">
+              <path d="M7 10h58M7 10l6-5M7 10l6 5M65 10l-6-5M65 10l-6 5"/>
+              <rect height="15" rx="1" width="16" x="8" y="23"/><rect height="15" rx="1" width="16" x="28" y="23"/><rect height="15" rx="1" width="16" x="48" y="23"/>
+              <path d="M3 30.5h5M64 30.5h5M3 30.5l3-3M3 30.5l3 3M69 30.5l-3-3M69 30.5l-3 3"/>
+            </svg>
+            <strong>使用自动布局</strong>
+            <p>自动排列子项，并统一控制方向、间距、换行与对齐。</p>
+            <div class="btns" data-one="true"><span class="btn" data-primary="true">＋ 添加自动布局</span></div>
+            <span class="foot">添加后可随时移除</span>
+          </div>
+        </div>
+      </div>
+      <div class="menu">
+        <div>Auto Layout <code>display: flex</code></div>
+      </div>
+      <p class="hint" style="margin-left:2px;">＋ 菜单，一项。</p>
+    </div>
+
+    <div>
+      <div class="inspector">
+        <div class="ins-title">加上网格之后</div>
+        <div class="grp">
+          <div class="grp-head"><span class="name">布局</span><span class="spacer"></span>
+            <span class="hd-acts"><span class="ib">＋</span></span>
+          </div>
+          <div class="ins-empty">
+            <svg aria-hidden="true" viewBox="0 0 72 44">
+              <path d="M7 10h58M7 10l6-5M7 10l6 5M65 10l-6-5M65 10l-6 5"/>
+              <rect height="15" rx="1" width="16" x="8" y="23"/><rect height="15" rx="1" width="16" x="28" y="23"/><rect height="15" rx="1" width="16" x="48" y="23"/>
+              <path d="M3 30.5h5M64 30.5h5M3 30.5l3-3M3 30.5l3 3M69 30.5l-3-3M69 30.5l-3 3"/>
+            </svg>
+            <strong>排列子项</strong>
+            <p>让容器接管子项的位置：按一条轴自动排列，或摆到一块网格上。</p>
+            <div class="btns">
+              <span class="btn">自动布局</span>
+              <span class="btn" data-primary="true">网格</span>
+            </div>
+            <span class="foot">添加后可随时移除</span>
+          </div>
+        </div>
+      </div>
+      <div class="menu">
+        <div>Auto Layout <code>display: flex</code></div>
+        <div data-new="true">网格 <code>12 列</code></div>
+      </div>
+      <p class="hint" style="margin-left:2px;">＋ 菜单，两项。<b>没有新控件。</b></p>
+    </div>
+  </div>
+
+  <div class="pins">
+    <div><span class="pin">1</span><span><b>引导卡的标题从「使用自动布局」改成「排列子项」。</b>它现在要同时介绍两种布局，不能只讲其中一种。正文相应改成一句同时覆盖两者的话，两个按钮并排——这是个二选一的决定，两个按钮就是最直接的表达。</span></div>
+    <div><span class="pin">2</span><span><b>＋ 菜单是同一件事的第二个入口</b>，给已经知道自己要什么的人。它本来就是 WAI-ARIA Menu Button，加一项不动任何交互代码。</span></div>
+    <div><span class="pin">3</span><span><b>切过去时既有子级要就近落格。</b><code>planEnableComposeGridLayout</code> 按每个子级当前的视觉位置算出它最接近的 <code>{x, y, w, h}</code>，与既有的 <code>planEnableComposeAutoLayout</code>（把子项转成 Flow）是同一类规划。这一步写进同一条事务，撤销一步回去。</span></div>
+  </div>
+
+  <!-- 7.2 -->
+  <h3 style="margin:34px 0 4px 22px;font-size:14px;">7.2　容器是网格时</h3>
+  <p class="sub">标题栏三件套照旧，字段区五行——其中<b class="k">两个 editor 是白拿的</b>。</p>
+
+  <div class="panels">
+    <div class="inspector">
+      <div class="ins-title">属性 · 容器「仪表盘区」</div>
+      <div class="grp">
+        <div class="grp-head"><span class="name">布局</span><span class="spacer"></span>
+          <span class="hd-acts"><span class="st">Grid</span><span class="ib">↺</span><span class="ib">⋯</span></span>
+        </div>
+        <div class="grp-body">
+          <div class="row"><span class="lbl">列数</span><div class="fld">12</div></div>
+          <div class="colbar" style="margin-left:84px;"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="row"><span class="lbl">行高</span><div class="fld">48<span class="unit">px</span></div></div>
+          <div class="row"><span class="lbl">项间距</span>
+            <div class="pair"><div class="fld">6<span class="unit">行</span></div><div class="fld">6<span class="unit">列</span></div></div>
+          </div>
+          <div class="row"><span class="lbl">内边距</span>
+            <div class="pair"><div class="fld">16</div><div class="fld">16</div></div>
+          </div>
+          <div class="row"><span class="lbl">重力</span>
+            <div class="sw" data-on="true"><i></i><span>空洞自动填上</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="menu" style="margin-top:0;">
+        <div>⋯ 菜单</div>
+        <div data-new="true">切换为自动布局 <code>丢弃格坐标</code></div>
+        <div data-danger="true">移除网格 <code>烘焙为绝对定位</code></div>
+      </div>
+      <p class="hint" style="margin:10px 2px 0;">
+        <b>↺ 重置</b>：值与默认值相同时禁用，与 flex 逐字相同的规则。<br>
+        <b>Grid 状态标签</b>：flex 那格写的是 <code>Auto Layout</code>。它回答「这个分组现在是哪一种」——两种布局共用一个分组标题，不印出来就分不出。<br>
+        <b>切换为自动布局</b>会丢掉全部格坐标，因此菜单项上明写代价；<b>移除网格</b>沿用既有的「移出 Layout 时烘焙 Absolute 几何」。
+      </p>
+    </div>
+  </div>
+
+  <div class="pins">
+    <div><span class="pin">1</span><span><b>项间距与内边距两个 editor 直接复用 flex 的</b>（<code>FLEX_RENDERERS</code> 里的 <code>gap</code> 与 <code>padding</code>）。它们本来就不含任何 flex 语义——一个是两轴数值对，一个是四边数值。这既省实现，又让"间距"在两种布局里长得一模一样。</span></div>
+    <div><span class="pin">2</span><span><b>列数下面那条格子条是内联的，不是一个预览区块。</b>12 → 8 的差别在画布上要数格子，这条 N 段的小条一眼就读得出来。它跟着列数实时变。</span></div>
+    <div><span class="pin">3</span><span><b>不做 flex 那样的三节点实时预览。</b>flex 需要它，是因为 <code>align-content</code> / <code>justify-content</code> / <code>align-items</code> 三个词抽象、图标难认，一个小图能立刻说清。网格的五个字段全是数字，<b>画布本身就是预览</b>，再画一个小的等于同一句话说两遍。</span></div>
+    <div><span class="pin">4</span><span><b>没有方向、换行、三个对齐。</b>网格里"主轴/交叉轴"不存在——位置由 <code>{x, y}</code> 直接给出，没有可对齐的余量。flex 的七个字段在这里只剩两个能活下来。</span></div>
+  </div>
+
+  <!-- 7.3 -->
+  <h3 style="margin:34px 0 4px 22px;font-size:14px;">7.3　子级 —— 这里我上一版画错了</h3>
+  <p class="sub">
+    我原来给它单开了一个「网格位置 / <code>GridItem</code>」分组。<b class="k">那是错的</b>：既有的「几何」分组本来就<b class="k">按 <code>positioning</code> 切换</b>——绝对定位时第一个字段是「位置」，Flow 时是「自身对齐」。网格是这个开关的<b class="k">第三档</b>，不是一个新分组。
+  </p>
+
+  <div class="branches">
+    <div class="branch">
+      <h4>绝对定位 <code>absolute</code></h4>
+      <ul>
+        <li data-hit="true">位置 <small>x, y · px</small></li>
+        <li>旋转</li>
+        <li>旋转基点</li>
+        <li>尺寸 <small>fixed/fill/hug</small></li>
+        <li>外边距</li>
+      </ul>
+    </div>
+    <div class="branch">
+      <h4>自动布局 <code>flow</code></h4>
+      <ul>
+        <li data-hit="true">自身对齐 <small>alignSelf</small></li>
+        <li>旋转</li>
+        <li>旋转基点</li>
+        <li>尺寸 <small>fixed/fill/hug</small></li>
+        <li>外边距</li>
+      </ul>
+    </div>
+    <div class="branch" data-new="true">
+      <h4>网格 <code>grid</code></h4>
+      <ul>
+        <li data-hit="true">网格位置 <small>列, 行</small></li>
+        <li data-hit="true">网格尺寸 <small>宽, 高 · 格</small></li>
+        <li>旋转</li>
+        <li>旋转基点</li>
+        <li data-ro="true">尺寸 <small>只读</small></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="panels" style="margin-top:20px;">
+    <div class="inspector">
+      <div class="ins-title">属性 · 卡片「环境」</div>
+      <div class="grp">
+        <div class="grp-head"><span class="name">几何</span><span class="spacer"></span>
+          <span class="hd-acts"><span class="st">Grid</span></span>
+        </div>
+        <div class="grp-body">
+          <div class="row"><span class="lbl">忽略网格</span>
+            <div class="sw"><i></i><span>脱离格子自由摆放</span></div>
+          </div>
+          <div class="row"><span class="lbl">网格位置</span>
+            <div class="pair"><div class="fld">0<span class="unit">列</span></div><div class="fld">2<span class="unit">行</span></div></div>
+          </div>
+          <div class="row"><span class="lbl">网格尺寸</span>
+            <div class="pair"><div class="fld">4<span class="unit">列</span></div><div class="fld">2<span class="unit">行</span></div></div>
+          </div>
+          <div class="row" data-soon="true"><span class="lbl">最小</span>
+            <div class="pair"><div class="fld">2<span class="unit">列</span></div><div class="fld">1<span class="unit">行</span></div></div>
+          </div>
+          <div class="row"><span class="lbl">旋转</span><div class="fld">0<span class="unit">°</span></div></div>
+          <div class="row"><span class="lbl">尺寸</span>
+            <div class="pair"><div class="fld" data-ro="true">237</div><div class="fld" data-ro="true">102</div></div>
+          </div>
+          <p class="hint"><b>「尺寸」只读，虚线框。</b>事实来源是上面那四个格数——与 <code>Frame.size</code> 压过 <code>LayoutItem</code> 是同构的。仍然印出来，是因为"它现在到底多少像素"是个正当问题。</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th style="width:42%">既有字段</th><th>在网格里</th></tr></thead>
+          <tbody>
+            <tr><td><b>忽略自动布局</b><br><span style="font-size:11.5px">既有 <code>ignoreLayout</code></span></td><td><b>留下，改文案</b>「忽略网格」。一张卡要脱离格子自由摆放，这个逃生口在两种布局里同样需要</td></tr>
+            <tr><td><b>位置 / 自身对齐</b></td><td>被<b>网格位置</b>顶掉——同一个开关的第三档</td></tr>
+            <tr><td><b>尺寸</b> <span style="font-size:11.5px">fixed/fill/hug</span></td><td><b>降为只读</b>。格子里没有尺寸自由度，三种模式一个都用不上</td></tr>
+            <tr><td><b>外边距</b></td><td class="gone">隐藏</td></tr>
+            <tr><td><b>旋转 / 旋转基点</b></td><td><b>照旧</b>。旋转与布局正交，它来自 <code>Transform</code> 不是 <code>LayoutItem</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin:10px 2px 0;">
+        <b>外边距为什么隐藏：</b>间距归容器（项间距那一格），每张卡再各带一份外边距会让"两张卡之间到底多远"有两个来源。GridStack 也没有 per-item margin。
+      </p>
+    </div>
+  </div>
+
+  <div class="pins">
+    <div><span class="pin">1</span><span><b>「分组标题对应一个 Component」不是铁律</b>——几何分组本来就跨了两个：旋转与基点来自 <code>Transform</code>，尺寸与外边距来自 <code>LayoutItem</code>。所以"格坐标来自 <code>GridItem</code> 所以要另起分组"这条理由不成立，而"用户找『这东西在哪儿』只看一个地方"成立。</span></div>
+    <div><span class="pin">2</span><span><b>四个格数都可键入</b>，键入产生的碰撞同样推挤。画布上的拖动与这四个框是同一份事实的两个入口——键盘用户要能精确摆位。</span></div>
+    <div><span class="pin">3</span><span>琥珀虚线圈 = <b>v1 可以先不做</b>：只有「最小」那一行。它不影响任何其他部分。</span></div>
+    <div><span class="pin">4</span><span><b>不做 GridStack 的 <code>locked</code>（不被推走）。</b>仓库里已经有一个 <code>Lock</code> Component，含义是"不可编辑"。两个不同的东西共用"锁定"这个词，是用户只能靠试才能分辨的那一类缺陷。</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <h2><span class="num">08</span>否掉的四个做法</h2>
+  <p class="sub">写在这里是为了让"为什么不那样"可复查。</p>
+  <ul class="reasons">
+    <li><b class="k">CSS Grid 的模板声明</b>（<code>grid-template-columns</code> / <code>areas</code>）。你已经说了太复杂，我同意，而且还有一条独立的理由：那是<b>声明式模板</b>，用户在画布上拖出来的结果要能反向表达成一份模板，这是个反向约束——它会让"随便拖到哪儿"变成"只能拖到模板允许的地方"。</li>
+    <li><b class="k">拖动时兄弟只画虚线框、松手才真动。</b>这样便宜很多（不需要 move 期的实时求解），但它会让网格<b>退化成"带吸附的绝对定位"</b>——而那个能力画布上已经有了（网格吸附 + <code>COMPOSE_SNAP_RADIUS</code>）。用户看不见推挤的结果就没法判断这一下该不该松手。</li>
+    <li><b class="k">用既有的画布网格吸附冒充。</b>那条管线是"落点吸到格点"，没有列数、没有碰撞、没有重力，而且它是<b>会话级视图状态</b>（怎么看），网格布局是<b>文档</b>（画了什么）。两者连住的地方都不一样。</li>
+    <li><b class="k">响应式列数收缩</b>（GridStack 的 <code>column(n)</code> 重排）。大屏的分辨率由 <code>Frame.size</code> 定死，没有消费者。做它还要回答"从 12 列压到 6 列时怎么重排"，而那个答案会渗进求解器。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <h2><span class="num">09</span>要你拍板的三件事</h2>
+  <p class="sub">其余的我都按既有判据取了值。这三件我有倾向，但它们各自会改变落地的量级或手感。</p>
+  <div class="decide">
+
+    <div class="dec">
+      <div class="dec-n">01</div>
+      <div>
+        <h3>拖动时，兄弟要不要<em class="q">真的</em>实时让位 <span class="tag" data-kind="ask">影响成本最大</span></h3>
+        <p>
+          这是本稿唯一要动既有架构的地方。现在 Stage 的实时布局求解<b>只接了 resize</b>——代码里明写着
+          "resize 是唯一需要真实布局求解的手势"。要让拖动时兄弟也动，得把 move 也接进那条预览通道。
+        </p>
+        <p>不做的话，第 03 节状态 3 那张图里，「发电趋势」就只是一个虚线框停在原地，松手才跳下去。</p>
+        <p class="mine"><b>我的意见：做。</b>不做就等于本稿第 08 节否掉的第二条——它会让整件事退化成一个已经有了的能力。通道本身已经写好（rAF 合并、配对清理都在），主要是要重新论证一条既有约束在网格下还成不成立。估 2–3 天，是三件里最贵的一件。</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-n">02</div>
+      <div>
+        <h3>行高固定 <code>px</code>，还是按列宽的比例</h3>
+        <p>
+          GridStack 两种都支持。固定 px：容器变宽时格子变宽、行高不变，卡片会变"扁"。
+          按比例（如 <code>1:1</code> 方格）：容器变宽时卡片等比长高，整块板子跟着长。
+        </p>
+        <p class="mine"><b>我的意见：v1 只做固定 px。</b>大屏的宽度在一个项目里通常是定死的，比例模式的价值要等到同一份页面投多种分辨率时才出现；而它是纯粹的加法，以后补不破坏任何东西。</p>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-n">03</div>
+      <div>
+        <h3>推挤的方向：只向下，还是允许交换</h3>
+        <p>
+          GridStack 默认<b>只向下推</b>。另有一种"两张同尺寸的卡片对调"的交换语义（<code>swap</code>），
+          手感更聪明，但它有一个说不清的边界：尺寸不同的时候换不了，于是同一个动作有时交换、有时推挤。
+        </p>
+        <p class="mine"><b>我的意见：只向下推。</b>理由就是上一句——用户无法预测的规则比笨一点的规则更糟，而"拖上去、它下去"任何时候都成立。</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  设计稿 · 待评审。对齐之后进 OpenSpec（<code>add-grid-layout</code>）。
+  本稿不含协议字段定义、包归属与落地顺序——那些属于提案。
+</footer>
+
+</div>
+</body>
+</html>
