@@ -359,6 +359,15 @@ export interface StageInteractionContext {
    * （带 `Curve` 的 Entity），而引擎不认识文档协议，因此由宿主查询后以判定入口传入。
    */
   readonly isGeometryEditable?: (entityId: string) => boolean
+  /**
+   * 正在几何编辑的那个 Entity；没有会话时为 `null`。
+   *
+   * @remarks
+   * 只用来分派**双击**：会话已经开在它身上时，落在它描边上的那一下不是「再进一次」，而是在
+   * 那条段上插一个顶点。会话本身住宿主（它持有夹点、轮廓与十字光标），引擎只需要知道有没有
+   * 以及是谁——把会话搬进来意味着提示、预览与捕捉标记要逐帧回传。
+   */
+  readonly geometryEditingId?: string | null
   /** 宿主回灌的最近一次绘制创建结果；`draw-text` 的创建据此进入编辑。 */
   readonly drawnEntity?: StageDrawnEntity | null
   /**
@@ -447,6 +456,22 @@ export type StageInteractionEffect =
        * 哪，而浏览器不提供查询接口。缺席的含义是「先不画」，不是「画在别处」。
        */
       readonly worldPoint?: StagePoint
+    }
+  /**
+   * 请求宿主在几何编辑会话里的落点处插入一个顶点。
+   *
+   * @remarks
+   * 落点是**世界坐标**，且**还没有解算过**——吸附、特征点捕捉与动态输入都住在宿主的落点管线
+   * 里，与拖夹点是同一条。引擎在这里解算一遍会得到第二条通道，而分叉的症状是「拖顶点吸端点、
+   * 插顶点不吸」。
+   *
+   * 「这一下是不是真的落在一条段上」同样由宿主判定：它要拿轮廓与命中容差比，而两者都在宿主
+   * 那边（填过色的曲线内部也命中，而它的中间没有段）。
+   */
+  | {
+      readonly type: 'geometry-editing.insert-vertex'
+      readonly entityId: string
+      readonly worldPoint: StagePoint
     }
   | {
       /**

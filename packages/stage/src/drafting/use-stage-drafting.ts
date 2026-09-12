@@ -977,6 +977,15 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   /** 清掉命令行上残留的说明。进入几何编辑时调用：用户此刻站在一个会取点的状态里。 */
   const clearNotice = useCallback(() => { setNotice(null) }, [])
+  /**
+   * 说出一句拒绝。
+   *
+   * @remarks
+   * 顶点增删由**手势与键盘**触发而不是由一条命令推进，因此它到不了 `rejected` 那一支；
+   * 而「敲了没反应」与敲错在屏幕上无法区分这条对它一样成立，落地的地方也该是同一处——
+   * 命令行那一行，用户此刻正在看的就是它。
+   */
+  const notify = useCallback((message: string) => { setNotice(message) }, [])
 
   const submit = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -1563,6 +1572,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     /** 修饰键滚轮的拦截谓词；交给画布滚轮 Hook 的 `interceptWheel`。 */
     handleWheel,
     clearNotice,
+    setNotice: notify,
     handleKeyDown,
     handlePoint,
     setPointer,

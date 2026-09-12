@@ -7,3 +7,9 @@ export type {
   StageCurveCornersOptions,
   StageCurveCornersSession,
 } from './use-stage-curve-corners'
+export { useStageVertexEdits } from './use-stage-vertex-edits'
+export type {
+  StageVertexEditMessages,
+  StageVertexEdits,
+  StageVertexEditsOptions,
+} from './use-stage-vertex-edits'

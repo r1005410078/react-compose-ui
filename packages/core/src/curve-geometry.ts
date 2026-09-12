@@ -402,9 +402,16 @@ export function composeCubicBoundsPoints(
  * 在参数 `t` 处把一段三次贝塞尔分成两段（de Casteljau）。
  *
  * @remarks
- * 两段拼起来与原段**逐像素相同**，这正是拍平可以放心递归下去的前提。
+ * 两段拼起来与原段**逐像素相同**，这正是拍平可以放心递归下去的前提，也是「在曲线段上插一个
+ * 顶点，形状逐像素不变」这条要求唯一的做法——插点是为了之后能改它，当场把曲线改成另一个
+ * 样子会让用户以为自己弄坏了什么。
+ *
+ * `t` **不钳制**：调用方要么给 `0.5`（拍平），要么给 {@link nearestComposeCubicT} 的返回值，
+ * 两者都已在 `[0, 1]` 内。钳制会把「算错了 t」这个编程错误变成一个静默产出退化段的结果。
+ *
+ * @public
  */
-function splitCubic(cubic: ComposeCubicShape, t: number): readonly [ComposeCubicShape, ComposeCubicShape] {
+export function splitComposeCubic(cubic: ComposeCubicShape, t: number): readonly [ComposeCubicShape, ComposeCubicShape] {
   const lerp = (a: ComposePlanarPoint, b: ComposePlanarPoint): ComposePlanarPoint => ({
     x: a.x + (b.x - a.x) * t,
     y: a.y + (b.y - a.y) * t,
@@ -444,23 +451,88 @@ const MAX_CUBIC_FLATTEN_DEPTH = 12
  * @public
  */
 export function flattenComposeCubic(cubic: ComposeCubicShape): readonly ComposeSegmentShape[] {
-  const segments: ComposeSegmentShape[] = []
-  const walk = (current: ComposeCubicShape, depth: number) => {
+  return flattenCubicWithParams(cubic).map(({ segment }) => segment)
+}
+
+/** 拍平产出的一条弦，连同它在原段上占的参数区间。 */
+interface ParameterizedChord {
+  readonly segment: ComposeSegmentShape
+  readonly t0: number
+  readonly t1: number
+}
+
+/**
+ * 拍平并记下每条弦占的参数区间。
+ *
+ * @remarks
+ * 与 {@link flattenComposeCubic} **共用同一条细分规则**而不是各拍各的：最近点与距离必须落在
+ * 同一条折线上，否则「点在这条曲线上」与「它落在参数 t 处」会给出互相矛盾的答案，而这种
+ * 偏差只在细分边界附近出现、极难复现。
+ *
+ * 参数区间靠**下标推算**而不是在递归里传：每次对半分，因此第 k 层的第 i 条弦占
+ * `[i / 2^k, (i + 1) / 2^k]`——但深度并不齐平（弯的那一半分得更深），所以这里在递归里直接
+ * 带着区间走。
+ */
+function flattenCubicWithParams(cubic: ComposeCubicShape): readonly ParameterizedChord[] {
+  const chords: ParameterizedChord[] = []
+  const walk = (current: ComposeCubicShape, depth: number, t0: number, t1: number) => {
     const chord = { start: current.start, end: current.end }
     const deviation = Math.max(
       pointToComposeSegmentDistance(chord, current.c1),
       pointToComposeSegmentDistance(chord, current.c2),
     )
     if (depth >= MAX_CUBIC_FLATTEN_DEPTH || !(deviation > MAX_SAGITTA)) {
-      segments.push(chord)
+      chords.push({ segment: chord, t0, t1 })
       return
     }
-    const [left, right] = splitCubic(current, 0.5)
-    walk(left, depth + 1)
-    walk(right, depth + 1)
+    const [left, right] = splitComposeCubic(current, 0.5)
+    const mid = (t0 + t1) / 2
+    walk(left, depth + 1, t0, mid)
+    walk(right, depth + 1, mid, t1)
   }
-  walk(cubic, 0)
-  return segments
+  walk(cubic, 0, 0, 1)
+  return chords
+}
+
+/**
+ * 点到三次贝塞尔最近处的参数 `t`。
+ *
+ * @remarks
+ * 「在这条曲线段上插一个顶点」需要的正是这个数：拿它去 {@link splitComposeCubic} 分割，两段
+ * 拼起来与原段逐像素相同。
+ *
+ * 与 {@link pointToComposeCubicDistance} 同一条拍平，因此「多近算在这条线上」与「它落在哪儿」
+ * 读出的是同一份事实。贝塞尔的最近点没有闭式解（要解五次方程），近似不可避免；落在最近那条
+ * 弦上之后再按弦上的比例插值，误差是一条弦的尺度，而弦本身已经细到与它在屏幕上分不出来。
+ *
+ * 退化段（起终点重合且控制点也压在上面）里每条弦长度都是 0，此时返回区间起点——那一段在屏幕
+ * 上是一个点，任何 `t` 给出的位置都相同。
+ *
+ * @public
+ */
+export function nearestComposeCubicT(
+  cubic: ComposeCubicShape,
+  point: ComposePlanarPoint,
+): number {
+  let best = 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const { segment, t0, t1 } of flattenCubicWithParams(cubic)) {
+    const distance = pointToComposeSegmentDistance(segment, point)
+    if (distance >= bestDistance) continue
+    bestDistance = distance
+    best = t0 + (t1 - t0) * segmentParameterAt(segment, point)
+  }
+  return best
+}
+
+/** 落点在一条线段上的归一化投影参数，钳到 `[0, 1]`。 */
+function segmentParameterAt(segment: ComposeSegmentShape, point: ComposePlanarPoint): number {
+  const dx = segment.end.x - segment.start.x
+  const dy = segment.end.y - segment.start.y
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) return 0
+  const raw = ((point.x - segment.start.x) * dx + (point.y - segment.start.y) * dy) / lengthSquared
+  return Math.min(1, Math.max(0, raw))
 }
 
 /**

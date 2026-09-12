@@ -3,7 +3,9 @@ import {
   composeCubicBoundsPoints,
   composeCubicPointAt,
   flattenComposeCubic,
+  nearestComposeCubicT,
   pointToComposeCubicDistance,
+  splitComposeCubic,
   type ComposeCubicShape,
 } from './curve-geometry'
 
@@ -122,5 +124,78 @@ describe('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 点到�
   it('包围盒里的空处不算命中——这正是曲线不按盒判定的理由', () => {
     // 盒的左上角 (0, 0) 是起点，因此取盒内那块空的中间偏上处。
     expect(pointToComposeCubicDistance(curve, { x: 50, y: 20 })).toBeGreaterThan(10)
+  })
+})
+
+/*
+ * 判别性来自**形状逐像素不变**：只断言「分成了两段」的用例，在一个随手挑两个控制点的实现上
+ * 同样会绿。因此这里在整条参数域上逐点比对分割前后的位置。
+ */
+describe('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / de Casteljau 分割', () => {
+  const curved: ComposeCubicShape = {
+    start: { x: 0, y: 0 },
+    c1: { x: 20, y: 120 },
+    c2: { x: 180, y: -60 },
+    end: { x: 200, y: 40 },
+  }
+
+  it('两段拼起来与原段逐点相同', () => {
+    const t = 0.37
+    const [left, right] = splitComposeCubic(curved, t)
+    // 接缝处：左段的终点、右段的起点与原段在 t 处的点是同一个点。
+    const seam = composeCubicPointAt(curved, t)
+    expect(left.end).toEqual(right.start)
+    expect(left.end.x).toBeCloseTo(seam.x, 9)
+    expect(left.end.y).toBeCloseTo(seam.y, 9)
+
+    for (let step = 0; step <= 20; step += 1) {
+      const u = step / 20
+      const expected = composeCubicPointAt(curved, u * t)
+      const actual = composeCubicPointAt(left, u)
+      expect(actual.x).toBeCloseTo(expected.x, 9)
+      expect(actual.y).toBeCloseTo(expected.y, 9)
+    }
+    for (let step = 0; step <= 20; step += 1) {
+      const u = step / 20
+      const expected = composeCubicPointAt(curved, t + u * (1 - t))
+      const actual = composeCubicPointAt(right, u)
+      expect(actual.x).toBeCloseTo(expected.x, 9)
+      expect(actual.y).toBeCloseTo(expected.y, 9)
+    }
+  })
+
+  it('端点处分割产出一段退化段与一段原段', () => {
+    const [left, right] = splitComposeCubic(curved, 0)
+    expect(left.start).toEqual(curved.start)
+    expect(left.end).toEqual(curved.start)
+    expect(composeCubicPointAt(right, 0.5)).toEqual(composeCubicPointAt(curved, 0.5))
+  })
+})
+
+describe('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 最近处的参数', () => {
+  const curved: ComposeCubicShape = {
+    start: { x: 0, y: 0 },
+    c1: { x: 0, y: 100 },
+    c2: { x: 100, y: 100 },
+    end: { x: 100, y: 0 },
+  }
+
+  it('曲线上的点还原出它自己的参数', () => {
+    for (const t of [0.1, 0.25, 0.5, 0.73, 0.9]) {
+      const point = composeCubicPointAt(curved, t)
+      // 容差是一条弦的尺度：最近点没有闭式解，落在最近那条弦上再按比例插值。
+      expect(nearestComposeCubicT(curved, point)).toBeCloseTo(t, 3)
+    }
+  })
+
+  it('离曲线很远的点取投影最近的那一处，而不是端点', () => {
+    // 正上方一点：顶点在 t = 0.5（y = 75），它比两个端点近得多。
+    expect(nearestComposeCubicT(curved, { x: 50, y: 400 })).toBeCloseTo(0.5, 2)
+  })
+
+  it('参数恒落在 [0, 1] 内，分割因此永不产出反向段', () => {
+    // 起点外侧的延长线上：投影会跑到负数去，必须钳回 0。
+    expect(nearestComposeCubicT(curved, { x: -500, y: -500 })).toBe(0)
+    expect(nearestComposeCubicT(curved, { x: 600, y: -500 })).toBe(1)
   })
 })
