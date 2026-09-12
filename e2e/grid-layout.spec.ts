@@ -526,3 +526,60 @@ test('OpenSpec: layout-engine / 网格容器的预解算 / 嵌套网格的子元
   await expect.poll(async () => (await card.boundingBox())!.width)
     .toBeGreaterThan(placed.width + 20)
 })
+
+/**
+ * 网格里的缩放在拖动期就按格实时解算。
+ *
+ * @remarks
+ * 此前缩放只在**松手**那一刻才走网格：拖动期间读数与选区框跟着自由像素走（屏幕上是
+ * `500.67` 这样的数），而卡片本身已经被预解算吸到了格矩形上——同一次手势里两样东西在说
+ * 不同的话，用户读到的是「我明明拉到了这里」。
+ *
+ * 判别性有三半，缺一半都会让某种错误实现照样绿：
+ *
+ * - **选区框与卡片对齐**：只断卡片吸格不够，卡片的吸格来自预览文档那条路径，读数与选区框
+ *   走的是另一条。
+ * - **相邻两个落点给出同一个宽度**：这是「整格跳」唯一说得死的形式；断「变宽了」对自由像素
+ *   同样绿。
+ * - **兄弟在松手之前就让位**，且松手后的结果与拖动中所见一致。
+ */
+test('OpenSpec: stage / 手势期实时布局反馈 / 网格里的缩放拖动期就按格解算', async ({ page }) => {
+  const { stage, children } = await setupGrid(page, [{ x: 120, y: 160 }, { x: 400, y: 160 }])
+  const first = children.nth(0)
+  const second = children.nth(1)
+  const a0 = (await first.boundingBox())!
+  const b0 = (await second.boundingBox())!
+
+  await page.mouse.click(a0.x + a0.width / 2, a0.y + 1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  // 东侧手柄：空心选区的缩放命中带整条让到盒外，因此起手点要在边线外侧。
+  const start = { x: a0.x + a0.width + 4, y: a0.y + a0.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+
+  const widthsAt = async (dx: number) => {
+    await page.mouse.move(start.x + dx, start.y, { steps: 3 })
+    const card = (await first.boundingBox())!
+    const box = (await stage.getByTestId('stage-selection-bounds').first().boundingBox())!
+    return { card: card.width, box: box.width }
+  }
+
+  // 同一格内的两个落点：宽度必须一模一样，而选区框必须始终贴着卡片。
+  const near = await widthsAt(30)
+  const alsoNear = await widthsAt(70)
+  expect(Math.abs(near.box - near.card)).toBeLessThan(4)
+  expect(Math.abs(alsoNear.box - alsoNear.card)).toBeLessThan(4)
+  expect(Math.round(alsoNear.card)).toBe(Math.round(near.card))
+
+  // 拉到压住兄弟：它在松手之前就让位。
+  const wide = await widthsAt(210)
+  expect(wide.card).toBeGreaterThan(near.card + 40)
+  expect(Math.abs(wide.box - wide.card)).toBeLessThan(4)
+  await expect.poll(async () => (await second.boundingBox())!.y).toBeGreaterThan(b0.y + 30)
+
+  await page.mouse.up()
+  // 松手后的结果与拖动中所见逐像素一致。
+  await expect.poll(async () => (await first.boundingBox())!.width).toBeCloseTo(wide.card, 0)
+  await expect.poll(async () => (await second.boundingBox())!.y).toBeGreaterThan(b0.y + 30)
+})

@@ -17,6 +17,7 @@ import {
   getComposeHierarchy,
   getComposeLayout,
   isComposeGridLayout,
+  projectComposeGridCell,
   resolveComposeAppearance,
   solveComposeGrid,
   type ComposeEntity,
@@ -177,4 +178,38 @@ export function solveStageGrid(
     float: context.layout.float,
     anchorId: override?.id,
   })
+}
+
+/**
+ * 把一个格矩形换算成世界矩形。
+ *
+ * @remarks
+ * 占位影子与网格缩放的吸附后包围盒读的是**同一个**换算：各算一遍的症状是「影子画在这儿、
+ * 松手却落在那儿」，而那种偏差只在特定列宽下现形。
+ *
+ * @public
+ */
+export function projectStageGridCellToWorld(
+  index: StageSceneIndex,
+  containerId: string,
+  context: StageGridContext,
+  cell: { readonly x: number; readonly y: number; readonly w: number; readonly h: number },
+): StageRect | null {
+  const matrix = index.getWorldMatrix(containerId)
+  if (!matrix) return null
+  const rect = projectComposeGridCell(cell, context.metrics)
+  const topLeft = applyMatrix(matrix, {
+    x: context.contentOrigin.x + rect.x,
+    y: context.contentOrigin.y + rect.y,
+  })
+  const bottomRight = applyMatrix(matrix, {
+    x: context.contentOrigin.x + rect.x + rect.width,
+    y: context.contentOrigin.y + rect.y + rect.height,
+  })
+  return {
+    x: topLeft.x,
+    y: topLeft.y,
+    width: bottomRight.x - topLeft.x,
+    height: bottomRight.y - topLeft.y,
+  }
 }

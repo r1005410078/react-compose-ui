@@ -5,10 +5,10 @@ import {
   getComposeLayoutItem,
   getComposeLock,
   isComposeGridLayout,
-  projectComposeGridCell,
 } from '@compose-ui/core'
 import { applyMatrix, invertMatrix, type StagePoint, type StageRect } from '../geometry'
 import {
+  projectStageGridCellToWorld,
   resolveStageGridCell,
   resolveStageGridContext,
   solveStageGrid,
@@ -37,6 +37,15 @@ export type StageDropTarget =
       readonly containerId: string
       readonly x: number
       readonly y: number
+      /**
+       * 本次手势之后的列跨度；缺席表示沿用已提交的跨度。
+       *
+       * @remarks
+       * 只有缩放会改跨度。移动不带它，因此预览与提交都读已提交值——移动改的是位置不是大小。
+       */
+      readonly w?: number
+      /** 本次手势之后的行跨度；缺席表示沿用已提交的跨度。 */
+      readonly h?: number
     }
   | {
       readonly kind: 'reorder'
@@ -470,30 +479,15 @@ export function resolveStageDropIndicator(input: {
       id: leadId,
       x: target.x,
       y: target.y,
-      w: item?.w ?? 1,
-      h: item?.h ?? 1,
+      // 缩放会在落点上带来新的跨度；移动不带，那一档沿用已提交值。
+      w: target.w ?? item?.w ?? 1,
+      h: target.h ?? item?.h ?? 1,
     }
     // 影子画在**求解之后**的位置：重力会把它继续往上拉，而影子承诺的正是松手后的结果。
     const solved = solveStageGrid(index, target.containerId, context, override)
     const settled = solved.find((cell) => cell.id === leadId) ?? override
-    const rect = projectComposeGridCell(settled, context.metrics)
-    const topLeft = applyMatrix(matrix, {
-      x: context.contentOrigin.x + rect.x,
-      y: context.contentOrigin.y + rect.y,
-    })
-    const bottomRight = applyMatrix(matrix, {
-      x: context.contentOrigin.x + rect.x + rect.width,
-      y: context.contentOrigin.y + rect.y + rect.height,
-    })
-    return {
-      kind: 'grid-cell',
-      bounds: {
-        x: topLeft.x,
-        y: topLeft.y,
-        width: bottomRight.x - topLeft.x,
-        height: bottomRight.y - topLeft.y,
-      },
-    }
+    const bounds = projectStageGridCellToWorld(index, target.containerId, context, settled)
+    return bounds ? { kind: 'grid-cell', bounds } : null
   }
 
   const container = index.document.entities[target.containerId]

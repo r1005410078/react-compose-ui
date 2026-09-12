@@ -12,8 +12,9 @@ import {
   type StageTransform,
   type StageViewport,
 } from '../geometry'
-import { planTransformCommit, resolveTransformTargets } from '../gesture-planning'
+import { planTransformCommit, resolveStageGridResize, resolveTransformTargets } from '../gesture-planning'
 import { transformedResizeSelection } from '../gesture-planning'
+import { projectStageGridCellToWorld } from '../hit-testing'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent, StageSession } from './stage-kernel-profile'
@@ -70,28 +71,63 @@ function createResizeSession(options: ResizeSessionOptions): StageSession {
           ? resolveComposeGeometryConstraints(entity).resize === 'preserve-aspect'
           : false
       })
-      const nextBounds = resizeBounds(
+      const freeBounds = resizeBounds(
         bounds,
         handle,
         snapped.point,
         { ...event.modifiers, shift: event.modifiers.shift || preserveAspect },
       )
-      transforms = transformedResizeSelection(
+      const mapTo = (target: StageRect) => transformedResizeSelection(
         index,
         ids,
-        rectMappingMatrix(bounds, nextBounds),
-        {
-          scaleX: nextBounds.width / bounds.width,
-          scaleY: nextBounds.height / bounds.height,
-        },
+        rectMappingMatrix(bounds, target),
+        { scaleX: target.width / bounds.width, scaleY: target.height / bounds.height },
         context.contentReflowsWithWidth,
         handle,
       )
+      transforms = mapTo(freeBounds)
+
+      /*
+       * **格中子级拖动期就吸到格矩形。**格里的盒**就是**格矩形，自由像素只是一个下一帧就会
+       * 被预解算覆盖掉的中间值：不吸的话读数写着 500.67、松手之后落成整格，用户读到的是
+       * 「我明明拉到了这里」。GridStack 与 react-grid-layout 的缩放同样是逐格跳的。
+       *
+       * 解算与提交读**同一个** `resolveStageGridResize`，因此「拖动时看到的大小」与「松手后
+       * 的结果」不可能不一致——那正是网格缩放唯一需要回答的问题。吸的是**求解之后**被拖那张
+       * 自己那一格：重力会把它继续往上拉，而屏幕上该显示的就是松手后的样子。
+       */
+      const gridPlan = resolveStageGridResize({
+        document: context.document,
+        index,
+        transforms,
+        handle,
+      })
+      const settled = gridPlan?.solved.find((cell) => cell.id === gridPlan.entityId)
+      const gridBounds = gridPlan && settled
+        ? projectStageGridCellToWorld(index, gridPlan.containerId, gridPlan.context, settled)
+        : null
+      const nextBounds = gridBounds ?? freeBounds
+      if (gridBounds) transforms = mapTo(gridBounds)
+
       ctx.publish({
         ...ctx.snapshot,
         phase: 'resize',
         previewTransforms: transforms,
         snapGuides: snapped.guides,
+        /*
+         * 网格缩放同样上报落点：兄弟的实时让位与占位影子因此复用移动那条已有通道，本插件
+         * 不另造一份。跨度跟着这次手势走——移动不带它，缩放必须带，否则影子画的是旧大小。
+         */
+        dropTarget: gridPlan && settled
+          ? {
+              kind: 'grid-cell' as const,
+              containerId: gridPlan.containerId,
+              x: settled.x,
+              y: settled.y,
+              w: settled.w,
+              h: settled.h,
+            }
+          : ctx.snapshot.dropTarget,
         // 读数取解算之后的新包围盒，因此与选区框、参考线是同一个值；读裸指针的症状是开着
         // 网格时框里的数与选区框对不上。
         resizePreview: resizeReadoutPoints(handle, nextBounds),
