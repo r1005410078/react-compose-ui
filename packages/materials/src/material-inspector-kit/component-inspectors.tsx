@@ -468,7 +468,75 @@ function BasicMarginEditor({ commit, label, readOnly, value }: ComposePropertyPa
   )
 }
 
+
+/**
+ * 格坐标与格跨度的一对 editor。
+ *
+ * @remarks
+ * **不复用位置 editor**：跨度不是位置。复用会让两个含义不同的字段拿到同一个可访问名
+ * （屏幕阅读器上都念「位置 X」），而这正是这块面板反复在躲的那一类缺陷——两样东西长得一样
+ * 而按下去做的事不同。前缀也各自跟着领域走：坐标是列 / 行，跨度是宽 / 高。
+ *
+ * 两者只接受整数：格是离散的，`2.5 列`在求解里会被立刻取整，留一个能打出来却不生效的值比
+ * 不让打更糟。
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function GridPairEditor({
+  commit,
+  label,
+  prefixes,
+  readOnly,
+  minimum,
+  value,
+}: Pick<ComposePropertyPanelRendererProps, 'commit' | 'label' | 'readOnly' | 'value'> & {
+  readonly prefixes: readonly [string, string]
+  readonly minimum: number
+}) {
+  const pair = value as unknown as BasicPositionValue
+  const round = (next: number) => Math.max(minimum, Math.round(next))
+  return (
+    <div className="layout-item-inspector__position">
+      <InspectorNumberDraftInput
+        label={`${label} ${prefixes[0]}`}
+        prefix={prefixes[0]}
+        readOnly={readOnly}
+        value={pair.x}
+        onCommit={(x) => commit({ ...pair, x: round(x) }, 'commit')}
+      />
+      <InspectorNumberDraftInput
+        label={`${label} ${prefixes[1]}`}
+        prefix={prefixes[1]}
+        readOnly={readOnly}
+        value={pair.y}
+        onCommit={(y) => commit({ ...pair, y: round(y) }, 'commit')}
+      />
+    </div>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function BasicGridCellEditor(props: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  return <GridPairEditor {...props} minimum={0} prefixes={zh ? ['列', '行'] : ['Col', 'Row']} />
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- 组件仅注册到当前 Inspector 的实例级 renderer。
+function BasicGridSpanEditor(props: ComposePropertyPanelRendererProps) {
+  const zh = useZh()
+  return <GridPairEditor {...props} minimum={1} prefixes={zh ? ['宽', '高'] : ['W', 'H']} />
+}
+
 const BASIC_GEOMETRY_RENDERERS: readonly ComposePropertyPanelRenderer[] = [
+  {
+    id: 'basic-geometry-grid-cell',
+    component: BasicGridCellEditor,
+    layout: 'inline',
+  },
+  {
+    id: 'basic-geometry-grid-span',
+    component: BasicGridSpanEditor,
+    layout: 'inline',
+  },
   {
     id: 'basic-geometry-position',
     component: BasicPositionEditor,
@@ -589,12 +657,12 @@ export function createLayoutItemInspector(
           gridCell: v.pipe(
             v.custom<BasicPositionValue>(isBasicPositionValue),
             v.title(zh ? '网格位置' : 'Grid position'),
-            v.metadata({ propertyPanel: { editor: 'basic-geometry-position' } }),
+            v.metadata({ propertyPanel: { editor: 'basic-geometry-grid-cell' } }),
           ),
           gridSpan: v.pipe(
             v.custom<BasicPositionValue>(isBasicPositionValue),
             v.title(zh ? '网格尺寸' : 'Grid size'),
-            v.metadata({ propertyPanel: { editor: 'basic-geometry-position' } }),
+            v.metadata({ propertyPanel: { editor: 'basic-geometry-grid-span' } }),
           ),
           ...withoutMargin,
         }) as unknown as v.GenericSchema<BasicGeometryValue>
