@@ -79,6 +79,10 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly wireParentMismatch: string
   /** 一次接线的历史标签；它产出建节点、断线与改绑三条命令。 */
   readonly wireTap: string
+  /** 一次镜像的历史标签；整棵子树的几何、翻转与位置共享它，撤销一步全部回来。 */
+  readonly mirrorLabel: string
+  /** 一次对齐或分布的历史标签。 */
+  readonly alignLabel: string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -524,6 +528,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
           })()
         : {}),
       curveLabel: current.messages.editGeometry,
+      mirrorLabel: current.messages.mirrorLabel,
+      alignLabel: current.messages.alignLabel,
     })) {
       current.dispatch(command)
     }

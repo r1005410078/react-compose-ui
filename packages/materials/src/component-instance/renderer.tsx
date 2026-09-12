@@ -44,6 +44,8 @@ import {
   readComponentInstanceContentFit,
   type ComponentInstanceContentFit,
 } from './content-fit'
+import { componentInstanceFlipScale, readComponentInstanceFlip } from './flip'
+import type { ComponentInstanceFlip } from './flip'
 import { useComposeComponentInstanceNest } from './nest-state'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -154,6 +156,7 @@ export function ComponentInstanceRenderer({
       animationTime={props.animationTime}
       assetResolver={assetResolver}
       contentFit={readComponentInstanceContentFit(props)}
+      flip={readComponentInstanceFlip(props)}
       document={document}
       mode={mode}
       registry={registry}
@@ -234,6 +237,7 @@ function ResolvedComponentContent({
   animationTime,
   assetResolver,
   contentFit,
+  flip,
   document,
   mode,
   registry,
@@ -244,6 +248,8 @@ function ResolvedComponentContent({
   readonly animationTime: unknown
   readonly assetResolver: ComposeRendererProps['assetResolver']
   readonly contentFit: ComponentInstanceContentFit
+  /** 呈现层的翻转；镜像的「内容那一半」由它承担。 */
+  readonly flip: ComponentInstanceFlip
   readonly document: ComposeDocument
   readonly mode: 'editor' | 'preview'
   readonly registry: ComposeEntityRegistry
@@ -368,6 +374,7 @@ function ResolvedComponentContent({
   const rootId = layoutDocument.rootIds[0]
   const rootFrameSize = (rootId ? getComposeFrame(layoutDocument.entities[rootId]) : null)?.size ?? null
   const scale = componentInstanceContentScale(hostBox, rootFrameSize)
+  const flipScale = componentInstanceFlipScale(flip)
   return (
     <ComposeComponentInstanceNestProvider
       ancestorKeys={[...nest.ancestorKeys, ancestorKey]}
@@ -382,6 +389,19 @@ function ResolvedComponentContent({
           inset: 0,
           overflow: 'hidden',
           ...(mode === 'editor' ? { pointerEvents: 'none' as const } : {}),
+          /*
+           * 翻转绕**实例盒的中心**发生，不读 `Transform.pivot`：那个字段回答的是「绕哪一点
+           * 旋转」，借给翻转会让改过基点的用户看到图形整个跳走。
+           *
+           * 下钻选中与命中走 DOM 测量（`getBoundingClientRect` 如实反映 transform），
+           * 因此翻转对它们透明——与内容适配的整体缩放是同一条。
+           */
+          ...(flipScale.x === 1 && flipScale.y === 1
+            ? {}
+            : {
+                transform: `scale(${flipScale.x}, ${flipScale.y})`,
+                transformOrigin: 'center',
+              }),
         }}
       >
         {contentFit === 'scale' && rootFrameSize

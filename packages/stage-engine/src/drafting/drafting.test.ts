@@ -54,6 +54,19 @@ const messages = {
   moreSidesKeyword: '加一边',
   fewerSidesKeyword: '减一边',
   invalidSides: (min: number, max: number) => `边数必须是 ${min} 到 ${max} 之间的整数`,
+  mirrorTitle: '镜像',
+  mirrorFirstPoint: '指定镜像轴的第一点',
+  mirrorSecondPoint: '指定镜像轴的第二点',
+  mirrorDegenerateAxis: '两点重合，定不出镜像轴',
+  alignLeftTitle: '左对齐',
+  alignCenterXTitle: '水平居中',
+  alignRightTitle: '右对齐',
+  alignTopTitle: '顶对齐',
+  alignCenterYTitle: '垂直居中',
+  alignBottomTitle: '底对齐',
+  distributeXTitle: '水平等距',
+  distributeYTitle: '垂直等距',
+  alignmentNeedsMore: (minimum: number) => `至少需要选中 ${minimum} 个对象`,
 }
 
 const context: StageDraftingContext = { messages }
@@ -122,7 +135,10 @@ describe('LINE 命令', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
       'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'POLYGON', 'PLINE',
-      'MOVE', 'COPY', 'ERASE', 'VERTEX',
+      'MOVE', 'COPY', 'ERASE', 'VERTEX', 'MIRROR',
+      'ALIGNLEFT', 'ALIGNCENTERX', 'ALIGNRIGHT',
+      'ALIGNTOP', 'ALIGNCENTERY', 'ALIGNBOTTOM',
+      'DISTRIBUTEX', 'DISTRIBUTEY',
     ])
     expect(commands[0]?.aliases).toEqual(['L'])
     // 导线在一次接线图上是独立的活儿（红色粗实线、只走横平竖直、可以有拐点），因此有自己

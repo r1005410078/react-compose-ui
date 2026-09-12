@@ -99,12 +99,19 @@ export {
 
 /** 手势的预览几何与提交规划。 */
 export {
+  planStageAlignment,
+  planStageMirror,
   planTransformCommit,
   resolveTransformGizmoTarget,
   resolveTransformTargets,
   transformedResizeSelection,
   transformedSelection,
+  stageAlignmentMinimum,
+  STAGE_ALIGN_MINIMUM,
+  STAGE_DISTRIBUTE_MINIMUM,
+  type StageAlignmentMode,
   type StageFinishedTransform,
+  type StageMirrorQuery,
   type StageMoveAxis,
   type StageTransformGizmoTarget,
   type StageTransformKind,

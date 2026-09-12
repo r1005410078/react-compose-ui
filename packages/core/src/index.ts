@@ -295,6 +295,12 @@ export type {
   ComposeSegmentShape,
 } from './curve-geometry'
 export {
+  composeHorizontalMirrorAxis,
+  reflectComposeCurve,
+  reflectComposePoint,
+} from './curve-reflect'
+export type { ComposeMirrorAxis } from './curve-reflect'
+export {
   applyComposeAngleConstraint,
   applyComposeFieldOverride,
   composeFieldsToPoint,

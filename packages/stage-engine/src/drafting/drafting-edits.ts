@@ -17,6 +17,8 @@ import type { StageJunctionPredicate } from '../commands'
 import { applyStageCurveGrip, stageCurveBoxGeometry, stageCurveLocalPoint } from '../geometry-editing'
 import { translationMatrix } from '../geometry'
 import {
+  planStageAlignment,
+  planStageMirror,
   planTransformCommit,
   resolveTransformTargets,
   transformedSelection,
@@ -81,6 +83,10 @@ export interface StageDraftingEditQuery {
   readonly isJunction?: StageJunctionPredicate
   /** 夹点几何变更的已本地化标签；缺席时退回 Entity 名。 */
   readonly curveLabel?: (name: string) => string
+  /** 镜像的已本地化事务标签。 */
+  readonly mirrorLabel?: string
+  /** 对齐与分布的已本地化事务标签。 */
+  readonly alignLabel?: string
 }
 
 /**
@@ -126,6 +132,39 @@ export function planStageDraftingEdits(query: StageDraftingEditQuery): readonly 
         idFactory,
       })
       if (planned?.type === 'command.dispatch') commands.push(planned.command)
+    }
+  }
+
+  if (effect.mirror && effect.mirror.entityIds.length > 0) {
+    commands.push(...planStageMirror({
+      document,
+      layoutSnapshot,
+      index,
+      entityIds: effect.mirror.entityIds,
+      axis: effect.mirror.axis,
+      idFactory,
+      ...(query.mirrorLabel ? { label: query.mirrorLabel } : {}),
+    }))
+  }
+
+  if (effect.align && effect.align.entityIds.length > 0) {
+    const { entityIds, mode } = effect.align
+    const transforms = planStageAlignment(index, entityIds, mode)
+    const ids = Object.keys(transforms)
+    if (ids.length > 0) {
+      // 走既有的变换漏斗：多选对齐因此只占一步撤销，与多选移动逐字相同。
+      const planned = planTransformCommit({
+        document,
+        layoutSnapshot,
+        index,
+        finished: { type: 'move', ids, transforms },
+        idFactory,
+      })
+      if (planned?.type === 'command.dispatch') {
+        commands.push(query.alignLabel
+          ? { ...planned.command, meta: { ...planned.command.meta, label: query.alignLabel } }
+          : planned.command)
+      }
     }
   }
 

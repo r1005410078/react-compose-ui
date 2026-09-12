@@ -53,6 +53,19 @@ const messages: StageDraftingMessages = {
   moreSidesKeyword: '加一边',
   fewerSidesKeyword: '减一边',
   invalidSides: (min: number, max: number) => `边数必须是 ${min} 到 ${max} 之间的整数`,
+  mirrorTitle: '镜像',
+  mirrorFirstPoint: '指定镜像轴的第一点',
+  mirrorSecondPoint: '指定镜像轴的第二点',
+  mirrorDegenerateAxis: '两点重合，定不出镜像轴',
+  alignLeftTitle: '左对齐',
+  alignCenterXTitle: '水平居中',
+  alignRightTitle: '右对齐',
+  alignTopTitle: '顶对齐',
+  alignCenterYTitle: '垂直居中',
+  alignBottomTitle: '底对齐',
+  distributeXTitle: '水平等距',
+  distributeYTitle: '垂直等距',
+  alignmentNeedsMore: (minimum: number) => `至少需要选中 ${minimum} 个对象`,
 }
 
 const empty: StageDraftingContext = { messages }

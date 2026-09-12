@@ -10,6 +10,8 @@ import type { ComposeCurve } from '@compose-ui/core'
 import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
 import { createStageEraseCommand } from './erase-command'
 import { createStageVertexCommand } from './vertex-command'
+import { createStageAlignmentCommand, createStageMirrorCommand } from './mirror-command'
+import type { StageAlignmentMode } from '../gesture-planning'
 import {
   createStageArcCommand,
   createStageCircleCommand,
@@ -407,5 +409,37 @@ export function createStageDraftingCommands(
     createStageCopyCommand(messages),
     createStageEraseCommand(messages),
     createStageVertexCommand(messages),
+    createStageMirrorCommand(messages),
+    /*
+     * 八项对齐/分布是**词**而不是面板动作：它们进词汇表，命令行因此敲得出来，也就不存在
+     * 「面板里有、命令行敲不出来」的动作。
+     *
+     * 别名只给用户真会去敲的那几个，其余仍可用 id 键入；`AL`/`AR` 这种一眼看不出方向的
+     * 两字母缩写比不给更差。
+     */
+    ...ALIGNMENT_COMMANDS.map(({ id, aliases, mode, title }) => createStageAlignmentCommand({
+      id,
+      ...(aliases ? { aliases } : {}),
+      title: title(messages),
+      mode,
+      messages,
+    })),
   ]
 }
+
+/** 八项对齐/分布的 id、别名与文案来源。 */
+const ALIGNMENT_COMMANDS: readonly {
+  readonly id: string
+  readonly aliases?: readonly string[]
+  readonly mode: StageAlignmentMode
+  readonly title: (messages: StageDraftingMessages) => string
+}[] = [
+  { id: 'ALIGNLEFT', mode: 'left', title: (m) => m.alignLeftTitle },
+  { id: 'ALIGNCENTERX', mode: 'center-x', title: (m) => m.alignCenterXTitle },
+  { id: 'ALIGNRIGHT', mode: 'right', title: (m) => m.alignRightTitle },
+  { id: 'ALIGNTOP', mode: 'top', title: (m) => m.alignTopTitle },
+  { id: 'ALIGNCENTERY', mode: 'center-y', title: (m) => m.alignCenterYTitle },
+  { id: 'ALIGNBOTTOM', mode: 'bottom', title: (m) => m.alignBottomTitle },
+  { id: 'DISTRIBUTEX', aliases: ['DX'], mode: 'distribute-x', title: (m) => m.distributeXTitle },
+  { id: 'DISTRIBUTEY', aliases: ['DY'], mode: 'distribute-y', title: (m) => m.distributeYTitle },
+]

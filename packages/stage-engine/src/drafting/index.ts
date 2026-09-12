@@ -27,6 +27,11 @@ export {
   createStageLineSession,
 } from './line-command'
 export {
+  createStageAlignmentCommand,
+  createStageMirrorCommand,
+  createStageMirrorSession,
+} from './mirror-command'
+export {
   createStageGripSession,
   createStageVertexCommand,
   createStageVertexSession,
@@ -41,6 +46,8 @@ export type {
   StageDraftingGripEdit,
   StageDraftingMessages,
   StageDraftingSegment,
+  StageDraftingAlignment,
+  StageDraftingMirror,
   StageDraftingTranslation,
   StageGripTarget,
 } from './drafting-types'
