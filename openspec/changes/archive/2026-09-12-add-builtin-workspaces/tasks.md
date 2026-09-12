@@ -37,7 +37,9 @@
 - [x] 4.1 `README.md` 补「页面 / 绘图」；`AGENTS.md` 当前阶段补「货架单位是来源不是物料」一条判据
 - [x] 4.3 `AGENTS.md` 补两条：对齐吸附与特征点捕捉在绘图里不同时默认生效（含「只能是种子不能是
       会话开关」的理由）；两个内建的其余会话开关同值，因为会话开关本来就按工作区各记一份
-- [ ] 4.2 `bun run lint`、`typecheck`、`test`、`build`、`test:e2e` 全绿
+- [x] 4.2 `bun run lint`、`typecheck`、`test`、`build`、`test:e2e` 全绿
+      （此前一直没勾是因为确实没绿：物料面板改成九宫格之后，`editor-workspace` 与
+      `toolbar-shelf` 里按英文名找瓦片的选择器与三张黄金图一起过期。已修，全仓 296/296）
       —— 前四项全绿；`test:e2e` 每轮有 9–12 条**与本变更无关**的用例红，全部是同一个症状：
       `stage-surface` 刚 `toBeVisible()` 就 `boundingBox()` 读出 null。单独跑这些用例全绿。
       根因已定位：宿主换页面 `TransactionRuntime` 的那一帧，`useComposeEditorLayout` 按既有

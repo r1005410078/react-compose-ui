@@ -47,4 +47,4 @@
 
 - [x] 5.1 `AGENTS.md` 当前阶段补两条判据：编排区画的是它将来的样子；第二条入口的声明住在源码里
       并被 UI 渲染
-- [ ] 5.2 `bun run lint`、`typecheck`、`test`、`build`、`test:e2e` 全绿
+- [x] 5.2 `bun run lint`、`typecheck`、`test`、`build`、`test:e2e` 全绿

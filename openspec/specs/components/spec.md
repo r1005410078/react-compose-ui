@@ -235,6 +235,12 @@ Preflight or Shadcn default global `:root`/`.dark` theme state.
 包 MUST 同时导出 `useComposeContextMenu<T>`，让虚拟化或委托事件可以用右键事件或显式屏幕坐标打开
 受控菜单，并保留当前 payload。原始 Base UI ContextMenu 符号不得成为公共 API。
 
+**菜单的字号 MUST 与编辑器 chrome 同一档**：菜单项 13px、行高 28px，快捷键与分组标题 12px。
+Shadcn 默认的 `text-sm`（14px）与 32px 行高是为独立页面定的，而这块界面比它密一档——场景树行
+13px、命令行 13px、物料行与面板标签 12px，菜单按默认值就是界面上最大的一号字。图标 MUST 仍是
+16px：字缩一档而图标是形状，跟着缩只会更难认。行高比行内列表宽一档，是因为菜单项是**指针
+目标**，而树行还有键盘导航兜底。
+
 #### Scenario: 用声明式 Trigger 打开共享菜单
 
 - **WHEN** 消费者使用 `ComposeContextMenu`、`ComposeContextMenuTrigger` 与 Content 组合右键区域
@@ -254,6 +260,16 @@ Preflight or Shadcn default global `:root`/`.dark` theme state.
 - **THEN** Portal 菜单自身携带解析后的 theme、locale 和 token style
 - **AND** 普通、禁用和 destructive 项使用 Compose 语义色，且样式不引入全局 reset 或第二套主题状态
 
+#### Scenario: 菜单字号与周围 chrome 一致
+
+- **WHEN** 用户在编辑器里打开任意共享右键菜单
+- **THEN** 菜单项是 13px / 28px 行高，快捷键 12px，图标仍是 16px
+
+#### Scenario: 深色画布上浮层读得出分界
+
+- **WHEN** 在 Dark 主题的画布上打开菜单
+- **THEN** 浮层带自己的投影，与图面之间读得出一条分界，而不是贴在画布上
+
 ### Requirement: 全视口 Compose Dialog
 
 `@compose-ui/components` MUST 提供 Shadcn/Base UI source-adapted 的 Compose 命名 Dialog 组合部件，
@@ -262,6 +278,9 @@ Close。Root MUST 支持 controlled 与 uncontrolled open；原始 Base UI Dialo
 Dialog Portal MUST 默认挂载到 document body，Backdrop 与 Viewport MUST 覆盖完整浏览器 visual viewport，
 不得受任一消费组件、Dockview panel 或 Editor root 的尺寸、overflow 和 stacking context 限制。Dialog
 内容必须保留可配置尺寸而非强制内容全屏。
+
+Content MUST 提供一档更宽的尺寸供编排类对话框使用，缺省 MUST 仍是既有的窄档——尺寸是**消费者
+声明**的，MUST NOT 由内容撑开：撑开会让同一个对话框在不同数据下宽度不同。
 
 #### Scenario: 从裁剪容器打开 Dialog
 
@@ -274,6 +293,11 @@ Dialog Portal MUST 默认挂载到 document body，Backdrop 与 Viewport MUST �
 - **WHEN** Host 在 Dark、Light 或 token override 的 ComposeThemeProvider 下打开 ComposeDialog
 - **THEN** Portal 内容自身携带解析后的 theme、locale 和 token style
 - **AND** Header、Content、Close、边框、焦点和 destructive 语义使用 Compose token，且不注入全局 reset
+
+#### Scenario: 声明更宽的一档
+
+- **WHEN** 消费者以更宽的尺寸档渲染 ComposeDialogContent
+- **THEN** 对话框按该档的宽度渲染，未声明的对话框宽度不变
 
 ### Requirement: Shadcn 表单 Primitive 与 Dialog 操作层级
 
