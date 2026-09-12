@@ -154,9 +154,18 @@
 .flex-layout-inspector__empty-actions {
   display: flex;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin-top: 10px;
+}
+
+/*
+ * 两种布局是一次二选一，因此两颗按钮并排；「添加后可随时移除」独占一行——它是对两者都成立
+ * 的一句补充，挤在按钮旁边会被读成只说明右边那一颗。
+ */
+.flex-layout-inspector__empty-actions > span {
+  flex-basis: 100%;
 }
 
 .flex-layout-inspector__empty-actions > button {

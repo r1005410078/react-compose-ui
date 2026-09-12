@@ -14,12 +14,14 @@ test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并�
   await expandInspectorSection(inspector, '布局')
   await expect(emptyLayoutHeader).toHaveAttribute('aria-expanded', 'true')
   await expect(inspector.getByRole('button', { name: '添加布局' })).toBeVisible()
-  await expect(emptyLayoutSection.getByText('使用自动布局', { exact: true })).toBeVisible()
+  // 引导卡同时介绍两种布局：只讲其中一种会让另一种在这个入口上不可发现。
+  await expect(emptyLayoutSection.getByText('排列子项', { exact: true })).toBeVisible()
   await expect(emptyLayoutSection.getByText(
-    '自动排列子项，并统一控制方向、间距、换行与对齐。',
+    '让容器接管子项的位置：按一条轴自动排列，或摆到一块网格上。',
     { exact: true },
   )).toBeVisible()
   await expect(emptyLayoutSection.getByRole('button', { name: '添加自动布局' })).toBeVisible()
+  await expect(emptyLayoutSection.getByRole('button', { name: '添加网格' })).toBeVisible()
   await expect(emptyLayoutSection).toHaveScreenshot('empty-auto-layout-guide.png', {
     animations: 'disabled',
     caret: 'hide',
