@@ -40,8 +40,9 @@ test('OpenSpec: basic-materials / junction Preset 是接线节点 / 接线点改
   await stage.press('Enter')
   await stage.press('Escape')
 
-  // 节点是填实的整圆，因此渲染成 `<circle>`。
-  const junction = stage.locator('circle[data-testid="compose-material-curve-stroke"]')
+  // 节点是填实的方块，因此渲染成 `<polygon>`。此刻图上只有导线，它是唯一那一个——下面的对照
+  // 取整圆而不是矩形，正是为了不让它在这里变成两个。
+  const junction = stage.locator('polygon[data-testid="compose-material-curve-stroke"]')
   await expect(junction).toHaveCount(1)
   const junctionBox = (await junction.boundingBox())!
   const center = {
@@ -51,7 +52,7 @@ test('OpenSpec: basic-materials / junction Preset 是接线节点 / 接线点改
 
   // 1) 选中它：八个缩放手柄一个都不画——尺寸由线宽推出，改它没有意义。
   await page.mouse.click(center.x, center.y)
-  // 先等一个**肯定**的信号：整圆是闭合曲线，因此选中时画的是盒。没有这一步，下面那条
+  // 先等一个**肯定**的信号：方块是闭合曲线，因此选中时画的是盒。没有这一步，下面那条
   // `toHaveCount(0)` 会在选区还没画出来的那一帧就通过，成为一条永远绿的假断言。
   await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
   await expect(stage.locator('[data-testid^="stage-resize-"]')).toHaveCount(0)
@@ -66,21 +67,32 @@ test('OpenSpec: basic-materials / junction Preset 是接线节点 / 接线点改
    * 3) 判别性的另一半：同一张图上另一条**闭合**曲线照旧有八个手柄、照旧进得了顶点模式。
    *    只断上面两条时，「把所有曲线的手柄与顶点模式一起收走了」同样绿。
    *
-   *    对照取矩形而不是导线：开放几何选中时画的是**轮廓**，按既有规则本来就没有盒手柄
-   *    （曲线的整体缩放让给变换指示器）。拿导线做对照会得出一条永远绿的假断言。
+   *    对照必须是闭合曲线而不是导线：开放几何选中时画的是**轮廓**，按既有规则本来就没有盒
+   *    手柄（曲线的整体缩放让给变换指示器）。拿导线做对照会得出一条永远绿的假断言。
+   *
+   *    闭合的那两种里取**整圆**而不是矩形：矩形也是闭合多段线、同样渲染成 `<polygon>`，
+   *    画一个下去上面那个 `junction` 定位子就指向两个元素了。整圆走 `<circle>`，两不相干。
    */
-  const rectFrom = { x: Math.round(frameBox.x + 460), y: Math.round(frameBox.y + 80) }
-  const rectTo = { x: rectFrom.x + 120, y: rectFrom.y + 90 }
-  await commandInput.fill('RECTANGLE')
+  const circleCenter = { x: Math.round(frameBox.x + 430), y: Math.round(frameBox.y + 120) }
+  await commandInput.fill('CIRCLE')
   await commandInput.press('Enter')
-  await page.mouse.click(rectFrom.x, rectFrom.y)
-  await page.mouse.click(rectTo.x, rectTo.y)
+  await page.mouse.click(circleCenter.x, circleCenter.y)
+  await page.mouse.click(circleCenter.x + 50, circleCenter.y)
   await stage.press('Escape')
 
-  const rectEdge = { x: Math.round((rectFrom.x + rectTo.x) / 2), y: rectFrom.y }
-  await page.mouse.click(rectEdge.x, rectEdge.y)
+  /*
+   * 落点取**量出来的**包围盒左边中点，不按 `circleCenter ± 半径` 硬算：半径点会被网格吸附，
+   * 画出来的半径与键入的那个数差了三个像素，而那已经超过命中容差——硬算的落点会整个落空。
+   */
+  const circleShape = stage.locator('circle[data-testid="compose-material-curve-stroke"]')
+  const circleBox = (await circleShape.boundingBox())!
+  const circleEdge = {
+    x: Math.round(circleBox.x),
+    y: Math.round(circleBox.y + circleBox.height / 2),
+  }
+  await page.mouse.click(circleEdge.x, circleEdge.y)
   await expect(stage.locator('[data-testid^="stage-resize-"]').first()).toBeVisible()
-  await page.mouse.dblclick(rectEdge.x, rectEdge.y)
+  await page.mouse.dblclick(circleEdge.x, circleEdge.y)
   await expect(stage.locator('[data-testid^="stage-path-vertex-hit-"]').first()).toBeVisible()
   await stage.press('Escape')
   await stage.press('Escape')

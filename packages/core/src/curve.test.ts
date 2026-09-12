@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   COMPOSE_CURVE_MIN_EXTENT,
+  COMPOSE_JUNCTION_SIZE_RATIO,
+  composeJunctionGeometry,
+  composeJunctionSize,
   composeCurveBounds,
   composeCurveBoxScale,
   composeCurveSegments,
@@ -696,5 +699,40 @@ describe('OpenSpec: compose-document / 曲线闭不闭合有一个谓词', () =>
   it('直线为假', () => {
     // 两个端点表达不了一块面积。
     expect(isComposeClosedCurve(createComposeLineCurve({ x: 0, y: 0 }, { x: 90, y: 60 }))).toBe(false)
+  })
+})
+
+describe('接线点的几何', () => {
+  it('OpenSpec: basic-materials / junction Preset 是接线节点 / 是填满盒的闭合方块', () => {
+    /*
+     * 方块而不是圆点是一条画法上的决定。代码这一侧要钉住的只有一件事：它仍然是**既有 kind 的
+     * 一个实例**（四顶点的闭合多段线），因此归一化、平移、距离、特征点、渲染与校验六条路径
+     * 一支都不必为它分。
+     */
+    const size = composeJunctionSize(2)
+    expect(composeJunctionGeometry(size)).toEqual({
+      kind: 'polyline',
+      vertices: [
+        { x: 0, y: 0 },
+        { x: size.width, y: 0 },
+        { x: size.width, y: size.height },
+        { x: 0, y: size.height },
+      ],
+      closed: true,
+    })
+  })
+
+  it('OpenSpec: basic-materials / junction Preset 是接线节点 / 仍算闭合，因此选中时画盒', () => {
+    // 上一条变更的整层（选中画盒、`resize: none`、进不了顶点模式）靠的是闭合性而不是「圆」。
+    expect(isComposeClosedCurve(composeJunctionGeometry(composeJunctionSize(2)))).toBe(true)
+  })
+
+  it('OpenSpec: basic-materials / junction Preset 是接线节点 / 边长由线宽推出', () => {
+    // 绝对值会让粗线把自己的接头盖住。
+    expect(composeJunctionSize(2)).toEqual({
+      width: 2 * COMPOSE_JUNCTION_SIZE_RATIO,
+      height: 2 * COMPOSE_JUNCTION_SIZE_RATIO,
+    })
+    expect(composeJunctionSize(2).width).toBeLessThan(composeJunctionSize(6).width)
   })
 })

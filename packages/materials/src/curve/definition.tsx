@@ -220,11 +220,11 @@ export function createCurveMaterial(
         options.wire,
       ),
       /*
-       * 节点是曲线的**第五个起点**：一个填实的整圆，外加它自己的那一个端口。接线时三条支路
+       * 节点是曲线的**第五个起点**：一个填实的方块，外加它自己的那一个端口。接线时三条支路
        * 都绑到这个端口上，因此既有的「端点绑端口」协议一个字节不改——求解、失效判定、
        * `port` 最高捕捉优先级与 Inspector 全部白拿。
        *
-       * `paletteHidden`：从物料面板拖出来的节点不连着任何导线，而一个不表达任何连接的实心点
+       * `paletteHidden`：从物料面板拖出来的节点不连着任何导线，而一个不表达任何连接的实心块
        * 读不出意图。
        */
       curvePreset(
@@ -232,7 +232,9 @@ export function createCurveMaterial(
         { label: '节点', name: 'Junction' },
         DEFAULT_JUNCTION_PROPS,
         composeJunctionGeometry,
-        <ComposeCircleMaterialIcon />,
+        // 图标跟着形状走：画布上是方块、场景树里是圆圈，等于同一件事在两个地方说两句不一样的
+        // 话——而树正是用户在画布上点不中它时会去找它的地方。
+        <ComposeRectMaterialIcon />,
         'always',
         options.junction,
         {

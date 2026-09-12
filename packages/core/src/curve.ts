@@ -1067,11 +1067,15 @@ export function splitComposeCurveAt(
 }
 
 /**
- * 节点直径相对导线线宽的倍率。
+ * 节点边长相对导线线宽的倍率。
  *
  * @remarks
- * 3 倍是 KiCad 的量级。**由线宽推出而不是取一个绝对值**：线粗了而点没跟着粗，点就被线自己
- * 盖住，接头在图上再也读不出来。
+ * 3 倍是 KiCad 那个圆点的量级。**由线宽推出而不是取一个绝对值**：线粗了而点没跟着粗，点就被线
+ * 自己盖住，接头在图上再也读不出来。
+ *
+ * 形状换成方块之后倍率**没有跟着调**：同样标称 3 倍，方块的墨比圆多约 27%（面积比 4/π），四个角
+ * 还往外顶，因此接头读起来更重——而更重未必是错的。一刀里既换形状又调倍率，看着不对时说不清是哪
+ * 一样不对；这是一个独立的旋钮。
  *
  * 住在 `core` 与 `COMPOSE_CURVE_PICK_TOLERANCE` 是同一条理由：`materials`（节点 Preset 的
  * 默认尺寸）与 `stage`（接线时按被接入导线的线宽建节点）之间没有依赖关系，各写一份的症状是
@@ -1079,7 +1083,7 @@ export function splitComposeCurveAt(
  *
  * @public
  */
-export const COMPOSE_JUNCTION_DIAMETER_RATIO = 3
+export const COMPOSE_JUNCTION_SIZE_RATIO = 3
 
 /**
  * 节点端口的 id。
@@ -1096,35 +1100,46 @@ export const COMPOSE_JUNCTION_PORT_ID = 'p'
  * 按线宽推出节点的盒尺寸。
  *
  * @remarks
- * 盒是正方形，几何是内切的整圆——非正方盒里的整圆经 `viewBox` 会被拉成椭圆，而接头是圆的。
+ * 盒是正方形，几何就是它的四个角——接头是方的，不是长方的。
  *
  * @public
  */
 export function composeJunctionSize(
   strokeWidth: number,
 ): { readonly width: number; readonly height: number } {
-  const diameter = Math.max(1, roundComposeGeometry(strokeWidth * COMPOSE_JUNCTION_DIAMETER_RATIO))
+  const diameter = Math.max(1, roundComposeGeometry(strokeWidth * COMPOSE_JUNCTION_SIZE_RATIO))
   return { width: diameter, height: diameter }
 }
 
 /**
- * 节点的几何：内切于盒的整圆。
+ * 节点的几何：填满盒的闭合方块。
  *
  * @remarks
- * 整圆是扫掠 360 的弧，不另立 kind——归一化、平移、距离、特征点、渲染与校验六条路径因此一行
- * 都不必为节点分支。
+ * 方块是四顶点的闭合多段线，不另立 kind——归一化、平移、距离、特征点、渲染与校验六条路径因此
+ * 一行都不必为节点分支。这与它从前是「扫掠 360 的弧」时成立的是**同一条**判断，因此换形状不欠
+ * 那六条路径任何东西。
+ *
+ * 闭合性也没变（闭合多段线与整圆同样算闭合），因此「选中时画盒而不画几何轮廓」这个答案不变，
+ * 接线点那一整层几何约束（`resize: 'none'`、进不了顶点模式）一个字节不动。
+ *
+ * **不与 `materials` 那个矩形 Preset 的默认几何合并**：两者此刻的函数体逐字相同，但同一个表达式
+ * 不等于同一条规则——一个回答「用户点出来的矩形长什么样」，一个回答「接头长什么样」，没有理由
+ * 一起变。何况本函数必须住 `core`（`materials` 与 `stage` 都要用），而那一个是 `materials` 的内部
+ * 默认值。
  *
  * @public
  */
 export function composeJunctionGeometry(
   size: { readonly width: number; readonly height: number },
 ): ComposeCurve {
-  const radius = Math.min(size.width, size.height) / 2
   return {
-    kind: 'arc',
-    center: { x: size.width / 2, y: size.height / 2 },
-    radius,
-    startAngle: 0,
-    sweep: 360,
+    kind: 'polyline',
+    vertices: [
+      { x: 0, y: 0 },
+      { x: size.width, y: 0 },
+      { x: size.width, y: size.height },
+      { x: 0, y: size.height },
+    ],
+    closed: true,
   }
 }

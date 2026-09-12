@@ -21,10 +21,10 @@ function setup(page: Page) {
     stage,
     surface: stage.getByTestId('stage-surface'),
     commandInput: stage.getByRole('combobox', { name: '命令行' }),
-    /** 两点导线画成 `<line>`，三顶点以上画成 `<polyline>`，节点画成 `<circle>`。 */
+    /** 两点导线画成 `<line>`，三顶点以上画成 `<polyline>`，节点是闭合方块、画成 `<polygon>`。 */
     lines: stage.locator('line[data-testid="compose-material-curve-stroke"]'),
     polylines: stage.locator('polyline[data-testid="compose-material-curve-stroke"]'),
-    junctions: stage.locator('circle[data-testid="compose-material-curve-stroke"]'),
+    junctions: stage.locator('polygon[data-testid="compose-material-curve-stroke"]'),
   }
 }
 

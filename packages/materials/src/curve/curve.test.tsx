@@ -7,7 +7,7 @@ import {
 import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_CURVE_PICK_TOLERANCE,
-  COMPOSE_JUNCTION_DIAMETER_RATIO,
+  COMPOSE_JUNCTION_SIZE_RATIO,
   composeJunctionSize,
   getComposeCurve,
   getComposeLayoutItem,
@@ -445,20 +445,28 @@ describe('junction Preset', () => {
     expect(junction.seed.components.Curve).toBeDefined()
   })
 
-  it('是填实的整圆，并带恰好一个落在盒心的端口', () => {
+  it('是填实的方块，并带恰好一个落在盒心的端口', () => {
     const created = registry.createSeed('junction')
     expect(created.ok).toBe(true)
     if (!created.ok) return
-    const curve = created.seed.components.Curve as { kind: string; sweep: number }
-    expect(curve.kind).toBe('arc')
-    expect(Math.abs(curve.sweep)).toBe(360)
-    // 填实是节点对「曲线默认空心」的例外：空心的接头读作两个同心小圆圈。
-    const appearance = created.seed.components.Appearance as { backgroundPaint: { color: string } }
-    expect(appearance.backgroundPaint.color).not.toBe('transparent')
     const item = created.seed.components.LayoutItem as {
       width: { value: number }
       height: { value: number }
     }
+    // 方块是四顶点的闭合多段线，不另立 kind——与它从前是「扫掠 360 的弧」时是同一条判断。
+    expect(created.seed.components.Curve).toEqual({
+      kind: 'polyline',
+      vertices: [
+        { x: 0, y: 0 },
+        { x: item.width.value, y: 0 },
+        { x: item.width.value, y: item.height.value },
+        { x: 0, y: item.height.value },
+      ],
+      closed: true,
+    })
+    // 填实是节点对「曲线默认空心」的例外：空心的接头读作一个小方框。
+    const appearance = created.seed.components.Appearance as { backgroundPaint: { color: string } }
+    expect(appearance.backgroundPaint.color).not.toBe('transparent')
     const ports = created.seed.components.Ports as {
       items: readonly { id: string; position: { x: number; y: number } }[]
     }
@@ -469,10 +477,10 @@ describe('junction Preset', () => {
     })
   })
 
-  it('直径跟着线宽走', () => {
-    // 绝对值会让粗线把自己的接头盖住，因此直径必须由线宽推出。
+  it('边长跟着线宽走', () => {
+    // 绝对值会让粗线把自己的接头盖住，因此边长必须由线宽推出。
     expect(composeJunctionSize(2).width).toBeLessThan(composeJunctionSize(6).width)
-    expect(composeJunctionSize(2).width).toBe(2 * COMPOSE_JUNCTION_DIAMETER_RATIO)
+    expect(composeJunctionSize(2).width).toBe(2 * COMPOSE_JUNCTION_SIZE_RATIO)
   })
 
   it('默认不出现在 Palette', () => {

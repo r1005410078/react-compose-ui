@@ -127,7 +127,7 @@ test('OpenSpec: stage / 会话把已落地的几何扩到同一个 Entity 上 / 
 
   const lines = stage.locator('line[data-testid="compose-material-curve-stroke"]')
   const polylines = stage.locator('polyline[data-testid="compose-material-curve-stroke"]')
-  const junctions = stage.locator('circle[data-testid="compose-material-curve-stroke"]')
+  const junctions = stage.locator('polygon[data-testid="compose-material-curve-stroke"]')
 
   // 1) 一条水平导线。
   const left = at(80, 200)

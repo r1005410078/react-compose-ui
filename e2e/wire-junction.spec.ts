@@ -53,8 +53,8 @@ test('OpenSpec: stage-engine / 取点落在导线上即接入节点 / 接上之�
    * 那条线一移动就与它分家。
    */
   await expect(lines).toHaveCount(3)
-  // 节点是填实的整圆，因此渲染成 `<circle>`；图上那个实心点就是它自己。
-  const junction = stage.locator('circle[data-testid="compose-material-curve-stroke"]')
+  // 节点是填实的方块，因此渲染成 `<polygon>`；这张图上只有导线（`<line>`），它是唯一那一个。
+  const junction = stage.locator('polygon[data-testid="compose-material-curve-stroke"]')
   await expect(junction).toHaveCount(1)
 
   /** 三条线的端点，页面坐标。 */
