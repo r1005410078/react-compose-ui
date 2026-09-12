@@ -53,7 +53,7 @@
 
 ## 6. 验证
 
-- [ ] 6.1 `bun run lint` / `typecheck` / `test` / `build`
-- [ ] 6.2 `bun run test:e2e`，与 main 逐条对比既有失败
-- [ ] 6.3 `openspec validate add-preview-fullscreen-page --strict`
-- [ ] 6.4 设计稿第 08 节的琥珀虚线圈按落地情况收掉
+- [x] 6.1 `bun run lint` / `typecheck` / `test` / `build`
+- [x] 6.2 `bun run test:e2e`，与 main 逐条对比既有失败
+- [x] 6.3 `openspec validate add-preview-fullscreen-page --strict`
+- [x] 6.4 设计稿第 08 节的琥珀虚线圈按落地情况收掉
