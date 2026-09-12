@@ -14,9 +14,18 @@ import {
  * 为网格里的 move 手势构造实时布局求解用的瞬态文档。
  *
  * @remarks
- * 写进去的是**被推挤的兄弟**的新格坐标，**不写被拖的那一个**：它由 previewTransforms 跟着
- * 光标走，吸格会让拖动一顿一顿。两者分工与占位影子一致——影子回答「松手会变成什么」，
- * 跟手的卡回答「我现在拖到哪了」。
+ * 写进去的是**整份求解结果**，被拖的那一个也在内。曾经刻意不写它，理由是「它由
+ * previewTransforms 跟着光标走，吸格会让拖动一顿一顿」——**那条理由不成立**：
+ * `transformLayoutSnapshot` 是整盒替换（直接写 `transform.x/y/width/height`），被拖对象的
+ * 视觉位置完全由覆盖决定，文档里写什么都影响不到它。
+ *
+ * 而不写它会让推挤**在屏幕上永远看不见**：交给 Runtime 的文档变成「兄弟被推到了下面，而被
+ * 拖的那张还在原格」——没有任何东西占着那个位置，于是 Runtime 自己那趟求解的**重力把兄弟原样
+ * 浮回去**，一帧之内撤销了推挤。写上之后这份文档就是一个自洽的格局（「此刻松手会是什么样」），
+ * 而求解是幂等的，Runtime 重解一遍等于原样返回。
+ *
+ * 分工因此仍然成立：影子回答「松手会变成什么」，跟手的卡回答「我现在拖到哪了」，而文档回答
+ * 「现在整块板子是什么格局」。
  *
  * 推挤结果来自 core 的那一个求解器（经 `solveStageGrid`），与提交时走的是同一条路径，因此
  * 「拖动中看到的让位」与「松手后的结果」必然一致。
@@ -53,7 +62,6 @@ export function buildGridPreviewSolveDocument(
   let changed = false
   const entities = { ...previewDocument.entities }
   for (const cell of solved) {
-    if (cell.id === leadId) continue
     const entity = entities[cell.id]
     const before = entity && getComposeGridItem(entity)
     if (!entity || !before) continue

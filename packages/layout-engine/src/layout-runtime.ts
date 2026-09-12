@@ -146,6 +146,47 @@ function measureConstraint(yoga: Yoga, mode: number, value: number): ComposeMeas
   return { mode: 'undefined' }
 }
 
+/**
+ * 两份盒表是否逐项相同。
+ *
+ * @remarks
+ * **按值比而不是按引用比**：求解会复用上一份 Snapshot 里值未变的冻结盒，而这里要比的是
+ * 「提交态」与「刚从预览态解回来的结果」，后者的上一份是预览 Snapshot，因此即使数值相同
+ * 也是两个不同的对象。
+ */
+function sameLayoutBoxes(
+  a: ComposeLayoutSnapshot['boxes'],
+  b: ComposeLayoutSnapshot['boxes'],
+): boolean {
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  return keys.every((id) => {
+    const left = a[id]
+    const right = b[id]
+    return Boolean(left && right)
+      && left!.x === right!.x
+      && left!.y === right!.y
+      && left!.width === right!.width
+      && left!.height === right!.height
+      && left!.positioning === right!.positioning
+  })
+}
+
+/** 两份诊断是否逐项相同。 */
+function sameLayoutDiagnostics(
+  a: readonly ComposeLayoutDiagnostic[],
+  b: readonly ComposeLayoutDiagnostic[],
+): boolean {
+  return a.length === b.length
+    && a.every((left, index) => {
+      const right = b[index]!
+      return left.code === right.code
+        && left.entityId === right.entityId
+        && left.axis === right.axis
+        && left.message === right.message
+    })
+}
+
 function sameConstraint(a: ComposeMeasureConstraint, b: ComposeMeasureConstraint): boolean {
   if (a.mode !== b.mode) return false
   if (a.mode === 'undefined') return true
@@ -771,6 +812,35 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       // 命中读到的盒与渲染画出的几何差一帧，而这种偏差只在拖动符号的那一瞬出现、极难复现。
       // Runtime 是唯一同时握有文档与快照的地方，因此解算住在这里，三条渲染路径各自零改动。
       // 导线是绝对定位，改它的盒不影响任何其他 Entity 的求解，因此不触发二次求解。
+      /*
+       * 回到提交态且几何逐项相同时**复用上一份提交态**，不新发一份。
+       *
+       * `clearPreview()` 要把 Yoga 树从预览布局摆回提交态，因此必须真的重解一遍；但解出来
+       * 的结果按定义与上一次提交态求解逐项相同——输入是同一份文档。若照常发布，`revision`
+       * 会平白加一，而**那是一次可观察的变化**：手势会话的空间基线正是「document 恒等 +
+       * layoutSnapshot.revision 恒等」，于是一次纯粹的预览清理会把正在进行的手势判成失效并
+       * 中止它。
+       *
+       * 症状具体而难查：网格里拖一张卡，求解文档会随目标格在「有兄弟要让位」与「没有」之间
+       * 来回，每一次「没有」都是一次 `clearPreview`——拖到某一行时卡片突然弹回原位，此后整
+       * 条手势再也不跟手，而用户还没松手。resize 碰不到它，因为那一档的求解文档自始至终非
+       * 空，`clearPreview` 只在手势结束时发生。
+       *
+       * 判据取「同一份输入 + 几何逐项相同」而不是只看输入：预览期间宿主的测量可能失效，那
+       * 时重解确实会得到不同的盒，此刻中止手势是对的——冻结的几何真的过期了。
+       */
+      const committed = this.lastCommittedState
+      if (
+        !this.previewing
+        && committed.status === 'ready'
+        && committed.sourceDocument === this.document
+        && sameLayoutBoxes(committed.snapshot.boxes, boxes)
+        && sameLayoutDiagnostics(committed.snapshot.diagnostics, diagnostics)
+      ) {
+        this.setState(committed)
+        this.emit()
+        return
+      }
       const resolved = resolveComposeWires(this.document, {
         revision: ++this.revision,
         boxes: Object.freeze(boxes),

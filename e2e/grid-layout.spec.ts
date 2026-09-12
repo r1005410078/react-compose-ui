@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import type { Locator } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import {
   drawContainer,
   expandInspectorSection,
@@ -121,4 +121,348 @@ test('OpenSpec: basic-materials / 几何 Inspector 的网格档 / 格坐标可�
   await cellX.press('Enter')
   await expect.poll(async () => (await children.nth(0).boundingBox())!.x)
     .toBeGreaterThan(before!.x + 100)
+})
+
+/**
+ * 画布拖拽：全程跟手、兄弟当场让位、松手落格。
+ *
+ * @remarks
+ * 这条覆盖的是 Inspector 那条路径**覆盖不到**的两件事，而它们各自都曾经是真缺陷：
+ *
+ * 1. **手势不能被自己的预览打断。**网格 move 的求解文档会随目标格在「有兄弟要让位」与
+ *    「没有」之间来回，每一次「没有」都是一次 `clearPreview`；而清理预览若发布一份数值相同、
+ *    `revision` 加一的新提交态，手势会话的空间基线（document 恒等 + revision 恒等）就会判定
+ *    失效并中止手势。症状是拖到某一行时卡片突然弹回原位、此后再也不跟手，而用户还没松手。
+ *
+ * 2. **推挤必须看得见。**预览求解文档若只写被推挤的兄弟、不写被拖的那一张，交给 Runtime 的
+ *    就是一个「没人占着那个格子」的格局，Runtime 自己那趟求解的重力会把兄弟原样浮回去，
+ *    一帧之内撤销推挤。屏幕上的结果是「兄弟纹丝不动」，而用户没法判断这一下该不该松手。
+ *
+ * 因此断言要逐段取样：只断「松手之后落进格子」对上面两条都绿。
+ */
+test('OpenSpec: stage / 网格容器的画布反馈 / 拖动全程跟手、兄弟当场让位、松手落格', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
+
+  const container = stage.getByTestId('stage-container')
+  const children = container.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(2)
+  await selectContainer(editor)
+  await enableGrid(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+
+  const first = children.nth(0)
+  const second = children.nth(1)
+  const a0 = (await first.boundingBox())!
+  const b0 = (await second.boundingBox())!
+
+  // 空心矩形只有那一圈描边可点；选中之后它的盒才归它，中间才拖得动。
+  await page.mouse.click(b0.x + b0.width / 2, b0.y + 1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  const start = { x: b0.x + b0.width / 2, y: b0.y + b0.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+
+  // 往左上那张卡的列上拖：目标格被占，兄弟必须当场让位。
+  await page.mouse.move(start.x - 200, start.y + 20, { steps: 6 })
+  await expect.poll(async () => (await first.boundingBox())!.y)
+    .toBeGreaterThan(a0.y + 30)
+  const shadow = stage.getByTestId('stage-drop-grid-cell')
+  await expect(shadow).toHaveCount(1)
+
+  /*
+   * 继续往下拖过好几行，**逐段**断言卡片仍然跟着光标走。弹回的那个缺陷正是在越过某一行时
+   * 发作的，只在起点与终点取样会整段跳过它。
+   */
+  for (const dy of [60, 100, 140]) {
+    await page.mouse.move(start.x - 200, start.y + dy, { steps: 3 })
+    const moving = (await second.boundingBox())!
+    expect(Math.round(moving.x - b0.x)).toBeCloseTo(-200, -1)
+    expect(moving.y).toBeGreaterThan(b0.y + dy - 40)
+  }
+
+  /*
+   * 途中**拖回原位再拖走**：回到原位那一刻谁都不用让位，求解文档因此为空，走的是
+   * `clearPreview`。清理预览若发布一份 `revision` 加一的新提交态，手势会在这里被自己的预览
+   * 判成失效——之后无论怎么动卡片都不再跟手。这一段是那条修复唯一的判别性取样点，其余各段
+   * 的求解文档都非空，碰不到它。
+   */
+  await page.mouse.move(start.x + 2, start.y + 2, { steps: 4 })
+  await page.mouse.move(start.x - 160, start.y + 120, { steps: 6 })
+  const revived = (await second.boundingBox())!
+  expect(Math.round(revived.x - b0.x)).toBeCloseTo(-160, -1)
+
+  // 松手落进格子：落点由同一个求解器决定，因此它对齐到列而不是停在光标处。
+  await page.mouse.up()
+  const dropped = (await second.boundingBox())!
+  expect(Math.abs(dropped.x - a0.x)).toBeLessThan(2)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  // 一次撤销把两张卡一起带回去。
+  await stage.focus()
+  await stage.press('Control+z')
+  await expect.poll(async () => (await first.boundingBox())!.y).toBeCloseTo(a0.y, 0)
+  await expect.poll(async () => (await second.boundingBox())!.x).toBeCloseTo(b0.x, 0)
+})
+
+/**
+ * 网格的公共夹具：一块开了网格的容器，外加若干张卡。
+ *
+ * @remarks
+ * 落点按屏幕像素给：容器的屏幕尺寸随视口适配的缩放变，按比例给会让固定落点落到容器外面。
+ */
+async function setupGrid(page: Page, drops: readonly { x: number; y: number }[]) {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
+  for (const at of drops) {
+    await pointerDrop(page, rectangleButton, { x: outputBox.x + at.x, y: outputBox.y + at.y })
+  }
+
+  const container = stage.getByTestId('stage-container')
+  const children = container.locator(':scope > .compose-stage__node.is-renderer')
+  await expect(children).toHaveCount(drops.length)
+  await selectContainer(editor)
+  const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await enableGrid(containerInspector)
+  await expandInspectorSection(containerInspector, '布局')
+  const containerBox = (await container.boundingBox())!
+  return { editor, stage, container, containerBox, containerInspector, children, outputBox }
+}
+
+/** 点描边选中一张空心卡——它的盒要选中之后才归它。 */
+async function selectCard(page: Page, stage: Locator, card: Locator) {
+  const box = (await card.boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + 1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+  return box
+}
+
+/** 从卡的盒内部起手拖到某个屏幕点。 */
+async function dragCardTo(page: Page, box: { x: number; y: number; width: number; height: number },
+  to: { x: number; y: number }) {
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 8 })
+  await page.mouse.up()
+}
+
+/**
+ * 落点钳制在列范围内。
+ *
+ * @remarks
+ * 断的是 `x = columns - w` 而不是「没跑到容器外面」：允许越界会产出一个永远解算不出来的
+ * 坐标，而那种坐标在屏幕上表现为卡片消失，看起来像渲染坏了。跨度从面板读而不是写死——
+ * 默认跨度改了之后写死的那个数会让用例变成一条永远绿的假用例。
+ */
+test('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划 / 落点钳制在列范围内', async ({ page }) => {
+  const { editor, stage, containerBox, children } = await setupGrid(page, [{ x: 120, y: 160 }])
+  const card = children.nth(0)
+  const box = await selectCard(page, stage, card)
+
+  const inspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  const span = Number(await inspector.getByRole('spinbutton', { name: '网格尺寸 宽' }).inputValue())
+
+  /*
+   * 拖到容器**内**的最右端。刻意不拖到容器之外——那里根本没有落点（落点要求「深入」目标
+   * 容器），手势会被整个放弃，于是列号纹丝不动，用例看起来绿着却什么都没验到。
+   */
+  await dragCardTo(page, box, {
+    x: containerBox.x + containerBox.width - 10,
+    y: containerBox.y + 40,
+  })
+
+  await expect(inspector.getByRole('spinbutton', { name: '网格位置 列' }))
+    .toHaveValue(String(12 - span))
+  // 卡片仍然落在容器内：越界坐标解算不出来，症状是它从屏幕上消失。
+  const after = (await card.boundingBox())!
+  expect(after.x + after.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 1)
+})
+
+/**
+ * 手势目标同样受重力作用，而「空洞自动填上」关掉之后停在放下的那一行。
+ *
+ * @remarks
+ * 这是网格最有辨识度的那条语义，也是唯一一条**同一个手势在两种设置下结果相反**的：
+ * 只测其中一半，另一半坏掉也不会红。目标豁免重力会让求解不再幂等——卡停在第 5 行，
+ * 下一次任何无关编辑触发重解时它自己跳回第 0 行，而屏幕上没有任何东西解释它为什么动。
+ */
+test('OpenSpec: compose-document / 网格求解是 core 的纯函数 / 重力对手势目标同样生效，关掉后停在原行', async ({ page }) => {
+  const { editor, stage, containerBox, containerInspector, children } =
+    await setupGrid(page, [{ x: 120, y: 160 }])
+  const card = children.nth(0)
+  const box = await selectCard(page, stage, card)
+  const inspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  await expect(inspector.getByRole('spinbutton', { name: '网格位置 行' })).toHaveValue('0')
+
+  // 往下拖三行开外再松手：重力开着，它浮回第 0 行。
+  await dragCardTo(page, box, { x: box.x + box.width / 2, y: containerBox.y + 260 })
+  await expect(inspector.getByRole('spinbutton', { name: '网格位置 行' })).toHaveValue('0')
+
+  // 关掉「空洞自动填上」（协议字段 float 取反），同一个手势结果相反。
+  await selectContainer(editor)
+  await containerInspector.getByRole('checkbox', { name: '空洞自动填上' }).uncheck()
+
+  const again = await selectCard(page, stage, card)
+  await dragCardTo(page, again, { x: again.x + again.width / 2, y: containerBox.y + 260 })
+  await expect
+    .poll(async () => Number(await inspector
+      .getByRole('spinbutton', { name: '网格位置 行' }).inputValue()))
+    .toBeGreaterThan(0)
+})
+
+/**
+ * 列数变少时按新列数呈现，改回去逐像素复原。
+ *
+ * @remarks
+ * 钳制**在读取时而不是写入时**：文档里保留作者写下的列号，容器改回更多列时复原。
+ * 判别性全在后半句——写入时钳制的实现前半句同样绿，只有「改回去」那一下才分得出来，
+ * 而用户遇到它的场景恰恰是「把板子调窄看一眼再调回来」。
+ */
+test('OpenSpec: compose-document / 网格 Layout 类型 / 列数变少时钳制呈现，改回去复原', async ({ page }) => {
+  const { editor, stage, containerInspector, children } = await setupGrid(page, [{ x: 320, y: 160 }])
+  const card = children.nth(0)
+  await selectCard(page, stage, card)
+  const inspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  const cellX = inspector.getByRole('spinbutton', { name: '网格位置 列' })
+  await cellX.fill('10')
+  await cellX.press('Enter')
+  const wide = (await card.boundingBox())!
+
+  await selectContainer(editor)
+  const columns = containerInspector.getByRole('spinbutton', { name: '列数' })
+  await columns.fill('4')
+  await columns.press('Enter')
+
+  // 按 4 列呈现：卡片挪回了范围内。
+  await expect.poll(async () => (await card.boundingBox())!.x).toBeLessThan(wide.x - 10)
+  // 文档里那个 10 没有被改写。
+  await selectCard(page, stage, card)
+  await expect(cellX).toHaveValue('10')
+
+  await selectContainer(editor)
+  await columns.fill('12')
+  await columns.press('Enter')
+  await expect.poll(async () => (await card.boundingBox())!.x).toBeCloseTo(wide.x, 0)
+})
+
+/**
+ * 缩放写的是格跨度，并吸到格线。
+ *
+ * @remarks
+ * 判别性在「再多拖一点点，跨度不变」：一个把像素尺寸直接写进 `LayoutItem` 的实现同样能让
+ * 卡片变大，但那份尺寸在下一次求解时会被格矩形覆盖掉——症状是松手之后卡片自己弹回去。
+ * 因此两件事都要断：跨度真的变了，而且它是整数。
+ *
+ * 目标取**容器**而不是矩形：空心矩形选中之后边缘的缩放命中带整条让到盒外，起手点要额外让开
+ * 一个描边容差，而那与本用例要验的事无关。
+ */
+test('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划 / 缩放写格跨度并吸到格线', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 容器' }),
+    { x: outputBox.x + 120, y: outputBox.y + 160 })
+
+  await selectContainer(editor, 0)
+  const outerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await enableGrid(outerInspector)
+
+  const inner = stage.getByTestId('stage-container').nth(1)
+  const innerBox = (await inner.boundingBox())!
+  await page.mouse.click(innerBox.x + 10, innerBox.y + 10)
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  const spanW = inspector.getByRole('spinbutton', { name: '网格尺寸 宽' })
+  const spanH = inspector.getByRole('spinbutton', { name: '网格尺寸 高' })
+  const beforeW = Number(await spanW.inputValue())
+  const beforeH = Number(await spanH.inputValue())
+
+  const corner = { x: innerBox.x + innerBox.width, y: innerBox.y + innerBox.height }
+  await page.mouse.move(corner.x - 2, corner.y - 2)
+  await page.mouse.down()
+  await page.mouse.move(corner.x + 110, corner.y + 60, { steps: 8 })
+  await page.mouse.up()
+
+  const grownW = Number(await spanW.inputValue())
+  const grownH = Number(await spanH.inputValue())
+  expect(grownW).toBeGreaterThan(beforeW)
+  expect(grownH).toBeGreaterThan(beforeH)
+  expect(Number.isInteger(grownW)).toBe(true)
+  expect(Number.isInteger(grownH)).toBe(true)
+
+  // 尺寸没有被写成像素：松手之后盒仍然停在格矩形上，再量一次不变。
+  const settled = (await inner.boundingBox())!
+  await page.waitForTimeout(300)
+  const again = (await inner.boundingBox())!
+  expect(again.width).toBeCloseTo(settled.width, 0)
+  expect(again.height).toBeCloseTo(settled.height, 0)
+})
+
+/**
+ * 拖出网格容器时删除 GridItem。
+ *
+ * @remarks
+ * 结构取「外层普通容器 + 内层网格容器」——一块页面上摆着一张仪表板，正是这条能力的真实场景，
+ * 而且它给「网格之外」留出了落脚的地方。这一点值得写下来：落点要求**深入**目标容器，而
+ * `drawContainer` 画出来的那块比场景还宽，直接在它上面做这条用例会连一个合法落点都找不到，
+ * 手势被整个放弃、卡片纹丝不动——用例看起来绿着却什么都没验到。
+ */
+test('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划 / 拖出网格容器时删除 GridItem', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outer = stage.getByTestId('stage-container').nth(0)
+  const outerBox = (await outer.boundingBox())!
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 容器' }),
+    { x: outerBox.x + 100, y: outerBox.y + 80 })
+  const grid = stage.getByTestId('stage-container').nth(1)
+
+  // 把内层容器撑到装得下一张看得清的卡：默认那块只有一百多像素宽，12 列摊下来一格不到十个像素。
+  const small = (await grid.boundingBox())!
+  await page.mouse.click(small.x + 8, small.y + 8)
+  await page.mouse.move(small.x + small.width - 2, small.y + small.height - 2)
+  await page.mouse.down()
+  await page.mouse.move(small.x + 340, small.y + 200, { steps: 8 })
+  await page.mouse.up()
+  await expect.poll(async () => (await grid.boundingBox())!.width).toBeGreaterThan(300)
+
+  const gridBox = (await grid.boundingBox())!
+  await enableGrid(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }),
+    { x: gridBox.x + gridBox.width / 2, y: gridBox.y + gridBox.height / 2 })
+
+  const card = grid.locator(':scope > .compose-stage__node.is-renderer').nth(0)
+  const box = await selectCard(page, stage, card)
+  const inspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  await expect(inspector.getByRole('spinbutton', { name: '网格位置 列' })).toHaveCount(1)
+
+  // 拖到外层容器里、内层网格之外的深处。
+  await dragCardTo(page, box, {
+    x: gridBox.x + gridBox.width + 120,
+    y: gridBox.y + gridBox.height + 60,
+  })
+
+  // 离开网格之后它回到普通的绝对定位：格坐标字段整组消失，位置字段回来。
+  await expect(inspector.getByRole('spinbutton', { name: '网格位置 列' })).toHaveCount(0)
+  await expect(inspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(1)
 })

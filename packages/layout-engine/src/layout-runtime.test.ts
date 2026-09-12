@@ -537,10 +537,63 @@ describe('Yoga Compose layout runtime', () => {
     expect(previewed.snapshot.boxes.child).toMatchObject({ x: 82 })
 
     runtime.clearPreview()
+    /*
+     * 清理预览**发布回上一份提交态本身**，而不是一份数值相同、`revision` 加一的新状态。
+     * 手势会话的空间基线是「document 恒等 + revision 恒等」，多发一份等于让一次纯粹的预览
+     * 清理把正在进行的手势判成失效——症状是网格里拖一张卡拖到某一行就弹回原位、此后再也
+     * 不跟手，而用户还没松手。
+     */
+    const restored = runtime.getState()
+    expect(restored).toBe(initial)
+    expect(restored.status === 'ready' && restored.preview).toBe(false)
+    expect(restored.status === 'ready' && restored.snapshot.revision)
+      .toBe(initial.snapshot.revision)
+    expect(restored.status === 'ready' && restored.document).toBe(committed)
+    expect(restored.status === 'ready' && restored.snapshot.boxes.child)
+      .toMatchObject({ x: 12 })
+    runtime.dispose()
+  })
+
+  it('OpenSpec: layout-engine / 手势期预览求解通道 / 预览期测量变化时清理仍发新快照', async () => {
+    /*
+     * 复用提交态的判据是「同一份输入 **且** 几何逐项相同」。只看输入不够：预览期间宿主的
+     * 测量可能失效，那时解回来的盒确实不一样，此刻发新快照、让手势判成失效是对的——冻结
+     * 的几何真的过期了。
+     */
+    const container = entity('container', fixedItem(0, 0, 300, 200), ['child'])
+    const hugChild = {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      width: { mode: 'hug' as const, value: 50, min: null, max: null },
+      height: { mode: 'hug' as const, value: 20, min: null, max: null },
+    }
+    const child = entity('child', hugChild)
+    const committed = documentFixture({ container, child })
+    let measured = 40
+    let invalidate: ((entityIds?: readonly string[]) => void) | undefined
+    const port: ComposeLayoutMeasurementPort = {
+      revision: 0,
+      measure: () => ({ width: measured, height: 20 }),
+      subscribe: (listener) => {
+        invalidate = listener
+        return () => undefined
+      },
+    }
+    const runtime = createComposeLayoutRuntime({ document: committed, measurementPort: port })
+    const initial = await waitForReady(runtime)
+    const committedWidth = initial.snapshot.boxes.child!.width
+
+    runtime.previewDocument(documentFixture({
+      container,
+      child: entity('child', { ...hugChild, offset: { x: 20, y: 0 } }),
+    }))
+    const previewed = await waitForReady(runtime, initial.snapshot.revision)
+
+    measured = 90
+    invalidate?.(['child'])
+    runtime.clearPreview()
     const restored = await waitForReady(runtime, previewed.snapshot.revision)
-    expect(restored.preview).toBe(false)
-    expect(restored.document).toBe(committed)
-    expect(restored.snapshot.boxes.child).toMatchObject({ x: 12 })
+    expect(restored).not.toBe(initial)
+    expect(restored.snapshot.boxes.child!.width).toBeGreaterThan(committedWidth)
     runtime.dispose()
   })
 
