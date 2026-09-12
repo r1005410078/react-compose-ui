@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { drawContainer, pointerDrop } from './support/test-helpers'
 import type { Page } from '@playwright/test'
 
 /**
@@ -241,9 +242,71 @@ test('OpenSpec: stage / 选中的空心图形盒内部起手即移动 / 拖动�
   // 还选中着：原来的症状里它把自己取消选中了。
   await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
 
-  // 另一半：一步没动的那一下仍然是单击——落在空白上，因此清空选区。
+  /*
+   * 另一半：一步没动的那一下仍然是一次单击——不产生任何文档变更。它**不再清空选区**：
+   * 这一下点在一个已经被选中的对象自己的盒里，「点一下自己的盒」等于「取消选中自己」
+   * 没有任何解释得通的读法。
+   */
   await page.mouse.click(moved.x + moved.width / 2, moved.y + moved.height / 2)
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(0)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
   const after = (await stroke.boundingBox())!
   expect(after.x).toBeCloseTo(moved.x, 0)
+})
+
+/**
+ * 画在**普通容器**里时，移动的仍然是它自己。
+ *
+ * @remarks
+ * 这条钉住的是那条能力在容器里同样成立。它曾经只覆盖「外框画在场景里」——接管的两个条件
+ * （什么都没点到、点到一块会收敛成框选的顶层容器体）里，收敛要求命中目标是 `rootIds` 的
+ * 直接成员，而普通容器不是。于是这次按下落给实体命中，**选中并拖走了那个容器**。
+ *
+ * 而这个产品里的空心矩形是设备外框、柜体轮廓与分区框，它们几乎总是画在某个容器里，因此
+ * 这正是那条能力最常被用到的地方。
+ *
+ * 这里**不加** `?no-auto-fit`：视口适配会把缩放带离 1，而命中相关的断言本来就该在非 100%
+ * 缩放下跑一遍。
+ */
+test('OpenSpec: stage / 选中的空心图形盒内部起手即移动 / 画在容器里时移动的是它而不是容器', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await drawContainer(page, editor)
+
+  const container = stage.getByTestId('stage-container')
+  const containerBox = (await container.boundingBox())!
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
+    x: containerBox.x + containerBox.width * 0.4,
+    y: containerBox.y + containerBox.height * 0.4,
+  })
+
+  const stroke = stage.getByTestId('compose-material-curve-stroke')
+  await expect.poll(() => stroke.boundingBox()).not.toBeNull()
+  const before = (await stroke.boundingBox())!
+
+  // 空心图形只有那一圈描边可点；先选中它，盒与八个手柄画出来之后那句承诺才成立。
+  await page.mouse.click(before.x + before.width / 2, before.y + 1)
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  const center = { x: before.x + before.width / 2, y: before.y + before.height / 2 }
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.down()
+  await page.mouse.move(center.x + 30, center.y + 30, { steps: 5 })
+  // 症状是「抓着矩形拖了一下，走的是整个容器」——因此这里同时断两件事。
+  await expect(stage.getByTestId('stage-marquee')).toHaveCount(0)
+  await page.mouse.move(center.x + 60, center.y + 60, { steps: 5 })
+  await page.mouse.up()
+
+  const moved = (await stroke.boundingBox())!
+  expect(Math.round(moved.x - before.x)).toBeCloseTo(60, -1)
+  expect(Math.round(moved.y - before.y)).toBeCloseTo(60, -1)
+
+  // 容器一个像素没动，也没有被选中。
+  const containerAfter = (await container.boundingBox())!
+  expect(containerAfter.x).toBeCloseTo(containerBox.x, 0)
+  expect(containerAfter.y).toBeCloseTo(containerBox.y, 0)
+  await expect(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+    .toHaveCount(0)
 })
