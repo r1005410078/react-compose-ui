@@ -24,7 +24,7 @@ TBD - created by archiving change add-animation-panel-prototype. Update Purpose 
 
 #### Scenario: 选择并编辑关键帧
 
-- **WHEN** 用户选择任意关键帧并修改其时间、插值或值
+- **WHEN** 用户选择任意一个关键帧并修改其时间、插值或值
 - **THEN** 时间线选中态和右侧字段立即反映该关键帧自己的时间、值和插值会话值
 - **AND** 包自身不触碰任何外部文档
 
@@ -47,6 +47,7 @@ TBD - created by archiving change add-animation-panel-prototype. Update Purpose 
 - **THEN** 关键帧时间在 0～duration 内以 10 ms 吸附调整，右侧时间字段同步到该关键帧
 - **AND** 关键帧保持选中，且不得越过边界或与同一属性轨道已有关键帧重叠
 - **AND** 预览播放头保持在调整前的当前播放时间
+- **AND** 该关键帧属于一个多成员选区时，位移同样作用于选区的其余成员
 
 ### Requirement: 关键帧间的插值曲线段
 
@@ -178,13 +179,15 @@ MUST 保持顶部控制栏、固定轨道列表、可横向滚动的标尺、播
 
 `ComposeAnimationPanelProvider` MUST 支持可选的 `onAction` 回调，在每次用户操作时给出描述该操作
 本身的语义动作，而不要求宿主从会话快照中 diff 反推。动作 MUST 至少覆盖播放头改变、选择改变、
-关键帧移动、关键帧删除、插值修改、时长修改、播放模式切换与自动记录开关。`onValueChange`
-MUST 保持现有语义，两者可同时使用。
+关键帧移动（单帧字段写入与整组拖动各一种）、关键帧删除（单帧与整组各一种）、插值修改、时长修改、
+播放模式切换与自动记录开关。`select` 动作 MUST 以 `keyframeIds` 携带整个关键帧选区。
+`onValueChange` MUST 保持现有语义，两者可同时使用。
 
 #### Scenario: 拖动关键帧产生移动动作
 
 - **WHEN** 受控宿主提供 `onAction` 且用户把一个关键帧从 200 ms 拖到 250 ms
-- **THEN** 宿主收到一个携带该属性轨道 ID、关键帧 ID 与 `250` 的关键帧移动动作
+- **THEN** 宿主收到一个 `move-keyframes` 动作，`items` 只有一项，携带该属性轨道 ID、关键帧 ID
+  与 `250`
 - **AND** 宿主不需要比较前后快照即可确定发生了什么
 
 #### Scenario: 播放不产生编辑动作
@@ -434,4 +437,113 @@ Ease in、Ease out、Ease in and out、Ease in back、Ease out back、Ease in an
 
 - **WHEN** 用户把数值行改成 `0.5, 0, abc` 并提交
 - **THEN** 数值行恢复提交前的四个控制点，宿主不收到任何插值更新
+
+### Requirement: 关键帧选区是集合
+
+`ComposeAnimationPanelValue` MUST 以 `selectedKeyframeIds: readonly string[]` 表示已选关键帧，
+MUST NOT 同时保留一个单值的 `selectedKeyframeId`——同一份事实两处表示，多选时那份单值没有
+说得清的取值。单选是集合恰好一个成员的退化情形。Context 的 `selectedKeyframe` MUST 只在选区
+恰好一个成员时给出定位好的关键帧，其余情形为 `undefined`；字段面板、插值段选中态与
+`addKeyframe` 的目标推断 MUST 读它。
+
+点击关键帧 MUST 替换选区；`Shift` + 点击 MUST 切换该帧在选区中的去留。按在**已选中**的关键帧上
+MUST NOT 在按下那一刻收敛选区，只有松手且指针没有离开过按下点时才收敛成单选——否则从多选中
+拖动任何一个成员都会先把其余成员丢掉。
+
+删除属性轨道、删除对象轨道与删除关键帧时，MUST 从选区里清掉不再存在的 id。
+
+#### Scenario: Shift 累加选中
+
+- **WHEN** 用户点击 0 ms 关键帧，再按住 `Shift` 点击同一轨道的 200 ms 关键帧
+- **THEN** 两个关键帧同时显示选中态，`selectedKeyframeIds` 含两者
+- **WHEN** 用户再按住 `Shift` 点击 200 ms 关键帧
+- **THEN** 200 ms 关键帧退出选区，0 ms 关键帧仍选中
+
+#### Scenario: 多选下字段面板不显示单帧字段
+
+- **WHEN** 选区含两个及以上关键帧
+- **THEN** 右侧字段面板显示已选数量，不显示时间、值与插值字段
+
+#### Scenario: 按下已选成员不收敛选区
+
+- **WHEN** 选区含三个关键帧，用户在其中一个上按下并松手、指针未移动
+- **THEN** 选区收敛为该关键帧一个
+- **WHEN** 用户在其中一个上按下并拖动
+- **THEN** 拖动期间三个关键帧都保持选中
+
+### Requirement: 关键帧车道框选
+
+用户在关键帧区域的空白处按下并拖动 MUST 画出一个矩形，松手时矩形**碰到**的关键帧（菱形的命中区
+与矩形相交）MUST 成为选区，可跨多条属性轨道与多个对象轨道；`Shift` + 框选 MUST 把碰到的加进
+既有选区。判定 MUST 只有「碰到就选」一种，MUST NOT 按拖拽方向区分——关键帧是点不是面，
+「完全框住」与「碰到」对点给出同一个答案。
+
+框选 MUST NOT 引入位移阈值：指针没有离开过按下点即还原成这次按下本来的含义（属性轨道的点击）。
+只有渲染出来的关键帧参与判定，折叠的对象轨道下的关键帧 MUST NOT 被框到。矩形坐标 MUST 以时间
+标尺容器为基准，横向滚动时矩形随内容移动。框选 MUST NOT 移动播放头，MUST NOT 选中动画片段。
+
+判定 MUST 是一个纯函数，输入候选关键帧的命中区与矩形，输出 id 列表。
+
+#### Scenario: 框选跨两条轨道
+
+- **WHEN** 两条属性轨道各有 0 ms 与 200 ms 两个关键帧，用户从 150 ms 上方的空白处拖到 250 ms
+  下方
+- **THEN** 两条轨道的 200 ms 关键帧同时选中，0 ms 的两个都不选中
+- **AND** 播放头保持在拖动前的时间
+
+#### Scenario: 没有移动的按下仍是属性轨道点击
+
+- **WHEN** 用户在某条属性轨道的空白处按下并原地松手
+- **THEN** 该属性轨道进入选中态，与变更前逐字相同，选区不变
+
+#### Scenario: 折叠的轨道不参与
+
+- **WHEN** 某个对象轨道已折叠，用户画出的矩形在时间上覆盖它的关键帧
+- **THEN** 该对象轨道下的关键帧不进入选区
+
+### Requirement: 批量移动关键帧
+
+拖动选区中任意一个关键帧 MUST 让整个选区同加一个时间位移：`delta` 是锚点（按下的那个）解算落点
+与它原时间之差，每个成员移动 `timeMs + delta`。位移 MUST 钳制到整个选区都合法的最后一个值——
+没有成员越出 0～duration，也没有成员落到同轨道**未选中**关键帧的时间上；冲突时停在上一帧的合法
+位移并显示既有的重复时间提示。焦点落在选区成员上按 ArrowLeft/ArrowRight MUST 以 10 ms 位移作用于
+整个选区。
+
+拖动手势 MUST 发出一个 `move-keyframes` 动作，`items` 逐帧携带 `propertyId`、`keyframeId` 与
+落地后的 `timeMs`；单选时 `items` 长度为 1。`move-keyframe` MUST 保留给字段面板的时间输入。
+宿主 MUST 能把一个 `move-keyframes` 合成一次可撤销事务。
+
+#### Scenario: 整体后移
+
+- **WHEN** 选区含两条轨道的 200 ms 关键帧，用户把其中一个拖到 300 ms
+- **THEN** 两个关键帧都到 300 ms，宿主收到一个含两项的 `move-keyframes`
+- **AND** 撤销一步两者一起回到 200 ms
+
+#### Scenario: 钳制读整个选区
+
+- **WHEN** 选区含 0 ms 与 200 ms 两个关键帧，用户把 200 ms 的那个往左拖到 100 ms
+- **THEN** 位移停在 0，两者都不移动——0 ms 的成员不能早于 0
+- **WHEN** 选区含 100 ms 关键帧，同轨道 200 ms 有一个未选中的关键帧，用户把它拖向 200 ms
+- **THEN** 位移停在最后一个不与 200 ms 重合的值，并显示重复时间提示
+
+### Requirement: 批量删除关键帧
+
+焦点在时间线内且选区非空时，`Delete` 与 `Backspace` MUST 删除整个选区。按在选区成员上的右键
+菜单在成员数大于 1 时 MUST 把「删除此关键帧」换成「删除选中的 N 个关键帧」；按在**未选中**的
+关键帧上 MUST 只删除它自己且不改选区——右键不是选择手势。
+
+删除 MUST 发出一个 `remove-keyframes` 动作，`items` 逐帧携带 `propertyId` 与 `keyframeId`；
+宿主 MUST 能把它合成一次可撤销事务。删除后选区 MUST 清空。
+
+#### Scenario: Delete 删除选区
+
+- **WHEN** 用户框选了三个关键帧后按 `Delete`
+- **THEN** 三个关键帧消失，宿主收到一个含三项的 `remove-keyframes`，撤销一步全部回来
+
+#### Scenario: 右键菜单按选区换条目
+
+- **WHEN** 选区含三个关键帧，用户在其中一个上按下右键
+- **THEN** 菜单显示「删除选中的 3 个关键帧」
+- **WHEN** 用户在一个未选中的关键帧上按下右键
+- **THEN** 菜单显示「删除此关键帧」，且选区不变
 
