@@ -12,6 +12,7 @@ import {
   parseComposeCoordinate,
   resolveComposePoint,
   resolveComposePointDetail,
+  type ComposeCurve,
   type ComposeDocument,
   type ComposeInputPoint,
   type ComposeAngleConstraint,
@@ -204,6 +205,19 @@ const BARE_NUMBER = /^-?\d+(\.\d+)?$/
  *
  * @internal
  */
+/**
+ * 一条曲线的顶点数；弧与 `path` 没有这个数。
+ *
+ * @remarks
+ * 只服务「Entity 还在、但被改小了」那一档的判定，因此拿不出确切顶点数时返回 `undefined`
+ * 而不是 0——0 会让任何一次文档变化都被读成「它被撤销了一整条」。
+ */
+function composeCurveVertexCount(curve: ComposeCurve): number | undefined {
+  if (curve.kind === 'line') return 2
+  if (curve.kind === 'polyline') return curve.vertices.length
+  return undefined
+}
+
 export function useStageDrafting(options: StageDraftingOptions) {
   const {
     enabled,
@@ -345,8 +359,16 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * `seen` 是必需的：派发之后新 Entity 要过一趟 React 才到得了 `document`，而在那之前它
    * **也不在文档里**。少了这一位，「还没到」与「被删了」分不开——症状是画第二段时第一段被
    * 自己撤掉，只剩一条线。因此只有**曾经见过**的 id 消失才算删除。
+   *
+   * `vertices` 记的是**上一次写进去的顶点数**，只有把几何扩在同一个 Entity 上的会话（导线）
+   * 才有值。同一条规则要覆盖「Entity 还在、但被改小了」这一档：撤销撤掉的是最后那一次几何
+   * 写入，Entity 并没有消失。只判存在的症状是——撤销一下、再点一下，那个拐点又回来了。
    */
-  const createdIdsRef = useRef<{ readonly id: string; seen: boolean }[]>([])
+  const createdIdsRef = useRef<{
+    readonly id: string
+    seen: boolean
+    vertices?: number
+  }[]>([])
   /**
    * 当前正在跑的那条命令的定义；没有会话时为 `null`。
    *
@@ -451,10 +473,20 @@ export function useStageDrafting(options: StageDraftingOptions) {
     latest.current = snapshot
   })
 
-  /** 把一条 `entity.create` 命令建出来的 id 记进栈；`meta.targetIds` 就是它。 */
-  const recordCreated = useCallback((command: { readonly meta?: { readonly targetIds?: readonly string[] } }) => {
+  /**
+   * 把一条 `entity.create` 命令建出来的 id 记进栈；`meta.targetIds` 就是它。
+   *
+   * @param vertices - 这一次写进去的顶点数；把几何扩在同一个 Entity 上的会话靠它判断
+   * 「Entity 还在、但被改小了」。
+   */
+  const recordCreated = useCallback((
+    command: { readonly meta?: { readonly targetIds?: readonly string[] } },
+    vertices?: number,
+  ) => {
     const id = command.meta?.targetIds?.[0]
-    if (id) createdIdsRef.current.push({ id, seen: false })
+    if (id) {
+      createdIdsRef.current.push({ id, seen: false, ...(vertices === undefined ? {} : { vertices }) })
+    }
   }, [])
 
   /**
@@ -481,6 +513,14 @@ export function useStageDrafting(options: StageDraftingOptions) {
     const undone = effect.undoLastCreated ? createdIdsRef.current.pop()?.id : undefined
 
     for (const curve of effect.curves ?? []) {
+      /*
+       * 替换本次会话上一个建出来的那一个：导线每取一个点就落地，而产出仍然是**一个** Entity。
+       * 栈里没有可替换的对象时（它已经被外部撤销掉了）`replace` 落空，下面那一支退回新建并
+       * 把新的记进栈——会话因此自己愈合，而不是从此每一步都写不进去。
+       */
+      const replaced = effect.replaceLastCreated
+        ? createdIdsRef.current[createdIdsRef.current.length - 1]
+        : undefined
       const created = createStageDraftingCurveCommand({
         document: current.document,
         layoutSnapshot: current.layoutSnapshot,
@@ -494,17 +534,33 @@ export function useStageDrafting(options: StageDraftingOptions) {
         // 是让同一个意图说两遍。两端都没碰过端口时 `wireBindingsFor` 给出空对象，落地时
         // 因此不写 `Wire`，也不走导线 Preset——没碰过端口的普通线一个字节都不变。
         wire: wireBindingsFor(portAnchors.current, curve),
-        // 落在线身上的那些端：宿主在同一个事务里建节点、断线并绑上去。
-        ...(() => {
-          const taps = wireTapsFor(wireAnchors.current, curve)
-          return taps ? { taps, tapLabel: current.messages.wireTap } : {}
-        })(),
+        /*
+         * 落在线身上的那些端：宿主在同一个事务里建节点、断线并绑上去。
+         *
+         * **这一条还没画完时整个跳过**：中途路过另一条导线不是接线意图，先建节点、把对方
+         * 劈成两段，下一下又走开，留下的是一个谁也没接的孤儿节点，而对方的线已经被切开了。
+         * 端口绑定不受这一条约束——它每一步按当前几何重算，是自我纠正的。
+         */
+        ...(effect.pending
+          ? {}
+          : (() => {
+              const taps = wireTapsFor(wireAnchors.current, curve)
+              return taps ? { taps, tapLabel: current.messages.wireTap } : {}
+            })()),
         ...(effect.wire ? { wiring: true } : {}),
         ...(effect.arrow ? { arrow: true } : {}),
         ...(effect.rectangle ? { rectangle: true } : {}),
+        ...(replaced ? { replace: replaced.id } : {}),
       })
       if (!created) continue
-      recordCreated(created.command)
+      const vertices = composeCurveVertexCount(curve)
+      // 换掉栈顶那一项而不是就地改它：`createdIdsRef` 是 Hook 的参数，编译器不允许在
+      // 回调里改它指到的对象；整份换新是 ref 写入，语义完全相同。
+      if (replaced) {
+        createdIdsRef.current = createdIdsRef.current.map((entry) => (
+          entry === replaced ? { ...entry, vertices } : entry
+        ))
+      } else recordCreated(created.command, vertices)
       current.dispatch(created.command)
       // 跨父级的绑定被丢掉了就必须说出来：静默丢弃与「绑上了」在屏幕上无法区分。
       if (created.droppedWireEnds.length > 0) notice = current.messages.wireParentMismatch
@@ -598,9 +654,18 @@ export function useStageDrafting(options: StageDraftingOptions) {
       return
     }
     if (step.status === 'cancelled') {
+      /*
+       * 放弃这一条时先落地它交出来的效果：导线从第二个点起就在文档里了，只清掉会话会在图上
+       * 留下半条线。**必须排在重开之前**——重开会把「我建了哪些」那份记录清掉，此后没有人
+       * 知道该删谁。
+       */
+      const notice = commit(step.effect)
       // 两级 Escape：这一条取过点就只放弃这一条，命令留着回到第一步；没取过点才退出。
-      if (pickedRef.current && repeat()) return
-      endSession(messages.cancelled)
+      if (pickedRef.current && repeat()) {
+        if (notice !== null) setNotice(notice)
+        return
+      }
+      endSession(notice ?? messages.cancelled)
       return
     }
     // rejected **不结束会话**：点错、打错在这类工具里是常态，结束命令会让用户从头再来。
@@ -961,24 +1026,42 @@ export function useStageDrafting(options: StageDraftingOptions) {
    *
    * 会话不认这个关键字（两点命令、`PLINE`、夹点会话都不认）时 `rejected`，什么也不会发生——
    * 而它们本来也不会往栈里放东西。
+   *
+   * **同一条规则要覆盖「Entity 还在、但被改小了」**：导线把几何扩在同一个 Entity 上，撤销
+   * 撤掉的是最后那一次几何写入，它并没有消失。因此顶点数比记下的少时按差值回退同样多个点；
+   * 只判存在的症状是「撤销一下、再点一下，那个拐点又回来了」。
    */
   useLayoutEffect(() => {
     const session = sessionRef.current
     const created = createdIdsRef.current
     const last = created[created.length - 1]
     if (!session || last === undefined) return
-    if (document.entities[last.id]) {
+    /** 回退一个点，并把这一步的效果丢掉——文档已经先动了。 */
+    const stepBack = () => {
+      const step = session.advance({ kind: 'keyword', key: 'U' })
+      if (step.status !== 'prompt') return false
+      setPrompt(step.prompt)
+      setReference(step.preview?.reference ?? null)
+      setPreview(step.preview ?? null)
+      return true
+    }
+    const entity = document.entities[last.id]
+    if (entity) {
       last.seen = true
+      const curve = getComposeCurve(entity)
+      const current = curve ? composeCurveVertexCount(curve) : undefined
+      if (last.vertices === undefined || current === undefined || current >= last.vertices) return
+      const missing = last.vertices - current
+      last.vertices = current
+      for (let index = 0; index < missing; index += 1) {
+        if (!stepBack()) return
+      }
       return
     }
     // 还没见过：它只是没走完那趟 React，不是被删了。
     if (!last.seen) return
     created.pop()
-    const step = session.advance({ kind: 'keyword', key: 'U' })
-    if (step.status !== 'prompt') return
-    setPrompt(step.prompt)
-    setReference(step.preview?.reference ?? null)
-    setPreview(step.preview ?? null)
+    stepBack()
   }, [document, setPrompt])
 
   /** 清掉命令行上残留的说明。进入几何编辑时调用：用户此刻站在一个会取点的状态里。 */

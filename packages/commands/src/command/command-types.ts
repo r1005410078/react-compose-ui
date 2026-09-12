@@ -206,7 +206,20 @@ export type ComposeCommandStep<TEffect> =
       readonly commit?: TEffect
     }
   | { readonly status: 'commit'; readonly effect: TEffect }
-  | { readonly status: 'cancelled' }
+  | {
+      readonly status: 'cancelled'
+      /**
+       * 放弃时要回收的东西。
+       *
+       * @remarks
+       * 只服务**中途落地过**的会话（在 `prompt` 那一档带过 `commit`）：它已经把东西写进文档
+       * 了，「放弃」因此必须说得出要回收什么——宿主手上只有一份会话句柄，无从得知这一条在
+       * 文档里留下了哪些痕迹。
+       *
+       * 绝大多数会话中途什么都不提交，它们不带这个字段，行为与从前逐字相同。
+       */
+      readonly effect?: TEffect
+    }
   | { readonly status: 'rejected'; readonly message: string }
 
 /**

@@ -12,6 +12,7 @@ import {
   createStageArrowSession,
   createStageDraftingCommands,
   createStageLineSession,
+  createStageWireSession,
 } from './line-command'
 import type {
   StageDraftingContext,
@@ -113,6 +114,114 @@ describe('ARROW 命令', () => {
      */
     expect(session.prompt?.message).toBe(messages.specifyEndPoint)
     expect(session.prompt?.message).not.toBe(messages.specifyNextPoint)
+  })
+})
+
+describe('WIRE 命令', () => {
+  /** 喂一串点，返回每一步的结果。 */
+  const pick = (session: ReturnType<typeof createStageWireSession>, ...points: { x: number; y: number }[]) =>
+    points.map((point) => session.advance({ kind: 'point', point }))
+  /** 一步的提交内容；不是 `prompt` 那一档时为 undefined。 */
+  const committed = (step: ReturnType<ReturnType<typeof createStageWireSession>['advance']>) => (
+    step.status === 'prompt' ? step.commit : undefined
+  )
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 第二个点就产出一条可落地的曲线', () => {
+    const session = createStageWireSession(context)
+    const [first, second] = pick(session, { x: 0, y: 0 }, { x: 100, y: 0 })
+
+    // 第一个点还构不成一段：一个点的导线画不出来。
+    expect(committed(first!)).toBeUndefined()
+    const commit = committed(second!)
+    expect(commit?.curves).toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
+    expect(commit?.wire).toBe(true)
+    // 此刻还没有可替换的对象，但这一条还没画完。
+    expect(commit && 'replaceLastCreated' in commit).toBe(false)
+    expect(commit?.pending).toBe(true)
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 第三个点起是替换而不是新建', () => {
+    const session = createStageWireSession(context)
+    const [, , third] = pick(session, { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 })
+
+    const commit = committed(third!)
+    expect(commit?.curves).toEqual([{
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }],
+      closed: false,
+    }])
+    expect(commit?.replaceLastCreated).toBe(true)
+    expect(commit?.pending).toBe(true)
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 结束那一步不再是「还没画完」', () => {
+    const session = createStageWireSession(context)
+    pick(session, { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 })
+    const step = session.advance({ kind: 'accept' })
+
+    expect(step.status).toBe('commit')
+    const effect = step.status === 'commit' ? step.effect : undefined
+    // 接入节点只在这一步做：中途路过另一条导线不是接线意图。
+    expect(effect?.pending).toBeUndefined()
+    expect(effect?.replaceLastCreated).toBe(true)
+    expect(effect?.curves?.[0]).toMatchObject({ kind: 'polyline' })
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 放弃上一点把几何收回去', () => {
+    const session = createStageWireSession(context)
+    pick(session, { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 })
+    const step = session.advance({ kind: 'keyword', key: 'U' })
+
+    const commit = committed(step)
+    // 只动会话的话（`PLINE` 的 `U` 就是那样）屏幕上那条线纹丝不动，而提示已经回退了一步。
+    expect(commit?.curves).toEqual([{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }])
+    expect(commit?.replaceLastCreated).toBe(true)
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 放弃到只剩一个点时删掉那条线', () => {
+    const session = createStageWireSession(context)
+    pick(session, { x: 0, y: 0 }, { x: 100, y: 0 })
+    const step = session.advance({ kind: 'keyword', key: 'U' })
+
+    const commit = committed(step)
+    expect(commit?.undoLastCreated).toBe(true)
+    expect(commit?.curves).toBeUndefined()
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 取消时说出要删掉哪一条', () => {
+    const session = createStageWireSession(context)
+    pick(session, { x: 0, y: 0 }, { x: 100, y: 0 })
+    const step = session.advance({ kind: 'cancel' })
+
+    expect(step.status).toBe('cancelled')
+    expect(step.status === 'cancelled' ? step.effect?.undoLastCreated : undefined).toBe(true)
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 一个点都没取过的取消不带效果', () => {
+    const session = createStageWireSession(context)
+    pick(session, { x: 0, y: 0 })
+    const step = session.advance({ kind: 'cancel' })
+
+    expect(step.status === 'cancelled' ? step.effect : undefined).toBeUndefined()
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 预览只有待定的那一段', () => {
+    const session = createStageWireSession(context)
+    pick(session, { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 })
+
+    // 已落地的部分是真的 Entity、由渲染器画；预览再画一遍就是同一条线画两遍。
+    expect(session.preview?.({ x: 200, y: 80 })?.curves).toEqual([
+      { kind: 'line', start: { x: 100, y: 80 }, end: { x: 200, y: 80 } },
+    ])
+  })
+
+  it('OpenSpec: stage-engine / 导线每取一个点就落地 / 原地点两下不落地', () => {
+    const session = createStageWireSession(context)
+    const [, second] = pick(session, { x: 0, y: 0 }, { x: 0, y: 0 })
+
+    // 退化的导线画不出来：顶点数已经是 2，但这一步什么都不该落地。
+    expect(committed(second!)).toBeUndefined()
+    expect(session.advance({ kind: 'cancel' }).status === 'cancelled').toBe(true)
   })
 })
 

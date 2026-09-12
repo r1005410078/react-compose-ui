@@ -113,6 +113,129 @@ describe('createStageDraftingCurveCommand 的 Preset 选择', () => {
   })
 })
 
+describe('createStageDraftingCurveCommand 的替换那一支', () => {
+  /** 真实文档里每个 Entity 都带着这两个 Component；替身少了它们读出来是 undefined。 */
+  const chrome = {
+    Lock: { locked: false },
+    Visibility: { visible: true },
+    Transform: { rotation: 0 },
+  }
+  /** 一条已经落地的导线，住在 `frame-a` 里；`frame-b` 在别处。 */
+  const withWire = (wire?: unknown): ComposeDocument => ({
+    schemaVersion: 7,
+    rootIds: ['frame-a', 'frame-b'],
+    entities: {
+      'frame-a': {
+        id: 'frame-a',
+        components: { ...chrome, Hierarchy: { childIds: ['device', 'wire-1'] } },
+      },
+      device: { id: 'device', components: { ...chrome } },
+      'frame-b': { id: 'frame-b', components: { ...chrome, Hierarchy: { childIds: [] } } },
+      'wire-1': {
+        id: 'wire-1',
+        name: '导线',
+        components: {
+          ...chrome,
+          Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 90, y: 30 } },
+          LayoutItem: {
+            offset: { x: -10, y: -20 },
+            width: { mode: 'fixed', value: 90 },
+            height: { mode: 'fixed', value: 30 },
+          },
+          ...(wire ? { Wire: wire } : {}),
+        },
+      },
+    },
+  } as unknown as ComposeDocument)
+
+  const snapshot = {
+    revision: 1,
+    boxes: {
+      'frame-a': { x: 10, y: 20, width: 500, height: 500 },
+      'frame-b': { x: 300, y: 300, width: 500, height: 500 },
+      'wire-1': { x: 0, y: 0, width: 90, height: 30 },
+    },
+  } as never
+
+  /** 落地上下文：`containerAtPoint` 故意指向**另一个**容器。 */
+  const context = (document: ComposeDocument, created: string[]): StageDraftingCommitContext => ({
+    ...commitContext(created),
+    document,
+    layoutSnapshot: snapshot,
+    index: { containerAtPoint: () => 'frame-b' } as never,
+  })
+
+  it('OpenSpec: stage / 会话把已落地的几何扩到同一个 Entity 上 / 改的是同一个 Entity', () => {
+    const created: string[] = []
+    const result = createStageDraftingCurveCommand(
+      context(withWire(), created),
+      { kind: 'polyline', vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }], closed: false },
+      { wiring: true, replace: 'wire-1' },
+    )
+
+    expect(result?.command.type).toBe('entity.curve.set')
+    expect(result?.command.meta?.targetIds).toEqual(['wire-1'])
+    // 不向 Registry 取 seed：Preset 在这个 Entity 建出来的那一刻就定下了。
+    expect(created).toEqual([])
+  })
+
+  it('OpenSpec: stage / 会话把已落地的几何扩到同一个 Entity 上 / 父级不重算', () => {
+    const created: string[] = []
+    const result = createStageDraftingCurveCommand(
+      context(withWire(), created),
+      { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 50 } },
+      { wiring: true, replace: 'wire-1' },
+    )
+
+    /*
+     * 判别点在**换算用的是哪个父级**：`containerAtPoint` 指着 `frame-b`（300,300），重算的话
+     * 局部坐标会是 (-300,-300)；取当前父级 `frame-a`（10,20）才得到 (-10,-20)。
+     */
+    expect(result?.command.payload).toMatchObject({
+      entityId: 'wire-1',
+      curve: { kind: 'line', start: { x: -10, y: -20 }, end: { x: 90, y: 30 } },
+    })
+  })
+
+  it('OpenSpec: stage / 会话把已落地的几何扩到同一个 Entity 上 / 目标不在了就退回新建', () => {
+    const created: string[] = []
+    const result = createStageDraftingCurveCommand(
+      context(withWire(), created),
+      line,
+      { wiring: true, replace: 'gone' },
+    )
+
+    // 它已经被外部撤销掉了；退回新建让会话自己愈合，而不是从此每一步都写不进去。
+    expect(result?.command.type).toBe('entity.create')
+    expect(created).toEqual(['wire'])
+  })
+
+  it('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 替换时按当前几何重算绑定', () => {
+    const bound = createStageDraftingCurveCommand(
+      context(withWire(), []),
+      line,
+      { wiring: true, replace: 'wire-1', wire: { end: { entityId: 'device', portId: 'L1' } } },
+    )
+    expect(bound?.command.payload).toMatchObject({ wire: { end: { portId: 'L1' } } })
+
+    // 末端走开：原来有绑定就要清掉，否则文档里留着一条指向别处的线。
+    const cleared = createStageDraftingCurveCommand(
+      context(withWire({ end: { entityId: 'device', portId: 'L1' } }), []),
+      line,
+      { wiring: true, replace: 'wire-1', wire: {} },
+    )
+    expect((cleared?.command.payload as { wire?: unknown }).wire).toBeNull()
+
+    // 从来没碰过端口的线不写 `Wire`，也不产生一条无谓的补丁。
+    const untouched = createStageDraftingCurveCommand(
+      context(withWire(), []),
+      line,
+      { wiring: true, replace: 'wire-1', wire: {} },
+    )
+    expect('wire' in (untouched?.command.payload as object)).toBe(false)
+  })
+})
+
 describe('sameParentWireEnds', () => {
   /** 两块场景，`device` 在 `frame-a` 里。 */
   const document = {
