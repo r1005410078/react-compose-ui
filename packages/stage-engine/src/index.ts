@@ -140,7 +140,11 @@ export {
   isComposeContainerEntity,
   isInvalidCutInsertion,
   normalizeClipboardEntityIds,
+  orientStageWireVertices,
   planStageJunctionCleanup,
+  planStageWireCut,
+  planStageWireMerge,
+  stageWireParentVertices,
   resolveNextScenePlacement,
   resolveSuggestedEntityInsertion,
   type ComposeClipboardPastePlan,
@@ -154,6 +158,10 @@ export {
   type ComposeStructureCommandAvailability,
   type StageDeleteEntitiesOptions,
   type StageJunctionPredicate,
+  type StageWireBranch,
+  type StageWireCutOptions,
+  type StageWireCutPlan,
+  type StageWireMergePlan,
 } from './commands'
 
 /** 交互运行时入口。 */
@@ -272,6 +280,8 @@ export type {
   StageCurveGeometrySource,
   StageCurveGrip,
   StageCurveGripRole,
+  StageVertexDelete,
+  StageVertexDeleteOptions,
   StageVertexEdit,
   StageVertexEditRejection,
 } from './geometry-editing'

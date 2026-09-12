@@ -3,6 +3,7 @@ import { composeCubicPointAt, nearestComposeCubicT } from '@compose-ui/core'
 import { deleteStageCurveVertex, insertStageCurveVertex } from './vertex-edits'
 import type {
   ComposeArcCurve,
+  ComposeCurve,
   ComposeLineCurve,
   ComposePathCurve,
   ComposePolylineCurve,
@@ -224,5 +225,50 @@ describe('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 
     }
     expect(deleteStageCurveVertex(single, 'p0v1'))
       .toEqual({ status: 'rejected', reason: 'floor' })
+  })
+})
+
+describe('导线上的 Delete 分流', () => {
+  /** 一条四顶点直角导线：横、竖、横，中间那一段是可以剪的。 */
+  const wire: ComposePolylineCurve = {
+    kind: 'polyline',
+    closed: false,
+    vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 90 }, { x: 200, y: 90 }],
+  }
+
+  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 绑定端的顶点删不掉', () => {
+    // 删得掉的话绑定不会跟着动，下一帧求解把**新的**首顶点写回端口位置，那一段当场变斜。
+    expect(deleteStageCurveVertex(wire, 'v0', { boundEnds: ['start'] }))
+      .toEqual({ status: 'rejected', reason: 'wire-bound' })
+    expect(deleteStageCurveVertex(wire, 'v3', { boundEnds: ['end'] }))
+      .toEqual({ status: 'rejected', reason: 'wire-bound' })
+  })
+
+  it('自由端的顶点照常删', () => {
+    expect(deleteStageCurveVertex(wire, 'v3', { boundEnds: ['start'] }).status).toBe('ok')
+  })
+
+  it('内部顶点不受绑定影响', () => {
+    expect(deleteStageCurveVertex(wire, 'v1', { boundEnds: ['start', 'end'] }).status).toBe('ok')
+  })
+
+  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 导线的段夹点剪断那一段', () => {
+    expect(deleteStageCurveVertex(wire, 'm1', { wire: true }))
+      .toEqual({ status: 'cut', segmentIndex: 1 })
+  })
+
+  it('端段与只有一段的导线以 cut-edge 拒绝', () => {
+    expect(deleteStageCurveVertex(wire, 'm0', { wire: true }))
+      .toEqual({ status: 'rejected', reason: 'cut-edge' })
+    expect(deleteStageCurveVertex(wire, 'm2', { wire: true }))
+      .toEqual({ status: 'rejected', reason: 'cut-edge' })
+    const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }
+    expect(deleteStageCurveVertex(line, 'move', { wire: true }))
+      .toEqual({ status: 'rejected', reason: 'cut-edge' })
+  })
+
+  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 普通曲线的段夹点仍然拒绝', () => {
+    // 把一个形状剪成两个是「分割」，不是用户抓着一段时会想的事。
+    expect(deleteStageCurveVertex(wire, 'm1')).toEqual({ status: 'rejected', reason: 'unsupported' })
   })
 })

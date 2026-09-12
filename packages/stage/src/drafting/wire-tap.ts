@@ -101,8 +101,38 @@ export interface StageWireTapAnchor {
   readonly point: StagePoint
 }
 
-/** {@link planStageWireTap} 的结果。 @internal */
-export interface StageWireTapPlan {
+/**
+ * {@link planStageWireTap} 的结果。
+ *
+ * @remarks
+ * 两种形状而不是一种：落在另一条导线的**自由端**上时不建节点，那两条线在一点相接、而那一点
+ * 上再没有第三样东西，它们在电气上**就是**一条线。落在线身中间、或落在一个已经绑着端口的
+ * 端点上时才建节点——前者那一点上有三条支路，后者有一个端口。
+ *
+ * @internal
+ */
+export type StageWireTapPlan = StageWireTapJunction | StageWireTapMerge
+
+/**
+ * 落在另一条导线的自由端上：把这一段并进那条导线。
+ *
+ * @remarks
+ * 只交出「并进谁的哪一端」，几何由调用方接——它手上才有本次画的这条线的顶点，而那条线可能
+ * 还没写进文档。
+ *
+ * @internal
+ */
+export interface StageWireTapMerge {
+  readonly kind: 'merge'
+  /** 被并进去的那条导线；它是图上先有的那一条，因此留下的是它。 */
+  readonly targetId: string
+  /** 相接点是它的哪一端。 */
+  readonly end: 'start' | 'end'
+}
+
+/** 建一个节点，把三条（或两条）支路接起来。 @internal */
+export interface StageWireTapJunction {
+  readonly kind: 'junction'
   /**
    * 建节点那一条，**单独交出来**。
    *
@@ -254,8 +284,10 @@ function rebind(
  * 三件事必须在**同一个事务**里：建节点、把被接入的导线断成两段、三条支路各绑到节点的端口。
  * 拆开会产生一个可观察的不一致中间态（节点已经在了、线还没断），撤销也会变成多步。
  *
- * **落点落在被接入导线的首尾顶点上时不断线**：那里没有需要断开的线身，只把那一端改绑到节点。
- * 合成一种会产出一段零长度的残线——图上看不见，却出现在场景树里。
+ * **落点落在被接入导线的首尾顶点上时不断线**：那里没有需要断开的线身。那一端**自由**时连节点
+ * 都不建，交出一次**合并**——两条线在一点相接、而那一点上再没有第三样东西，它们在电气上就是
+ * 一条线。那一端已经绑着端口时才建节点并把它改绑过去：那一点上有第三样东西。
+ * 与断线合成一种会产出一段零长度的残线——图上看不见，却出现在场景树里。
  *
  * 断开的两段**各自继承靠近自己那一端的原绑定**，并把靠近落点的那一端绑到节点；描边、虚线、
  * marker 与 Preset 整份复制，因此用户看到的仍然是同一条线。
@@ -304,13 +336,28 @@ export function planStageWireTap(
   }
   const wire = getComposeWire(target)
 
+  /*
+   * 落在**自由端**上：不建节点，把这一段并进那条导线。那一点上再没有第三样东西，两条线在
+   * 电气上就是一条；建一个只连着两条线的节点等于让同一张图有两种文档形态，而删除的粒度跟着
+   * 文档形态走——用户会发现「一次画出的 ABC」与「先 AB 再 BC」按下同一个键没掉的东西不一样。
+   *
+   * 那一端**已经绑着**端口时仍然建节点：那一点上有第三样东西。
+   */
+  if (split.kind === 'at-end' && !wire?.[split.end]) {
+    return { kind: 'merge', targetId: target.id, end: split.end }
+  }
+
   if (split.kind === 'at-end') {
     /*
-     * 落在首尾顶点上：只改绑，**几何一个字节不动**。走 `entity.component.update` 而不是
-     * `entity.curve.set`——后者会把几何做一次世界→局部的来回换算再量化，把线挪动一个百分位，
-     * 而用户这一步根本没有碰它的形状。
+     * 落在一个**已经绑着端口**的端点上：只改绑，**几何一个字节不动**。走
+     * `entity.component.update` 而不是 `entity.curve.set`——后者会把几何做一次世界→局部的
+     * 来回换算再量化，把线挪动一个百分位，而用户这一步根本没有碰它的形状。
+     *
+     * 这一支必定有 `Wire`（上面那个判据读的就是它的那一端），因此 `update` 一定接得住；
+     * 两端都自由的导线根本不写这个 Component，而它走的是上面那条合并。
      */
     return {
+      kind: 'junction',
       binding,
       junction: junction.command,
       edits: [
@@ -349,6 +396,7 @@ export function planStageWireTap(
     },
   }
   return {
+    kind: 'junction',
     binding,
     junction: junction.command,
     edits: [

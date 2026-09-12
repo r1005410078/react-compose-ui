@@ -28,10 +28,22 @@ import type { StagePoint } from '../geometry'
  *   于数据里。把它落成真实的段会让子路径的末点与起点重合，凭空多出一个重合的顶点——那正是
  *   `closed` 用布尔而不是重复首尾顶点表达的理由。
  * - `unsupported`：这个夹点不是顶点（段中点、直线的平移夹点、控制手柄）。
+ * - `wire-bound`：导线的这一端绑在端口上。删得掉的话绑定不会跟着动，下一帧的求解把**新的**
+ *   首顶点写回端口位置——用户按下的是「删掉一个点」，看到的却是这一段当场变斜。让绑定跟着挪
+ *   等于在他没有要求的时候改了接线，而那个改动在屏幕上不可见；顺手解绑也不行，画布上没有只
+ *   解绑不动几何的手势。
+ * - `cut-edge`：这是导线最外侧的一段（或它只有一段）。去掉端段就是把外侧那个端点删掉，而那
+ *   已经有入口；只有一段的导线去掉那一段就是删掉整条线，那也已经有入口。
  *
  * @public
  */
-export type StageVertexEditRejection = 'arc' | 'floor' | 'path-seam' | 'unsupported'
+export type StageVertexEditRejection =
+  | 'arc'
+  | 'floor'
+  | 'path-seam'
+  | 'unsupported'
+  | 'wire-bound'
+  | 'cut-edge'
 
 /**
  * 一次顶点增删的结果。
@@ -45,6 +57,35 @@ export type StageVertexEditRejection = 'arc' | 'floor' | 'path-seam' | 'unsuppor
 export type StageVertexEdit =
   | { readonly status: 'ok'; readonly curve: ComposeCurve }
   | { readonly status: 'rejected'; readonly reason: StageVertexEditRejection }
+
+/**
+ * 一次顶点删除的结果。
+ *
+ * @remarks
+ * 比插入多一档 `cut`：导线的段夹点上 `Delete` 的含义是**剪断那一段**，而剪断产出的是两个
+ * Entity，不是一条新几何——本函数是纯的曲线数学，交出段下标由调用方去规划那两条命令。
+ *
+ * 「这一段能不能剪」仍然在这里判：判据只跟几何有关（中间段才行），而夹点 id 的语法也住在
+ * 本包，两处各判一次必然漂移。
+ *
+ * @public
+ */
+export type StageVertexDelete =
+  | StageVertexEdit
+  | { readonly status: 'cut'; readonly segmentIndex: number }
+
+/** {@link deleteStageCurveVertex} 的入参。 @public */
+export interface StageVertexDeleteOptions {
+  /**
+   * 这条导线**绑在端口上**的那几端。
+   *
+   * @remarks
+   * 由宿主注入：引擎不认识导线，与夹点求解的轴对齐选项是同一条既有边界。
+   */
+  readonly boundEnds?: readonly ('start' | 'end')[]
+  /** 这是不是一条导线；只有导线的段夹点才落到 `cut`。 */
+  readonly wire?: boolean
+}
 
 const ok = (curve: ComposeCurve): StageVertexEdit => ({ status: 'ok', curve })
 const rejected = (reason: StageVertexEditRejection): StageVertexEdit => (
@@ -184,26 +225,47 @@ function cubicSegment(cubic: ComposeCubicShape): ComposeCubicSegment {
 }
 
 /**
- * 删除某个夹点对应的顶点。
+ * 删除某个夹点对应的顶点，或者剪断导线的一段。
  *
  * @remarks
- * 只受理**顶点**夹点：段中点、直线的平移夹点与控制手柄各自表达别的自由度，在它们上面按
- * `Delete` 没有正确答案，因此以 `unsupported` 说出来而不是静默不动。
+ * 只受理**顶点**夹点：控制手柄表达别的自由度，在它上面按 `Delete` 没有正确答案，因此以
+ * `unsupported` 说出来而不是静默不动。段夹点在**导线**上例外——用户此刻抓着的正是「这一段」，
+ * 而那条拒绝回答不了它，因此那一档落到 `cut`。不是导线的曲线一个字节不变。
  *
  * 相邻两段合并成一段，**保留两侧各自外侧的那个控制点**：那两个点表达的是留下来的两个顶点上
  * 的切向，删掉中间那一个不该把它们一起改掉。形状会变——那正是用户要求的。
  *
  * @public
  */
-export function deleteStageCurveVertex(curve: ComposeCurve, gripId: string): StageVertexEdit {
+export function deleteStageCurveVertex(
+  curve: ComposeCurve,
+  gripId: string,
+  options?: StageVertexDeleteOptions,
+): StageVertexDelete {
   if (curve.kind === 'arc') return rejected('arc')
   // 两点直线的任一端都在下限上：删掉一个就只剩一个点。
   if (curve.kind === 'line') {
-    return gripId === 'start' || gripId === 'end' ? rejected('floor') : rejected('unsupported')
+    if (gripId === 'start' || gripId === 'end') {
+      return boundRejection(curve, gripId === 'start' ? 0 : 1, options) ?? rejected('floor')
+    }
+    // 只有一段的导线：去掉那一段就是删掉整条线，而那已经有入口。
+    return options?.wire === true && gripId === MOVE_GRIP
+      ? rejected('cut-edge')
+      : rejected('unsupported')
   }
   if (curve.kind === 'polyline') {
+    const segment = parseSegmentIndex(gripId)
+    if (segment !== null) {
+      if (options?.wire !== true) return rejected('unsupported')
+      // 中间段 ⇔ 两侧各至少还剩一段，因此剪出来的两半都还有两个顶点。
+      return segment >= 1 && segment <= curve.vertices.length - 3
+        ? { status: 'cut', segmentIndex: segment }
+        : rejected('cut-edge')
+    }
     const target = parseVertexIndex(gripId)
     if (target === null || target >= curve.vertices.length) return rejected('unsupported')
+    const bound = boundRejection(curve, target, options)
+    if (bound) return bound
     if (curve.vertices.length <= MIN_VERTICES) return rejected('floor')
     return ok({
       ...curve,
@@ -211,6 +273,29 @@ export function deleteStageCurveVertex(curve: ComposeCurve, gripId: string): Sta
     })
   }
   return deleteFromPath(curve, gripId)
+}
+
+/** 直线的平移夹点；它在只有一段的导线上就是「整条线」。 */
+const MOVE_GRIP = 'move'
+
+/** 落在绑定端上的那个顶点删不掉。 */
+function boundRejection(
+  curve: ComposeCurve,
+  index: number,
+  options: StageVertexDeleteOptions | undefined,
+): StageVertexEdit | null {
+  const bound = options?.boundEnds
+  if (!bound || bound.length === 0) return null
+  const last = curve.kind === 'polyline' ? curve.vertices.length - 1 : 1
+  if (index === 0 && bound.includes('start')) return rejected('wire-bound')
+  if (index === last && bound.includes('end')) return rejected('wire-bound')
+  return null
+}
+
+/** `m{下标}`；不是段夹点时返回 null。 */
+function parseSegmentIndex(gripId: string): number | null {
+  const match = /^m(\d+)$/.exec(gripId)
+  return match ? Number(match[1]) : null
 }
 
 /** `v{下标}`；不是顶点夹点时返回 null。 */
