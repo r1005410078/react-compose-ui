@@ -1,5 +1,6 @@
 import type { StagePoint } from '@compose-ui/stage-engine'
-import { StageGridLinesLayer, type StageGridLines } from './stage-grid-lines'
+import { StageGridLinesLayer } from './stage-grid-lines-layer'
+import type { StageGridLines } from './stage-grid-lines'
 import type { StageFrameScreenBounds } from './stage-screen-geometry'
 
 /** 世界原点图标的半边长；用于把 16×16 的图标中心对准原点。 */

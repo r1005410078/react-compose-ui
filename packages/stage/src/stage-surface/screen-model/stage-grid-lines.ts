@@ -1,5 +1,5 @@
 /**
- * 网格容器的格线：列带与行线。
+ * 网格容器格线的几何解算。
  *
  * @remarks
  * 画在 **Scene 之下**而不是覆盖层里：它是底纹不是标注，压在卡片上会让每张卡上横着几条线。
@@ -8,6 +8,9 @@
  * 格线的几何与 Layout Runtime 的预解算必须出自**同一个换算入口**（`resolveStageGridContext`
  * 加 `projectComposeGridCell`），否则同一个格坐标会在格线与卡片上差开一段，而这种偏差只在
  * 特定列数与容器宽度下出现、极难复现。
+ *
+ * 纯函数与渲染组件分成两个文件：同一个模块既导出组件又导出常量/函数会让 Fast Refresh 失效，
+ * 这是本仓库既有的模块划分规则。
  * @packageDocumentation
  */
 
@@ -97,40 +100,4 @@ export function resolveStageGridLines(
       y: origin.y + (row + 1) * rowStep * zoom,
     })),
   }
-}
-
-/** 渲染一组网格容器的格线。 @public */
-export function StageGridLinesLayer({ lines }: { readonly lines: readonly StageGridLines[] }) {
-  return (
-    <>
-      {lines.map((grid) => (
-        <g
-          data-testid={`stage-grid-lines-${grid.containerId}`}
-          key={grid.containerId}
-          style={{ pointerEvents: 'none' }}
-        >
-          {grid.columns.map((band, column) => (
-            <rect
-              className="compose-stage__grid-column"
-              height={band.height}
-              key={column}
-              width={band.width}
-              x={band.x}
-              y={band.y}
-            />
-          ))}
-          {grid.rows.map((line, row) => (
-            <line
-              className="compose-stage__grid-row"
-              key={row}
-              x1={line.x1}
-              x2={line.x2}
-              y1={line.y}
-              y2={line.y}
-            />
-          ))}
-        </g>
-      ))}
-    </>
-  )
 }

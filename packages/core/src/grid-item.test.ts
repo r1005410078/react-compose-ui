@@ -54,7 +54,8 @@ describe('OpenSpec: compose-document / 网格 Layout 类型', () => {
     const layout = { ...createDefaultComposeGridLayout(), type: 'masonry' }
     expect(isValidComposeLayout(layout)).toBe(false)
     // 缺 type 同样拒绝：回退会让一份写坏的 grid 文档静默渲染成一条轴上的序列。
-    const { type: _type, ...withoutType } = createDefaultComposeGridLayout()
+    const withoutType: Record<string, unknown> = { ...createDefaultComposeGridLayout() }
+    delete withoutType.type
     expect(isValidComposeLayout(withoutType)).toBe(false)
   })
 

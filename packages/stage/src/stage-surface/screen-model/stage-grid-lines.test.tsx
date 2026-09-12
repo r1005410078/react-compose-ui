@@ -14,7 +14,8 @@ import {
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import { createStageSceneIndex } from '@compose-ui/stage-engine'
-import { resolveStageGridLines, StageGridLinesLayer } from './stage-grid-lines'
+import { resolveStageGridLines } from './stage-grid-lines'
+import { StageGridLinesLayer } from './stage-grid-lines-layer'
 
 const LAYOUT = createDefaultComposeGridLayout()
 const METRICS: ComposeGridMetrics = {

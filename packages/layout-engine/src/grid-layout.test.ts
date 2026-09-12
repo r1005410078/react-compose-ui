@@ -32,7 +32,7 @@ function gridContainer(
     Visibility: { visible: true },
     Lock: { locked: false },
     Hierarchy: { childIds },
-    Layout: { ...createDefaultComposeGridLayout(), ...layout },
+    Layout: { ...createDefaultComposeGridLayout(), ...layout } as ComposeGridLayout,
     Appearance: { backgroundPaint: { kind: 'solid', color: 'transparent' }, borderWidth: 0 },
   } as const
   return {

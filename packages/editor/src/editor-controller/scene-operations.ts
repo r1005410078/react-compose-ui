@@ -6,6 +6,12 @@ import {
   resolveTargetFrameId,
 } from '@compose-ui/stage-engine'
 import {
+  createComposeGridItem,
+  findComposeGridVacancy,
+  getComposeGridItem,
+  isComposeGridLayout,
+  type ComposeGridItem,
+  type ComposeLayout,
   getComposeHierarchy,
   BUILTIN_COMMAND_TYPES,
   COMPOSE_DEFAULT_FRAME_SIZE,
@@ -18,7 +24,6 @@ import {
   promoteComposeEntityToFrame,
   type ComposeDocument,
   type ComposeEntity,
-  type ComposeFlexLayout,
   type ComposeLayoutSnapshot,
   type ComposeSpatialTransform,
   type EditorCommand,
@@ -126,7 +131,8 @@ function entityFromSeed(
   id: string,
   seed: ComposeEntitySeed,
   transform: ComposeSpatialTransform,
-  parentLayout?: ComposeFlexLayout,
+  parentLayout?: ComposeLayout,
+  gridPlacement?: ComposeGridItem,
 ): ComposeEntity {
   const item = getComposeLayoutItem({ id: '__seed__', ...seed })
   const placed = {
@@ -142,11 +148,37 @@ function entityFromSeed(
       ...seed.components,
       Transform: { rotation: transform.rotation },
       // 父级是 Auto Layout 容器时进入排队并采纳交叉轴，与画布 reparent/拖入判定一致。
-      LayoutItem: parentLayout
-        ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
-        : placed,
+      // 网格容器不走交叉轴采纳（格中子级的轴尺寸模式在求解里被忽略），改为落进第一块空位。
+      LayoutItem: isComposeGridLayout(parentLayout)
+        ? { ...placed, positioning: 'flow' as const }
+        : parentLayout
+          ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
+          : placed,
+      ...(isComposeGridLayout(parentLayout) && gridPlacement
+        ? { GridItem: gridPlacement }
+        : {}),
     },
   }
+}
+
+/**
+ * 往网格容器里新建一个容器时，它落在哪一格。
+ *
+ * @remarks
+ * 从场景树新建没有落点意图，因此取第一块放得下的空位——与画布上的「点击添加」同一条判断。
+ */
+function gridPlacementFor(
+  document: ComposeDocument,
+  parent: ComposeEntity | undefined,
+): ComposeGridItem | undefined {
+  const layout = parent ? getComposeLayout(parent) : undefined
+  if (!parent || !isComposeGridLayout(layout)) return undefined
+  const cells = (getComposeHierarchy(parent)?.childIds ?? []).flatMap((childId) => {
+    const item = getComposeGridItem(document.entities[childId])
+    return item ? [{ id: childId, x: item.x, y: item.y, w: item.w, h: item.h }] : []
+  })
+  const { x, y } = findComposeGridVacancy(cells, { columns: layout.columns, w: 4, h: 2 })
+  return createComposeGridItem(x, y)
 }
 
 function planCreate(
@@ -208,6 +240,7 @@ function planCreate(
     created.seed,
     transform,
     parent ? getComposeLayout(parent) : undefined,
+    gridPlacementFor(context.document, parent),
   )
   return planned(
     sceneCommand(

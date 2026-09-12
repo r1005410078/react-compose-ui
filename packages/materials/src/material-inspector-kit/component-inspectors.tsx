@@ -1,6 +1,11 @@
 import { createContext, useContext, useId, useMemo, useState } from 'react'
 import * as v from 'valibot'
 import {
+  type ComposeGridItem,
+  composeGridColumnWidth,
+  solveComposeGrid,
+  isComposeGridLayout,
+  getComposeGridItem,
   BUILTIN_COMMAND_TYPES,
   DEFAULT_COMPOSE_APPEARANCE,
   createDefaultComposeLayoutItem,
@@ -81,6 +86,14 @@ interface BasicGeometryInspectorView {
   readonly computedWidth: number
   readonly fillAllowed: boolean
   readonly hugAllowed: boolean
+  /**
+   * 尺寸只读。
+   *
+   * @remarks
+   * 格中子级的盒**就是**格矩形，三种尺寸模式一个都用不上。仍然渲染而不是隐藏——
+   * 「它现在到底多少像素」是个正当问题，只是答案不由这里给出。
+   */
+  readonly sizeReadOnly: boolean
   readonly zh: boolean
 }
 
@@ -89,6 +102,7 @@ const BasicGeometryInspectorContext = createContext<BasicGeometryInspectorView>(
   computedWidth: 0,
   fillAllowed: false,
   hugAllowed: false,
+  sizeReadOnly: false,
   zh: true,
 })
 
@@ -103,9 +117,13 @@ interface BasicPositionValue {
 }
 
 interface BasicGeometryValue {
-  /** 父级为 Auto Layout 容器时才出现：true 表示子级已脱流为 Absolute。 */
+  /** 父级为 Auto Layout 或网格容器时才出现：true 表示子级已脱离父级排布。 */
   readonly ignoreLayout?: boolean
   readonly position?: { readonly x: number; readonly y: number }
+  /** 父级为网格容器时才出现：格坐标（列、行）。 */
+  readonly gridCell?: { readonly x: number; readonly y: number }
+  /** 父级为网格容器时才出现：格跨度（宽、高），单位是格。 */
+  readonly gridSpan?: { readonly x: number; readonly y: number }
   readonly alignSelf?: ComposeLayoutItem['alignSelf']
   readonly rotation: number
   readonly pivot: PivotAnchor
@@ -401,6 +419,7 @@ const ALIGN_SELF_VALUES = ALIGN_SELF_OPTIONS.map((option) => option.value) as [
 function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
   const view = useContext(BasicGeometryInspectorContext)
   const size = value as unknown as BasicSizeValue
+  const locked = readOnly || view.sizeReadOnly
   const suggestions = [
     ...(view.fillAllowed
       ? [{ value: 'fill' as const, label: 'Fill' as const }]
@@ -414,7 +433,7 @@ function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRender
       <AxisSizingControl
         axis="width"
         computed={view.computedWidth}
-        readOnly={readOnly}
+        readOnly={locked}
         sizing={size.width}
         suggestions={suggestions}
         zh={view.zh}
@@ -423,7 +442,7 @@ function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRender
       <AxisSizingControl
         axis="height"
         computed={view.computedHeight}
-        readOnly={readOnly}
+        readOnly={locked}
         sizing={size.height}
         suggestions={suggestions}
         zh={view.zh}
@@ -488,7 +507,16 @@ export function createLayoutItemInspector(
           getComposeHierarchy(candidate)?.childIds.includes(entity.id))
       : undefined), [document, entity.id])
     const parentLayout = parent ? getComposeLayout(parent) : undefined
-    const fillAllowed = item.positioning === 'flow' && Boolean(parentLayout)
+    /*
+     * 格中子级是几何分组的**第三档**：`positioning` 开关的 absolute / flow 两支之外，
+     * 父级是网格容器时首个字段换成格坐标与格跨度。
+     *
+     * 判据是「父级是网格 **且**自己有 GridItem」——切换布局类型的中间态里两者可能不同步，
+     * 而此时按 flow 呈现是安全的降级：读到的仍是真实的求解结果。
+     */
+    const gridItem = isComposeGridLayout(parentLayout) ? getComposeGridItem(entity) : undefined
+    const isGridChild = gridItem !== undefined
+    const fillAllowed = !isGridChild && item.positioning === 'flow' && Boolean(parentLayout)
     // 「忽略 Auto Layout」是 Flow↔Absolute 的唯一显式转换入口；拖拽不再隐式脱流。
     const detachAllowed = Boolean(parentLayout)
     const hierarchy = getComposeHierarchy(entity)
@@ -538,10 +566,39 @@ export function createLayoutItemInspector(
         ? {
             ignoreLayout: v.pipe(
               v.boolean(),
-              v.title(zh ? '忽略自动布局' : 'Ignore auto layout'),
+              // 文案跟着父级的布局类型走：一个说 Auto Layout 的开关出现在网格容器的子级上，
+              // 用户会以为自己看错了面板。
+              v.title(isComposeGridLayout(parentLayout)
+                ? (zh ? '忽略网格' : 'Ignore grid')
+                : (zh ? '忽略自动布局' : 'Ignore auto layout')),
             ),
           }
         : {}
+      if (isGridChild) {
+        /*
+         * 网格档：格坐标顶掉位置与自身对齐；**外边距隐藏**——间距归容器（项间距那一格），
+         * 每张卡再各带一份会让「两张卡之间到底多远」有两个来源。尺寸留着但只读。
+         */
+        const withoutMargin: v.ObjectEntries = {
+          rotation: sharedFields.rotation,
+          pivot: sharedFields.pivot,
+          size: sharedFields.size,
+        }
+        return v.object({
+          ...detachField,
+          gridCell: v.pipe(
+            v.custom<BasicPositionValue>(isBasicPositionValue),
+            v.title(zh ? '网格位置' : 'Grid position'),
+            v.metadata({ propertyPanel: { editor: 'basic-geometry-position' } }),
+          ),
+          gridSpan: v.pipe(
+            v.custom<BasicPositionValue>(isBasicPositionValue),
+            v.title(zh ? '网格尺寸' : 'Grid size'),
+            v.metadata({ propertyPanel: { editor: 'basic-geometry-position' } }),
+          ),
+          ...withoutMargin,
+        }) as unknown as v.GenericSchema<BasicGeometryValue>
+      }
       if (item.positioning === 'absolute') {
         return v.object({
           ...detachField,
@@ -565,10 +622,15 @@ export function createLayoutItemInspector(
         })),
         ...sharedFields,
       }) as unknown as v.GenericSchema<BasicGeometryValue>
-    }, [detachAllowed, fillAllowed, hugAllowed, item.positioning, zh])
-    const placementValue = item.positioning === 'absolute'
-      ? { position: { x: item.offset.x, y: item.offset.y } }
-      : { alignSelf: item.alignSelf }
+    }, [detachAllowed, fillAllowed, hugAllowed, isGridChild, item.positioning, parentLayout, zh])
+    const placementValue = gridItem
+      ? {
+          gridCell: { x: gridItem.x, y: gridItem.y },
+          gridSpan: { x: gridItem.w, y: gridItem.h },
+        }
+      : item.positioning === 'absolute'
+        ? { position: { x: item.offset.x, y: item.offset.y } }
+        : { alignSelf: item.alignSelf }
     const viewValue: BasicGeometryValue = {
       ...(detachAllowed ? { ignoreLayout: item.positioning === 'absolute' } : {}),
       ...placementValue,
@@ -587,15 +649,59 @@ export function createLayoutItemInspector(
     const defaultValue = useMemo<BasicGeometryValue>(() => ({
       // 脱流状态由用户显式决定，没有实例无关默认值，基线复用当前值使其不参与重置。
       ...(detachAllowed ? { ignoreLayout: item.positioning === 'absolute' } : {}),
-      ...(item.positioning === 'absolute'
-        ? { position: { x: item.offset.x, y: item.offset.y } }
-        : { alignSelf: createDefaultComposeLayoutItem().alignSelf }),
+      ...(gridItem
+        ? {
+            gridCell: { x: gridItem.x, y: gridItem.y },
+            gridSpan: { x: gridItem.w, y: gridItem.h },
+          }
+        : item.positioning === 'absolute'
+          ? { position: { x: item.offset.x, y: item.offset.y } }
+          : { alignSelf: createDefaultComposeLayoutItem().alignSelf }),
       rotation: DEFAULT_COMPOSE_TRANSFORM.rotation,
       pivot: 'center',
       size: { width: item.width, height: item.height },
       margin: createDefaultComposeLayoutItem().margin,
-    }), [detachAllowed, item.offset.x, item.offset.y, item.positioning, item.width, item.height])
-    const updateLayoutItem = (nextItem: ComposeLayoutItem) => {
+    }), [detachAllowed, gridItem, item.offset.x, item.offset.y, item.positioning, item.width, item.height])
+    /**
+     * 回流进网格时的起点格坐标。
+     *
+     * @remarks
+     * 按当前视觉盒就近取格；落格产生的碰撞由下一次求解统一解开。取不到布局结果时退到
+     * 原点——那也是一个合法起点，求解会把它推到第一块空位上。
+     */
+    const gridPlacementForReflow = (): ComposeGridItem => {
+      const layout = parent ? getComposeLayout(parent) : undefined
+      const parentBox = parent ? layoutSnapshot?.boxes[parent.id] : undefined
+      if (!isComposeGridLayout(layout) || !box || !parentBox) return { x: 0, y: 0, w: 4, h: 2 }
+      const border = resolveComposeAppearance(parent!).borderWidth
+      const metrics = {
+        columns: layout.columns,
+        rowHeight: layout.rowHeight,
+        rowGap: layout.rowGap,
+        columnGap: layout.columnGap,
+        contentWidth: Math.max(
+          0,
+          parentBox.width - border * 2 - layout.padding.left - layout.padding.right,
+        ),
+      }
+      const columnStep = composeGridColumnWidth(metrics) + layout.columnGap
+      const rowStep = layout.rowHeight + layout.rowGap
+      const originX = border + layout.padding.left
+      const originY = border + layout.padding.top
+      const w = columnStep > 0
+        ? Math.min(layout.columns, Math.max(1, Math.round((box.width + layout.columnGap) / columnStep)))
+        : 1
+      const h = rowStep > 0 ? Math.max(1, Math.round((box.height + layout.rowGap) / rowStep)) : 1
+      return {
+        x: columnStep > 0
+          ? Math.min(Math.max(0, Math.floor((box.x - originX) / columnStep)), Math.max(0, layout.columns - w))
+          : 0,
+        y: rowStep > 0 ? Math.max(0, Math.floor((box.y - originY) / rowStep)) : 0,
+        w,
+        h,
+      }
+    }
+    const updateLayoutItem = (nextItem: ComposeLayoutItem, gridPlacement?: ComposeGridItem) => {
       const layoutItemCommand = command(
         idFactory,
         entity,
@@ -608,6 +714,32 @@ export function createLayoutItemInspector(
       // Frame 的尺寸事实来源是 Frame.size，布局求解会用它覆盖 LayoutItem 的推导结果。
       // 因此尺寸变化必须一并写 Frame.size，否则文档变了而画面不动。两条命令合成一次事务：
       // 用户只做了一个动作，撤销就该一步回到位。
+      // 回流进网格：LayoutItem 与 GridItem 必须写在同一条事务里，否则中间会出现一个
+      // 「已经是 Flow 却没有格坐标」的可观察状态，而撤销也变两步。
+      if (gridPlacement) {
+        return dispatch(createComposeBatchCommand({
+          id: idFactory(),
+          commands: [
+            layoutItemCommand,
+            {
+              id: idFactory(),
+              type: getComposeGridItem(entity)
+                ? BUILTIN_COMMAND_TYPES.updateComponent
+                : BUILTIN_COMMAND_TYPES.addComponent,
+              payload: {
+                entityId: entity.id,
+                key: 'GridItem',
+                value: gridPlacement as unknown as JsonValue,
+              },
+            },
+          ],
+          meta: {
+            label: zh ? `把 ${entity.name} 放回网格` : `Return ${entity.name} to grid`,
+            source: 'inspector',
+            targetIds: [entity.id],
+          },
+        }))
+      }
       if (!isFrame || !sizeChanged) return dispatch(layoutItemCommand)
       return dispatch(createComposeBatchCommand({
         id: idFactory(),
@@ -636,6 +768,7 @@ export function createLayoutItemInspector(
         computedHeight: box?.height ?? item.height.value,
         computedWidth: box?.width ?? item.width.value,
         fillAllowed,
+        sizeReadOnly: isGridChild,
         hugAllowed,
         zh,
       }}>
@@ -671,12 +804,82 @@ export function createLayoutItemInspector(
                   })
                 }
                 else if (!next.ignoreLayout && item.positioning === 'absolute') {
-                  // 回流：保持 childIds 位置不变，按进入容器的既有交叉轴采纳规则改写尺寸。
-                  updateLayoutItem(adoptComposeCrossAxisSizing(
-                    { ...item, positioning: 'flow' },
-                    parentLayout,
-                  ))
+                  // 回流：保持 childIds 位置不变。网格父级不走交叉轴采纳（格中子级的轴尺寸
+                  // 模式在求解里被忽略），改为按当前视觉位置就近落格——落格由下一次求解
+                  // 统一解开碰撞，这里只给出一个起点。
+                  if (isComposeGridLayout(parentLayout)) {
+                    updateLayoutItem({ ...item, positioning: 'flow' }, gridPlacementForReflow())
+                  }
+                  else {
+                    updateLayoutItem(adoptComposeCrossAxisSizing(
+                      { ...item, positioning: 'flow' },
+                      parentLayout,
+                    ))
+                  }
                 }
+                return
+              }
+              if ((field === 'gridCell' || field === 'gridSpan') && gridItem && parent) {
+                /*
+                 * 键入的格坐标走**与画布拖动同一个求解器**：画布与面板是同一份事实的两个
+                 * 入口，各解一次会让「面板里输 0,2」与「拖到 0,2」得到不同的结果。
+                 * 推挤出来的兄弟与目标写在同一条 batch 里，撤销一步全部回去。
+                 */
+                const layout = getComposeLayout(parent)
+                if (!isComposeGridLayout(layout) || !document) return
+                const cell = field === 'gridCell' ? next.gridCell : undefined
+                const span = field === 'gridSpan' ? next.gridSpan : undefined
+                const desired = {
+                  id: entity.id,
+                  x: Math.max(0, Math.round(cell?.x ?? gridItem.x)),
+                  y: Math.max(0, Math.round(cell?.y ?? gridItem.y)),
+                  w: Math.max(1, Math.round(span?.x ?? gridItem.w)),
+                  h: Math.max(1, Math.round(span?.y ?? gridItem.h)),
+                }
+                const siblings = (getComposeHierarchy(parent)?.childIds ?? [])
+                  .flatMap((childId) => {
+                    if (childId === entity.id) return []
+                    const sibling = getComposeGridItem(document.entities[childId])
+                    return sibling
+                      ? [{ id: childId, x: sibling.x, y: sibling.y, w: sibling.w, h: sibling.h }]
+                      : []
+                  })
+                const solved = solveComposeGrid([...siblings, desired], {
+                  columns: layout.columns,
+                  float: layout.float,
+                  anchorId: entity.id,
+                })
+                const batchId = idFactory()
+                const writes = solved.flatMap((solvedCell) => {
+                  const before = getComposeGridItem(document.entities[solvedCell.id])
+                  if (before && before.x === solvedCell.x && before.y === solvedCell.y
+                    && before.w === solvedCell.w && before.h === solvedCell.h) return []
+                  return [{
+                    id: `${batchId}:${solvedCell.id}:grid-item`,
+                    type: BUILTIN_COMMAND_TYPES.updateComponent,
+                    payload: {
+                      entityId: solvedCell.id,
+                      key: 'GridItem',
+                      value: {
+                        ...(before ?? {}),
+                        x: solvedCell.x,
+                        y: solvedCell.y,
+                        w: solvedCell.w,
+                        h: solvedCell.h,
+                      },
+                    },
+                  }]
+                })
+                if (writes.length === 0) return
+                dispatch(createComposeBatchCommand({
+                  id: batchId,
+                  commands: writes,
+                  meta: {
+                    label: zh ? `调整 ${entity.name} 的网格位置` : `Move ${entity.name} in grid`,
+                    source: 'inspector',
+                    targetIds: solved.map((solvedCell) => solvedCell.id),
+                  },
+                }))
                 return
               }
               if (field === 'position' && next.position) {

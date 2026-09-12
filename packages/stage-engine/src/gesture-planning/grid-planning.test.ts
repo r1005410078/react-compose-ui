@@ -17,7 +17,7 @@ import {
 import { createStageSceneIndex } from '../hit-testing'
 import { planMoveCommit, planMovePreview } from './move-planning'
 import { planTransformCommit } from './transform-planning'
-import type { StageInteractionContext } from '../interaction-controller'
+import type { StageInteractionContext, StageInteractionEffect } from '../interaction-controller'
 
 const LAYOUT: ComposeGridLayout = { ...createDefaultComposeGridLayout(), float: true }
 const CONTENT_WIDTH = 720
@@ -29,7 +29,6 @@ const METRICS: ComposeGridMetrics = {
   contentWidth: CONTENT_WIDTH,
 }
 const COLUMN_STEP = composeGridColumnWidth(METRICS) + LAYOUT.columnGap
-const ROW_STEP = LAYOUT.rowHeight + LAYOUT.rowGap
 /** 边框 0，因此内容原点就是内边距。 */
 const ORIGIN = { x: LAYOUT.padding.left, y: LAYOUT.padding.top }
 
@@ -161,6 +160,13 @@ function contextFor(doc: ComposeDocument, snapshot: ComposeLayoutSnapshot, selec
 }
 
 /** 把 batch 命令摊成子命令，断言起来比嵌套 payload 好读。 */
+/** 断言这次规划产出的是一条命令，并取出它——其余 effect 种类在网格路径上都是缺陷。 */
+function dispatched(effect: StageInteractionEffect | null): EditorCommand {
+  expect(effect?.type).toBe('command.dispatch')
+  if (effect?.type !== 'command.dispatch') throw new Error('期望一条 command.dispatch')
+  return effect.command
+}
+
 function subCommands(command: EditorCommand): readonly EditorCommand[] {
   const payload = command.payload as { commands?: readonly EditorCommand[] }
   return payload.commands ?? [command]
@@ -240,11 +246,10 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       dropTarget: preview.dropTarget,
       idFactory: () => 'cmd',
     })
-    expect(effect?.type).toBe('command.dispatch')
-    const writes = gridWrites(effect!.command)
+    const writes = gridWrites(dispatched(effect))
     expect(writes.find((item) => item.entityId === 'a')?.value).toMatchObject({ x: 8, y: 0 })
     // 位置的事实来源是格坐标；写 offset 会造出第二份事实。
-    expect(subCommands(effect!.command).some((item) =>
+    expect(subCommands(dispatched(effect)).some((item) =>
       (item.payload as { key?: string }).key === 'LayoutItem')).toBe(false)
   })
 
@@ -260,11 +265,11 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       dropTarget: preview.dropTarget,
       idFactory: () => 'cmd',
     })
-    const writes = gridWrites(effect!.command)
+    const writes = gridWrites(dispatched(effect))
     expect(writes.find((item) => item.entityId === 'a')?.value).toMatchObject({ x: 0, y: 2 })
     expect(writes.find((item) => item.entityId === 'trend')?.value).toMatchObject({ y: 4 })
     // 一条命令，因此一次撤销两者同时回去。
-    expect(effect!.command.type).toBe('transaction.batch')
+    expect(dispatched(effect).type).toBe('transaction.batch')
     // 没被压住的一动不动。
     expect(writes.some((item) => item.entityId === 'list')).toBe(false)
   })
@@ -285,6 +290,7 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       index,
       finished: {
         type: 'resize',
+        ids: ['trend'],
         handle: 'e',
         transforms: {
           trend: {
@@ -297,8 +303,8 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
         },
       },
       idFactory: () => 'cmd',
-    } as Parameters<typeof planTransformCommit>[0])
-    const writes = gridWrites(effect!.command)
+    })
+    const writes = gridWrites(dispatched(effect))
     expect(writes.find((item) => item.entityId === 'trend')?.value).toMatchObject({ w: 8, h: 2 })
   })
 
@@ -311,6 +317,7 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       index,
       finished: {
         type: 'resize',
+        ids: ['trend'],
         handle: 'e',
         transforms: {
           trend: {
@@ -323,9 +330,9 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
         },
       },
       idFactory: () => 'cmd',
-    } as Parameters<typeof planTransformCommit>[0])
+    })
     // 拉宽到 8 格挡住了 list（7..12 列），它被推到下一行。
-    expect(gridWrites(effect!.command).find((item) => item.entityId === 'list')?.value)
+    expect(gridWrites(dispatched(effect)).find((item) => item.entityId === 'list')?.value)
       .toMatchObject({ y: 4 })
   })
 
@@ -342,12 +349,13 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       index,
       finished: {
         type: 'resize',
+        ids: ['a'],
         handle: 'e',
         transforms: { a: { x: box.x, y: box.y, width: COLUMN_STEP, height: box.height, rotation: 0 } },
       },
       idFactory: () => 'cmd',
-    } as Parameters<typeof planTransformCommit>[0])
-    expect(gridWrites(effect!.command).find((item) => item.entityId === 'a')?.value)
+    })
+    expect(gridWrites(dispatched(effect)).find((item) => item.entityId === 'a')?.value)
       .toMatchObject({ w: 3 })
   })
 
@@ -367,7 +375,7 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       dropTarget: { kind: 'grid-cell', containerId: 'grid', x: 4, y: 0 },
       idFactory: () => 'cmd',
     })
-    const sub = subCommands(effect!.command)
+    const sub = subCommands(dispatched(effect))
     expect(sub.find((item) => (item.payload as { key?: string }).key === 'GridItem'))
       .toMatchObject({ type: 'entity.component.add', payload: { entityId: 'loose' } })
     const layoutItem = sub.find((item) => (item.payload as { key?: string }).key === 'LayoutItem')
@@ -393,7 +401,7 @@ describe('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划', () 
       dropTarget: { kind: 'reparent', containerId: 'box' },
       idFactory: () => 'cmd',
     })
-    expect(subCommands(effect!.command).some((item) =>
+    expect(subCommands(dispatched(effect)).some((item) =>
       item.type === 'entity.component.remove'
       && (item.payload as { key?: string }).key === 'GridItem')).toBe(true)
   })
