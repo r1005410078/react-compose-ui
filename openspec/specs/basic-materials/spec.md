@@ -829,6 +829,10 @@ Definition 的端点编辑 MUST 派发曲线几何写入漏斗命令，MUST NOT 
 
 Renderer MUST 按 `kind` 分派 SVG 元素：`line` 与 `polyline` 各用**一个**元素（闭合多段线用
 `polygon`），弧用 `path`，**整圆用 `circle`**——SVG 的 `A` 命令在起终点重合时画不出东西。
+`path` MUST 用**一个** `<path>`：全部子路径写进同一个 `d`，闭合的子路径以 `Z` 收尾。
+拆成多个元素会让填充规则失效——洞与实心的区别正是同一个 `d` 内多条子路径共同决定的。
+`path` 的 `fill-rule` 属性 MUST 由 `Curve.fillRule` 推出，缺席时 MUST NOT 写出该属性。
+
 未填充时命中 MUST 继续由透明加宽 stroke 承担，MUST NOT 因 `kind` 变化而改用盒判定。
 
 命中层的宽度 MUST 由 `COMPOSE_CURVE_PICK_TOLERANCE` 推出（两倍容差，与视觉线宽取较大者），
@@ -837,6 +841,8 @@ MUST NOT 在本包另写一个数——它同时是 Stage 拾取框的来源，�
 成为包围盒的超集。这一条只作用于两个自由端，多段线拐角仍由 `stroke-linejoin` 覆盖。
 
 Inspector MUST 按 `kind` 呈现对应的几何字段，全部写入 MUST 走同一条漏斗命令。
+`path` MUST NOT 呈现逐控制点的几何字段：一条导入来的路径有几十个控制点，逐点列出的面板既读
+不懂也点不动，而它的几何编辑入口在画布上（顶点方块与控制手柄）。描边、填充与变换字段照常呈现。
 
 #### Scenario: 渲染跟随几何
 
@@ -853,25 +859,20 @@ Inspector MUST 按 `kind` 呈现对应的几何字段，全部写入 MUST 走同
 - **WHEN** 在属性面板修改描边颜色或线宽
 - **THEN** 变更写入 Renderer props 并即时渲染，可参与数据绑定
 
-#### Scenario: 整圆用 circle 渲染
+#### Scenario: 带洞的路径渲染成一个元素
 
-- **WHEN** 渲染一个扫掠为 360 的弧
-- **THEN** 使用 `circle` 元素而不是起终点重合的 `path`
+- **WHEN** 渲染一条含两条子路径、`fillRule` 为 `evenodd` 的 `path`
+- **THEN** 页面里是**一个** `<path>`，`fill-rule` 为 `evenodd`，洞是透的
 
-#### Scenario: 多段线是一个元素
+#### Scenario: 缺席的 fillRule 不写属性
 
-- **WHEN** 渲染一条含四个顶点的多段线
-- **THEN** 图面上只有一个多段线元素，而不是三个线段元素
+- **WHEN** 渲染一条 `fillRule` 缺席的 `path`
+- **THEN** 元素上没有 `fill-rule` 属性
 
-#### Scenario: 命中层不越过端点
+#### Scenario: path 的 Inspector 不列控制点
 
-- **WHEN** 渲染任意 `kind` 的曲线
-- **THEN** 命中层的 `stroke-linecap` 为 `butt`
-
-#### Scenario: 空角仍不命中
-
-- **WHEN** 点击一段未填充的弧包围盒内远离弧身的位置
-- **THEN** 该弧不被选中
+- **WHEN** 选中一条 `path` 曲线
+- **THEN** 属性面板呈现描边与填充分组，不呈现任何逐点几何字段
 
 ### Requirement: 几何 Inspector 提供旋转基点
 
