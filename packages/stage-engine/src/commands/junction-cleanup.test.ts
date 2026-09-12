@@ -6,12 +6,38 @@ import { createStageDeleteEntitiesCommand, planStageJunctionCleanup } from './ju
 const isJunction = (entity: ComposeEntity) =>
   (entity.components.Composition as { presetId?: string } | undefined)?.presetId === 'junction'
 
-function wire(id: string, ends: Record<string, { entityId: string; portId: string }>): ComposeEntity {
+/**
+ * 一条导线。
+ *
+ * @param vertices - parent 局部坐标下的顶点。两支路那一档要真的合并，因此夹具必须带上
+ * 几何——没有 `Curve` 的假导线会静默走进「不能合并」那一支，用例照样绿。
+ */
+function wire(
+  id: string,
+  ends: Record<string, { entityId: string; portId: string }>,
+  vertices: readonly (readonly [number, number])[] = [[0, 0], [100, 0]],
+): ComposeEntity {
+  const xs = vertices.map(([x]) => x)
+  const ys = vertices.map(([, y]) => y)
+  const left = Math.min(...xs)
+  const top = Math.min(...ys)
   return {
     id,
     name: id,
     components: {
       Composition: { presetId: 'wire', baseComponentKeys: [], capabilityIds: [] },
+      Lock: { locked: false },
+      Curve: {
+        kind: 'polyline',
+        closed: false,
+        vertices: vertices.map(([x, y]) => ({ x: x - left, y: y - top })),
+      },
+      LayoutItem: {
+        positioning: 'absolute',
+        offset: { x: left, y: top },
+        width: { mode: 'fixed', value: Math.max(...xs) - left },
+        height: { mode: 'fixed', value: Math.max(...ys) - top },
+      },
       Wire: ends,
     },
   } as unknown as ComposeEntity
@@ -21,15 +47,27 @@ function junction(id: string): ComposeEntity {
   return {
     id,
     name: id,
-    components: { Composition: { presetId: 'junction', baseComponentKeys: [], capabilityIds: [] } },
+    components: {
+      Composition: { presetId: 'junction', baseComponentKeys: [], capabilityIds: [] },
+      Lock: { locked: false },
+    },
   } as unknown as ComposeEntity
 }
 
+/** 全部 Entity 都挂在同一块场景下：合并要求两条支路同父级。 */
 function documentWith(entities: readonly ComposeEntity[]): ComposeDocument {
+  const frame = {
+    id: 'f',
+    name: 'f',
+    components: {
+      Hierarchy: { childIds: entities.map(({ id }) => id) },
+      Lock: { locked: false },
+    },
+  } as unknown as ComposeEntity
   return {
     schemaVersion: 7,
-    rootIds: [],
-    entities: Object.fromEntries(entities.map((item) => [item.id, item])),
+    rootIds: ['f'],
+    entities: Object.fromEntries([frame, ...entities].map((item) => [item.id, item])),
   } as unknown as ComposeDocument
 }
 
@@ -38,9 +76,9 @@ const NODE = { entityId: 'j', portId: 'p' }
 /** 三条支路都接在同一个节点上。 */
 const three = documentWith([
   junction('j'),
-  wire('a', { end: NODE }),
-  wire('b', { start: NODE }),
-  wire('c', { start: NODE, end: { entityId: 'device', portId: 'L1' } }),
+  wire('a', { end: NODE }, [[0, 0], [100, 0]]),
+  wire('b', { start: NODE }, [[100, 0], [200, 0]]),
+  wire('c', { start: NODE, end: { entityId: 'device', portId: 'L1' } }, [[100, 0], [100, 90]]),
 ])
 
 let serial = 0
@@ -62,22 +100,49 @@ describe('planStageJunctionCleanup', () => {
     expect(commands[1]!.payload).toEqual({ entityIds: ['j'] })
   })
 
-  it('OpenSpec: stage-engine / 节点在支路不足时自删 / 两条支路时节点还在', () => {
-    // 这是对 KiCad「只连接两个东西时不画点」的有意偏离：节点是真实对象，
-    // 存在但不画的对象点得中却看不见。
-    expect(planStageJunctionCleanup(three, ['a'], { idFactory, isJunction })).toEqual([])
+  it('OpenSpec: stage-engine / 节点在支路不足时自删 / 降到两条支路时两条合回一条', () => {
+    const commands = planStageJunctionCleanup(three, ['c'], { idFactory, isJunction })
+
+    // 两条线在一点相接、那一点上再没有第三样东西时，它们在电气上就是一条线。
+    expect(commands.map(({ type }) => type)).toEqual([
+      BUILTIN_COMMAND_TYPES.setCurve,
+      BUILTIN_COMMAND_TYPES.deleteEntity,
+      BUILTIN_COMMAND_TYPES.deleteEntity,
+    ])
+    expect(commands[0]!.payload).toMatchObject({ entityId: 'a' })
+    expect((commands[0]!.payload as unknown as {
+      curve: { vertices: readonly { x: number; y: number }[] }
+    }).curve.vertices).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }])
+    expect(commands[1]!.payload).toEqual({ entityIds: ['b'] })
+    // 节点一并删掉：合并之后那一点上已经没有东西可连。
+    expect(commands[2]!.payload).toEqual({ entityIds: ['j'] })
   })
 
-  it('剩下那条支路没有别的绑定时整个 Wire 一起去掉', () => {
-    const two = documentWith([junction('j'), wire('a', { end: NODE }), wire('b', { start: NODE })])
+  it('OpenSpec: stage-engine / 节点在支路不足时自删 / 同一条导线的两端接在同一个节点上时不合并', () => {
+    const loop = documentWith([
+      junction('j'),
+      wire('loop', { start: NODE, end: NODE }),
+      wire('c', { start: NODE }, [[100, 0], [100, 90]]),
+    ])
 
-    const commands = planStageJunctionCleanup(two, ['a'], { idFactory, isJunction })
+    // 合并会把它接成一个环，因此这一档保留节点并照常画点。
+    expect(planStageJunctionCleanup(loop, ['c'], { idFactory, isJunction })).toEqual([])
+  })
 
-    // 空 `Wire` 是读不出意图的空壳，与新建时「两端都没绑就不写 Wire」同一条判断。
-    expect(commands[0]).toMatchObject({
-      type: BUILTIN_COMMAND_TYPES.removeComponent,
-      payload: { entityId: 'b', key: 'Wire' },
-    })
+  it('合不成一条时保留节点', () => {
+    // 两条支路缺几何（不是合法的导线几何）：不合并，也不留下半途的命令。
+    const broken = {
+      ...three,
+      entities: {
+        ...three.entities,
+        b: {
+          ...three.entities.b!,
+          components: { ...three.entities.b!.components, Curve: undefined },
+        },
+      },
+    } as unknown as ComposeDocument
+
+    expect(planStageJunctionCleanup(broken, ['c'], { idFactory, isJunction })).toEqual([])
   })
 
   it('节点自己被删掉时不再重复收拾它', () => {
@@ -99,10 +164,18 @@ describe('createStageDeleteEntitiesCommand', () => {
     ])
   })
 
-  it('没有节点要收拾时交出的就是那条删除命令', () => {
-    // 多套一层 batch 会让操作日志读不出发生了什么。
-    const command = createStageDeleteEntitiesCommand(three, ['a'], { idFactory, isJunction })
-    expect(command!.type).toBe(BUILTIN_COMMAND_TYPES.deleteEntity)
+  it('OpenSpec: stage-engine / 节点在支路不足时自删 / 撤销一次搭接式删除回到搭接之前', () => {
+    // 删掉搭上去的那条，被断开的两半合回一条、节点消失——一步撤销因此回到搭接之前。
+    const command = createStageDeleteEntitiesCommand(three, ['c'], { idFactory, isJunction })
+
+    expect(command!.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+    const commands = (command!.payload as unknown as { commands: readonly { type: string }[] }).commands
+    expect(commands.map(({ type }) => type)).toEqual([
+      BUILTIN_COMMAND_TYPES.deleteEntity,
+      BUILTIN_COMMAND_TYPES.setCurve,
+      BUILTIN_COMMAND_TYPES.deleteEntity,
+      BUILTIN_COMMAND_TYPES.deleteEntity,
+    ])
   })
 
   it('宿主没有注入谓词时删除行为一个字节不变', () => {

@@ -15,13 +15,15 @@ import {
 } from '@compose-ui/core'
 import type { ComposePosition, ComposeWire, ComposeWireBinding } from '@compose-ui/core'
 import { batchStageCommands, planStageWireTap } from './wire-tap'
-import type { StageWireTapAnchor } from './wire-tap'
+import type { StageWireTapAnchor, StageWireTapMerge } from './wire-tap'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   applyMatrix,
   getEntityParentId,
   getEntityWorldMatrix,
   invertMatrix,
+  orientStageWireVertices,
+  stageWireParentVertices,
   type StagePoint,
   type StageSceneIndex,
 } from '@compose-ui/stage-engine'
@@ -297,6 +299,17 @@ export interface StageDraftingCurveCommand {
   readonly command: EditorCommand
   /** 因为父级不一致而没能绑上的那些端；调用方 MUST 把它说出来。 */
   readonly droppedWireEnds: readonly ('start' | 'end')[]
+  /**
+   * 这条曲线被并进了哪个既有 Entity。
+   *
+   * @remarks
+   * 只有「落在另一条导线的自由端上」那一档有值。调用方 MUST 把会话记着的「我建的那一个」换成
+   * 它——本次画的那条线已经不在文档里了，不换的话「参考点跟着文档走」会把它当成一次删除，
+   * 把会话往回退一个点。
+   */
+  readonly mergedInto?: string
+  /** 合并之后那条线的顶点数；与 {@link StageDraftingCurveCommand.mergedInto} 成对出现。 */
+  readonly mergedVertices?: number
 }
 
 /**
@@ -364,12 +377,18 @@ export function createStageDraftingCurveCommand(
   const tapJunctions: EditorCommand[] = []
   const tapBindings: { start?: ComposeWireBinding; end?: ComposeWireBinding } = {}
   const droppedTaps: ('start' | 'end')[] = []
+  const merges: { readonly key: 'start' | 'end'; readonly plan: StageWireTapMerge }[] = []
   for (const key of ['start', 'end'] as const) {
     const anchor = taps?.[key]
     if (!anchor) continue
     const plan = planStageWireTap(context, anchor, parentId)
     if (!plan) {
       droppedTaps.push(key)
+      continue
+    }
+    // 落在另一条导线的自由端上：不建节点，把这一段并进那条线（见 `planStageWireMerge`）。
+    if (plan.kind === 'merge') {
+      merges.push({ key, plan })
       continue
     }
     tapEdits.push(...plan.edits)
@@ -401,6 +420,18 @@ export function createStageDraftingCurveCommand(
    * `wire` 每一步按当前几何重算：末端吸上端口就绑、下一下走开就解绑。缺席即不动 `Wire`，
    * 因此一条从来没碰过端口的线不会被写上一个空壳，也不会每一步都产生一条无谓的补丁。
    */
+  if (merges.length > 0) {
+    const merged = planStageDraftingWireMerge({
+      context,
+      local,
+      wire: bindings.wire,
+      merges,
+      removedIds: target ? [target.id] : [],
+      label: tapLabel ?? target?.name ?? '',
+    })
+    if (merged) return { ...merged, droppedWireEnds: [...bindings.dropped, ...droppedTaps] }
+  }
+
   if (target) {
     const current = getComposeWire(target)
     const nextWire = bindings.wire ?? (current ? null : undefined)
@@ -483,4 +514,106 @@ export function createStageDraftingCurveCommand(
     command,
     droppedWireEnds: [...bindings.dropped, ...droppedTaps],
   }
+}
+
+/** {@link planStageDraftingWireMerge} 的入参。 */
+interface StageDraftingWireMergeOptions {
+  readonly context: StageDraftingCommitContext
+  /** 本次画的这条线，parent 局部坐标。 */
+  readonly local: ComposeCurve
+  /** 本次画的这条线两端各绑到了哪个端口；被并掉的那一端由对方的远端接手。 */
+  readonly wire: ComposeWire | undefined
+  readonly merges: readonly { readonly key: 'start' | 'end'; readonly plan: StageWireTapMerge }[]
+  /** 本次画的这条线如果已经落过地，它的 id——合并之后要把它删掉。 */
+  readonly removedIds: readonly string[]
+  readonly label: string
+}
+
+/**
+ * 把本次画的这条线并进它两端碰到的那些既有导线。
+ *
+ * @remarks
+ * 留下来的是**图上先有的那一条**：它的 id、名称与全部呈现都不变，动画轨道与数据绑定也跟着
+ * 留下。被删掉的是本次刚画出来的那一条——它还什么都没有可失去的。两端各碰到一条时留下的是
+ * `start` 那一侧碰到的，另一条与本次这条一起删掉。
+ *
+ * 相接点作为一个顶点留下，MUST NOT 因为两侧共线就消解掉：一次画出的 A→B→C 是三个顶点，
+ * 分两次画出的合并之后也必须是三个顶点——让两种画法产出逐字相同的文档正是这条规则的全部目的。
+ *
+ * @returns 任一条的几何不是合法导线几何时为 `null`，调用方退回建节点那条老路。
+ */
+function planStageDraftingWireMerge(
+  options: StageDraftingWireMergeOptions,
+): { readonly command: EditorCommand; readonly mergedInto: string; readonly mergedVertices: number } | null {
+  const { context, local, wire, merges, removedIds, label } = options
+  const own = composeCurveVertices(local)
+  if (!own) return null
+
+  let vertices = own
+  let start = wire?.start
+  let end = wire?.end
+  let survivor: ComposeEntity | undefined
+  const removed = [...removedIds]
+  for (const { key, plan } of merges) {
+    const entity = context.document.entities[plan.targetId]
+    const theirs = entity ? stageWireParentVertices(entity) : null
+    if (!entity || !theirs) return null
+    const theirWire = getComposeWire(entity)
+    const far = theirWire?.[plan.end === 'start' ? 'end' : 'start']
+    if (key === 'start') {
+      vertices = [...orientStageWireVertices(theirs, plan.end, 'last'), ...vertices.slice(1)]
+      start = far
+    } else {
+      vertices = [...vertices, ...orientStageWireVertices(theirs, plan.end, 'first').slice(1)]
+      end = far
+    }
+    if (survivor) removed.push(entity.id)
+    else survivor = entity
+  }
+  if (!survivor) return null
+
+  const merged: ComposeWire = { ...(start ? { start } : {}), ...(end ? { end } : {}) }
+  /*
+   * 两端都没绑的导线不留一个空壳 `Wire`：`null` 在这条命令上就是「把它去掉」。它本来就没有时
+   * **不写这个字段**——去掉一个不存在的 Component 会让整条批次被拒（`patch.invalid-path`），
+   * 而两端都自由正是一张图上最常见的状态，症状是整次合并静默地什么都没发生。
+   */
+  const nextWire = Object.keys(merged).length > 0
+    ? merged
+    : (getComposeWire(survivor) ? null : undefined)
+  const update: EditorCommand = {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.setCurve,
+    payload: {
+      entityId: survivor.id,
+      curve: { kind: 'polyline', closed: false, vertices } as unknown as JsonValue,
+      ...(nextWire === undefined ? {} : { wire: nextWire as unknown as JsonValue }),
+    },
+    meta: { label: survivor.name, source: 'stage', targetIds: [survivor.id] },
+  }
+  const commands: EditorCommand[] = [update]
+  if (removed.length > 0) {
+    commands.push({
+      id: context.idFactory(),
+      type: BUILTIN_COMMAND_TYPES.deleteEntity,
+      payload: { entityIds: removed },
+      meta: { source: 'stage', targetIds: removed },
+    })
+  }
+  return {
+    command: batchStageCommands(context.idFactory, commands, label || survivor.name, {
+      label: label || survivor.name,
+      source: 'stage',
+      targetIds: [survivor.id],
+    }) ?? update,
+    mergedInto: survivor.id,
+    mergedVertices: vertices.length,
+  }
+}
+
+/** 一条线的顶点；不是合法的导线几何时为 `null`。 */
+function composeCurveVertices(curve: ComposeCurve): readonly ComposePosition[] | null {
+  if (curve.kind === 'line') return [curve.start, curve.end]
+  if (curve.kind !== 'polyline' || curve.closed) return null
+  return curve.vertices.length >= 2 ? curve.vertices : null
 }

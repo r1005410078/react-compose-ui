@@ -15,6 +15,8 @@ export {
   insertStageCurveVertex,
 } from './vertex-edits'
 export type {
+  StageVertexDelete,
+  StageVertexDeleteOptions,
   StageVertexEdit,
   StageVertexEditRejection,
 } from './vertex-edits'

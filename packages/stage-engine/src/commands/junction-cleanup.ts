@@ -10,6 +10,7 @@ import {
   type JsonValue,
 } from '@compose-ui/core'
 import { describeEntityTargets } from './transaction-labels'
+import { planStageWireMerge } from './wire-merge'
 
 /** 一条接在节点上的支路。 */
 interface JunctionBranch {
@@ -63,13 +64,23 @@ function branchesByJunction(
 }
 
 /**
- * 删掉支路不足的节点，并把剩下那条支路的该端解绑。
+ * 收拾支路不足的节点：降到 1 就删掉它，降到 2 就把那两条支路合并成一条。
  *
  * @remarks
  * **支路降到 1 时节点自删**：一个只连着一条线的节点已经不表达任何连接，留着它等于在图上放一个
- * 含义为空的实心点。支路为 2 时**保留并照常画点**——这是对 KiCad「只连接两个东西时不画点」的
- * 有意偏离，理由是我们的节点是一个真实的对象：一个存在但不画的对象点得中却看不见，而这块画布
- * 已经为「看不见却接管指针」付过一次代价。
+ * 含义为空的实心点。
+ *
+ * **支路降到 2 时合并那两条支路并把节点一并删掉**。两条线在一点相接、而那一点上再没有第三样
+ * 东西时，它们在电气上**就是**一条线，而同一张图不该有两种文档形态。这条规则同时收掉两个
+ * 现象：把搭上去的那条删掉之后两半合回原来那一条（图形回到搭接之前，那一点作为共线顶点留下），
+ * 以及「先画 A→B 再从
+ * B 画到 C」——那一下取点落在第一条的末顶点上，按既有规则建出来的正是一个两支路节点，因此它
+ * 当场被合并，两种画法产出逐字相同的文档。
+ *
+ * 这取代了此前「支路为 2 时保留节点并照常画点」那条对 KiCad 的有意偏离。那条的理由是「节点
+ * 是一个真实的对象，一个存在但不画的对象点得中却看不见」，而合并把那个对象**一起消掉了**。
+ * 合并不成立时（两条支路是同一条导线的两端、两者跨父级、几何不是合法的导线几何）仍然保留
+ * 节点并照常画点。
  *
  * 剩下那条支路必须**同时**解绑：只删节点会留下一个指向不存在实体的绑定，它在 Inspector 里显示
  * 为失效，而用户并没有配错任何东西——那是我们自己制造的失效。
@@ -88,7 +99,22 @@ export function planStageJunctionCleanup(
   const branches = branchesByJunction(document, options.isJunction, removed)
   const commands: EditorCommand[] = []
   for (const [junctionId, remaining] of branches) {
-    if (removed.has(junctionId) || remaining.length > 1) continue
+    if (removed.has(junctionId)) continue
+    if (remaining.length === 2) {
+      const merge = planStageWireMerge(document, [remaining[0]!, remaining[1]!], {
+        idFactory: options.idFactory,
+      })
+      // 合不成一条时保留节点：半条规则产出的形状用户预测不了。
+      if (!merge) continue
+      commands.push(...merge.commands, {
+        id: options.idFactory(),
+        type: BUILTIN_COMMAND_TYPES.deleteEntity,
+        payload: { entityIds: [junctionId] },
+        meta: { source: 'stage', targetIds: [junctionId] },
+      })
+      continue
+    }
+    if (remaining.length > 1) continue
     for (const branch of remaining) {
       const entity = document.entities[branch.entityId]
       const wire = getComposeWire(entity)

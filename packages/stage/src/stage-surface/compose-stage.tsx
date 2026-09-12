@@ -96,6 +96,7 @@ import { useStageEffectDispatch } from './entity-creation'
 import {
   STAGE_RECT_PRESET_ID,
   StageDraftingOverlay,
+  isStageWireEntity,
   stageCornerRadiusReadout,
   stageResizeReadout,
   stageRotationReadout,
@@ -499,17 +500,23 @@ function ComposeStageReady({
   const vertexEditMessages = useMemo(() => ({
     insert: messages.vertexInsert,
     del: messages.vertexDelete,
+    cut: messages.vertexCut,
     rejectArc: messages.vertexRejectArc,
     rejectFloor: messages.vertexRejectFloor,
     rejectSeam: messages.vertexRejectSeam,
     rejectUnsupported: messages.vertexRejectUnsupported,
+    rejectWireBound: messages.vertexRejectWireBound,
+    rejectCutEdge: messages.vertexRejectCutEdge,
   }), [
+    messages.vertexCut,
     messages.vertexDelete,
     messages.vertexInsert,
     messages.vertexRejectArc,
+    messages.vertexRejectCutEdge,
     messages.vertexRejectFloor,
     messages.vertexRejectSeam,
     messages.vertexRejectUnsupported,
+    messages.vertexRejectWireBound,
   ])
 
   const draftingMessages = useMemo(() => ({
@@ -764,6 +771,8 @@ function ComposeStageReady({
     zoom: viewport.zoom,
     resolvePoint: resolveDraftingPoint,
     notify: (message) => { draftingRef.current?.setNotice(message) },
+    // 与导线 Preset、端口捕捉、夹点会话钉死正交读同一个谓词。
+    isWire: isStageWireEntity,
     messages: vertexEditMessages,
   })
   // 键位级联在 `useStageRootHandlers` 的闭包里读它；经 ref 取用，回调因此不随文档每帧重建。
@@ -1317,10 +1326,16 @@ function ComposeStageReady({
       if (event.key === 'Delete' || event.key === 'Backspace') {
         const target = geometryRef.current?.entityId
         const grip = draftingRef.current?.gripTarget?.gripId
-        if (target != null && grip !== undefined
-          && vertexEditsRef.current?.deleteVertex(target, grip) === true) {
-          // 被删掉的那个夹点不再存在，它的取点会话跟着结束。
-          draftingRef.current?.cancel()
+        const outcome = target != null && grip !== undefined
+          ? vertexEditsRef.current?.deleteVertex(target, grip)
+          : 'ignored'
+        if (outcome !== undefined && outcome !== 'ignored') {
+          /*
+           * 落地之后被作用的那个夹点不再存在，它的取点会话跟着结束。**拒绝时不取消**：几何
+           * 一个字节没动、夹点还在，而取消会把刚说出来的那句理由用「已取消」冲掉——用户按了
+           * 一个键，屏幕上只剩一句与他的动作无关的话。
+           */
+          if (outcome === 'applied') draftingRef.current?.cancel()
           event.preventDefault()
           return
         }

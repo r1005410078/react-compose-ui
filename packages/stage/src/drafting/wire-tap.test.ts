@@ -15,6 +15,7 @@ import {
 import { createStageSceneIndex } from '@compose-ui/stage-engine'
 import { createStageDraftingCurveCommand, type StageDraftingCommitContext } from './drafting-entity'
 import { planStageWireTap } from './wire-tap'
+import type { StageWireTapJunction, StageWireTapPlan } from './wire-tap'
 
 const FRAME_ID = 'frame-root'
 
@@ -44,7 +45,9 @@ function wireEntity(
       Lock: { locked: options.locked ?? false },
       Renderer: { type: 'curve', props: { stroke: '#ff3b30', strokeWidth: 2 } },
       Curve: next.curve,
-      Wire: options.wire ?? {},
+      // 两端都自由的导线**不写** `Wire`（缺席即自由端），因此这里也不补一个空壳——补了会把
+      // 「接到一条谁也没接的线的端点上」那一档挡在用例之外。
+      ...(options.wire ? { Wire: options.wire } : {}),
     },
   } as unknown as ComposeEntity
 }
@@ -127,6 +130,12 @@ function payloadOf(command: EditorCommand): Record<string, unknown> {
   return command.payload as unknown as Record<string, unknown>
 }
 
+/** 断言这是一次「建节点」并窄化；自由端那一档交出的是一次合并，字段完全不同。 */
+function junctionOf(plan: StageWireTapPlan | null): StageWireTapJunction {
+  expect(plan?.kind).toBe('junction')
+  return plan as StageWireTapJunction
+}
+
 describe('planStageWireTap', () => {
   const target = wireEntity('w', { x: 0, y: 0 }, { x: 200, y: 0 })
   const value = documentWith([target], ['w'])
@@ -134,28 +143,48 @@ describe('planStageWireTap', () => {
   it('OpenSpec: stage-engine / 取点落在导线上即接入节点 / 线身中间断成两段', () => {
     const plan = planStageWireTap(contextFor(value), { entityId: 'w', point: { x: 100, y: 0 } }, FRAME_ID)
 
-    expect(plan).not.toBeNull()
+    const junction = junctionOf(plan)
     // 原 Entity 改成第一段 → 第二段是新 Entity；建节点那一条单独交出来，由调用方排到最后。
-    expect(plan!.edits.map((command) => command.type)).toEqual([
+    expect(junction.edits.map((command) => command.type)).toEqual([
       BUILTIN_COMMAND_TYPES.setCurve,
       BUILTIN_COMMAND_TYPES.createEntity,
     ])
-    expect(plan!.junction.type).toBe(BUILTIN_COMMAND_TYPES.createEntity)
-    expect(plan!.binding.portId).toBe(COMPOSE_JUNCTION_PORT_ID)
+    expect(junction.junction.type).toBe(BUILTIN_COMMAND_TYPES.createEntity)
+    expect(junction.binding.portId).toBe(COMPOSE_JUNCTION_PORT_ID)
     // 两段各把靠近落点的那一端绑到节点。
-    expect(payloadOf(plan!.edits[0]!).wire).toEqual({ end: plan!.binding })
-    const second = payloadOf(plan!.edits[1]!).entity as ComposeEntity
-    expect(second.components.Wire).toEqual({ start: plan!.binding })
+    expect(payloadOf(junction.edits[0]!).wire).toEqual({ end: junction.binding })
+    const second = payloadOf(junction.edits[1]!).entity as ComposeEntity
+    expect(second.components.Wire).toEqual({ start: junction.binding })
   })
 
   it('OpenSpec: stage-engine / 取点落在导线上即接入节点 / 落在端点上不断线', () => {
-    const plan = planStageWireTap(contextFor(value), { entityId: 'w', point: { x: 200, y: 0 } }, FRAME_ID)
+    // 被接入的那一端**已经绑着端口**：那一点上有第三样东西，因此仍然建节点。自由端那一档
+    // 走的是合并，见下一条。
+    const bound = wireEntity('w', { x: 0, y: 0 }, { x: 200, y: 0 }, {
+      wire: { end: { entityId: 'right', portId: 'R' } },
+    })
+    const plan = planStageWireTap(
+      contextFor(documentWith([bound], ['w'])),
+      { entityId: 'w', point: { x: 200, y: 0 } },
+      FRAME_ID,
+    )
 
     // 那里没有需要断开的线身：只建节点、只改绑，几何一个字节不动。
-    expect(plan!.edits.map((command) => command.type)).toEqual([
+    const junction = junctionOf(plan)
+    expect(junction.edits.map((command) => command.type)).toEqual([
       BUILTIN_COMMAND_TYPES.updateComponent,
     ])
-    expect(payloadOf(plan!.edits[0]!).value).toEqual({ end: plan!.binding })
+    expect(payloadOf(junction.edits[0]!).value).toEqual({ end: junction.binding })
+  })
+
+  it('OpenSpec: stage-engine / 两条导线合并成一条 / 落在自由端上不建节点，交出一次合并', () => {
+    /*
+     * 两条线在一点相接、那一点上再没有第三样东西时，它们在电气上就是一条线。建一个只连着
+     * 两条线的节点等于让同一张图有两种文档形态，而删除的粒度跟着文档形态走。
+     */
+    const plan = planStageWireTap(contextFor(value), { entityId: 'w', point: { x: 200, y: 0 } }, FRAME_ID)
+
+    expect(plan).toEqual({ kind: 'merge', targetId: 'w', end: 'end' })
   })
 
   it('OpenSpec: stage-engine / 取点落在导线上即接入节点 / 断开的两段继承原来的绑定', () => {
@@ -168,14 +197,15 @@ describe('planStageWireTap', () => {
     const withPorts = documentWith([bound], ['w'])
     const plan = planStageWireTap(contextFor(withPorts), { entityId: 'w', point: { x: 100, y: 0 } }, FRAME_ID)
 
-    expect(payloadOf(plan!.edits[0]!).wire).toEqual({
+    const junction = junctionOf(plan)
+    expect(payloadOf(junction.edits[0]!).wire).toEqual({
       start: { entityId: 'left', portId: 'L' },
-      end: plan!.binding,
+      end: junction.binding,
     })
-    const second = payloadOf(plan!.edits[1]!).entity as ComposeEntity
+    const second = payloadOf(junction.edits[1]!).entity as ComposeEntity
     expect(second.components.Wire).toEqual({
       end: { entityId: 'right', portId: 'R' },
-      start: plan!.binding,
+      start: junction.binding,
     })
   })
 

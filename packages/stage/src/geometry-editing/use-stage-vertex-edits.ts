@@ -2,20 +2,25 @@ import { useCallback, useLayoutEffect, useRef } from 'react'
 import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_CURVE_PICK_TOLERANCE,
+  createComposeBatchCommand,
   getComposeLayoutItem,
   getComposeLock,
+  getComposeWire,
   translateComposeCurve,
+  type ComposeEntity,
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
 import {
   deleteStageCurveVertex,
   insertStageCurveVertex,
+  planStageWireCut,
   stageCurveBoxGeometry,
   stageCurveLocalPoint,
   stageCurveOutline,
   type StageCurveGeometrySource,
   type StagePoint,
+  type StageVertexDelete,
   type StageVertexEdit,
   type StageVertexEditRejection,
 } from '@compose-ui/stage-engine'
@@ -28,6 +33,10 @@ export interface StageVertexEditMessages {
   readonly rejectFloor: string
   readonly rejectSeam: string
   readonly rejectUnsupported: string
+  readonly rejectWireBound: string
+  readonly rejectCutEdge: string
+  /** 剪断的事务标签。 */
+  readonly cut: (entityName: string) => string
 }
 
 /** {@link useStageVertexEdits} 的入参。 @internal */
@@ -54,15 +63,40 @@ export interface StageVertexEditsOptions {
   readonly resolvePoint: (world: StagePoint) => { readonly point: StagePoint }
   /** 说出拒绝的原因；「敲了没反应」与敲错在屏幕上无法区分。 */
   readonly notify: (message: string) => void
+  /**
+   * 这个 Entity 是不是导线。
+   *
+   * @remarks
+   * 引擎不认识导线，因此这条谓词由 Stage 注入——与夹点求解的轴对齐选项是同一条既有边界。
+   * 它 MUST 与导线 Preset、端口捕捉、夹点会话钉死正交读同一个答案：各判一次的症状是
+   * 「这条线在顶点模式里是导线、在画的时候不是」。
+   */
+  readonly isWire: (entity: ComposeEntity) => boolean
   readonly messages: StageVertexEditMessages
 }
+
+/**
+ * 一次 `Delete` 落到夹点上的结果。
+ *
+ * @remarks
+ * 三档而不是一个布尔：**拒绝与落地要分开**。落地之后被作用的那个夹点不再存在，它的取点会话
+ * 跟着结束；而拒绝时几何一个字节没动、夹点还在，顺手取消会话会把刚说出来的那句理由用
+ * 「已取消」冲掉——用户按了一个键，屏幕上只剩一句与他的动作无关的话。
+ *
+ * - `applied`：几何变了。
+ * - `rejected`：说明已经落到命令行上，几何不变。
+ * - `ignored`：这里没有答案，交回既有级联（删整个 Entity）。
+ *
+ * @internal
+ */
+export type StageVertexDeleteOutcome = 'applied' | 'rejected' | 'ignored'
 
 /** {@link useStageVertexEdits} 的返回值。 @internal */
 export interface StageVertexEdits {
   /** 在世界落点处插入一个顶点；落点不在这条曲线上时什么都不做。 */
   readonly insertAt: (entityId: string, worldPoint: StagePoint) => void
-  /** 删除某个夹点对应的顶点。 */
-  readonly deleteVertex: (entityId: string, gripId: string) => boolean
+  /** 删除某个夹点对应的顶点，或剪断导线的一段。 */
+  readonly deleteVertex: (entityId: string, gripId: string) => StageVertexDeleteOutcome
 }
 
 /**
@@ -88,15 +122,15 @@ export function useStageVertexEdits(options: StageVertexEditsOptions): StageVert
     entityId: string,
     result: StageVertexEdit,
     label: (name: string) => string,
-  ): boolean => {
+  ): StageVertexDeleteOutcome => {
     const { geometry, dispatch, idFactory, notify, messages } = latest.current
     if (result.status === 'rejected') {
       notify(messageFor(messages, result.reason))
-      return true
+      return 'rejected'
     }
     const entity = geometry.document.entities[entityId]
     // 锁保护的正是「别动我」，顶点同样是几何。
-    if (!entity || getComposeLock(entity).locked) return false
+    if (!entity || getComposeLock(entity).locked) return 'ignored'
     const offset = getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 }
     dispatch({
       id: idFactory(),
@@ -116,7 +150,7 @@ export function useStageVertexEdits(options: StageVertexEditsOptions): StageVert
       },
       meta: { label: label(entity.name), source: 'stage', targetIds: [entityId] },
     })
-    return true
+    return 'applied'
   }, [])
 
   const insertAt = useCallback((entityId: string, worldPoint: StagePoint) => {
@@ -139,10 +173,39 @@ export function useStageVertexEdits(options: StageVertexEditsOptions): StageVert
   }, [commit])
 
   const deleteVertex = useCallback((entityId: string, gripId: string) => {
-    const { geometry, messages } = latest.current
+    const { dispatch, geometry, idFactory, isWire, messages, notify } = latest.current
     const curve = stageCurveBoxGeometry(geometry, entityId)
-    if (!curve) return false
-    return commit(entityId, deleteStageCurveVertex(curve, gripId), messages.del)
+    const entity = geometry.document.entities[entityId]
+    if (!curve || !entity) return 'ignored'
+    const wire = isWire(entity)
+    const bindings = getComposeWire(entity)
+    const boundEnds = wire && bindings
+      ? (['start', 'end'] as const).filter((end) => bindings[end] !== undefined)
+      : []
+    const result: StageVertexDelete = deleteStageCurveVertex(curve, gripId, {
+      ...(wire ? { wire: true } : {}),
+      ...(boundEnds.length > 0 ? { boundEnds } : {}),
+    })
+    if (result.status !== 'cut') return commit(entityId, result, messages.del)
+
+    // 剪断产出两个 Entity，走不了 `entity.curve.set` 那条单 Entity 的路；两条命令收成一条
+    // 事务，撤销一步回到一条线。
+    if (getComposeLock(entity).locked) return 'ignored'
+    const plan = planStageWireCut(geometry.document, entityId, result.segmentIndex, {
+      idFactory,
+      isWire,
+    })
+    if (!plan) {
+      notify(messages.rejectCutEdge)
+      return 'rejected'
+    }
+    const label = messages.cut(entity.name)
+    dispatch(createComposeBatchCommand({
+      id: idFactory(),
+      commands: [...plan.commands],
+      meta: { label, source: 'stage', targetIds: [entityId, plan.createdId] },
+    }))
+    return 'applied'
   }, [commit])
 
   return { insertAt, deleteVertex }
@@ -155,6 +218,8 @@ function messageFor(
   if (reason === 'arc') return messages.rejectArc
   if (reason === 'floor') return messages.rejectFloor
   if (reason === 'path-seam') return messages.rejectSeam
+  if (reason === 'wire-bound') return messages.rejectWireBound
+  if (reason === 'cut-edge') return messages.rejectCutEdge
   return messages.rejectUnsupported
 }
 

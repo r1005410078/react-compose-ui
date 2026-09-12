@@ -556,7 +556,17 @@ export function useStageDrafting(options: StageDraftingOptions) {
       const vertices = composeCurveVertexCount(curve)
       // 换掉栈顶那一项而不是就地改它：`createdIdsRef` 是 Hook 的参数，编译器不允许在
       // 回调里改它指到的对象；整份换新是 ref 写入，语义完全相同。
-      if (replaced) {
+      if (created.mergedInto) {
+        /*
+         * 这一条被并进了一条既有导线：本次画的那个 Entity 已经不在文档里了。会话记的那一项
+         * 必须换成合并之后那一条——不换的话「参考点跟着文档走」会把它读成一次删除，把会话
+         * 往回退一个点，而用户明明刚落下了一个点。
+         */
+        const merged = { id: created.mergedInto, seen: false, vertices: created.mergedVertices }
+        createdIdsRef.current = replaced
+          ? createdIdsRef.current.map((entry) => (entry === replaced ? merged : entry))
+          : [...createdIdsRef.current, merged]
+      } else if (replaced) {
         createdIdsRef.current = createdIdsRef.current.map((entry) => (
           entry === replaced ? { ...entry, vertices } : entry
         ))
