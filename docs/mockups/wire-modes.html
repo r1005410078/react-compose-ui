@@ -221,7 +221,7 @@
     <p class="lede">
       一条导线在画布上有六种形态，这份稿子把它们并排画出来，重点是<strong>顶点模式</strong>——
       它与别的曲线不一样，因为导线只走横平竖直。画布片段按 Stage 的真实 token 1:1 绘制；
-      <strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿画着、尚未落地</strong>——全稿只有最后两节的提案那一半。
+      <strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿画着、尚未落地</strong>，圈出来的每一张都是提案，其余是现状。
     </p>
   </header>
 
@@ -341,6 +341,75 @@
       加一个拐点的入口不在这张表里：在段上<strong>双击</strong>插入顶点。删一个拐点在导线上今天没有入口——
       它只在相邻两段共线时才合法，否则删完必然产出一段斜线。
     </p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Delete 在每一档的含义</h2>
+      <p>同一个键在五档里做五件事，判据是<strong>此刻有没有夹点被会话作用着</strong>——与拾取框画不画读的是同一份事实。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>此刻</th><th>Delete 做什么</th><th>为什么</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>选中一条导线</td>
+            <td>删掉<strong>整条连接</strong></td>
+            <td>含全部拐点。支路降到 1 的节点在同一个事务里一并收掉，撤销一步回到有节点的状态</td>
+          </tr>
+          <tr>
+            <td>顶点模式 · 没有夹点被点亮</td>
+            <td>同上，删整条</td>
+            <td>与选中态走同一条路径——进了顶点模式就删不掉它，用户会以为这个模式出不去</td>
+          </tr>
+          <tr>
+            <td>顶点模式 · 点亮<strong>端点方块</strong></td>
+            <td>删掉那个顶点</td>
+            <td>自由端：线变短，这是对的。<span style="color:var(--page-todo)">绑定端：今天也删，而下一帧求解把新的首顶点拉回端口，那一段当场变斜</span></td>
+          </tr>
+          <tr>
+            <td>顶点模式 · 点亮<strong>段条形</strong></td>
+            <td>命令行说「这个夹点不是顶点」</td>
+            <td>拒绝是<strong>说出来</strong>的，不是静默不动——「敲了没反应」与敲错在屏幕上无法区分。
+            <span style="color:var(--page-todo)">这一档正是「剪断这一段」该落的地方</span></td>
+          </tr>
+          <tr>
+            <td>只剩两个顶点</td>
+            <td>命令行说「一条轮廓至少要有两个顶点」</td>
+            <td>删到只剩一个点，那是一条什么都画不出来的轮廓</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pair">
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="今天：绑定端的顶点删掉之后走线变斜"><path d="M60 60L180 140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="60" cy="60" r="4.5" fill="#38bdf8"/><text x="210" y="44" font-size="12" fill="#f59e0b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">求解把首顶点拉回端口 → 这一段斜了</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">已删除顶点</text></g></svg></div>
+        <figcaption><b>今天</b>：点亮左端那个方块按 Delete，顶点真的被删了；但 <code>Wire</code> 的绑定还在，
+        求解下一帧把新的首顶点写回端口的位置——用户看到的是<b>一段斜导线</b>，而他刚做的动作是「删一个点」。</figcaption>
+      </figure>
+      <figure>
+        <div class="stage todo"><svg viewBox="0 0 420 200" role="img" aria-label="提案：绑定端的顶点拒绝删除"><path d="M60 60H180V140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="60" cy="60" r="4.5" fill="#38bdf8"/><rect x="55.5" y="55.5" width="9" height="9" fill="#f2545b" stroke="#f2545b" stroke-width="1.5"/><text x="210" y="44" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">拒绝，线一个字节不动</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">这一端绑在端口上，删不掉</text></g></svg></div>
+        <figcaption><b>提案</b>：绑定端的顶点<b>删不掉</b>，在命令行说明理由。那一端的位置由端口决定，
+        删掉它只是把同一个点换了个顶点下标——形状却塌了。要挪这一端，挪符号；要断开，在 Inspector 里解除绑定。</figcaption>
+      </figure>
+    </div>
+
+    <div class="pair">
+      <figure>
+        <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="今天：段条形上的 Delete 只说一句话"><path d="M60 70H180V140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><rect x="176.75" y="96.5" width="6.5" height="17" rx="1.5" fill="#f2545b" fill-opacity="1" stroke="#f2545b" stroke-width="1.5"/><text x="210" y="54" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">线一个字节没动</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">这个夹点不是顶点</text></g></svg></div>
+        <figcaption><b>今天</b>：点亮一个段条形按 Delete，命令行说「这个夹点不是顶点」，线一个字节不动。
+        没做错什么——但用户此刻抓着的正是「这一段」，而这条命令没有答案。</figcaption>
+      </figure>
+      <figure>
+        <div class="stage todo"><svg viewBox="0 0 420 200" role="img" aria-label="提案：剪断这一段"><path d="M60 70H180" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M180 140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="180" cy="70" r="4.5" fill="none" stroke="#8b97a8" stroke-width="1.5" stroke-dasharray="2.4 2.2"/><circle cx="180" cy="140" r="4.5" fill="none" stroke="#8b97a8" stroke-width="1.5" stroke-dasharray="2.4 2.2"/><text x="210" y="54" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">剪断这一段，两头各留一个自由端</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif"></text></g></svg></div>
+        <figcaption><b>提案</b>：<b>剪断这一段</b>——中间段断成两条（两头各留一个自由端），端段就是缩短。
+        与 Altium 的「remove a segment up to that junction」和 <code>AETRIM</code> 同义，
+        而且不用造新词：它落在既有的两级 Delete 语法里。</figcaption>
+      </figure>
+    </div>
   </section>
 
   <section>
