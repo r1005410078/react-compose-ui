@@ -672,7 +672,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   // Text 与箭头在页面货架上有工具栏入口，因此不出现在 Palette；圆没有，因此出现。
-  await expect(editor.getByRole('button').filter({ hasText: /Container|Rectangle|ECharts/ }))
+  await expect(editor.getByRole('button', { name: /^添加 (容器|矩形|图表)$/ }))
     .toHaveCount(3)
   await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
@@ -1318,7 +1318,7 @@ test('OpenSpec: editor-workspace-layout / 页面文档标签 / 切换其他面�
   await expect(pagePanel.locator('.compose-stage')).toHaveCount(1)
 
   // 工作区仍跟随该页面：从组件库创建的实体写进页面运行时并标脏。
-  await editor.getByRole('button', { name: 'Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   const pageTab = editor.locator('[data-workspace-tab^="compose-page-document:"]')
   await expect(pageTab.getByRole('img', { name: '有未保存改动' })).toBeVisible()
 
@@ -1360,7 +1360,7 @@ test('OpenSpec: editor-workspace-layout / 页面保存 / 快捷键与按钮可�
 
   // 快捷键保存
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  await editor.getByRole('button', { name: 'Rectangle' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(dirty).toBeVisible()
   await page.keyboard.press('Control+S')
   await expect(dirty).toHaveCount(0)
