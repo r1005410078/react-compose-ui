@@ -250,6 +250,8 @@ export type {
 export {
   applyStageCurveCorner,
   applyStageCurveGrip,
+  deleteStageCurveVertex,
+  insertStageCurveVertex,
   stageCurveBoxGeometry,
   stageCurveCorners,
   stageCurveGripNeighbor,
@@ -262,4 +264,6 @@ export type {
   StageCurveGeometrySource,
   StageCurveGrip,
   StageCurveGripRole,
+  StageVertexEdit,
+  StageVertexEditRejection,
 } from './geometry-editing'

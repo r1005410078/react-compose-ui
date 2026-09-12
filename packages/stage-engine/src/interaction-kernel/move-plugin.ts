@@ -232,6 +232,21 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
       }
       // 文字优先于几何：一次双击只能进一个会话，而两者不会同时成立（曲线不是文字）。
       if (doubleClick && context.isGeometryEditable?.(entity.id) === true) {
+        /*
+         * 会话已经开在它身上：这一下落在它自己的描边上，含义不是「再进一次几何编辑」——那
+         * 是一次什么都不改变的空操作——而是在那条段上插一个顶点。
+         *
+         * 判据是**会话的目标就是被双击的这一个**：会话是单对象作用域，开在别的对象上时这一
+         * 下仍然是「进入这一个」。
+         */
+        if (context.geometryEditingId === entity.id) {
+          ctx.apply([{
+            type: 'geometry-editing.insert-vertex',
+            entityId: entity.id,
+            worldPoint: screenToWorld(event.point, context.viewport),
+          }])
+          return 'consumed'
+        }
         ctx.apply([{
           type: 'geometry-editing.enter',
           entityId: entity.id,

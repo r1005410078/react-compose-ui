@@ -9,6 +9,14 @@ export {
   stageCurveLocalPoint,
   stageCurveOutline,
 } from './curve-grips'
+export {
+  deleteStageCurveVertex,
+  insertStageCurveVertex,
+} from './vertex-edits'
+export type {
+  StageVertexEdit,
+  StageVertexEditRejection,
+} from './vertex-edits'
 export type {
   StageCurveCorner,
   StageCurveGeometrySource,

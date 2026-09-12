@@ -100,6 +100,8 @@ export interface StageEffectDispatchParams {
   readonly onCurveCornerChange?: (change: StageCurveCornerChange) => void
   /** 请求进入曲线几何编辑会话；会话住在 Stage 自己这里，宿主不参与。 */
   readonly onEnterGeometryEditing?: (entityId: string, worldPoint?: StagePoint) => void
+  /** 在几何编辑会话里的落点处插入一个顶点；落点未解算，见效果类型上的说明。 */
+  readonly onInsertGeometryVertex?: (entityId: string, worldPoint: StagePoint) => void
   readonly onEditablePathVertexToggle?: (vertexId: string) => void
   /** 指针会话能力提供的两个动作；效果分派只负责转交。 */
   readonly capturePointer: (root: HTMLDivElement, pointerId: number) => void
@@ -423,6 +425,10 @@ export function useStageEffectDispatch(
         }
         if (effect.type === 'geometry-editing.enter') {
           latestRef.current.onEnterGeometryEditing?.(effect.entityId, effect.worldPoint)
+          return
+        }
+        if (effect.type === 'geometry-editing.insert-vertex') {
+          latestRef.current.onInsertGeometryVertex?.(effect.entityId, effect.worldPoint)
           return
         }
         if (effect.type === 'path.vertex-toggle') {

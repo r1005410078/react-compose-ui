@@ -277,9 +277,11 @@ export {
   flattenComposeOutline,
   isComposeFullCircle,
   isDegenerateComposePolyline,
+  nearestComposeCubicT,
   pointToComposeArcDistance,
   pointToComposeCubicDistance,
   pointToComposeSegmentDistance,
+  splitComposeCubic,
 } from './curve-geometry'
 export type {
   ComposeArcShape,

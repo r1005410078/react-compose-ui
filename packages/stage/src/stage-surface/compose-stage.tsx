@@ -105,7 +105,7 @@ import {
   resolveTransformGizmoTarget,
   transformGizmoGeometry,
 } from '@compose-ui/stage-engine'
-import { useStageCurveCorners, useStageGeometryEditing } from '../geometry-editing'
+import { useStageCurveCorners, useStageGeometryEditing, useStageVertexEdits } from '../geometry-editing'
 import type { StageGeometryEditing } from '../geometry-editing'
 import { useStagePointerSession, useStageRootHandlers } from './pointer-session'
 import { useStageTextEditing } from './use-stage-text-editing'
@@ -496,6 +496,22 @@ function ComposeStageReady({
 
 
 
+  const vertexEditMessages = useMemo(() => ({
+    insert: messages.vertexInsert,
+    del: messages.vertexDelete,
+    rejectArc: messages.vertexRejectArc,
+    rejectFloor: messages.vertexRejectFloor,
+    rejectSeam: messages.vertexRejectSeam,
+    rejectUnsupported: messages.vertexRejectUnsupported,
+  }), [
+    messages.vertexDelete,
+    messages.vertexInsert,
+    messages.vertexRejectArc,
+    messages.vertexRejectFloor,
+    messages.vertexRejectSeam,
+    messages.vertexRejectUnsupported,
+  ])
+
   const draftingMessages = useMemo(() => ({
     ready: messages.draftingReady,
     commandLineLabel: messages.draftingCommandLineLabel,
@@ -722,6 +738,23 @@ function ComposeStageReady({
   })
   const geometryEditingActive = geometryEditing.entityId !== null
 
+  /*
+   * 顶点增删与夹点拖动读**同一份**几何来源与**同一条**落点解算：插入的落点因此照旧吸附、
+   * 照旧捕捉特征点，而删除读到的是与屏幕上那些夹点一致的那条曲线。
+   */
+  const vertexEdits = useStageVertexEdits({
+    geometry: previewGeometry,
+    idFactory,
+    dispatch,
+    zoom: viewport.zoom,
+    resolvePoint: resolveDraftingPoint,
+    notify: (message) => { draftingRef.current?.setNotice(message) },
+    messages: vertexEditMessages,
+  })
+  // 键位级联在 `useStageRootHandlers` 的闭包里读它；经 ref 取用，回调因此不随文档每帧重建。
+  const vertexEditsRef = useRef(vertexEdits)
+  useLayoutEffect(() => { vertexEditsRef.current = vertexEdits })
+
   // 圆角手柄是**选中就出**的一层 chrome，因此它的会话与几何编辑无关，各自独立。
   const curveCornerSession = useStageCurveCorners({
     document,
@@ -837,6 +870,7 @@ function ComposeStageReady({
     onToolChange,
     // 与 `VERTEX` 命令共用同一个入口：播种十字光标那一步因此不会只在其中一条路径上生效。
     onEnterGeometryEditing: enterGeometryEditing,
+    onInsertGeometryVertex: vertexEdits.insertAt,
     // 几何编辑的夹点由 Stage 自己写文档；宿主传入的那条路径仍然只上报，事实来源在宿主。
     onEditablePathChange: (change) => {
       if (geometryRef.current?.handlePathChange(change) === true) return
@@ -900,6 +934,8 @@ function ComposeStageReady({
       contentReflowsWithWidth,
       isTextEditable,
       isGeometryEditable: geometryEditing.isGeometryEditable,
+      // 会话已经开在谁身上：插件据此把落在它描边上的双击分派成「插一个顶点」而不是「再进一次」。
+      geometryEditingId: geometryEditing.entityId,
       idFactory,
       labels: {
         createGuide: messages.createGuide,
@@ -914,6 +950,7 @@ function ComposeStageReady({
     document,
     draftingSession.awaitingPoint,
     hiddenEntityIds,
+    geometryEditing.entityId,
     geometryEditing.isGeometryEditable,
     isTextEditable,
     lastDrawn,
@@ -1253,6 +1290,25 @@ function ComposeStageReady({
       if (event.key === 'Escape' && geometryRef.current?.entityId != null) {
         geometryRef.current.exit()
         return
+      }
+      /*
+       * `Delete` 在几何编辑里分两级，与 `Escape` 同构：**有夹点被会话作用着**时删那个顶点，
+       * 否则照旧删整个 Entity。判据读 `gripTarget` 这同一份事实——拾取框画不画、哪个夹点是
+       * 热的、捕捉排除哪个点读的都是它。
+       *
+       * 无条件改写是不行的：几何编辑会话里同样要能删掉整条曲线，而那时屏幕上没有任何东西
+       * 说明 `Delete` 为什么不起作用。
+       */
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const target = geometryRef.current?.entityId
+        const grip = draftingRef.current?.gripTarget?.gripId
+        if (target != null && grip !== undefined
+          && vertexEditsRef.current?.deleteVertex(target, grip) === true) {
+          // 被删掉的那个夹点不再存在，它的取点会话跟着结束。
+          draftingRef.current?.cancel()
+          event.preventDefault()
+          return
+        }
       }
       keyboardCommand(event)
     },
