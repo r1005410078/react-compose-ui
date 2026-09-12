@@ -4,7 +4,8 @@
       标题 12px；图标仍 16px；子菜单与 checkbox / radio 项同步
 - [x] 1.2 端到端量字号与行高（jsdom 不排版，Tailwind 类名在那里算不出字号，断言类名等于把
       实现细节当契约）
-- [ ] 1.3 重跑并更新含右键菜单的黄金图
+- [x] 1.3 重跑并更新含右键菜单的黄金图（比对过新旧两张：列表→九宫格、图标一个未变，
+      与「网格的画法只有图标与名字」一致）
 
 ## 2. 物料面板两种排法
 
@@ -50,7 +51,7 @@
 - [x] 6.1 各包 lint / typecheck / 单测：components、component-library、materials、stage、
       stage-engine、editor（`preferences` 与 `workspace-layout`）
 - [x] 6.2 端到端：`canvas-add-component.spec.ts` 三条全绿
-- [ ] 6.3 全仓 `bun run lint && bun run typecheck && bun run test && bun run build && bun run test:e2e`
+- [x] 6.3 全仓 `bun run lint && bun run typecheck && bun run test && bun run build && bun run test:e2e`
       与黄金图更新——**等并行进行中的场景树改动落定后再做**：工作树里同时有 `scene-tree` 与
       `controller.tsx` 的未完成改动（`controller.tsx:401` 当前类型不通过），此刻更新黄金图会把
       那半成品的样子烤进基线

@@ -1,5 +1,6 @@
 import type { Preview } from '@storybook/react-vite'
 import { ComposeUIProvider } from '@compose-ui/ui-context'
+import { ComposeStorybookSurface } from './compose-storybook-surface'
 import '@compose-ui/ui-context/styles.css'
 import '@compose-ui/components/styles.css'
 import '@compose-ui/command-panel/styles.css'
@@ -45,9 +46,9 @@ const preview: Preview = {
         locale={context.globals.locale === 'en-US' ? 'en-US' : 'zh-CN'}
         theme={context.globals.theme === 'light' ? 'light' : 'dark'}
       >
-        <div style={{ minHeight: 240, padding: 16 }}>
+        <ComposeStorybookSurface>
           <Story />
-        </div>
+        </ComposeStorybookSurface>
       </ComposeUIProvider>
     ),
   ],

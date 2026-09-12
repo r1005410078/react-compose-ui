@@ -165,12 +165,12 @@ test('OpenSpec: component-library / 混合组件目录 / 圆的瓦片跟着货�
    * 页面工作区的货架不含 `CIRCLE`，因此「工具栏已提供入口」这条理由在这里不成立，圆的瓦片
    * 要出现——否则页面里既没有按钮也没有瓦片，那条命令只剩键盘一条路。
    */
-  await expect(library.getByRole('button', { name: 'Circle' })).toBeVisible()
+  await expect(library.getByRole('button', { name: '添加 圆' })).toBeVisible()
 
   await switcher.getByRole('radio', { name: '绘图' }).click()
   await expect(switcher.getByRole('radio', { name: '绘图' })).toHaveAttribute('aria-checked', 'true')
   // 绘图的货架上有 `CIRCLE` 按钮，瓦片因此收起来：同一个入口不出现两次。
-  await expect(library.getByRole('button', { name: 'Circle' })).toBeHidden()
+  await expect(library.getByRole('button', { name: '添加 圆' })).toBeHidden()
 
   // 导线两边都不出现：它藏起来的理由是自己的（拖出来的导线不连着任何端口），与货架无关。
   await expect(library.getByRole('button', { name: 'Wire' })).toBeHidden()
@@ -467,7 +467,7 @@ test('OpenSpec: component-library / 自定义物料面板 / 右键隐藏、只�
   await expect(library).toBeVisible()
 
   // 1) 基础瓦片右键即隐藏；同一个 Preset 的别的入口（快捷键 / 动作目录）不受影响。
-  const container = library.getByRole('button', { name: /Container/ })
+  const container = library.getByRole('button', { name: '添加 容器' })
   await container.click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '从面板隐藏' }).click()
   await expect(container).toBeHidden()
@@ -492,7 +492,7 @@ test('OpenSpec: component-library / 自定义物料面板 / 右键隐藏、只�
   await expect(dialog.getByRole('heading', { name: '自定义物料面板' })).toBeVisible()
   await dialog.getByRole('button', { name: '重置为默认' }).click()
   await expect(library.getByRole('heading', { name: /基础组件/ })).toBeVisible()
-  await expect(library.getByRole('button', { name: /Container/ })).toBeVisible()
+  await expect(library.getByRole('button', { name: '添加 容器' })).toBeVisible()
 })
 
 test('OpenSpec: component-library / 自定义物料面板 / 对话框排序、标题与添加来源', async ({ page }) => {
