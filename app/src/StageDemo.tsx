@@ -37,7 +37,8 @@ import {
   ComposePropertyPanel,
   type ComposePropertyPanelBindingConfig,
 } from '@compose-ui/property-panel'
-import { ComposePreviewDialog } from '@compose-ui/preview'
+import { ComposePreviewDialog, ComposePreviewPage } from '@compose-ui/preview'
+import type { ComposePreviewHandoff } from '@compose-ui/preview'
 import { BarChart } from 'echarts/charts'
 import {
   GridComponent,
@@ -533,6 +534,14 @@ export function StageDemoWorkspace() {
   // 用户在对话框的场景选择器里也能改。
   const [previewFrameId, setPreviewFrameId] = useState<string | null>(null)
   /*
+   * 整屏形态是**同一个标签页里的一次路由**，编辑器不卸载——既有硬规则要求页面预览包含尚未
+   * 保存的改动，而卸载了就没有 live 文档可给。因此它只是宿主的一个会话状态，配一条
+   * `history` 记录让浏览器返回键也能退出。
+   */
+  const [previewForm, setPreviewForm] = useState<'dialog' | 'page'>('dialog')
+  // 两个形态之间交接的场景、屏幕尺寸与播放头；预览自己不跨形态记忆它们。
+  const [previewHandoff, setPreviewHandoff] = useState<ComposePreviewHandoff | undefined>(undefined)
+  /*
    * **画布上现在是哪一份文档，只有一个答案。**
    *
    * 页面会话与组件会话互不相干，打开组件不会清掉页面会话；`runtime` 早就按
@@ -559,6 +568,39 @@ export function StageDemoWorkspace() {
     // 每次打开预览都把会话对齐到正在编辑的页面：从首页起步会让用户看到的不是自己刚改的那页。
     if (previewOpen) navigationSession.reset(activePage?.pageKey ?? null)
   }, [activePage?.pageKey, navigationSession, previewOpen])
+
+  /*
+   * 浏览器返回键退出整屏。进入时 push 一条记录，退出时按来源分流：返回键触发的那次
+   * 记录已经弹掉了，再 `back()` 一次会退到编辑器之前的历史里去。
+   */
+  useEffect(() => {
+    if (previewForm !== 'page') return undefined
+    const handlePopState = () => { setPreviewForm('dialog') }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [previewForm])
+
+  const enterPreviewPage = (state: ComposePreviewHandoff) => {
+    setPreviewHandoff(state)
+    setPreviewOpen(false)
+    setPreviewForm('page')
+    window.history.pushState({ composePreview: 'page' }, '', `${window.location.pathname}${window.location.search}#preview`)
+  }
+  const exitPreviewPage = () => {
+    // 交回弹框：场景、屏幕尺寸与播放头原样传回去，用户回到切换之前的那一刻。
+    setPreviewForm('dialog')
+    setPreviewOpen(true)
+    if (window.location.hash === '#preview') window.history.back()
+  }
+
+  /*
+   * **示例应用不提供「在新标签页打开」。**
+   *
+   * 它的资源 Provider 是内存实现（`demo-memory`），新标签页拿到的是一份重新播种的空白
+   * 会话，看不见刚落盘的任何东西。在这里接上那颗按钮等于给一颗必然显示错内容的控件，
+   * 而「不静默地给出旧内容」正是这条契约的全部要求。`ComposePreviewDialog` 的
+   * `secondaryActions` 插槽本身已经就位，有持久化 Provider 的宿主接上它即可。
+   */
 
   return (
     <>
@@ -623,6 +665,7 @@ export function StageDemoWorkspace() {
           screenMapping: '屏幕与目标尺寸',
           enterFullscreen: '全屏预览',
           exitFullscreen: '退出全屏预览',
+          enterFullscreenForm: '整屏预览',
           close: '关闭预览',
           closeHint: '按 Esc 关闭预览',
         }}
@@ -632,8 +675,39 @@ export function StageDemoWorkspace() {
         pageLoader={pageLoader}
         targetKind={previewingComponent ? 'component' : 'scene'}
         registry={registry}
+        initialState={previewHandoff}
         onOpenChange={setPreviewOpen}
+        onRequestFullscreenForm={enterPreviewPage}
       />
+      {previewForm === 'page' ? (
+        <ComposePreviewPage
+          assetResolver={assetResolver}
+          document={controller.document}
+          initialState={previewHandoff}
+          livePage={livePage}
+          messages={{
+            label: '整屏预览',
+            exit: '返回编辑器',
+            toolbar: '预览控制条',
+            target: '预览场景',
+            screenSize: '屏幕尺寸',
+            actualScreen: '实际屏幕',
+            commonScreensGroup: '常见屏幕',
+            customSizeName: '自定义',
+            swapOrientation: '横竖互换',
+            enterFullscreen: '全屏',
+            exitFullscreen: '退出全屏',
+            screenMapping: '当前屏幕',
+          }}
+          navigation={livePage ? navigationSession : undefined}
+          page={activePage?.page}
+          pageLoader={pageLoader}
+          registry={registry}
+          selectedFrameId={previewTargetFrameId}
+          targetKind={previewingComponent ? 'component' : 'scene'}
+          onRequestExit={exitPreviewPage}
+        />
+      ) : null}
       {demonstrateComponentFailures ? (
         <section aria-label="组件容错演示" className="stage-demo__failure-controls">
           <strong>组件容错演示</strong>
