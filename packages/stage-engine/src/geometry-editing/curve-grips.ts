@@ -391,6 +391,49 @@ function localGripNeighbor(curve: ComposeCurve, gripId: string): StagePoint | nu
 }
 
 /**
+ * 位移里垂直于某一段的那个分量。
+ *
+ * @remarks
+ * 按**段方向投影**而不是写成「横段只改 y、竖段只改 x」的二选一：后者在一条已经斜了的段上
+ * 没有答案，而几何编辑不保证曲线一定是正交的（导入、旧文档、别的路径都可能留下斜段）。
+ * 轴对齐那一档它恰好退化成同一个结果。
+ *
+ * 退化段（两个端点重合）没有方向可言，位移原样返回。
+ */
+function perpendicularDelta(
+  delta: StagePoint,
+  segment: { readonly start: StagePoint; readonly end: StagePoint },
+): StagePoint {
+  const dx = segment.end.x - segment.start.x
+  const dy = segment.end.y - segment.start.y
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return delta
+  const along = (delta.x * dx + delta.y * dy) / (length * length)
+  return { x: delta.x - along * dx, y: delta.y - along * dy }
+}
+
+/**
+ * 这个夹点是不是**开放折线的内部顶点**。
+ *
+ * @remarks
+ * 宿主据此对导线不画那些夹点：正交折线上的内部拐点两根轴各被一条相邻段钉死，它一个自由度
+ * 都没有——留一个拖不动的方块比不留更糟，而让它能动就等于让相邻那一段变斜。
+ *
+ * 谓词住在这里而不是宿主：夹点 id 的语法住在引擎里，宿主按前缀自己解析等于把语法复制出去，
+ * 下一次改 id 的人只会改到其中一处。
+ *
+ * 闭合折线上每个顶点都是内部顶点，但闭合的导线不存在（一条导线连接的是两个端口），因此这里
+ * 只回答开放折线；其余 kind 与段夹点一律为假。
+ *
+ * @public
+ */
+export function isStageInteriorVertexGrip(curve: ComposeCurve, gripId: string): boolean {
+  if (curve.kind !== 'polyline' || curve.closed || !gripId.startsWith(VERTEX_PREFIX)) return false
+  const index = Number(gripId.slice(VERTEX_PREFIX.length))
+  return Number.isInteger(index) && index > 0 && index < curve.vertices.length - 1
+}
+
+/**
  * 派生一个 Entity 的世界坐标轮廓折线。
  *
  * @remarks
@@ -425,7 +468,7 @@ export function applyStageCurveGrip(
   curve: ComposeCurve,
   gripId: string,
   point: StagePoint,
-  options?: { readonly breakSymmetry?: boolean },
+  options?: { readonly breakSymmetry?: boolean; readonly axisAligned?: boolean },
 ): ComposeCurve | null {
   if (curve.kind === 'path') {
     return applyPathGrip(curve, gripId, point, options?.breakSymmetry === true)
@@ -457,8 +500,23 @@ export function applyStageCurveGrip(
        * 那个特征点上。按指针裸坐标算会让段中点停在离目标几个像素的地方，而用户瞄的正是
        * 那个点。
        */
-      const deltaX = point.x - (segment.start.x + segment.end.x) / 2
-      const deltaY = point.y - (segment.start.y + segment.end.y) / 2
+      const raw = {
+        x: point.x - (segment.start.x + segment.end.x) / 2,
+        y: point.y - (segment.start.y + segment.end.y) / 2,
+      }
+      /*
+       * 每一段都必须保持轴对齐时（导线），位移**只取垂直于该段的分量**。
+       *
+       * 平行分量会让两头的相邻段各自变斜：它们与这一段垂直，共用的那个端点一沿段方向走就
+       * 不再与另一头对齐。垂直分量恰好相反——相邻段只是伸缩，整条线仍然横平竖直。
+       *
+       * 只作用在**有相邻段**的段上：一段都没有邻居时（单段折线）平移不可能让任何东西变斜，
+       * 那一档就是「平移整条线」，与两点直线的中点夹点是同一句话。
+       */
+      const { x: deltaX, y: deltaY } = options?.axisAligned === true
+        && polylineSegments(curve.vertices, curve.closed).length > 1
+        ? perpendicularDelta(raw, segment)
+        : raw
       // 第 i 段的两个端点是 `i` 与 `(i + 1) % 顶点数`：取模只在闭合多段线的收尾段上起作用
       // （它接回第一个顶点），开放多段线的段下标最大只到 `顶点数 - 2`，取模不改变任何东西。
       const tail = (index + 1) % curve.vertices.length

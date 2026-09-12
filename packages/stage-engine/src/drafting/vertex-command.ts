@@ -41,7 +41,7 @@ export function createStageGripSession(
     fields: 'polar',
     ...(target.constrain ? { constrain: target.constrain } : {}),
   }
-  const { entityId, gripId, origin } = target
+  const { axisAligned, entityId, gripId, origin } = target
   let done = false
   return {
     get prompt() {
@@ -51,8 +51,22 @@ export function createStageGripSession(
       if (input.kind === 'cancel') return { status: 'cancelled' }
       if (input.kind === 'point') {
         done = true
-        // 效果只带规划要用的三样加落点：约束与参照是取点期的事，点已经取到了。
-        return { status: 'commit', effect: { curveGrip: { entityId, gripId, origin, point: input.point } } }
+        /*
+         * 效果只带规划要用的那几样加落点：角度约束与参照是**取点期**的事，点已经取到了；
+         * 而「每一段都保持轴对齐」是**几何的自由度**，规划那一步才用得上它。
+         */
+        return {
+          status: 'commit',
+          effect: {
+            curveGrip: {
+              entityId,
+              gripId,
+              origin,
+              ...(axisAligned ? { axisAligned: true } : {}),
+              point: input.point,
+            },
+          },
+        }
       }
       return { status: 'rejected', message: messages.expectedPoint }
     },

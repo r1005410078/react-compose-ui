@@ -185,11 +185,14 @@ export function planStageDraftingEdits(query: StageDraftingEditQuery): readonly 
   }
 
   if (effect.curveGrip) {
-    const { entityId, gripId, point } = effect.curveGrip
+    const { axisAligned, entityId, gripId, point } = effect.curveGrip
     const entity = document.entities[entityId]
     const geometry = stageCurveBoxGeometry(index, entityId)
     const local = stageCurveLocalPoint(index, entityId, point)
-    const next = geometry && local ? applyStageCurveGrip(geometry, gripId, local) : null
+    // 提交与拖动期的预览读同一个答案：两处各写一遍的话，松手的瞬间形状会跳一下。
+    const next = geometry && local
+      ? applyStageCurveGrip(geometry, gripId, local, { axisAligned: axisAligned === true })
+      : null
     if (entity && next && !getComposeLock(entity).locked) {
       const offset = getComposeLayoutItem(entity)?.offset ?? { x: 0, y: 0 }
       const wire = nextWireFor(entity, gripId, query.wireBinding)

@@ -261,6 +261,7 @@ export {
   insertStageCurveVertex,
   stageCurveBoxGeometry,
   stageCurveCorners,
+  isStageInteriorVertexGrip,
   stageCurveGripNeighbor,
   stageCurveGrips,
   stageCurveLocalPoint,

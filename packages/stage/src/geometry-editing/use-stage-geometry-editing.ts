@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getComposeCurve, getComposeLock } from '@compose-ui/core'
 import {
   applyStageCurveGrip,
+  isStageInteriorVertexGrip,
   stageCurveBoxGeometry,
   stageCurveGripNeighbor,
   stageCurveGrips,
@@ -36,7 +37,11 @@ function applyGripAt(
   const geometry = stageCurveBoxGeometry(source, entityId)
   if (!geometry) return null
   const local = stageCurveLocalPoint(source, entityId, world)
-  return local ? applyStageCurveGrip(geometry, gripId, local, { breakSymmetry }) : null
+  // 导线的每一段都必须保持轴对齐；判据与夹点会话、Preset、端口捕捉读的是同一个答案。
+  const axisAligned = isStageWireEntity(source.document.entities[entityId])
+  return local
+    ? applyStageCurveGrip(geometry, gripId, local, { breakSymmetry, axisAligned })
+    : null
 }
 
 /**
@@ -261,7 +266,19 @@ export function useStageGeometryEditing(
 
   const editablePath = useMemo((): StageEditablePath | null => {
     if (entityId === null || hostPathActive) return null
-    const grips = stageCurveGrips(geometry, entityId, activePreview)
+    const all = stageCurveGrips(geometry, entityId, activePreview)
+    /*
+     * 导线不画内部拐点的顶点夹点：正交折线上一个内部拐点的两根轴各被一条相邻段钉死，它一个
+     * 自由度都没有——留一个拖不动的方块比不留更糟（屏幕上不该出现一个鼠标动了也没反应的
+     * 状态），而让它能动就等于让相邻那一段变斜。改形状的入口是段夹点，加拐点的入口仍是在段上
+     * 双击插入顶点。
+     */
+    const shape = activePreview ?? stageCurveBoxGeometry(geometry, entityId)
+    const hideInterior = shape !== null
+      && isStageWireEntity(geometry.document.entities[entityId])
+    const grips = hideInterior
+      ? all.filter((grip) => !isStageInteriorVertexGrip(shape, grip.id))
+      : all
     if (grips.length === 0) return null
     return {
       entityId,
@@ -333,11 +350,18 @@ export function useStageGeometryEditing(
       const gripId = gripIdOf(change)
       const wire = isStageWireEntity(current.geometry.document.entities[entityId])
       const neighbor = wire ? stageCurveGripNeighbor(current.geometry, entityId, gripId) : null
+      /*
+       * 段夹点那一档**不钉角度约束**：它的几何本身只剩一个自由度（位移只取垂直于该段的
+       * 分量），再钉一次正交，沿段方向的那半边拖动就什么都不发生——而屏幕上没有任何东西
+       * 解释为什么。顶点夹点相反，它由落点决定，因此照旧钉住。
+       */
+      const pinned = wire && grip.role !== 'segment'
       current.session.start({
         entityId,
         gripId,
         origin,
-        ...(wire ? { constrain: 'ortho' as const } : {}),
+        ...(wire ? { axisAligned: true } : {}),
+        ...(pinned ? { constrain: 'ortho' as const } : {}),
         ...(neighbor ? { reference: neighbor } : {}),
       })
       // 按下即解一次：用户不必先移动一下才看到落点。
