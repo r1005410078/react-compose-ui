@@ -1,12 +1,20 @@
 import {
   BUILTIN_COMMAND_TYPES,
+  getComposeGridItem,
   getComposeHierarchy,
   getComposeLock,
   type ComposeDocument,
+  type ComposeGridItem,
   type ComposeLayoutSnapshot,
+  type JsonValue,
 } from '@compose-ui/core'
 import { createReparentCommand } from '../commands'
-import { resolveStageDropTarget, type StageDropTarget } from '../hit-testing'
+import {
+  resolveStageDropTarget,
+  resolveStageGridContext,
+  solveStageGrid,
+  type StageDropTarget,
+} from '../hit-testing'
 import { resolveTargetFrameId } from '../geometry'
 import {
   snapTranslation,
@@ -128,16 +136,18 @@ export function planMovePreview(query: StageMovePreviewQuery): StageMovePreview 
       enabled: grid.snapEnabled,
     },
   )
+  /*
+   * 吸附之后**再投影一次**：`snapTranslation` 两轴各自独立地把盒边吸到网格或参考线上，
+   * 因此被约束掉的那一轴照样会被吸出一个非零分量，不投影回去的话「沿轴拖」就会歪。
+   * 自由拖动时投影是恒等变换，行为一个字节不变。
+   */
+  const constrained = projectOntoAxis(snapped.delta, axis)
   return {
-    transforms: (() => {
-      /*
-       * 吸附之后**再投影一次**：`snapTranslation` 两轴各自独立地把盒边吸到网格或参考线上，
-       * 因此被约束掉的那一轴照样会被吸出一个非零分量，不投影回去的话「沿轴拖」就会歪。
-       * 自由拖动时投影是恒等变换，行为一个字节不变。
-       */
-      const constrained = projectOntoAxis(snapped.delta, axis)
-      return transformedSelection(index, ids, translationMatrix(constrained.x, constrained.y))
-    })(),
+    transforms: transformedSelection(
+      index,
+      ids,
+      translationMatrix(constrained.x, constrained.y),
+    ),
     dropTarget: resolveStageDropTarget({
       index,
       draggedIds: ids,
@@ -147,6 +157,13 @@ export function planMovePreview(query: StageMovePreviewQuery): StageMovePreview 
         alt: modifiers.alt,
         // 宿主级锁定（动画模式）与手势中的 Space 锁定同一语义，任一生效即锁定原父级。
         space: parentLocked || context.lockGestureParent === true,
+      },
+      // 网格落点取被拖盒的左上角而不是指针；Flow 重排照旧只看指针，两者判据不同。
+      draggedBounds: {
+        x: bounds.x + constrained.x,
+        y: bounds.y + constrained.y,
+        width: bounds.width,
+        height: bounds.height,
       },
     }),
     snapGuides: snapped.guides,
@@ -172,6 +189,104 @@ export function resolveCommittableDropTarget(
   if (!container || !getComposeHierarchy(container)) return null
   if (getComposeLock(container).locked) return null
   return target
+}
+
+/**
+ * 规划一次落进网格的提交。
+ *
+ * @remarks
+ * **一次手势一条事务**：目标的新格坐标与被它推挤的全部兄弟的新格坐标写在同一条 batch 里。
+ * 拆成两条会让用户按两次撤销，而他只做了一个动作。
+ *
+ * 推挤结果来自 core 的那一个求解器（经 `solveStageGrid`），本包不另算一遍。
+ *
+ * 换父级时复用 `createReparentCommand` 并把落格结果作为 `gridPlacements` 传进去——那条命令
+ * 已经处理好了 `LayoutItem` 转 Flow、`Transform` 与 batch 内的子命令次序。
+ */
+function planGridMoveCommit(input: {
+  readonly document: ComposeDocument
+  readonly layoutSnapshot: ComposeLayoutSnapshot
+  readonly index: StageSceneIndex
+  readonly ids: readonly string[]
+  readonly target: Extract<StageDropTarget, { kind: 'grid-cell' }>
+  readonly transforms: Readonly<Record<string, StageTransform>>
+  readonly idFactory: () => string
+}): StageInteractionEffect | null {
+  const { document, layoutSnapshot, index, ids, target, transforms, idFactory } = input
+  const context = resolveStageGridContext(index, target.containerId)
+  const leadId = ids[0]
+  if (!context || !leadId) return null
+
+  const existing = getComposeGridItem(document.entities[leadId])
+  const override = {
+    id: leadId,
+    x: target.x,
+    y: target.y,
+    w: existing?.w ?? 4,
+    h: existing?.h ?? 2,
+  }
+  const solved = solveStageGrid(index, target.containerId, context, override)
+  const placements: Record<string, ComposeGridItem> = {}
+  let changed = false
+  solved.forEach((cell) => {
+    const before = getComposeGridItem(document.entities[cell.id])
+    const next: ComposeGridItem = {
+      ...(before ?? {}),
+      x: cell.x,
+      y: cell.y,
+      w: cell.w,
+      h: cell.h,
+    }
+    placements[cell.id] = next
+    if (!before || before.x !== cell.x || before.y !== cell.y
+      || before.w !== cell.w || before.h !== cell.h) changed = true
+  })
+
+  const reparenting = index.getParentId(leadId) !== target.containerId
+  if (reparenting) {
+    return {
+      type: 'command.dispatch',
+      command: createReparentCommand(
+        document,
+        layoutSnapshot,
+        ids,
+        target.containerId,
+        getComposeHierarchy(document.entities[target.containerId]!)!.childIds.length,
+        idFactory(),
+        transforms,
+        placements,
+      ),
+    }
+  }
+  if (!changed) return null
+
+  // 同容器内：只写 GridItem。位置的事实来源是格坐标，写 LayoutItem.offset 会造出第二份事实。
+  const commandId = idFactory()
+  const commands = Object.entries(placements)
+    .filter(([entityId, value]) => {
+      const before = getComposeGridItem(document.entities[entityId])
+      return !before || before.x !== value.x || before.y !== value.y
+        || before.w !== value.w || before.h !== value.h
+    })
+    .map(([entityId, value]) => ({
+      id: `${commandId}:${entityId}:grid-item`,
+      type: BUILTIN_COMMAND_TYPES.updateComponent,
+      payload: { entityId, key: 'GridItem', value },
+    }))
+  if (commands.length === 0) return null
+  return {
+    type: 'command.dispatch',
+    command: {
+      id: commandId,
+      type: BUILTIN_COMMAND_TYPES.batch,
+      payload: { commands: commands as unknown as JsonValue },
+      meta: {
+        label: `Move ${describeEntityTargets(document, [leadId])}`,
+        source: 'stage',
+        targetIds: Object.keys(placements),
+      },
+    },
+  }
 }
 
 /** 规划一次移动提交所需的全部输入。 @public */
@@ -209,6 +324,9 @@ export function planMoveCommit(query: StageMoveCommitQuery): StageInteractionEff
       finished: { type: 'move', ids, transforms },
       idFactory,
     })
+  }
+  if (target.kind === 'grid-cell') {
+    return planGridMoveCommit({ document, layoutSnapshot, index, ids, target, transforms, idFactory })
   }
   const container = document.entities[target.containerId]!
   const childIds = getComposeHierarchy(container)!.childIds

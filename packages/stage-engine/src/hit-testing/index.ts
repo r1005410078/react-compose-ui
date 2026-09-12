@@ -6,6 +6,7 @@
  */
 export * from './scene-index'
 export * from './drop-target'
+export * from './grid-drop'
 export * from './marquee-selection'
 export * from './selection-mode'
 export {

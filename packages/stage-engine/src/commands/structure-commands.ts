@@ -4,14 +4,17 @@ import {
   BUILTIN_COMMAND_TYPES,
   createComposeGroupEntitySeed,
   getComposeHierarchy,
+  getComposeGridItem,
   getComposeLayout,
   adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
+  isComposeGridLayout,
   getComposeLock,
   getComposeSpatialTransform,
   resolveComposeAppearance,
   isComposeUngroupableEntity,
   type ComposeDocument,
+  type ComposeGridItem,
   type ComposeEntity,
   type ComposeLayoutItem,
   type ComposeLayoutSnapshot,
@@ -412,11 +415,20 @@ export function createReparentCommand(
   index: number,
   commandId = `reparent:${entityIds.join(',')}`,
   draggedTransforms?: Readonly<Record<string, StageTransform>>,
+  /**
+   * 目标是网格容器时，每个目标落在哪一格。
+   *
+   * @remarks
+   * 由调用方用 core 的求解器算出并传入：本函数不认识落点解算，它只负责把结果写成命令。
+   * 缺省表示目标不是网格容器。
+   */
+  gridPlacements?: Readonly<Record<string, ComposeGridItem>>,
 ): EditorCommand {
   const targetLayout = parentId && document.entities[parentId]
     ? getComposeLayout(document.entities[parentId]!)
     : undefined
   const targetManagesFlow = Boolean(targetLayout)
+  const targetIsGrid = isComposeGridLayout(targetLayout)
   const targetBorder = parentId && document.entities[parentId]
     ? resolveComposeAppearance(document.entities[parentId]!).borderWidth
     : 0
@@ -454,7 +466,11 @@ export function createReparentCommand(
     const currentItem = entity ? getComposeLayoutItem(entity) : null
     const item: ComposeLayoutItem | null = currentItem
       ? targetLayout
-        ? adoptComposeCrossAxisSizing({ ...currentItem, positioning: 'flow' }, targetLayout)
+        // 交叉轴采纳是 Flex 专属：网格子级的轴尺寸模式在求解里被忽略，改写它只会在属性面板
+        // 上留下一个既不生效也解释不通的值。
+        ? targetIsGrid
+          ? { ...currentItem, positioning: 'flow' }
+          : adoptComposeCrossAxisSizing({ ...currentItem, positioning: 'flow' }, targetLayout)
         : {
             ...currentItem,
             positioning: 'absolute',
@@ -481,6 +497,34 @@ export function createReparentCommand(
     type: BUILTIN_COMMAND_TYPES.moveEntity,
     payload: { entityIds, parentId, index },
   }
+  /**
+   * 进出网格时维护 `GridItem`。
+   *
+   * @remarks
+   * 进：已有就 update、没有就 add——`entity.component.update` 对不存在的 Component 是拒绝而
+   * 不是新建。出：只在它真的有 `GridItem` 时才发 remove，否则命令会被判成对不存在的
+   * Component 操作。
+   */
+  function gridItemCommand(entityId: string): readonly EditorCommand[] {
+    const existing = getComposeGridItem(document.entities[entityId])
+    if (targetIsGrid) {
+      const placement = gridPlacements?.[entityId]
+      if (!placement) return []
+      return [{
+        id: `${commandId}:${entityId}:grid-item`,
+        type: existing
+          ? BUILTIN_COMMAND_TYPES.updateComponent
+          : BUILTIN_COMMAND_TYPES.addComponent,
+        payload: { entityId, key: 'GridItem', value: placement as unknown as JsonValue },
+      }]
+    }
+    if (!existing) return []
+    return [{
+      id: `${commandId}:${entityId}:grid-item-remove`,
+      type: BUILTIN_COMMAND_TYPES.removeComponent,
+      payload: { entityId, key: 'GridItem' },
+    }]
+  }
   const componentCommands: EditorCommand[] = updates.flatMap(({ entityId, transform, item }) => item
     ? [
         {
@@ -497,6 +541,7 @@ export function createReparentCommand(
             value: { rotation: transform.rotation },
           },
         },
+        ...gridItemCommand(entityId),
       ]
     : [])
   // batch 会逐子命令严格校验：移出 Layout 时须先转 Absolute，移入时则先建立目标父子关系。
