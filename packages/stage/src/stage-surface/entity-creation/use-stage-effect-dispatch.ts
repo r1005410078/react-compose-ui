@@ -8,11 +8,17 @@ import type {
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
+  createComposeGridItem,
+  findComposeGridVacancy,
+  getComposeGridItem,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLock,
   getComposeVisibility,
+  isComposeGridLayout,
   type ComposeDocument,
+  type ComposeEntity,
+  type ComposeGridItem,
   type ComposeLayoutSnapshot,
   type EditorCommand,
   type JsonValue,
@@ -51,6 +57,29 @@ import { resolveClientPoint } from '../pointer-session'
 const ASSET_RESOLVE_CONCURRENCY = 4
 
 /** 效果分派能力的依赖清单。 */
+
+/**
+ * 往网格容器里新建一个对象时，它落在哪一格。
+ *
+ * @remarks
+ * 没有落点意图（点击添加、从面板点一下），因此取**第一块放得下的空位**而不是指针所在的格。
+ * 尺寸取网格的一档常见卡片（4 × 2），不从 seed 的像素尺寸反推——那是按像素设计的默认值，
+ * 换算成格数只会得到一个谁也没要求过的跨度。
+ */
+function gridPlacementFor(
+  document: ComposeDocument,
+  container: ComposeEntity | undefined,
+): ComposeGridItem | undefined {
+  const layout = container ? getComposeLayout(container) : undefined
+  if (!container || !isComposeGridLayout(layout)) return undefined
+  const cells = (getComposeHierarchy(container)?.childIds ?? []).flatMap((childId) => {
+    const item = getComposeGridItem(document.entities[childId])
+    return item ? [{ id: childId, x: item.x, y: item.y, w: item.w, h: item.h }] : []
+  })
+  const { x, y } = findComposeGridVacancy(cells, { columns: layout.columns, w: 4, h: 2 })
+  return createComposeGridItem(x, y)
+}
+
 export interface StageEffectDispatchParams {
   readonly controller: StageInteractionController
   readonly document: ComposeDocument
@@ -205,6 +234,7 @@ export function useStageEffectDispatch(
           entityId,
           center,
           parent ? getComposeLayout(parent) : undefined,
+          gridPlacementFor(current.document, parent),
         )
         if (parent) {
           return { entity: build(applyMatrix(inverseParent!, worldCenter)), parentId: parent.id }
@@ -440,6 +470,7 @@ export function useStageEffectDispatch(
           entityId,
           center,
           validParent ? getComposeLayout(validParent) : undefined,
+          gridPlacementFor(current.document, validParent),
         )
         // 命中容器时照常做子级；落在所有场景之外时按类型分流，与绘制工具同一条规则。
         const landing = validParent

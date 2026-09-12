@@ -29,6 +29,7 @@ export {
   composeGridCellAtPoint,
   composeGridColumnWidth,
   composeGridContentHeight,
+  findComposeGridVacancy,
   projectComposeGridCell,
   solveComposeGrid,
 } from './grid-geometry'

@@ -14,3 +14,5 @@ export {
   unlockedStageIds,
 } from './stage-selection-derivations'
 export { StageWorldUnderlay } from './stage-world-underlay'
+export { resolveStageGridLines, StageGridLinesLayer } from './stage-grid-lines'
+export type { StageGridLines } from './stage-grid-lines'

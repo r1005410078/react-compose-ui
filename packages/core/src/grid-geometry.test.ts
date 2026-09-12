@@ -3,6 +3,7 @@ import {
   composeGridCellAtPoint,
   composeGridColumnWidth,
   composeGridContentHeight,
+  findComposeGridVacancy,
   projectComposeGridCell,
   solveComposeGrid,
   type ComposeGridCell,
@@ -197,5 +198,33 @@ describe('OpenSpec: layout-engine / 网格容器的预解算', () => {
     expect(composeGridCellAtPoint({ x: 99999, y: 0 }, metrics).x).toBe(11)
     expect(composeGridCellAtPoint({ x: -50, y: -50 }, metrics)).toMatchObject({ x: 0, y: 0 })
     expect(composeGridCellAtPoint({ x: 0, y: 54 * 40 }, metrics).y).toBeGreaterThan(30)
+  })
+})
+
+describe('OpenSpec: stage-engine / 往网格里新建对象', () => {
+  it('取第一块放得下的空位，不是最下面一行', () => {
+    // 右边整片空着时，新卡片该落在那里而不是被甩到最下面。
+    const cells = [cell('a', 0, 0, 4, 2), cell('b', 0, 2, 4, 2)]
+    expect(findComposeGridVacancy(cells, { columns: 12, w: 4, h: 2 }))
+      .toEqual({ x: 4, y: 0 })
+  })
+
+  it('整行放不下时换下一行', () => {
+    const cells = [cell('a', 0, 0, 10, 1)]
+    expect(findComposeGridVacancy(cells, { columns: 12, w: 4, h: 1 }))
+      .toEqual({ x: 0, y: 1 })
+  })
+
+  it('空网格落在原点', () => {
+    expect(findComposeGridVacancy([], { columns: 12, w: 4, h: 2 })).toEqual({ x: 0, y: 0 })
+  })
+
+  it('每一行都占满时落到最下面一行之后', () => {
+    const cells = [cell('a', 0, 0, 12, 1), cell('b', 0, 1, 12, 1)]
+    expect(findComposeGridVacancy(cells, { columns: 12, w: 4, h: 1 })).toEqual({ x: 0, y: 2 })
+  })
+
+  it('跨度超出列数时先钳制再找位', () => {
+    expect(findComposeGridVacancy([], { columns: 12, w: 99, h: 1 })).toEqual({ x: 0, y: 0 })
   })
 })

@@ -151,6 +151,37 @@ export function solveComposeGrid(
 }
 
 /**
+ * 找一块能放下指定跨度的空位。
+ *
+ * @remarks
+ * 逐行从左往右扫，取第一个不与任何已有矩形重叠的位置；整行都放不下就换下一行。没有上界——
+ * 网格向下是无限的，因此**必然**找得到，函数不会返回空。
+ *
+ * 用在「往网格里新建一个对象」这条路径上：它没有落点意图（点击添加、从面板点一下），而
+ * GridStack 的 `addWidget` 不给位置时也是这个行为。**不是**「放到最下面一行」——那会在一块
+ * 右边留着大片空白的板子上把新卡片甩到很远的地方。
+ *
+ * @public
+ */
+export function findComposeGridVacancy(
+  cells: readonly ComposeGridCell[],
+  options: { readonly columns: number; readonly w: number; readonly h: number },
+): { readonly x: number; readonly y: number } {
+  const columns = Math.max(1, Math.round(options.columns))
+  const w = Math.min(Math.max(1, Math.round(options.w)), columns)
+  const h = Math.max(1, Math.round(options.h))
+  const maxRow = cells.reduce((max, cell) => Math.max(max, cell.y + cell.h), 0)
+  for (let y = 0; y <= maxRow; y += 1) {
+    for (let x = 0; x <= columns - w; x += 1) {
+      const candidate = { id: '', x, y, w, h }
+      if (!cells.some((cell) => overlaps(candidate, cell))) return { x, y }
+    }
+  }
+  // 每一行都被占满时落到最下面一行之后；那一行必然是空的。
+  return { x: 0, y: maxRow }
+}
+
+/**
  * 列宽。
  *
  * @remarks
