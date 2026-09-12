@@ -90,7 +90,8 @@ export function useStagePreviewDocuments(
    * 整件事会退化成一个已经有了的能力（网格吸附）。
    */
   const gridSolveDocument = useMemo(
-    () => (interactionPhase === 'move' && layoutRuntime?.previewDocument
+    () => ((interactionPhase === 'move' || interactionPhase === 'resize')
+      && layoutRuntime?.previewDocument
       ? buildGridPreviewSolveDocument(
           previewDocument,
           document,
@@ -101,7 +102,11 @@ export function useStagePreviewDocuments(
       : null),
     [document, dropTarget, interactionPhase, layoutRuntime, layoutSnapshot, previewDocument, previewTransforms],
   )
-  const solveDocument = resizeSolveDocument ?? gridSolveDocument
+  /*
+   * 网格那一份排在前面：格中子级的盒**就是**格矩形，Auto Layout 那条求解文档写的是像素尺寸，
+   * 下一帧就会被预解算覆盖掉——两份同时在时先用哪一份是可观察的差别，而正确的那份是网格。
+   */
+  const solveDocument = gridSolveDocument ?? resizeSolveDocument
   useEffect(() => {
     const runtime = layoutRuntime
     if (!runtime?.previewDocument || !runtime.clearPreview) return
@@ -123,8 +128,15 @@ export function useStagePreviewDocuments(
    * **光标覆盖**（跟手、不吸格）。resize 那一档不叠——它的几何已经烘进求解用文档了，再叠
    * 一次覆盖等于把同一个位移应用两遍。
    */
+  /*
+   * 网格的 **move** 要把两份反馈叠起来：兄弟取求解结果（它们真的让位了），被拖的那一个取
+   * 光标覆盖（跟手、不吸格）。**resize 那一档不叠**——它的盒已经被吸到格矩形上并烘进求解用
+   * 文档了，再叠一次覆盖等于把同一个变换应用两遍，症状是卡片比格子大出一倍的位移。
+   */
   const sceneLayoutSnapshot = gridSolveDocument && layoutPreviewSnapshot
-    ? transformLayoutSnapshot(layoutPreviewSnapshot, previewTransforms)
+    ? (interactionPhase === 'move'
+        ? transformLayoutSnapshot(layoutPreviewSnapshot, previewTransforms)
+        : layoutPreviewSnapshot)
     : resizeSolveDocument && layoutPreviewSnapshot
       ? layoutPreviewSnapshot
       : previewLayoutSnapshot

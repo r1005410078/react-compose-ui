@@ -8,13 +8,19 @@ import {
   resolveComposeAppearance,
   resolveComposeGeometryConstraints,
   type ComposeDocument,
+  type ComposeGridCell,
   type ComposeGridItem,
   type ComposeLayoutSnapshot,
   type JsonValue,
 } from '@compose-ui/core'
 import { toComposeTransform, unionRects, type ResizeHandle, type StageRect, type StageTransform } from '../geometry'
 import { describeTransform } from '../commands'
-import { resolveStageGridContext, solveStageGrid, type StageSceneIndex } from '../hit-testing'
+import {
+  resolveStageGridContext,
+  solveStageGrid,
+  type StageGridContext,
+  type StageSceneIndex,
+} from '../hit-testing'
 import type { StageInteractionEffect } from '../interaction-controller'
 
 /** 变换手势的三种语义；决定约束查询与提交规划的分支。 @public */
@@ -112,6 +118,38 @@ export type StageFinishedTransform =
  * @public
  */
 /**
+ * 一次网格缩放解算出来的格局。
+ *
+ * @remarks
+ * 预览与提交读**同一份**：拖动期把被拖的那张吸到 `solved` 里它自己那一格，松手时按同一份
+ * 写命令。各算一遍的症状是「拖动时看到的大小与松手后的结果不一样」，而那正是网格缩放唯一
+ * 需要回答的问题。
+ *
+ * @public
+ */
+export interface StageGridResizePlan {
+  readonly containerId: string
+  readonly entityId: string
+  readonly context: StageGridContext
+  /** 手势开始前已提交的格。 */
+  readonly committed: ComposeGridItem
+  /** 这一帧请求的格，尚未经过推挤与重力。 */
+  readonly requested: ComposeGridCell
+  /** 求解之后的全部格，含被推挤的兄弟。 */
+  readonly solved: readonly ComposeGridCell[]
+}
+
+/**
+ * 把一次进行中或已结束的网格缩放解算成格局。
+ *
+ * @remarks
+ * 拖到的边吸到最近的格线（`Math.round`，与移动落点取「所在的格」不同——缩放判据是「这条边
+ * 离哪条格线更近」，而移动判据是「左上角压住了哪一格」）。`minW` / `minH` 在这里钳制。
+ *
+ * @returns 目标不在网格里、或多选时为 `null`，由调用方退回既有的通用路径。
+ * @public
+ */
+/**
  * 规划一次格中子级的缩放提交。
  *
  * @remarks
@@ -125,14 +163,14 @@ export type StageFinishedTransform =
  *
  * @returns 目标不在网格里时为 `null`，由调用方退回既有的通用提交。
  */
-function planGridResizeCommit(input: {
+export function resolveStageGridResize(input: {
   readonly document: ComposeDocument
   readonly index: StageSceneIndex
-  readonly finished: Extract<StageFinishedTransform, { type: 'resize' }>
-  readonly idFactory: () => string
-}): StageInteractionEffect | null {
-  const { document, index, finished, idFactory } = input
-  const entityIds = Object.keys(finished.transforms)
+  readonly transforms: Readonly<Record<string, StageTransform>>
+  readonly handle: ResizeHandle
+}): StageGridResizePlan | null {
+  const { document, index, transforms, handle } = input
+  const entityIds = Object.keys(transforms)
   const entityId = entityIds[0]
   // 多选缩放在网格里的语义（整块等比还是逐张）尚未定，v1 只处理单个目标，其余退回通用路径。
   if (!entityId || entityIds.length !== 1) return null
@@ -142,11 +180,11 @@ function planGridResizeCommit(input: {
   const context = containerId ? resolveStageGridContext(index, containerId) : null
   if (!containerId || !context) return null
 
-  const transform = finished.transforms[entityId]!
+  const transform = transforms[entityId]!
   const columnStep = composeGridColumnWidth(context.metrics) + context.metrics.columnGap
   const rowStep = context.metrics.rowHeight + context.metrics.rowGap
-  const changesWidth = finished.handle.includes('e') || finished.handle.includes('w')
-  const changesHeight = finished.handle.includes('n') || finished.handle.includes('s')
+  const changesWidth = handle.includes('e') || handle.includes('w')
+  const changesHeight = handle.includes('n') || handle.includes('s')
   const spanFrom = (pixels: number, step: number, min: number) => (step > 0
     ? Math.max(min, Math.round((pixels + context.metrics.columnGap) / step))
     : min)
@@ -163,9 +201,37 @@ function planGridResizeCommit(input: {
   const local = index.getWorldMatrix(containerId) && toGridOrigin(index, containerId, context, transform)
   const x = local ? Math.min(Math.max(0, local.x), Math.max(0, context.layout.columns - w)) : item.x
   const y = local ? Math.max(0, local.y) : item.y
-  if (w === item.w && h === item.h && x === item.x && y === item.y) return null
+  const requested = { id: entityId, x, y, w, h }
+  return {
+    containerId,
+    entityId,
+    context,
+    committed: item,
+    requested,
+    solved: solveStageGrid(index, containerId, context, requested),
+  }
+}
 
-  const solved = solveStageGrid(index, containerId, context, { id: entityId, x, y, w, h })
+function planGridResizeCommit(input: {
+  readonly document: ComposeDocument
+  readonly index: StageSceneIndex
+  readonly finished: Extract<StageFinishedTransform, { type: 'resize' }>
+  readonly idFactory: () => string
+}): StageInteractionEffect | null {
+  const { document, index, finished, idFactory } = input
+  const plan = resolveStageGridResize({
+    document,
+    index,
+    transforms: finished.transforms,
+    handle: finished.handle,
+  })
+  if (!plan) return null
+  const { entityId, requested, solved } = plan
+  const item = plan.committed
+  const transform = finished.transforms[entityId]!
+  if (requested.w === item.w && requested.h === item.h
+    && requested.x === item.x && requested.y === item.y) return null
+
   const commandId = idFactory()
   const commands = solved.flatMap((cell) => {
     const before = getComposeGridItem(document.entities[cell.id])

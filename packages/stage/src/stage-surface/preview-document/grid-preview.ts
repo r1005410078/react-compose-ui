@@ -55,8 +55,9 @@ export function buildGridPreviewSolveDocument(
     id: leadId,
     x: dropTarget.x,
     y: dropTarget.y,
-    w: existing?.w ?? 4,
-    h: existing?.h ?? 2,
+    // 跨度跟着这次手势走：缩放会带来新的跨度，移动不带，那一档沿用已提交值。
+    w: dropTarget.w ?? existing?.w ?? 4,
+    h: dropTarget.h ?? existing?.h ?? 2,
   })
 
   let changed = false
