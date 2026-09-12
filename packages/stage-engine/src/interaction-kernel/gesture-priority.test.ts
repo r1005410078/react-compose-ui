@@ -16,6 +16,7 @@ describe('OpenSpec: stage-engine / Stage 交互插件仲裁 / 优先级表锁定
       'text-edit-guard',
       'pan',
       'drafting-point',
+      'drafting-pick',
       'paint-sample',
       'path',
       'paint',

@@ -157,6 +157,14 @@ export interface StageDraftingEffect {
   /** 本步要删除的 Entity。 */
   readonly removed?: readonly string[]
   /**
+   * 本步要修剪的若干截：每项是一个 Entity 与落在它身上的世界点。
+   *
+   * @remarks
+   * 一笔拖过多条是**一次**输入、一个事务，因此是数组；点一下是长度为 1 的退化情形。哪一截
+   * 由规划那一步按落点解算（`resolveStageTrimPiece`），会话只说「这里」。
+   */
+  readonly trim?: readonly { readonly id: string; readonly point: ComposeCommandPoint }[]
+  /**
    * 删掉本次会话**上一个建出来**的 Entity。
    *
    * @remarks
@@ -313,6 +321,11 @@ export interface StageDraftingMessages {
   readonly moveTitle: string
   readonly copyTitle: string
   readonly eraseTitle: string
+  readonly trimTitle: string
+  /** `TRIM` 的提示：选择要修剪的一截，或按住拖过多条。 */
+  readonly selectTrimTarget: string
+  /** `TRIM` 收到不是 `pick` 的输入时的说明。 */
+  readonly expectedPick: string
   readonly vertexTitle: string
   readonly specifyNewLocation: string
   readonly expectedSingleObject: string

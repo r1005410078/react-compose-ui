@@ -178,9 +178,9 @@ describe('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 
       .toEqual({ status: 'rejected', reason: 'floor' })
   })
 
-  it('段中点、平移夹点与控制手柄都不是顶点', () => {
+  it('平移夹点与控制手柄都不是顶点；闭合折线的段夹点是剪断', () => {
     expect(deleteStageCurveVertex(rectangle, 'm2'))
-      .toEqual({ status: 'rejected', reason: 'unsupported' })
+      .toEqual({ status: 'cut', segmentIndex: 2 })
     expect(deleteStageCurveVertex(diagonal, 'move'))
       .toEqual({ status: 'rejected', reason: 'unsupported' })
     expect(deleteStageCurveVertex(twoSegments, 'p0v1o'))
@@ -267,8 +267,19 @@ describe('导线上的 Delete 分流', () => {
       .toEqual({ status: 'rejected', reason: 'cut-edge' })
   })
 
-  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 普通曲线的段夹点仍然拒绝', () => {
-    // 把一个形状剪成两个是「分割」，不是用户抓着一段时会想的事。
-    expect(deleteStageCurveVertex(wire, 'm1')).toEqual({ status: 'rejected', reason: 'unsupported' })
+  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 普通折线的段夹点剪断那一段', () => {
+    // 矩形的一条边要让给符号、六边形要开一个口，正是抓着一段时想做的事。
+    expect(deleteStageCurveVertex(wire, 'm1')).toEqual({ status: 'cut', segmentIndex: 1 })
+  })
+
+  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 矩形的段夹点去掉一条边', () => {
+    const square: ComposeCurve = { ...wire, closed: true } as ComposeCurve
+    expect(deleteStageCurveVertex(square, 'm0')).toEqual({ status: 'cut', segmentIndex: 0 })
+    expect(deleteStageCurveVertex(square, 'm3')).toEqual({ status: 'cut', segmentIndex: 3 })
+  })
+
+  it('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 直线的平移夹点仍然拒绝', () => {
+    const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }
+    expect(deleteStageCurveVertex(line, 'move')).toEqual({ status: 'rejected', reason: 'unsupported' })
   })
 })

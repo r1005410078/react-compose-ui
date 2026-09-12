@@ -12,7 +12,7 @@ import {
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
-import { createDuplicateCommand, createStageDeleteEntitiesCommand } from '../commands'
+import { createDuplicateCommand, createStageDeleteEntitiesCommand, planStageTrim } from '../commands'
 import type { StageJunctionPredicate } from '../commands'
 import { applyStageCurveGrip, stageCurveBoxGeometry, stageCurveLocalPoint } from '../geometry-editing'
 import { translationMatrix } from '../geometry'
@@ -83,6 +83,15 @@ export interface StageDraftingEditQuery {
   readonly isJunction?: StageJunctionPredicate
   /** 夹点几何变更的已本地化标签；缺席时退回 Entity 名。 */
   readonly curveLabel?: (name: string) => string
+  /** 修剪的已本地化事务标签；缺席时退回 Entity 名。 */
+  readonly trimLabel?: (name: string) => string
+  /**
+   * 判断一个 Entity 是不是导线；修剪据此继承绑定。
+   *
+   * @remarks
+   * 由宿主注入：引擎不认识导线。缺席时视为都不是。
+   */
+  readonly isWire?: (entity: ComposeEntity) => boolean
   /** 镜像的已本地化事务标签。 */
   readonly mirrorLabel?: string
   /** 对齐与分布的已本地化事务标签。 */
@@ -215,6 +224,17 @@ export function planStageDraftingEdits(query: StageDraftingEditQuery): readonly 
         },
       })
     }
+  }
+
+  if (effect.trim && effect.trim.length > 0) {
+    // 一笔的全部目标是一个事务；哪一截由落点解算，与悬停预览读同一份纯函数。
+    const plan = planStageTrim(index, effect.trim, {
+      idFactory,
+      ...(query.isWire ? { isWire: query.isWire } : {}),
+      ...(query.isJunction ? { isJunction: query.isJunction } : {}),
+      ...(query.trimLabel ? { label: query.trimLabel } : {}),
+    })
+    commands.push(...plan.commands)
   }
 
   if (effect.removed && effect.removed.length > 0) {

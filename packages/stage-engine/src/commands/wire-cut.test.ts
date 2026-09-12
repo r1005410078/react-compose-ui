@@ -81,12 +81,13 @@ describe('planStageWireCut', () => {
     // 左半留在原 Entity 上：id 不变，选中与撤销都还认得它。
     expect(result!.commands[0]!.payload).toMatchObject({
       entityId: 'w',
-      curve: { vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }] },
+      // 两个顶点取最窄的 kind：一条两点导线就是 line。
+      curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
       wire: { start: A_PORT },
     })
     const right = created(result!.commands)
     expect(right.components.Curve).toMatchObject({
-      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+      kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 },
     })
     expect(right.components.LayoutItem).toMatchObject({ offset: { x: 100, y: 90 } })
     expect(right.components.Wire).toEqual({ end: B_PORT })
@@ -122,7 +123,7 @@ describe('planStageWireCut', () => {
     expect(planStageWireCut(two, 'w', 0, options)).toBeNull()
   })
 
-  it('OpenSpec: stage-engine / 剪断导线的一段 / 普通曲线不受理', () => {
+  it('OpenSpec: stage-engine / 剪断导线的一段 / 普通折线也能剪', () => {
     const plain = documentWith([wire('w', [[0, 0], [100, 0], [100, 90], [200, 90]])])
     const curve = {
       ...plain.entities.w!,
@@ -132,12 +133,38 @@ describe('planStageWireCut', () => {
       },
     } as ComposeEntity
 
-    expect(planStageWireCut(
+    const plan = planStageWireCut(
       { ...plain, entities: { ...plain.entities, w: curve } } as ComposeDocument,
       'w',
       1,
       options,
-    )).toBeNull()
+    )
+    expect(plan).not.toBeNull()
+    // 两条都不带 Wire：普通折线没有绑定可继承。
+    expect(plan!.commands[0]!.payload).not.toHaveProperty('wire')
+    const right = (plan!.commands[1]!.payload as unknown as { entity: ComposeEntity }).entity
+    expect(right.components).not.toHaveProperty('Wire')
+  })
+
+  it('OpenSpec: stage-engine / 剪断导线的一段 / 矩形去掉一条边', () => {
+    const square = wire('r', [[0, 0], [100, 0], [100, 100], [0, 100]])
+    const closed = {
+      ...square,
+      components: {
+        ...square.components,
+        Composition: { presetId: 'rect', baseComponentKeys: [], capabilityIds: [] },
+        Curve: { ...(square.components.Curve as object), closed: true },
+      },
+    } as ComposeEntity
+    const plan = planStageWireCut(documentWith([closed]), 'r', 1, options)
+    expect(plan).not.toBeNull()
+    expect(plan!.createdId).toBeNull()
+    expect(plan!.commands).toHaveLength(1)
+    expect((plan!.commands[0]!.payload as { curve: unknown }).curve).toEqual({
+      kind: 'polyline',
+      closed: false,
+      vertices: [{ x: 100, y: 100 }, { x: 0, y: 100 }, { x: 0, y: 0 }, { x: 100, y: 0 }],
+    })
   })
 
   it('锁定的导线不剪断', () => {

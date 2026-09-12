@@ -246,7 +246,13 @@ export {
   projectComposeCurveToBox,
   splitComposeCurveAt,
   translateComposeCurve,
+  composeCurveParameterSpan,
+  composeCurvePointAtParameter,
+  nearestComposeCurveParameter,
+  sliceComposeCurve,
   type ComposeCurveBoxScale,
+  type ComposeCurveParameter,
+  type ComposeCurveSlice,
   type ComposeCurveSplit,
   type ComposeCurveViewBox,
 } from './curve'
@@ -258,6 +264,10 @@ export {
   composeArcPointAt,
   composeArcQuadrants,
   composeArcThroughPoints,
+  composeArcTravelledDegrees,
+  intersectComposeArcs,
+  intersectComposeSegmentArc,
+  intersectComposeSegments,
   clampComposeCornerRadius,
   composeCornerArcCenter,
   composeCornerRadiusAt,
@@ -293,6 +303,7 @@ export type {
   ComposeRectShape,
   ComposeRegularPolygonFit,
   ComposeSegmentShape,
+  ComposeShapeIntersection,
 } from './curve-geometry'
 export {
   composeHorizontalMirrorAxis,

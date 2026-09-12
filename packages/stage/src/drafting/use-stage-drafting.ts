@@ -58,6 +58,13 @@ import {
   wireTapsFor,
 } from './drafting-entity'
 import { isStageJunctionEntity, isStageWireEntity } from './wire-tap'
+import {
+  resolveStageTrailTargets,
+  resolveStageTrimPiece,
+  type StageTrimPiece,
+  type StageTrimRejection,
+} from '@compose-ui/stage-engine'
+import { COMPOSE_CURVE_PICK_TOLERANCE, getComposeRenderer, isComposeFrameEntity } from '@compose-ui/core'
 import type { StageWireTapAnchor } from './wire-tap'
 
 /** 绘图模式需要的额外文案。 @internal */
@@ -84,6 +91,10 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly mirrorLabel: string
   /** 一次对齐或分布的历史标签。 */
   readonly alignLabel: string
+  /** 一次修剪的历史标签。 */
+  readonly trimLabel: (name: string) => string
+  /** 修剪被拒绝时的说明；六种原因六句，互不相同。 */
+  readonly trimRejection: (reason: StageTrimRejection) => string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -112,6 +123,15 @@ export interface StageDraftingOptions {
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /** 捕捉的屏幕半径（CSS 像素）。 @defaultValue {@link COMPOSE_SNAP_RADIUS} */
   readonly snapRadius?: number
+  /**
+   * `pick` 的拾取框半边长（CSS 像素）。
+   *
+   * @remarks
+   * 与点选那一档同一个数：`pick` 的命中读的正是这个容差。
+   *
+   * @defaultValue {@link COMPOSE_CURVE_PICK_TOLERANCE}
+   */
+  readonly pickRadius?: number
   /**
    * 角度约束；给出即受控，由宿主持有。
    *
@@ -233,6 +253,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     selectedIds,
     onSelectedIdsChange,
     snapRadius = COMPOSE_SNAP_RADIUS,
+    pickRadius = COMPOSE_CURVE_PICK_TOLERANCE,
     angleConstraint: controlledAngle,
     onAngleConstraintChange,
     polarIncrement = DEFAULT_POLAR_INCREMENT,
@@ -272,6 +293,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [notice, setNotice] = useState<string | null>(null)
   const [reference, setReference] = useState<ComposeInputPoint | null>(null)
   const [preview, setPreview] = useState<StageDraftingEffect | null>(null)
+  /** 一笔 `pick` 拖动中的轨迹，世界坐标；不在拖动时为 `null`。由取点插件逐帧回传。 */
+  const [pickTrail, setPickTrail] = useState<readonly StagePoint[] | null>(null)
   const [pointer, setPointerPoint] = useState<StagePoint | null>(null)
   // 指针类型只服务触摸豁免：触摸屏上没有光标，十字光标对它毫无意义，而这个判断只有事件
   // 本身知道。
@@ -586,6 +609,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
       // 引擎不认识 Preset id，节点的身份由这条谓词注入：`ERASE` 删掉一条支路之后，
       // 支路不足的节点在同一个事务里一起收掉。
       isJunction: isStageJunctionEntity,
+      // 修剪据此继承绑定：引擎不认识导线。
+      isWire: isStageWireEntity,
+      trimLabel: current.messages.trimLabel,
       // 绑定来自**取点时记下的来源**，与新建导线读的是同一张表。
       ...(effect.curveGrip
         ? (() => {
@@ -1545,6 +1571,89 @@ export function useStageDrafting(options: StageDraftingOptions) {
 
   // 命令正在请求一个点：捕捉标记与十字线形态都读它，两处不得各判一次。
   const awaitingPoint = enabled && prompt?.accepts.includes('point') === true
+  const awaitingPick = enabled && prompt?.accepts.includes('pick') === true
+
+  /**
+   * 拾取框底下的曲线 Entity；与点选同一个容差。
+   *
+   * @remarks
+   * 取最上层命中的那一个（与点选一致），而不是另找最近的：两条判定给出两个答案时用户读不出
+   * 为什么点选选中的和修剪剪掉的不是同一条。落在场景本体上不算——那是空白。
+   */
+  const pickTargetAt = useCallback((world: StagePoint): string | null => {
+    const id = index.entityAtPoint(world, pickRadius / viewport.zoom)
+    const entity = id ? document.entities[id] : undefined
+    return entity && !isComposeFrameEntity(entity) ? id : null
+  }, [document, index, pickRadius, viewport.zoom])
+
+  /** 一截的呈现：世界折线、剪口与它自己的描边色，幽灵按这个颜色改成点画。 */
+  const trimOverlayPiece = useCallback((piece: StageTrimPiece) => {
+    const entity = document.entities[piece.entityId]
+    const props = entity ? getComposeRenderer(entity)?.props as { stroke?: unknown } | undefined : undefined
+    return {
+      outline: piece.outline,
+      cuts: piece.cuts,
+      stroke: typeof props?.stroke === 'string' ? props.stroke : null,
+    }
+  }, [document])
+
+  /**
+   * 悬停预览：光标底下那一截，与落地读**同一份**解算。
+   *
+   * @remarks
+   * 纯函数只读索引与文档，不读会话的 ref，因此可以在渲染期算；拖动中改画轨迹碰到的那些。
+   */
+  const trim = useMemo(() => {
+    if (!awaitingPick) return null
+    if (pickTrail) {
+      const seen = new Set<string>()
+      const pieces = resolveStageTrailTargets(index, pickTrail, { isJunction: isStageJunctionEntity })
+        .map((target) => resolveStageTrimPiece(index, target.id, target.point, { isJunction: isStageJunctionEntity }))
+        .filter((resolution): resolution is Extract<typeof resolution, { status: 'ok' }> => resolution.status === 'ok')
+        .map(({ piece }) => piece)
+        .filter((piece) => {
+          const key = `${piece.entityId}:${piece.from}:${piece.to}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+      return { pieces: pieces.map(trimOverlayPiece), trail: pickTrail }
+    }
+    if (!pointer) return null
+    const id = pickTargetAt(pointer)
+    if (!id) return { pieces: [], trail: null }
+    const resolution = resolveStageTrimPiece(index, id, pointer, { isJunction: isStageJunctionEntity })
+    return { pieces: resolution.status === 'ok' ? [trimOverlayPiece(resolution.piece)] : [], trail: null }
+  }, [awaitingPick, index, pickTargetAt, pickTrail, pointer, trimOverlayPiece])
+
+  /**
+   * 一次 `pick`：点一下是按下点底下那一截，拖一笔是轨迹碰到的每一截。
+   *
+   * @remarks
+   * 点一下落在拒绝档上要**说出来**——「点了没反应」与点错在屏幕上无法区分；拖一笔里被拒绝的
+   * 那些静默略过，用户没有逐条瞄准它们。落在空白处什么都不做。
+   */
+  const handlePick = useCallback((point: StagePoint, trail: readonly StagePoint[] | null) => {
+    const session = sessionRef.current
+    if (!session || session.prompt?.accepts.includes('pick') !== true) return
+    const current = latest.current
+    const junctionOptions = { isJunction: isStageJunctionEntity }
+    if (trail) {
+      const targets = resolveStageTrailTargets(current.index, trail, junctionOptions)
+        .filter((target) => resolveStageTrimPiece(current.index, target.id, target.point, junctionOptions).status === 'ok')
+      if (targets.length === 0) return
+      applyStep(session.advance({ kind: 'pick', targets }))
+      return
+    }
+    const id = pickTargetAt(point)
+    if (!id) return
+    const resolution = resolveStageTrimPiece(current.index, id, point, junctionOptions)
+    if (resolution.status === 'rejected') {
+      setNotice(current.messages.trimRejection(resolution.reason))
+      return
+    }
+    applyStep(session.advance({ kind: 'pick', targets: [{ id, point }] }))
+  }, [applyStep, pickTargetAt])
 
   /**
    * 光标够及范围内那个符号的**全部**端口。
@@ -1609,6 +1718,15 @@ export function useStageDrafting(options: StageDraftingOptions) {
      */
     cursorInput: enabled ? cursorInput : null,
     awaitingSelection: enabled && prompt?.accepts.includes('selection') === true,
+    /** 这一步等一个落在对象上的点：拾取框加徽标，不画十字线，不改选择集。 */
+    awaitingPick,
+    /** 提示声明的光标徽标；由提示自己声明而不由宿主按命令 id 反推。 */
+    badge: enabled ? prompt?.badge ?? null : null,
+    /** 修剪的悬停预览与拖动轨迹；不在等 `pick` 时为 `null`。 */
+    trim,
+    pickTrail,
+    setPickTrail,
+    handlePick,
     pointerType,
     prompt: enabled ? prompt : null,
     notice: enabled ? notice : null,

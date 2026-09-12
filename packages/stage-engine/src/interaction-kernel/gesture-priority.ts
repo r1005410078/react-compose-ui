@@ -49,6 +49,7 @@ export const STAGE_GESTURE_PRIORITY: readonly StageGesturePriorityEntry[] = Obje
   { id: 'text-edit-guard', priority: 1800, sourceLine: 1702, condition: 'context.textEditing 且命中编辑目标或变换手柄（consumed）' },
   { id: 'pan', priority: 1700, sourceLine: 1719, condition: 'snapshot.temporaryPan || button === 1' },
   { id: 'drafting-point', priority: 1650, condition: '绘图命令正在等待一个点（consumed）' },
+  { id: 'drafting-pick', priority: 1640, condition: '绘图命令正在等待一个落在对象上的点（会话：点一下或拖一笔）' },
   { id: 'paint-sample', priority: 1500, sourceLine: 1875, condition: 'context.paintSampling 存在' },
   { id: 'path', priority: 1400, sourceLine: 1896, condition: "hit.kind === 'path-handle'" },
   { id: 'paint', priority: 1300, sourceLine: 1940, condition: "hit.kind === 'paint-handle'" },

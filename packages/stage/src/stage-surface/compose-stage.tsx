@@ -55,6 +55,7 @@ import {
   type StageGripTarget,
   type StagePoint,
   type StageRect,
+  type StageTrimRejection,
   type StageWireEnd,
 } from '@compose-ui/stage-engine'
 import { fitViewportTo } from './stage-viewport-actions'
@@ -587,6 +588,18 @@ function ComposeStageReady({
     moveTitle: messages.draftingMoveTitle,
     copyTitle: messages.draftingCopyTitle,
     eraseTitle: messages.draftingEraseTitle,
+    trimTitle: messages.draftingTrimTitle,
+    selectTrimTarget: messages.draftingSelectTrimTarget,
+    expectedPick: messages.draftingExpectedPick,
+    trimLabel: messages.draftingTrimLabel,
+    trimRejection: (reason: StageTrimRejection) => ({
+      locked: messages.trimRejectLocked,
+      'fixed-size': messages.trimRejectFixedSize,
+      'not-curve': messages.trimRejectNotCurve,
+      path: messages.trimRejectPath,
+      'single-boundary': messages.trimRejectSingleBoundary,
+      unsupported: messages.trimRejectUnsupported,
+    })[reason],
     vertexTitle: messages.draftingVertexTitle,
     specifyNewLocation: messages.draftingSpecifyNewLocation,
     expectedSingleObject: messages.draftingExpectedSingleObject,
@@ -703,6 +716,7 @@ function ComposeStageReady({
     // `VERTEX` 是几何编辑的第二个入口，与双击产出同一个会话。
     onEnterGeometryEditing: enterGeometryEditing,
     isGeometryEditable,
+    pickRadius,
     ...(angleConstraint ? { angleConstraint } : {}),
     ...(onAngleConstraintChange ? { onAngleConstraintChange } : {}),
     ...(polarIncrement === undefined ? {} : { polarIncrement }),
@@ -799,6 +813,7 @@ function ComposeStageReady({
    */
   const draftingPointerTracked = draftingSession.awaitingPoint
     || draftingSession.awaitingSelection
+    || draftingSession.awaitingPick
     || draftingSession.cursorInput !== null
   const pointerTracked = draftingPointerTracked || geometryEditingActive
 
@@ -847,14 +862,19 @@ function ComposeStageReady({
     center: draftingSession.pointerScreen,
     lines: draftingSession.awaitingPoint || geometryEditingActive,
     // 点亮与拖动同样是「已经抓住了」，框只会挡住落点；两者共用 `gripTarget` 这一份事实。
+    // `pick` 与选择对象同一个框：两档的命中读的是同一个容差。徽标由覆盖层按同一个解析结果画。
     box: draftingSession.awaitingSelection
+      || draftingSession.awaitingPick
       || (geometryEditingActive && draftingSession.gripTarget === null),
     // 命令那一档用宿主配置的 `pickRadius`；顶点模式用夹点命中圆的内切正方形。两档的框含义
     // 不同，共用一个数会让顶点模式那个框慢慢说谎。
-    boxRadius: draftingSession.awaitingSelection ? pickRadius : GRIP_PICK_RADIUS,
+    boxRadius: draftingSession.awaitingSelection || draftingSession.awaitingPick
+      ? pickRadius
+      : GRIP_PICK_RADIUS,
     size: crosshairSize,
   }), [
     crosshairSize,
+    draftingSession.awaitingPick,
     draftingSession.awaitingPoint,
     draftingSession.awaitingSelection,
     draftingSession.gripTarget,
@@ -891,6 +911,8 @@ function ComposeStageReady({
     viewport,
     onDrawn: setLastDrawn,
     onDraftingPoint: (point) => { draftingRef.current?.handlePoint(point) },
+    onDraftingPick: (point, trail) => { draftingRef.current?.handlePick(point, trail) },
+    onDraftingPickTrail: (trail) => { draftingRef.current?.setPickTrail(trail) },
     onToolChange,
     // 与 `VERTEX` 命令共用同一个入口：播种十字光标那一步因此不会只在其中一条路径上生效。
     onEnterGeometryEditing: enterGeometryEditing,
@@ -949,6 +971,7 @@ function ComposeStageReady({
       // 判定模式只由宿主受控：模式不该偷改用户的设置。
       lockGestureParent,
       draftingAwaitingPoint: draftingSession.awaitingPoint,
+      draftingAwaitingPick: draftingSession.awaitingPick,
       selectedIds: normalizedSelection,
       paintEditing,
       paintSampling,
@@ -972,6 +995,7 @@ function ComposeStageReady({
     contentReflowsWithWidth,
     controller,
     document,
+    draftingSession.awaitingPick,
     draftingSession.awaitingPoint,
     hiddenEntityIds,
     geometryEditing.entityId,
@@ -1288,7 +1312,8 @@ function ComposeStageReady({
    * 或刚点亮，右键在那里不表达「我说完了」。这份事实读的是既有那一份：拾取框画不画、哪个
    * 夹点是热的、捕捉排除哪个点，读的都是它。
    */
-  const acceptDraftingCommand = draftingSession.awaitingPoint && draftingSession.gripTarget === null
+  const acceptDraftingCommand = (draftingSession.awaitingPoint || draftingSession.awaitingPick)
+    && draftingSession.gripTarget === null
     ? draftingSession.acceptCommand
     : null
 
@@ -1306,6 +1331,12 @@ function ComposeStageReady({
     surfaceRef,
     onSelectedIdsChange,
     keyboardCommand: (event) => {
+      // 拖着一笔修剪时 Esc 只放弃这一笔、命令留着：轨迹是内核里的一个会话，取消它走内核。
+      if (event.key === 'Escape' && draftingRef.current?.pickTrail) {
+        controller.send({ type: 'pointer.cancel' })
+        event.preventDefault()
+        return
+      }
       // 绘图的 F8/F3 先于既有键位级联：它们在别处没有绑定，因此不会抢走任何东西。
       // Esc 只在命令进行中被这里消费，其余情况交回级联——文字编辑的退出分支在那里。
       if (draftingRef.current?.handleKeyDown(event)) return
@@ -1483,6 +1514,8 @@ function ComposeStageReady({
           <StageDraftingOverlay
             crosshair={crosshair}
             outlines={draftingSession.outlines}
+            trim={draftingSession.trim}
+            badge={draftingSession.badge}
             rubberBand={draftingSession.rubberBand}
             trackingRay={draftingSession.trackingRay}
             previewOutline={draftingSession.previewOutline}
