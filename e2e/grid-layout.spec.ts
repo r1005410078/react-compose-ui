@@ -466,3 +466,63 @@ test('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划 / 拖出�
   await expect(inspector.getByRole('spinbutton', { name: '网格位置 列' })).toHaveCount(0)
   await expect(inspector.getByRole('spinbutton', { name: '位置 X' })).toHaveCount(1)
 })
+
+/**
+ * 嵌套网格：内层网格的子元素按内层的真实宽度分列，并且能调整宽度。
+ *
+ * @remarks
+ * 这一档此前**整条没有覆盖**——既有用例的网格都只有一层，而单层里内层容器的宽度在第一趟求解
+ * 之后就已经成立，因此那个次序缺陷在单层上完全看不出来。
+ *
+ * 缺陷是这样的：内层网格算列宽要用它自己的内容宽，而它作为**格中子级**根本没有轴尺寸——那个
+ * 宽度要等外层把格矩形写进去、再求解一次才存在。只跑一趟时内层读到的宽度是 0，十二列全塌成
+ * 0 宽，屏幕上是一排只剩间距的细条，而且怎么改跨度都没有用（每一格都是 0 宽）。
+ *
+ * 判别性因此有两半：卡片**够宽**（塌掉时它只剩间距那么宽），以及**改跨度真的会变宽**。
+ * 只断前一半的话，一个把宽度算对却不跟跨度走的实现同样绿。
+ */
+test('OpenSpec: layout-engine / 网格容器的预解算 / 嵌套网格的子元素按真实宽度分列且可调跨度', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await drawContainer(page, editor)
+  const outerBox = (await stage.getByTestId('stage-container').nth(0).boundingBox())!
+
+  // 外层开网格，再往里放一块板子，那块板子自己也开网格。
+  await selectContainer(editor, 0)
+  await enableGrid(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 容器' }),
+    { x: outerBox.x + 140, y: outerBox.y + 100 })
+
+  const innerGrid = stage.getByTestId('stage-container').nth(1)
+  await expect(innerGrid).toHaveCount(1)
+  await page.mouse.click((await innerGrid.boundingBox())!.x + 8, (await innerGrid.boundingBox())!.y + 8)
+  await enableGrid(editor.getByRole('region', { name: 'Container 属性', exact: true }))
+  const innerBox = (await innerGrid.boundingBox())!
+
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }),
+    { x: innerBox.x + innerBox.width / 2, y: innerBox.y + innerBox.height / 2 })
+
+  const card = innerGrid.locator(':scope > .compose-stage__node.is-renderer').nth(0)
+  await expect(card).toHaveCount(1)
+  const placed = (await card.boundingBox())!
+
+  /*
+   * 塌掉时每一格宽 0，一张跨 w 格的卡只剩 (w-1) 个间距那么宽——按默认间距 6 算不过十几像素。
+   * 因此这里断的是「明显比那个宽」，而不是一个精确值：精确值随内层板子的尺寸变，写死会让这条
+   * 用例在换了夹具之后变成假用例。
+   */
+  expect(placed.width).toBeGreaterThan(40)
+
+  // 改跨度真的会变宽——每一格是 0 宽时，这一步一个像素都不会动。
+  await page.mouse.click(placed.x + placed.width / 2, placed.y + 1)
+  const inspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  const spanW = inspector.getByRole('spinbutton', { name: '网格尺寸 宽' })
+  const before = Number(await spanW.inputValue())
+  await spanW.fill(String(before + 3))
+  await spanW.press('Enter')
+  await expect.poll(async () => (await card.boundingBox())!.width)
+    .toBeGreaterThan(placed.width + 20)
+})

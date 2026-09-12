@@ -94,6 +94,15 @@ let yogaModulePromise: Promise<Yoga> | undefined
 
 type ComposeYogaLoader = () => Promise<Yoga>
 
+/**
+ * 网格求解的最大趟数。
+ *
+ * @remarks
+ * 每多一层嵌套网格就多要一趟（内层的列宽要等外层把格矩形写进去之后才算得出来），再加一趟
+ * 确认不再变化。8 覆盖六层嵌套，而这个产品里一块板子套一块板子已经是极限。
+ */
+const MAX_GRID_PASSES = 8
+
 function loadYogaSingleton(): Promise<Yoga> {
   yogaModulePromise ??= import('yoga-layout/load').then(({ loadYoga }) => loadYoga())
   return yogaModulePromise
@@ -249,6 +258,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     ComposeLayoutMeasurementDiagnostic
   >()
   private revision = 0
+  /** 本次求解里各网格子级已写入的格矩形，供收敛循环判断「还在变吗」。 */
+  private readonly gridWrites = new Map<string, string>()
   private disposed = false
   /** 最后一次正式提交的文档；`document` 在预览期指向瞬态文档，结束后回到这里。 */
   private committedDocument: ComposeDocument
@@ -615,6 +626,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       this.root.setWidth(extent.width)
       this.root.setHeight(extent.height)
       this.root.setFlexDirection(yoga.FLEX_DIRECTION_ROW)
+      this.gridWrites.clear()
       const desiredChildren = new Map<Node, readonly Node[]>()
       const rootChildren = this.document.rootIds.map((entityId) =>
         this.prepareTree(entityId, undefined, desiredChildren))
@@ -701,6 +713,12 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private applyGridLayouts(): boolean {
     const yoga = this.yoga!
     let changed = false
+    /** 本趟写入与上一趟不同才算「变了」，循环据此收敛。 */
+    const note = (key: string, value: string) => {
+      if (this.gridWrites.get(key) === value) return
+      this.gridWrites.set(key, value)
+      changed = true
+    }
     this.nodes.forEach((node, entityId) => {
       const entity = this.document.entities[entityId]
       if (!entity) return
@@ -743,21 +761,25 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
         childNode.setPosition(yoga.EDGE_TOP, layout.padding.top + rect.y)
         childNode.setWidth(rect.width)
         childNode.setHeight(rect.height)
-        changed = true
+        note(cell.id, `${rect.x},${rect.y},${rect.width},${rect.height}`)
       })
 
-      // 绝对定位的子级不撑父级，因此 Hug 高度必须显式写回——否则一块放满卡片的板子高度是 0。
-      // 每趟都无条件重写，不依赖样式增量缓存：缓存跳过的是 applyEntityStyle，不是这里。
-      if (getComposeLayoutItem(entity).height.mode === 'hug') {
+      /*
+       * 绝对定位的子级不撑父级，因此 Hug 高度必须显式写回——否则一块放满卡片的板子高度是 0。
+       * 每趟都无条件重写，不依赖样式增量缓存：缓存跳过的是 applyEntityStyle，不是这里。
+       *
+       * **它自己也是格中子级时不写**：那一档它的盒**就是**外层给它的格矩形，两边都写会让两个
+       * 高度在相邻两趟里互相覆盖，收敛循环因此永远停不下来。
+       */
+      if (getComposeLayoutItem(entity).height.mode === 'hug' && !getComposeGridItem(entity)) {
         const borderY = node.getComputedBorder(yoga.EDGE_TOP)
           + node.getComputedBorder(yoga.EDGE_BOTTOM)
-        node.setHeight(
-          composeGridContentHeight(solved, metrics)
+        const hugHeight = composeGridContentHeight(solved, metrics)
           + layout.padding.top
           + layout.padding.bottom
-          + borderY,
-        )
-        changed = true
+          + borderY
+        node.setHeight(hugHeight)
+        note(`${entityId}:hug`, String(hugHeight))
       }
     })
     return changed
@@ -768,7 +790,18 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     try {
       const extent = this.rootExtent()
       this.root.calculateLayout(extent.width, extent.height, this.yoga.DIRECTION_LTR)
-      if (this.applyGridLayouts()) {
+      /*
+       * **迭代到稳定，而不是固定跑一趟。**一趟不够的是**嵌套网格**：内层容器的列宽要按它的
+       * 内容宽算，而它作为格中子级根本没有轴尺寸——那个宽度要等外层这一趟把格矩形写进去、
+       * 再求解一次才存在。只跑一趟时内层读到的宽度是 0，十二列全塌成 0 宽，屏幕上是一排
+       * 只剩间距的细条。
+       *
+       * 收敛靠 `applyGridLayouts` 只在**写入值真的变了**时报 true：第一趟全是新值，第二趟只有
+       * 嵌套那一层变，第三趟不再变就停。上界按嵌套层数给，够深的嵌套本来就不是这个产品的形态，
+       * 而一个没有上界的循环在数值恰好来回摆动时会挂死整个编辑器。
+       */
+      for (let pass = 0; pass < MAX_GRID_PASSES; pass += 1) {
+        if (!this.applyGridLayouts()) break
         this.root.calculateLayout(extent.width, extent.height, this.yoga.DIRECTION_LTR)
       }
       const previousBoxes = this.state.status === 'ready' ? this.state.snapshot.boxes : undefined

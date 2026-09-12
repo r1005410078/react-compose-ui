@@ -45,6 +45,27 @@ function gridContainer(
   }
 }
 
+/** 既是外层网格的子级、自己又是网格容器：嵌套网格的那一档。 */
+function nestedGridContainer(
+  id: string,
+  childIds: readonly string[],
+  grid: ComposeGridItem,
+  layout: Partial<ComposeGridLayout> = {},
+): ComposeEntity {
+  const base = gridContainer(id, childIds, layout)
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      LayoutItem: {
+        ...(base.components.LayoutItem as ComposeLayoutItem),
+        positioning: 'flow',
+      } as ComposeLayoutItem,
+      GridItem: grid,
+    },
+  }
+}
+
 function card(id: string, grid: ComposeGridItem | undefined): ComposeEntity {
   const components = {
     Transform: { rotation: 0 },
@@ -262,5 +283,57 @@ describe('OpenSpec: layout-engine / 网格容器的预解算', () => {
       },
     })
     expect(snapshot.boxes.card).toMatchObject({ x: 30, y: 40, width: 120, height: 60 })
+  })
+
+  /*
+   * 嵌套网格：内层容器的列宽必须按它**被外层排出来的那个宽度**算，而不是它自己 LayoutItem 上
+   * 那个与网格无关的固定值。判据是内层子级的宽度——只断「内层容器的盒对不对」不够，外层把它
+   * 排对了、内层照着旧宽度分列，容器仍然是对的而里面的卡全错。
+   */
+  it('嵌套网格按外层排出来的宽度分列', async () => {
+    const snapshot = await solve({
+      'frame-root': frameRoot(['outer']),
+      outer: gridContainer('outer', ['inner'], {}),
+      inner: nestedGridContainer('inner', ['a'], createComposeGridItem(0, 0, 6, 4)),
+      a: card('a', createComposeGridItem(0, 0, 4, 2)),
+    })
+
+    // 外层给内层的格矩形：6 列宽。
+    const innerBox = snapshot.boxes.inner!
+    expect(innerBox.width).toBeCloseTo(6 * COLUMN_STEP - 6, 5)
+
+    // 内层自己的列步长由它的真实内容宽推出。
+    const innerContent = innerBox.width - 32
+    const innerStep = (innerContent - 11 * 6) / 12 + 6
+    const box = snapshot.boxes.a!
+    expect(box.width).toBeCloseTo(4 * innerStep - 6, 5)
+    // 快照的盒是父级相对坐标，因此这里是内层的内边距本身。
+    expect(box.x).toBeCloseTo(16, 5)
+  })
+
+  /*
+   * 三层嵌套：收敛循环必须**按层数推进**，而不是恰好跑两趟就够。写死两趟的实现对上一条同样
+   * 绿——它只差一层——而这一条会让最内层退化成只剩间距的细条。
+   */
+  it('三层嵌套网格逐层按真实宽度分列', async () => {
+    const snapshot = await solve({
+      'frame-root': frameRoot(['outer']),
+      outer: gridContainer('outer', ['mid'], {}),
+      mid: nestedGridContainer('mid', ['inner'], createComposeGridItem(0, 0, 8, 6)),
+      inner: nestedGridContainer('inner', ['a'], createComposeGridItem(0, 0, 6, 4)),
+      a: card('a', createComposeGridItem(0, 0, 4, 2)),
+    })
+
+    const stepOf = (width: number) => (width - 32 - 11 * 6) / 12 + 6
+    const midBox = snapshot.boxes.mid!
+    expect(midBox.width).toBeCloseTo(8 * COLUMN_STEP - 6, 5)
+
+    const innerBox = snapshot.boxes.inner!
+    expect(innerBox.width).toBeCloseTo(6 * stepOf(midBox.width) - 6, 5)
+
+    const box = snapshot.boxes.a!
+    expect(box.width).toBeCloseTo(4 * stepOf(innerBox.width) - 6, 5)
+    // 判别性：塌成 0 宽时这个数会退化成只剩间距的 4*6-6。
+    expect(box.width).toBeGreaterThan(30)
   })
 })
