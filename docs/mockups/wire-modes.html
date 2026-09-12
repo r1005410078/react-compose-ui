@@ -14,6 +14,7 @@
     --page-line: #dde3ec;
     --page-accent: #1f6feb;
     --page-todo: #b45309;
+    --page-done: #2f855a;
 
     /* 画布 token —— 取自 packages/stage/src/styles.css 与 ui-context 的深色主题 */
     --canvas: #11151b;
@@ -31,6 +32,7 @@
       --page-line: #262f3b;
       --page-accent: #4d9cff;
       --page-todo: #f59e0b;
+      --page-done: #48bb78;
     }
   }
 
@@ -42,6 +44,7 @@
     --page-line: #262f3b;
     --page-accent: #4d9cff;
     --page-todo: #f59e0b;
+    --page-done: #48bb78;
   }
 
   * { box-sizing: border-box; }
@@ -126,6 +129,7 @@
 
   /* 本稿画着、尚未落地的部分；琥珀虚线圈是这张图上唯一的「还没做」记号。 */
   .stage.todo { outline: 2px dashed var(--page-todo); outline-offset: 3px; }
+  .stage.done { outline: 2px solid var(--page-done); outline-offset: 3px; }
 
   .step { display: flex; flex-direction: column; gap: 12px; }
   .step-head { display: flex; align-items: baseline; gap: 12px; }
@@ -196,6 +200,10 @@
     flex-direction: column;
     gap: 6px;
   }
+  .callout.done {
+    background: color-mix(in srgb, var(--page-done) 8%, var(--page-panel));
+    border-color: color-mix(in srgb, var(--page-done) 34%, transparent);
+  }
   .callout.todo {
     background: color-mix(in srgb, var(--page-todo) 8%, var(--page-panel));
     border-color: color-mix(in srgb, var(--page-todo) 34%, transparent);
@@ -221,7 +229,7 @@
     <p class="lede">
       一条导线在画布上有六种形态，这份稿子把它们并排画出来，重点是<strong>顶点模式</strong>——
       它与别的曲线不一样，因为导线只走横平竖直。画布片段按 Stage 的真实 token 1:1 绘制；
-      <strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿画着、尚未落地</strong>，圈出来的每一张都是提案，其余是现状。
+      <strong style="color:var(--page-done)">绿实线圈 = 已经落地</strong>：本稿画着的四处提案都做完了，其余是原本就有的现状。
     </p>
   </header>
 
@@ -367,13 +375,13 @@
           <tr>
             <td>顶点模式 · 点亮<strong>端点方块</strong></td>
             <td>删掉那个顶点</td>
-            <td>自由端：线变短，这是对的。<span style="color:var(--page-todo)">绑定端：今天也删，而下一帧求解把新的首顶点拉回端口，那一段当场变斜</span></td>
+            <td>自由端：线变短，这是对的。<span style="color:var(--page-done)">绑定端：拒绝并说明。此前删得掉，而下一帧求解把新的首顶点拉回端口，那一段当场变斜</span></td>
           </tr>
           <tr>
             <td>顶点模式 · 点亮<strong>段条形</strong></td>
             <td>命令行说「这个夹点不是顶点」</td>
             <td>拒绝是<strong>说出来</strong>的，不是静默不动——「敲了没反应」与敲错在屏幕上无法区分。
-            <span style="color:var(--page-todo)">这一档正是「剪断这一段」该落的地方</span></td>
+            <span style="color:var(--page-done)">剪断这一段（只有中间段；端段与只有一段的拒绝并说明）</span></td>
           </tr>
           <tr>
             <td>只剩两个顶点</td>
@@ -391,8 +399,8 @@
         求解下一帧把新的首顶点写回端口的位置——用户看到的是<b>一段斜导线</b>，而他刚做的动作是「删一个点」。</figcaption>
       </figure>
       <figure>
-        <div class="stage todo"><svg viewBox="0 0 420 200" role="img" aria-label="提案：绑定端的顶点拒绝删除"><path d="M60 60H180V140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="60" cy="60" r="4.5" fill="#38bdf8"/><rect x="55.5" y="55.5" width="9" height="9" fill="#f2545b" stroke="#f2545b" stroke-width="1.5"/><text x="210" y="44" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">拒绝，线一个字节不动</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">这一端绑在端口上，删不掉</text></g></svg></div>
-        <figcaption><b>提案</b>：绑定端的顶点<b>删不掉</b>，在命令行说明理由。那一端的位置由端口决定，
+        <div class="stage done"><svg viewBox="0 0 420 200" role="img" aria-label="已落地：绑定端的顶点拒绝删除"><path d="M60 60H180V140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="60" cy="60" r="4.5" fill="#38bdf8"/><rect x="55.5" y="55.5" width="9" height="9" fill="#f2545b" stroke="#f2545b" stroke-width="1.5"/><text x="210" y="44" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">拒绝，线一个字节不动</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif">这一端绑在端口上，删不掉</text></g></svg></div>
+        <figcaption><b>已落地</b>：绑定端的顶点<b>删不掉</b>，在命令行说明理由。拒绝时夹点仍然亮着——取消会话会把这句理由用「已取消」冲掉。那一端的位置由端口决定，
         删掉它只是把同一个点换了个顶点下标——形状却塌了。要挪这一端，挪符号；要断开，在 Inspector 里解除绑定。</figcaption>
       </figure>
     </div>
@@ -404,8 +412,8 @@
         没做错什么——但用户此刻抓着的正是「这一段」，而这条命令没有答案。</figcaption>
       </figure>
       <figure>
-        <div class="stage todo"><svg viewBox="0 0 420 200" role="img" aria-label="提案：剪断这一段"><path d="M60 70H180" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M180 140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="180" cy="70" r="4.5" fill="none" stroke="#8b97a8" stroke-width="1.5" stroke-dasharray="2.4 2.2"/><circle cx="180" cy="140" r="4.5" fill="none" stroke="#8b97a8" stroke-width="1.5" stroke-dasharray="2.4 2.2"/><text x="210" y="54" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">剪断这一段，两头各留一个自由端</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif"></text></g></svg></div>
-        <figcaption><b>提案</b>：<b>剪断这一段</b>——中间段断成两条（两头各留一个自由端），端段就是缩短。
+        <div class="stage done"><svg viewBox="0 0 420 200" role="img" aria-label="已落地：剪断这一段"><path d="M60 70H180" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M180 140H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="180" cy="70" r="4.5" fill="none" stroke="#8b97a8" stroke-width="1.5" stroke-dasharray="2.4 2.2"/><circle cx="180" cy="140" r="4.5" fill="none" stroke="#8b97a8" stroke-width="1.5" stroke-dasharray="2.4 2.2"/><text x="210" y="54" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">剪断这一段，两头各留一个自由端</text><g transform="translate(0 160)"><rect x="12" y="0" width="396" height="30" rx="4" fill="#1a1f27" stroke="#2c3542"/><text x="26" y="20" font-size="12.5" fill="#7d8797" font-family="'IBM Plex Sans SC', sans-serif">命令：</text><text x="66" y="20" font-size="12.5" fill="#e6edf7" font-family="'IBM Plex Sans SC', sans-serif"></text></g></svg></div>
+        <figcaption><b>已落地</b>：<b>剪断这一段</b>——去掉的是整整一段，因此剪口留下一个看得见的缺口；在一点上断开产出的是两个重合的自由端，屏幕上与没剪之前一模一样。端段与只有一段的导线拒绝并说明：缩短一截与删整条各自已有入口。
         与 Altium 的「remove a segment up to that junction」和 <code>AETRIM</code> 同义，
         而且不用造新词：它落在既有的两级 Delete 语法里。</figcaption>
       </figure>
@@ -432,7 +440,7 @@
   <section>
     <div class="section-head">
       <h2>删掉搭上去的那条</h2>
-      <p>这一节是<strong>提案</strong>，不是现状。</p>
+      <p>这一节画的是<strong>改之前 / 改之后</strong>。</p>
     </div>
     <div class="pair">
       <figure>
@@ -442,8 +450,8 @@
         画一次接线再删掉，图<b>回不到原样</b>。</figcaption>
       </figure>
       <figure>
-        <div class="stage todo"><svg viewBox="0 0 420 200" role="img" aria-label="提案：合并回一条"><path d="M60 70H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="210" y="48" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">合并回一条</text></svg></div>
-        <figcaption><b>提案</b>：支路降到 2 时把两条支路合并成一条、删掉节点。
+        <div class="stage done"><svg viewBox="0 0 420 200" role="img" aria-label="已落地：合并回一条"><path d="M60 70H360" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="210" y="48" font-size="12" fill="#38bdf8" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">合并回一条</text></svg></div>
+        <figcaption><b>已落地</b>：支路降到 2 时把两条支路合并成一条、删掉节点。
         两条导线在一点相接、而那一点上没有第三样东西时，它们<b>就是</b>一条导线。
         Altium 的 Optimize Wires 与 <code>AETRIM</code>「不再需要的连接点一并删除」是同一条。</figcaption>
       </figure>
@@ -462,7 +470,7 @@
       </figure>
       <figure>
         <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="两次画，第二次吸在 B 上"><path d="M80 60H300" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M300 60V150" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><circle cx="300" cy="60" r="5" fill="#ff3b30"/><text x="80" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">A</text><text x="300" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">B</text><text x="316" y="154" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">C</text><text x="210" y="186" font-size="12" fill="#f59e0b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">两条 + 一个两通点</text></svg></div>
-        <figcaption><b>两次画</b>，第二次起点吸在 B 上：两条 + 一个两通节点，图上多一个实心点。<code>Delete</code> 只删其中一条。</figcaption>
+        <figcaption><b>两次画</b>，第二次起点吸在 B 上：改之前这里<b>两条都没接上</b>——那次接入被静默拒掉了（去写一个尚不存在的 <code>Wire</code>，而批次是原子的）。<b>改之后</b>：不建节点，直接并成一条，与左边逐字相同。</figcaption>
       </figure>
       <figure>
         <div class="stage"><svg viewBox="0 0 420 200" role="img" aria-label="两次画，第二次键入 B 的坐标"><path d="M80 60H300" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><path d="M300 60V150" fill="none" stroke="#ff3b30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="1"/><text x="80" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">A</text><text x="300" y="48" font-size="12" fill="#7d8797" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">B</text><text x="316" y="154" font-size="12" fill="#7d8797" text-anchor="start" font-family="'IBM Plex Sans SC', sans-serif">C</text><circle cx="300" cy="60" r="10" fill="none" stroke="#f59e0b" stroke-width="1.4" stroke-dasharray="3 3"/><text x="210" y="186" font-size="12" fill="#f59e0b" text-anchor="middle" font-family="'IBM Plex Sans SC', sans-serif">两条 · 假接头</text></svg></div>
@@ -470,8 +478,8 @@
         这是一个假接头，符号一挪就裂开，而屏幕上与上面两种几乎一样。</figcaption>
       </figure>
     </div>
-    <div class="callout todo">
-      <strong>一条规则同时收掉这两节</strong>
+    <div class="callout done">
+      <strong>一条规则同时收掉这两节（已落地）</strong>
       <p>
         两条导线在一点相接、而那一点上没有第三样东西时合并成一条。两处触发：取点落在另一条导线的
         <strong>自由端</strong>上时不建节点、直接续成一条；节点的支路降到 <strong>2</strong> 时合并两条支路并删掉节点。
