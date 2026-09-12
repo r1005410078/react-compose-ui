@@ -4,6 +4,7 @@ import { createStageSceneIndex } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
 import {
   applyStageCurveGrip,
+  isStageInteriorVertexGrip,
   stageCurveCorners,
   stageCurveGripNeighbor,
   stageCurveGrips,
@@ -230,6 +231,92 @@ describe('OpenSpec: stage-engine / 多段线夹点 / 拖段中点平移那一段
     expect(applyStageCurveGrip(line, 'm0', { x: 5, y: 5 })).toBeNull()
     expect(applyStageCurveGrip(line, 'move', { x: 5, y: 5 }))
       .toEqual({ kind: 'line', start: { x: 0, y: 5 }, end: { x: 10, y: 5 } })
+  })
+})
+
+describe('OpenSpec: stage-engine / 轴对齐曲线的夹点求解', () => {
+  /** 一条直角走线：横 → 竖 → 横。 */
+  const wire: ComposeCurve = {
+    kind: 'polyline',
+    vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 200, y: 100 }],
+    closed: false,
+  }
+
+  it('段夹点只取垂直分量', () => {
+    /*
+     * 第 1 段是竖直的（(100,0)→(100,100)），中点 (100,50)。拖到 (140,80)：位移 (40,30)
+     * 里只有水平那 40 是垂直于这一段的，竖直那 30 平行于它——平行分量会让两头的相邻段各自
+     * 变斜（它们是横的，共用的端点一上下走就不再与另一头等高）。
+     */
+    const next = applyStageCurveGrip(wire, 'm1', { x: 140, y: 80 }, { axisAligned: true })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 0, y: 0 }, { x: 140, y: 0 }, { x: 140, y: 100 }, { x: 200, y: 100 },
+    ])
+  })
+
+  it('关着时平行分量照常生效', () => {
+    // 普通多段线一个字节不变：段中点两个方向都能平移。
+    const next = applyStageCurveGrip(wire, 'm1', { x: 140, y: 80 })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 0, y: 0 }, { x: 140, y: 30 }, { x: 140, y: 130 }, { x: 200, y: 100 },
+    ])
+  })
+
+  it('端段同样只取垂直分量', () => {
+    // 第 0 段一端是自由端，它照样不能沿自己的方向走——那会让第 1 段变斜。
+    const next = applyStageCurveGrip(wire, 'm0', { x: 90, y: 40 }, { axisAligned: true })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 0, y: 40 }, { x: 100, y: 40 }, { x: 100, y: 100 }, { x: 200, y: 100 },
+    ])
+  })
+
+  it('没有相邻段时不投影', () => {
+    /*
+     * 单段折线平移不可能让任何东西变斜——那一档就是「平移整条线」，与两点直线的中点夹点
+     * 是同一句话。一律投影会让一条两顶点的线再也沿不了自己的方向走。
+     */
+    const single: ComposeCurve = {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+      closed: false,
+    }
+    const next = applyStageCurveGrip(single, 'm0', { x: 70, y: 20 }, { axisAligned: true })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 20, y: 20 }, { x: 120, y: 20 },
+    ])
+  })
+
+  it('斜段按它自己的方向投影', () => {
+    // 二选一的写法（横段只改 y、竖段只改 x）在这里没有答案，而几何编辑不保证曲线是正交的。
+    const slanted: ComposeCurve = {
+      kind: 'polyline',
+      vertices: [{ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 200, y: 0 }],
+      closed: false,
+    }
+    // 第 0 段方向 (1,1)/√2，中点 (50,50)；拖到 (70,50) 即位移 (20,0)，垂直分量是 (10,-10)。
+    const next = applyStageCurveGrip(slanted, 'm0', { x: 70, y: 50 }, { axisAligned: true })
+
+    expect(next?.kind === 'polyline' ? next.vertices : []).toEqual([
+      { x: 10, y: -10 }, { x: 110, y: 90 }, { x: 200, y: 0 },
+    ])
+  })
+
+  it('内部顶点谓词按 kind 分派', () => {
+    expect(isStageInteriorVertexGrip(wire, 'v1')).toBe(true)
+    expect(isStageInteriorVertexGrip(wire, 'v2')).toBe(true)
+    // 两个端点顶点与段夹点都不是：端点有「相对相邻顶点正交」管着，段夹点是改形状的入口。
+    expect(isStageInteriorVertexGrip(wire, 'v0')).toBe(false)
+    expect(isStageInteriorVertexGrip(wire, 'v3')).toBe(false)
+    expect(isStageInteriorVertexGrip(wire, 'm1')).toBe(false)
+
+    const line: ComposeCurve = { kind: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } }
+    for (const id of ['start', 'end', 'move']) {
+      expect(isStageInteriorVertexGrip(line, id)).toBe(false)
+    }
   })
 })
 

@@ -26,6 +26,18 @@ export interface StageGripTarget {
    */
   readonly constrain?: 'ortho'
   /**
+   * 这条曲线的每一段都必须保持轴对齐。
+   *
+   * @remarks
+   * 与 {@link StageGripTarget.constrain} 是两件事：那个约束的是**落点**（用户能把点放到哪
+   * 儿），这个约束的是**几何的自由度**（夹点能把形状改成什么样）。导线的段夹点两者都要——
+   * 落点不钉角度（几何只剩一个自由度，再钉一次会让沿段方向的拖动什么都不发生），而位移只
+   * 取垂直于该段的分量。
+   *
+   * 同样由宿主按目标 Entity 的性质给出：引擎不认识导线。
+   */
+  readonly axisAligned?: boolean
+  /**
    * 方向与距离的参照点；缺席即 `origin`。
    *
    * @remarks
