@@ -166,6 +166,52 @@ describe('OpenSpec: basic-materials / 关联组件实例物料', () => {
     expect(content).toHaveStyle({ pointerEvents: 'none' })
   })
 
+  /*
+   * 判别性来自**两侧都断**：只断「翻了」的用例，在一个恒写 `scale(-1,-1)` 的实现上同样会绿；
+   * 只断默认的用例，在一个根本没实现翻转的实现上同样会绿。
+   */
+  it('OpenSpec: basic-materials / 组件实例的翻转 / 不声明 flip 的实例不带 transform', async () => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    const props = instanceProps()
+    render(<Renderer
+      authoredProps={props}
+      entity={{ id: 'instance', name: 'Card', components: {} } as ComposeEntity}
+      mode="editor"
+      props={props}
+      registry={materials.registry}
+      renderer={{ type: 'component-instance', props }}
+    />)
+    const content = await screen.findByTestId('compose-component-instance-content')
+    // 缺席即 `'none'`：既有实例的渲染因此逐像素不变，而「不变」在这里就是不写这个属性。
+    expect(content.style.transform).toBe('')
+  })
+
+  it('OpenSpec: basic-materials / 组件实例的翻转 / flip 绕盒中心翻转且不改定义', async () => {
+    const materials = createComposeBasicMaterials()
+    const Renderer = materials.registry.getRenderer('component-instance')!.renderer
+    const base = instanceProps()
+    const props = { ...base, flip: 'y' }
+    const snapshotBefore = JSON.stringify(base.resolvedSnapshot)
+    render(<Renderer
+      authoredProps={props}
+      entity={{ id: 'instance', name: 'Card', components: {} } as ComposeEntity}
+      mode="editor"
+      props={props}
+      registry={materials.registry}
+      renderer={{ type: 'component-instance', props }}
+    />)
+    const content = await screen.findByTestId('compose-component-instance-content')
+    expect(content.style.transform).toBe('scale(1, -1)')
+    /*
+     * 绕**盒中心**而不是 `Transform.pivot`：那个字段回答的是「绕哪一点旋转」，借给翻转会让
+     * 改过基点的用户看到图形整个跳走。
+     */
+    expect(content.style.transformOrigin).toBe('center')
+    // 定义是共享的：翻转只作用于呈现，快照一个字节没变。
+    expect(JSON.stringify(base.resolvedSnapshot)).toBe(snapshotBefore)
+  })
+
   it('嵌套实体应用 Appearance 圆角与 overflow，Material 不盖默认蓝底', async () => {
     const materials = createComposeBasicMaterials()
     const Renderer = materials.registry.getRenderer('component-instance')!.renderer

@@ -1,5 +1,6 @@
 import type { ComposeCommandPoint } from '@compose-ui/commands'
-import type { ComposeCurve, ComposeRegularPolygonFit } from '@compose-ui/core'
+import type { ComposeCurve, ComposeMirrorAxis, ComposeRegularPolygonFit } from '@compose-ui/core'
+import type { StageAlignmentMode } from '../gesture-planning'
 
 /**
  * 一次夹点取点。
@@ -63,6 +64,19 @@ export interface StageDraftingTranslation {
   readonly delta: ComposeCommandPoint
 }
 
+/** 一次针对既有 Entity 的镜像。 @public */
+export interface StageDraftingMirror {
+  readonly entityIds: readonly string[]
+  /** 镜像轴上的两个点，世界坐标。 */
+  readonly axis: ComposeMirrorAxis
+}
+
+/** 一次针对既有 Entity 的对齐或分布。 @public */
+export interface StageDraftingAlignment {
+  readonly entityIds: readonly string[]
+  readonly mode: StageAlignmentMode
+}
+
 /**
  * 绘图命令的效果。
  *
@@ -114,6 +128,16 @@ export interface StageDraftingEffect {
    * 箭头」，由持有 Registry 的宿主挑那个带 `markerEnd` 的 Preset。
    */
   readonly arrow?: boolean
+  /**
+   * 本步要按一条轴镜像的既有 Entity。
+   *
+   * @remarks
+   * 轴是**世界坐标**的两个点。反射怎么落进文档（曲线烘进几何、实例走 `flip`、盒只反射位置
+   * 与朝向）由规划那一步决定，命令只说「按这条轴镜像这些对象」。
+   */
+  readonly mirror?: StageDraftingMirror
+  /** 本步要对齐或分布的既有 Entity。 */
+  readonly align?: StageDraftingAlignment
   /** 本步要平移的既有 Entity。 */
   readonly translate?: StageDraftingTranslation
   /** 本步要复制并平移的既有 Entity。 */
@@ -227,6 +251,23 @@ export interface StageDraftingMessages {
   readonly collinearArc: string
   readonly degenerateShape: string
   readonly selectObjects: string
+  readonly mirrorTitle: string
+  /** `MIRROR` 的第一个点：镜像轴的起点。 */
+  readonly mirrorFirstPoint: string
+  readonly mirrorSecondPoint: string
+  /** 两个点重合、轴没有方向时的说明。 */
+  readonly mirrorDegenerateAxis: string
+  /** 六项对齐与两项分布的标题。 */
+  readonly alignLeftTitle: string
+  readonly alignCenterXTitle: string
+  readonly alignRightTitle: string
+  readonly alignTopTitle: string
+  readonly alignCenterYTitle: string
+  readonly alignBottomTitle: string
+  readonly distributeXTitle: string
+  readonly distributeYTitle: string
+  /** 选区不足时的说明；`minimum` 是这一项至少需要几个对象。 */
+  readonly alignmentNeedsMore: (minimum: number) => string
   readonly expectedSelection: string
   readonly basePoint: string
   readonly displacementPoint: string

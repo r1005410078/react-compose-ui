@@ -80,9 +80,9 @@ describe('first-party Renderer Prop Contracts', () => {
     // 组件实例的两条 Prop 是「宿主怎么驱动这个实例」的全部入口；实例内不持有时钟，
     // 因此没有 playing / playbackMode 之类的第三条。
     expect(contractNames(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER))
-      .toEqual(['animation', 'animationTime', 'contentFit'])
+      .toEqual(['animation', 'animationTime', 'contentFit', 'flip'])
     expect(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER.inspectorPropNames)
-      .toEqual(['animation', 'animationTime', 'contentFit'])
+      .toEqual(['animation', 'animationTime', 'contentFit', 'flip'])
     expect(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER.propCategories)
       .toEqual([
         { id: 'animation', label: '动画', inspectorDefaultExpanded: true },
@@ -108,6 +108,10 @@ describe('first-party Renderer Prop Contracts', () => {
       .not.toBe(true)
     expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'contentFit', 'scale')).toBe(true)
     expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'contentFit', null)).toBe(true)
+    expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'flip', 'xy')).toBe(true)
+    // 缺席即 'none'：null 表示「回到默认」，与 contentFit 的空态同形。
+    expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'flip', null)).toBe(true)
+    expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'flip', 'z')).not.toBe(true)
     expect(validateValue(DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER, 'contentFit', 'stretch'))
       .not.toBe(true)
   })

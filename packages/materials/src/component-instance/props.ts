@@ -15,4 +15,6 @@ export const COMPONENT_INSTANCE_RENDERER_PROP_SCHEMAS = {
   animationTime: v.pipe(v.number(), v.finite()),
   // 缺席即 'layout'（默认值不写成显式值）；null 表示「回到默认」，与 animation 的空态同形。
   contentFit: v.nullable(v.picklist(['layout', 'scale'])),
+  // 缺席即 'none'；null 表示「回到默认」，与 contentFit 的空态同形。
+  flip: v.nullable(v.picklist(['none', 'x', 'y', 'xy'])),
 } as const
