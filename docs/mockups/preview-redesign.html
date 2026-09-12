@@ -379,6 +379,9 @@ b.k { color: var(--text-strong); font-weight: 600; }
 .step-b { color: var(--text); font-size: 13px; }
 .step-b em { display: block; margin-top: 3px; font-style: normal; font-size: 12px; color: var(--muted); }
 .step-t { font: 500 11px/1.5 var(--mono); color: var(--muted); white-space: nowrap; }
+.step[data-done="true"] .step-n::after { content: " ✓"; color: var(--ok); }
+.step[data-done="true"] .step-b { color: var(--muted); }
+.step[data-done="true"] .step-t { color: var(--ok); }
 
 
 /* ——— 调研对照 ——— */
@@ -736,7 +739,7 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
 <section>
   <h2><span class="num">05</span>设计稿 · 弹框</h2>
   <p class="sub">头部一行收掉今天的三行（标题行 + 目标行 + 页脚）；台面安静、无网格；画板不切角、不补底。</p>
-  <p class="sub"><b class="k">琥珀虚线圈 = 本稿画着、v1 未落地</b>：面包屑的页面那一级、页面底色、整屏形态与时间轴各自是独立的后续变更，见第 10 节。其余部分已按本图落地。</p>
+  <p class="sub"><b class="k">琥珀虚线圈 = 本稿画着、尚未落地</b>：只剩面包屑的页面那一级、页面底色与时间轴三处，各自是独立的后续变更。整屏形态已落地，见第 08 节。</p>
 
   <div class="shot">
     <div class="shot-bar"><span class="dot"></span>ComposePreviewDialog · 取景形态</div>
@@ -763,7 +766,7 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
               <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3" /></svg>
             </button>
             <span class="rule"></span>
-            <button class="icon-btn" type="button" data-soon="true" title="整屏预览">
+            <button class="icon-btn" type="button" title="整屏预览">
               <svg viewBox="0 0 24 24"><path d="M14 4h6v6" /><path d="M20 4 13 11" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>
             </button>
             <span class="rule"></span>
@@ -993,6 +996,7 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
 <section>
   <h2><span class="num">08</span>设计稿 · 整屏</h2>
   <p class="sub">静息态零 chrome——这是它存在的全部理由。指针移动时下方浮出控制条，停两秒再隐去。</p>
+  <p class="sub"><b class="k">已落地</b>（`ComposePreviewPage`），除两处琥珀虚线圈：面包屑的页面那一级与页面底色。控制条多一条本图没画的规矩——<b class="k">键盘焦点进入时它恒可见</b>，否则它对键盘用户永远不存在。</p>
 
   <div class="shot">
     <div class="shot-bar"><span class="dot"></span>ComposePreviewPage · 权威形态（同标签页路由，编辑器不卸载）</div>
@@ -1019,12 +1023,12 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
         <span class="rule"></span>
         <nav class="crumb">
           <span class="pin pin-abs" style="top: -14px; left: -6px;">7</span>
-          <button type="button">储能总览<span class="caret"></span></button>
+          <button type="button" data-soon="true">储能总览<span class="caret"></span></button>
           <span class="sep">›</span>
           <button type="button" data-cur="true">1# 储能单元<span class="caret"></span></button>
         </nav>
         <span class="rule"></span>
-        <button class="pill" type="button"><span class="swatch" style="background: #0b1220;"></span><span class="val">深底</span><span class="caret"></span></button>
+        <button class="pill" type="button" data-soon="true"><span class="swatch" style="background: #0b1220;"></span><span class="val">深底</span><span class="caret"></span></button>
         <button class="pill" type="button" title="屏幕尺寸">
           <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="1.5" /><path d="M9 20h6" /></svg>
           <span class="val">实际屏幕</span><span class="caret"></span>
@@ -1120,13 +1124,13 @@ footer { padding-top: 8px; border-top: 1px solid var(--border); color: var(--mut
   <h2><span class="num">11</span>落地顺序</h2>
   <p class="sub">前三步不动结构，当天就能让弹框「符」；结构改动排在后面，因为它要先有一条能跑的纵向流程。</p>
   <div class="steps">
-    <div class="step"><span class="step-n">1</span><span class="step-b">修保真度四条：白底、<code>zoom</code>、圆角与白外圈、缩放读数<em>F1–F4。纯 CSS 与一个 state 默认值，不动任何协议。</em></span><span class="step-t">改</span></div>
-    <div class="step"><span class="step-n">2</span><span class="step-b">修两条缺陷：场景名读错文档、跳转后闪错误态<em>F6–F7。后者把目标解析挪进渲染期的 prev-adjust，与 PageHost 里已有的那处同一种写法。</em></span><span class="step-t">修</span></div>
-    <div class="step"><span class="step-n">3</span><span class="step-b">把缩放下拉换成「屏幕尺寸 + 视图缩放」两个控件<em>清单复用 core 既有常量；<code>fit</code> 终于被用上（F9）。这一步就让「适应」这个档位消失。</em></span><span class="step-t">改</span></div>
-    <div class="step"><span class="step-n">4</span><span class="step-b">宿主交出「画布上是哪一份文档」这一个答案，修 F10<em>目标种类（场景／组件）从它读出来，第 07 节整张表都挂在它上面。</em></span><span class="step-t">修</span></div>
-    <div class="step"><span class="step-n">5</span><span class="step-b">拖边角改屏幕尺寸，带吸附<em>吸附数学是纯函数，Vitest 直接钉；优先级、容差与记号按上一节那七条。</em></span><span class="step-t">新能力</span></div>
-    <div class="step"><span class="step-n">6</span><span class="step-b">抽 <code>ComposePreviewSurface</code>，把弹框改成它的 chrome<em>行为逐条不变，既有用例全绿即为通过。</em></span><span class="step-t">重构</span></div>
-    <div class="step"><span class="step-n">7</span><span class="step-b">新增 <code>ComposePreviewPage</code> 与宿主路由<em>OpenSpec 变更：新增公共 API + 新能力，按流程先提案。</em></span><span class="step-t">新能力</span></div>
+    <div class="step" data-done="true"><span class="step-n">1</span><span class="step-b">修保真度四条：白底、<code>zoom</code>、圆角与白外圈、缩放读数<em>F1–F4。纯 CSS 与一个 state 默认值，不动任何协议。</em></span><span class="step-t">改</span></div>
+    <div class="step" data-done="true"><span class="step-n">2</span><span class="step-b">修两条缺陷：场景名读错文档、跳转后闪错误态<em>F6–F7。后者把目标解析挪进渲染期的 prev-adjust，与 PageHost 里已有的那处同一种写法。</em></span><span class="step-t">修</span></div>
+    <div class="step" data-done="true"><span class="step-n">3</span><span class="step-b">把缩放下拉换成「屏幕尺寸 + 视图缩放」两个控件<em>清单复用 core 既有常量；<code>fit</code> 终于被用上（F9）。这一步就让「适应」这个档位消失。</em></span><span class="step-t">改</span></div>
+    <div class="step" data-done="true"><span class="step-n">4</span><span class="step-b">宿主交出「画布上是哪一份文档」这一个答案，修 F10<em>目标种类（场景／组件）从它读出来，第 07 节整张表都挂在它上面。</em></span><span class="step-t">修</span></div>
+    <div class="step" data-done="true"><span class="step-n">5</span><span class="step-b">拖边角改屏幕尺寸，带吸附<em>吸附数学是纯函数，Vitest 直接钉；优先级、容差与记号按上一节那七条。</em></span><span class="step-t">新能力</span></div>
+    <div class="step" data-done="true"><span class="step-n">6</span><span class="step-b">抽 <code>ComposePreviewSurface</code>，把弹框改成它的 chrome<em>行为逐条不变，既有用例全绿即为通过。</em></span><span class="step-t">重构</span></div>
+    <div class="step" data-done="true"><span class="step-n">7</span><span class="step-b">新增 <code>ComposePreviewPage</code> 与宿主路由<em>OpenSpec 变更：新增公共 API + 新能力，按流程先提案。</em></span><span class="step-t">新能力</span></div>
     <div class="step"><span class="step-n">8</span><span class="step-b">底色开关与时间轴刮擦<em>各自独立，可以排在 7 之后任意时间。</em></span><span class="step-t">增强</span></div>
   </div>
 </section>
