@@ -152,6 +152,33 @@ export interface StageDraftingEffect {
    * 那份栈的宿主决定，与 `wire` / `arrow` 是同一条边界。
    */
   readonly undoLastCreated?: boolean
+  /**
+   * 本步的曲线**替换**本次会话上一个建出来的 Entity 的几何，而不是新建一个。
+   *
+   * @remarks
+   * 与 {@link StageDraftingEffect.undoLastCreated} 同一条边界：引擎建不了 Entity 也记不住
+   * id，因此它只说意图，是哪一个由记着那份栈的宿主决定。
+   *
+   * 导线靠它做到「每点一下就落地，产出的仍然是**一个** Entity」——逐段落地会让中间的拐点
+   * 退化成两个自由端刚好重合，符号一挪接头就裂开。
+   *
+   * 栈里没有可替换的对象时（它已经被外部撤销掉了）宿主退回新建，会话因此自己愈合。
+   */
+  readonly replaceLastCreated?: boolean
+  /**
+   * 这一条**还没画完**，会话仍在取点。
+   *
+   * @remarks
+   * 宿主据此跳过**接入节点**：中途路过另一条导线不是接线意图，先建节点、把对方劈成两段，
+   * 下一下又走开，留下的是一个谁也没接的孤儿节点，而对方的线已经被切开了。
+   *
+   * 端口绑定**不受它约束**——那一件事每一步按当前几何重算，是自我纠正的：末端吸上端口就绑、
+   * 下一下走开就解绑。接入相反，它改的是别人的文档。
+   *
+   * 与 {@link StageDraftingEffect.replaceLastCreated} MUST NOT 合并：最后一步同时是「替换」
+   * 与「画完了」，而中间每一步两者都成立。
+   */
+  readonly pending?: boolean
   /** 本步要把某个夹点挪到某个落点。 */
   readonly curveGrip?: StageDraftingGripEdit
   /**

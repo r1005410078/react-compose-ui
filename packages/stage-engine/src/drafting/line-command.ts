@@ -223,12 +223,17 @@ function createTwoPointCurveSession(
  * 建立一次 WIRE 执行的状态机。
  *
  * @remarks
- * **连续取点**：一条导线是**一个**连接，因此几何攒成一个 Entity 在结束时提交，而不像 `LINE`
- * 那样逐段落地——逐段会得到 N 个 Entity，中间的接头退化成「两个自由端刚好重合」，符号一移动
- * 接头就裂开（求解保证的是**绑定端**跟着走，假接头不是绑定）。
+ * **连续取点，产出一个 Entity**：一条导线是**一个**连接，不像 `LINE` 那样逐段落地——逐段会
+ * 得到 N 个 Entity，中间的接头退化成「两个自由端刚好重合」，符号一移动接头就裂开（求解保证
+ * 的是**绑定端**跟着走，假接头不是绑定）。
  *
- * 推论（与 `PLINE` 同一条判断）：攒到结束才提交的命令需要「放弃上一点」关键字，因为此刻文档上
- * 什么都还没有、撤销够不着它。
+ * **但落地不等到结束**：第二个点就把这条线建出来，之后每取一个点替换它的几何。攒到结束才写
+ * 进文档的症状是——用户点了两下、三下，画布上只有一条预览，场景树里什么都没有，而他已经确定
+ * 了那几个点。`LINE` 逐段落地的理由（「画一段就该在场景树里出现一行」）在这里一字不差地成立，
+ * 本命令与它的差别只剩产出几个 Entity。
+ *
+ * 「放弃上一点」关键字因此不再是「文档上什么都还没有」那条推论的产物（那是 `PLINE`）：它在
+ * 这里要把已落地的几何一起收回去。
  *
  * **不做自动路由**：横平竖直由既有的角度约束给（极轴默认开、增量角 45°，正好覆盖 H/V/45），
  * 用户点到哪儿就是哪儿。替用户补拐角要回答「拐点该拐在哪儿」，而真答案要考虑障碍物。
@@ -280,18 +285,56 @@ export function createStageWireSession(
   })
 
   let prompt: ComposeCommandPrompt = firstPrompt(messages)
+  /*
+   * 这一条已经落进文档了没有。
+   *
+   * @remarks
+   * 它决定同一条曲线是**新建**还是**替换**，也决定放弃时要不要说「删掉我建的那一个」。
+   * 不能用 `vertices.length >= 2` 代替：第二个点与第一个重合时那一步什么都没落地（退化的
+   * 导线画不出来），而顶点数已经是 2。
+   */
+  let landed = false
+
+  /** 这一步要落地的几何；退化时为 null（第二个点与第一个重合，画不出线来）。 */
+  const landing = (pending: boolean): StageDraftingEffect | undefined => {
+    if (isDegenerateComposePolyline(vertices)) return undefined
+    const effect: StageDraftingEffect = {
+      curves: [wireCurve(vertices)],
+      wire: true,
+      ...(landed ? { replaceLastCreated: true } : {}),
+      ...(pending ? { pending: true } : {}),
+      reference: vertices[vertices.length - 1]!,
+    }
+    landed = true
+    return effect
+  }
 
   return {
     get prompt() {
       return prompt
     },
-    // 已取的**全部**顶点加上光标那个候选点：攒到结束才提交，没画出来的部分对用户就是不存在的。
+    /*
+     * **只画待定的那一段**，与 `LINE` 同一条规则：已落地的部分是真的 Entity、由渲染器画，
+     * 预览再画一遍就是同一条线画两遍——而两条的墨色与线宽不同（预览是 1px 虚线），叠出来
+     * 读不出哪一条是结果。
+     *
+     * 第一个点之后还没有落地的部分，这一段仍然是「待定的那一段」，因此同一个表达式两档都对。
+     */
     preview(point) {
-      if (vertices.length === 0) return null
-      return { curves: [wireCurve([...vertices, point])], wire: true }
+      const last = vertices[vertices.length - 1]
+      return last ? { curves: [createComposeLineCurve(last, point)], wire: true } : null
     },
     advance(input): ComposeCommandStep<StageDraftingEffect> {
-      if (input.kind === 'cancel') return { status: 'cancelled' }
+      /*
+       * 放弃这一条时连它已经落进文档的部分一起放弃：导线从第二个点起就在文档里了，只清掉
+       * 会话会在图上留下半条线，而用户读到的是「按了取消，它还在」。是哪一个由宿主按栈决定
+       * ——引擎不认识 Entity id。
+       */
+      if (input.kind === 'cancel') {
+        return landed
+          ? { status: 'cancelled', effect: { undoLastCreated: true } }
+          : { status: 'cancelled' }
+      }
 
       if (input.kind === 'keyword') {
         if (input.key.toUpperCase() !== 'U' || vertices.length === 0) {
@@ -300,7 +343,23 @@ export function createStageWireSession(
         vertices.pop()
         prompt = vertices.length === 0 ? firstPrompt(messages) : nextPrompt()
         const last = vertices[vertices.length - 1]
-        return { status: 'prompt', prompt, preview: last ? { reference: last } : {} }
+        /*
+         * 收回一个顶点是**对称的**：已落地的几何要跟着变短，只剩一个点时那条线整个删掉。
+         * 只动会话的话（`PLINE` 的 `U` 就是那样，因为它此刻文档上什么都还没有）屏幕上那条线
+         * 纹丝不动，而提示已经回退了一步。
+         */
+        let shrink: StageDraftingEffect | undefined
+        if (landed && vertices.length > 1) shrink = landing(true)
+        else if (landed) {
+          landed = false
+          shrink = { undoLastCreated: true }
+        }
+        return {
+          status: 'prompt',
+          prompt,
+          preview: last ? { reference: last } : {},
+          ...(shrink ? { commit: shrink } : {}),
+        }
       }
 
       if (input.kind === 'accept') {
@@ -309,24 +368,28 @@ export function createStageWireSession(
          * `PLINE` 的 `cancelled` 刻意不同——`PLINE` 的 `Enter` 在退化时放弃整条命令，而导线
          * 的 `Enter` 只是「这一条画完了」，此刻拒绝并停在原提示才说得通。
          */
-        if (isDegenerateComposePolyline(vertices)) {
-          return { status: 'rejected', message: messages.expectedPoint }
-        }
-        return {
-          status: 'commit',
-          effect: {
-            curves: [wireCurve(vertices)],
-            wire: true,
-            reference: vertices[vertices.length - 1]!,
-          },
-        }
+        const effect = landing(false)
+        if (!effect) return { status: 'rejected', message: messages.expectedPoint }
+        return { status: 'commit', effect }
       }
 
       if (input.kind !== 'point') return { status: 'rejected', message: messages.expectedPoint }
 
       vertices.push(input.point)
       prompt = nextPrompt()
-      return { status: 'prompt', prompt, preview: { reference: input.point } }
+      /*
+       * 每取一个点就落地：第二个点把这条线建出来，之后每一下扩它一个顶点。产出仍然是**一个**
+       * Entity——本条改的是「什么时候写进文档」，不是「产出几个 Entity」。
+       *
+       * 带 `pending`：中途路过另一条导线不是接线意图，接入留到结束那一步做。
+       */
+      const effect = landing(true)
+      return {
+        status: 'prompt',
+        prompt,
+        preview: { reference: input.point },
+        ...(effect ? { commit: effect } : {}),
+      }
     },
   }
 }

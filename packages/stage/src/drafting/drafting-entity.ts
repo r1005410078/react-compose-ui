@@ -4,6 +4,7 @@ import {
   getComposeHierarchy,
   getComposeLock,
   getComposeVisibility,
+  getComposeWire,
   normalizeComposeCurveGeometry,
   type ComposeDocument,
   type ComposeEntity,
@@ -274,6 +275,21 @@ export interface StageDraftingCurveOptions {
   }
   /** 事务的展示名；接线一步会产出多条命令，历史里需要一句话说清它是什么。 */
   readonly tapLabel?: string
+  /**
+   * 改**这一个已有 Entity** 的几何，而不是新建一个。
+   *
+   * @remarks
+   * 导线每取一个点就落地，产出的仍然是一个 Entity：第二个点新建，之后每一下走这一支。
+   * 写入走 `entity.curve.set`——曲线几何写入的唯一漏斗，它在同一个事务里写 `Curve` 与
+   * `LayoutItem`。
+   *
+   * **落地父级取它当前的父级，不重算**：新建那一支按几何紧包围盒的中心挑父级，而那个中心
+   * 随着导线变长一直在动，每一步重算会让一条画到一半的线突然从一个场景搬到另一个场景。
+   *
+   * 目标不存在或被锁定时退回新建：那一个已经被外部撤销掉了，会话因此自己愈合，而不是从此
+   * 每一步都写不进去。
+   */
+  readonly replace?: string
 }
 
 /** {@link createStageDraftingCurveCommand} 的结果。 @internal */
@@ -294,6 +310,9 @@ export interface StageDraftingCurveCommand {
  * 落点父级取线段中点所在的容器；不在任何容器里时落进激活场景，与「根层落点按类型分流」
  * 一致——曲线不是容器，不走升格。
  *
+ * `options.replace` 给出目标时改的是**那一个**：命令换成 `entity.curve.set`，父级取它当前的
+ * 父级。导线每取一个点就落地、产出仍然是一个 Entity，走的就是这一支。
+ *
  * @returns 可派发的命令与被丢掉的绑定端；Preset 缺失时返回 null。
  * @internal
  */
@@ -302,7 +321,9 @@ export function createStageDraftingCurveCommand(
   curve: ComposeCurve,
   options: StageDraftingCurveOptions = {},
 ): StageDraftingCurveCommand | null {
-  const { arrow, rectangle, taps, tapLabel, wire, wiring } = options
+  const { arrow, rectangle, replace, taps, tapLabel, wire, wiring } = options
+  const existing = replace ? context.document.entities[replace] : undefined
+  const target = existing && !getComposeLock(existing).locked ? existing : undefined
   /*
    * 导线走 `wire` Preset（一次回路的红色粗实线），判据是**这条线真的绑上了端口**而不是
    * 走了哪条命令——`WIRE` 合并进 `LINE` 之后没有第二种线可分，绑定跟着取点来源走，因此
@@ -318,16 +339,17 @@ export function createStageDraftingCurveCommand(
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
   }
-  const parent = usableParent(context.document, context.index.containerAtPoint(anchor))
-    ?? usableParent(context.document, context.activeFrameId ?? null)
-  const inverse = parent
-    ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parent.id))
+  const parentId = target
+    ? getEntityParentId(context.document, target.id)
+    : (usableParent(context.document, context.index.containerAtPoint(anchor))
+      ?? usableParent(context.document, context.activeFrameId ?? null))?.id ?? null
+  const inverse = parentId
+    ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parentId))
     : null
   const toParent = (point: StagePoint) => (inverse ? applyMatrix(inverse, point) : point)
   const rotationDegrees = inverse ? Math.atan2(inverse.b, inverse.a) * 180 / Math.PI : 0
-  const normalized = normalizeComposeCurveGeometry(
-    toParentCurve(curve, toParent, rotationDegrees),
-  )
+  const local = toParentCurve(curve, toParent, rotationDegrees)
+  const normalized = normalizeComposeCurveGeometry(local)
 
   /*
    * 接入另一条导线：先把节点建出来、把被接入的线断成两段，再让本条曲线的那一端绑上去。
@@ -338,7 +360,6 @@ export function createStageDraftingCurveCommand(
    * 跨父级的接入在 `planStageWireTap` 里被拒绝并返回 null，与端口那一侧同一条判据：不接是
    * **可见的**降级，非法文档是不可见的。
    */
-  const parentId = parent ? parent.id : null
   const tapEdits: EditorCommand[] = []
   const tapJunctions: EditorCommand[] = []
   const tapBindings: { start?: ComposeWireBinding; end?: ComposeWireBinding } = {}
@@ -373,6 +394,39 @@ export function createStageDraftingCurveCommand(
    * MUST NOT 在 Preset 缺失时静默回退到 `curve`：回退画出来的是一条看起来像标注线的导线，
    * 而它是主回路、还带着屏幕上看不见的绑定。
    */
+  /*
+   * 改一个已有 Entity 的几何：走 `entity.curve.set`，载荷是 parent 局部坐标，盒与几何由那条
+   * 唯一漏斗一起写。Preset 与父级都不在这一支里——它们在这个 Entity 建出来的那一刻就定下了。
+   *
+   * `wire` 每一步按当前几何重算：末端吸上端口就绑、下一下走开就解绑。缺席即不动 `Wire`，
+   * 因此一条从来没碰过端口的线不会被写上一个空壳，也不会每一步都产生一条无谓的补丁。
+   */
+  if (target) {
+    const current = getComposeWire(target)
+    const nextWire = bindings.wire ?? (current ? null : undefined)
+    const update: EditorCommand = {
+      id: context.idFactory(),
+      type: BUILTIN_COMMAND_TYPES.setCurve,
+      payload: {
+        entityId: target.id,
+        curve: local as unknown as JsonValue,
+        ...(nextWire === undefined ? {} : { wire: nextWire as unknown as JsonValue }),
+      },
+      meta: { label: target.name, source: 'stage', targetIds: [target.id] },
+    }
+    return {
+      command: tapJunctions.length > 0
+        ? batchStageCommands(
+            context.idFactory,
+            [...tapEdits, update, ...tapJunctions],
+            tapLabel ?? target.name ?? '',
+            { label: tapLabel ?? target.name, source: 'stage', targetIds: [target.id] },
+          ) ?? update
+        : update,
+      droppedWireEnds: [...bindings.dropped, ...droppedTaps],
+    }
+  }
+
   const seed = context.registry.createSeed(
     wiring || bindings.wire
       ? 'wire'
