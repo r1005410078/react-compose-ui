@@ -1,9 +1,4 @@
-## RENAMED Requirements
-
-- FROM: `### Requirement: 矩形的选中呈现走盒那一套`
-- TO: `### Requirement: 闭合曲线的选中呈现走盒那一套`
-
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: 闭合曲线的选中呈现走盒那一套
 
@@ -65,6 +60,8 @@ MUST NOT 随本条一起放宽——一个六边形选中之后多出六个圆�
 
 - **WHEN** 拖动一个圆角手柄
 - **THEN** 圆角之后的轮廓画了出来，且选区框与缩放手柄仍在
+
+## MODIFIED Requirements
 
 ### Requirement: 受控工具模式与专属选区反馈
 
