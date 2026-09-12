@@ -139,6 +139,7 @@ export const DRAWING_TOOLBAR_SHELF: ComposeToolbarShelf = [
   'ARC',
   'ARROW',
   'WIRE',
+  'TRIM',
   COMPOSE_TOOLBAR_SEPARATOR,
   'draw-text',
 ]
@@ -402,4 +403,6 @@ export const COMPOSE_TOOLBAR_CATALOG: readonly ComposeToolbarCatalogEntry[] = [
   { id: 'ARC', messageKey: 'drawArc', icon: 'arc', entrance: { kind: 'command' } },
   { id: 'ARROW', messageKey: 'drawArrow', icon: 'arrow', entrance: { kind: 'command' } },
   { id: 'WIRE', messageKey: 'drawWire', icon: 'wire', entrance: { kind: 'command' } },
+  // 修剪的第二条入口是命令行的 `TRIM` / `TR`；不给单键，`T` 已归文字工具。
+  { id: 'TRIM', messageKey: 'trim', icon: 'trim', entrance: { kind: 'command' } },
 ]

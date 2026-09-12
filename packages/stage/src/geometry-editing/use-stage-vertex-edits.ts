@@ -24,6 +24,7 @@ import {
   type StageVertexEdit,
   type StageVertexEditRejection,
 } from '@compose-ui/stage-engine'
+import { isStageJunctionEntity } from '../drafting/wire-tap'
 
 /** 顶点增删要用到的文案；本 Hook 不认识 locale。 @internal */
 export interface StageVertexEditMessages {
@@ -194,6 +195,7 @@ export function useStageVertexEdits(options: StageVertexEditsOptions): StageVert
     const plan = planStageWireCut(geometry.document, entityId, result.segmentIndex, {
       idFactory,
       isWire,
+      isJunction: isStageJunctionEntity,
     })
     if (!plan) {
       notify(messages.rejectCutEdge)
@@ -203,7 +205,7 @@ export function useStageVertexEdits(options: StageVertexEditsOptions): StageVert
     dispatch(createComposeBatchCommand({
       id: idFactory(),
       commands: [...plan.commands],
-      meta: { label, source: 'stage', targetIds: [entityId, plan.createdId] },
+      meta: { label, source: 'stage', targetIds: plan.createdId ? [entityId, plan.createdId] : [entityId] },
     }))
     return 'applied'
   }, [commit])

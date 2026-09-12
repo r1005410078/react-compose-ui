@@ -9,6 +9,7 @@ import { createComposeLineCurve, isDegenerateComposePolyline } from '@compose-ui
 import type { ComposeCurve } from '@compose-ui/core'
 import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
 import { createStageEraseCommand } from './erase-command'
+import { createStageTrimCommand } from './trim-command'
 import { createStageVertexCommand } from './vertex-command'
 import { createStageAlignmentCommand, createStageMirrorCommand } from './mirror-command'
 import type { StageAlignmentMode } from '../gesture-planning'
@@ -471,6 +472,7 @@ export function createStageDraftingCommands(
     createStageMoveCommand(messages),
     createStageCopyCommand(messages),
     createStageEraseCommand(messages),
+    createStageTrimCommand(messages),
     createStageVertexCommand(messages),
     createStageMirrorCommand(messages),
     /*

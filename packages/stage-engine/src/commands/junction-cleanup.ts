@@ -44,6 +44,7 @@ function branchesByJunction(
   document: ComposeDocument,
   isJunction: StageJunctionPredicate,
   removed: ReadonlySet<string>,
+  dropped: ReadonlySet<string> = new Set(),
 ): Map<string, JunctionBranch[]> {
   const branches = new Map<string, JunctionBranch[]>()
   for (const entity of Object.values(document.entities)) {
@@ -53,6 +54,7 @@ function branchesByJunction(
     for (const end of ['start', 'end'] as const) {
       const binding = wire[end]
       if (!binding || removed.has(binding.entityId)) continue
+      if (dropped.has(`${entity.id}:${end}`)) continue
       const target = document.entities[binding.entityId]
       if (!target || !isJunction(target)) continue
       const list = branches.get(binding.entityId)
@@ -93,10 +95,23 @@ function branchesByJunction(
 export function planStageJunctionCleanup(
   document: ComposeDocument,
   removedIds: readonly string[],
-  options: { readonly idFactory: () => string; readonly isJunction: StageJunctionPredicate },
+  options: {
+    readonly idFactory: () => string
+    readonly isJunction: StageJunctionPredicate
+    /**
+     * 同一次变更里被**去掉的绑定**（Entity 还在，只是那一端不再绑着）。
+     *
+     * @remarks
+     * 修剪掉导线含端口的那一截时，Entity 留下、绑定跟着那一截走；节点因此少了一条支路，
+     * 而它不在 `removedIds` 里。不把这一档交进来的症状是「剪掉一条支路之后图上留着一个只连着
+     * 两条线的实心点」。
+     */
+    readonly droppedBindings?: readonly { readonly entityId: string; readonly end: 'start' | 'end' }[]
+  },
 ): readonly EditorCommand[] {
   const removed = new Set(removedIds)
-  const branches = branchesByJunction(document, options.isJunction, removed)
+  const dropped = new Set((options.droppedBindings ?? []).map(({ entityId, end }) => `${entityId}:${end}`))
+  const branches = branchesByJunction(document, options.isJunction, removed, dropped)
   const commands: EditorCommand[] = []
   for (const [junctionId, remaining] of branches) {
     if (removed.has(junctionId)) continue

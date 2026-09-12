@@ -113,6 +113,10 @@ export interface StageEffectDispatchParams {
   readonly onDrawn: (drawn: StageDrawnEntity) => void
   /** 绘图命令取到一个世界坐标；只在绘图模式下由取点插件产生。 */
   readonly onDraftingPoint?: (point: StagePoint) => void
+  /** 绘图命令收到一次 `pick`：按下点与整笔轨迹（没动过为 `null`）。 */
+  readonly onDraftingPick?: (point: StagePoint, trail: readonly StagePoint[] | null) => void
+  /** `pick` 拖动中的轨迹逐帧回传；松手或取消时为 `null`。 */
+  readonly onDraftingPickTrail?: (trail: readonly StagePoint[] | null) => void
   /** 绘制提交后切回选择工具；仅点击创建文字时需要。 */
   readonly onToolChange?: (tool: ComposeStageTool) => void
 }
@@ -453,6 +457,14 @@ export function useStageEffectDispatch(
         }
         if (effect.type === 'drafting.point') {
           latestRef.current.onDraftingPoint?.(effect.point)
+          return
+        }
+        if (effect.type === 'drafting.pick') {
+          latestRef.current.onDraftingPick?.(effect.point, effect.trail)
+          return
+        }
+        if (effect.type === 'drafting.pick-trail') {
+          latestRef.current.onDraftingPickTrail?.(effect.trail)
           return
         }
         if (effect.item.kind === 'assets') {

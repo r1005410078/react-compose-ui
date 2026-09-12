@@ -26,6 +26,9 @@ const messages = {
   vertexTitle: '编辑顶点',
   specifyNewLocation: '指定新位置',
   expectedSingleObject: '只能选择一个对象',
+  trimTitle: '修剪',
+  selectTrimTarget: '选择要修剪的一截，或按住拖过多条（回车结束）:',
+  expectedPick: '需要点一下要修剪的一截',
   arcTitle: '圆弧',
   circleTitle: '圆',
   rectangleTitle: '矩形',
@@ -135,7 +138,7 @@ describe('LINE 命令', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
       'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'POLYGON', 'PLINE',
-      'MOVE', 'COPY', 'ERASE', 'VERTEX', 'MIRROR',
+      'MOVE', 'COPY', 'ERASE', 'TRIM', 'VERTEX', 'MIRROR',
       'ALIGNLEFT', 'ALIGNCENTERX', 'ALIGNRIGHT',
       'ALIGNTOP', 'ALIGNCENTERY', 'ALIGNBOTTOM',
       'DISTRIBUTEX', 'DISTRIBUTEY',

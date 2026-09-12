@@ -1667,3 +1667,61 @@
   width: 16px;
   height: 16px;
 }
+
+/*
+ * 修剪的悬停预览：被去掉的那一截。
+ *
+ * **不换色**：先压一层画布底色把原墨淡掉，再按 Entity 自己的描边色画一遍点画。一条红导线上
+ * 涂任何颜色都读不出来，淡掉在每种墨上都读得出来。宽度比线宽宽一圈，淡掉的才是整条线。
+ */
+.compose-stage__trim-dim {
+  fill: none;
+  stroke: var(--compose-workspace-bg, #11151b);
+  stroke-opacity: 0.68;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compose-stage__trim-ghost {
+  fill: none;
+  stroke: var(--compose-accent, #4c8dff);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/*
+ * 剪口：与线垂直的短划，回答「这一截的两头在这里」。
+ *
+ * 自己的 token 而不借任何一个：导线红是墨，捕捉橙回答「吸上了没有」，热夹点回答「有一次编辑
+ * 正在进行」，accent 回答「这是选中的」，`danger` 在这块画布上是「失效」——修剪不是缺陷。
+ */
+.compose-stage__trim-cut {
+  stroke: var(--compose-stage-trim-cut, #e15bd0);
+  stroke-width: 2;
+  stroke-linecap: butt;
+}
+
+/* 拖动中的轨迹：它是「将要产出的」那一族，与橡皮筋同色同点画。 */
+.compose-stage__trim-trail {
+  fill: none;
+  stroke: var(--compose-accent, #4c8dff);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/*
+ * 光标旁的剪刀徽标：与拾取框同一支笔——它是光标的一部分，不是画布上的记号。
+ * 是徽标不是换光标：拾取框必须留着，它是靶区、半边长是容差的事实来源。
+ */
+.compose-stage__drafting-badge {
+  fill: none;
+  stroke: var(--compose-stage-crosshair, #e6edf7);
+  stroke-opacity: 0.9;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}

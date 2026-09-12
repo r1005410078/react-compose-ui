@@ -19,8 +19,13 @@ import {
   type JsonObject,
 } from './document-types'
 import {
+  closestPointOnComposeSegment,
   composeArcBoundsPoints,
+  composeArcPointAt,
+  composeArcTravelledDegrees,
   composeCubicBoundsPoints,
+  composePolylineSegments,
+  composeSquaredDistance,
   composeRoundedPolylineOutline,
   flattenComposeArc,
   flattenComposeCubic,
@@ -1142,4 +1147,234 @@ export function composeJunctionGeometry(
     ],
     closed: true,
   }
+}
+
+/**
+ * 曲线上的一个位置，用曲线**自己的参数**表达。
+ *
+ * @remarks
+ * `line` / `polyline` 是「段下标 + 段内比例」合成的一个数（第 2 段的中点是 `2.5`），`arc` 是
+ * 从起始角沿扫掠方向走过的角量（度）。两种都单调、都能排序，因此「从落点向两边走到第一个
+ * 交点或顶点」在这个轴上就是取邻居——修剪的全部边界规则收成一次排序。
+ *
+ * 折线的参数按**尖角顶点**的段算，不按圆角后的轮廓：多段线的顶点没有 bulge，落在角弧里的
+ * 位置没法落成一个顶点。
+ *
+ * `path` 没有这条轴：它的截要解贝塞尔求交，v1 不做。
+ *
+ * @public
+ */
+export type ComposeCurveParameter = number
+
+/**
+ * 这条曲线的参数上限：折线是段数（闭合 `n`、开放 `n − 1`），弧是 `|sweep|`。
+ *
+ * @returns `path` 或退化几何返回 `null`。
+ * @public
+ */
+export function composeCurveParameterSpan(curve: ComposeCurve): number | null {
+  if (curve.kind === 'line') return 1
+  if (curve.kind === 'arc') return Math.abs(curve.sweep)
+  if (curve.kind === 'polyline') {
+    const count = curve.closed ? curve.vertices.length : curve.vertices.length - 1
+    return count >= 1 ? count : null
+  }
+  return null
+}
+
+/** 把参数收进 `[0, span]`；闭合几何按周期取模。 */
+function wrapParameter(curve: ComposeCurve, parameter: number, span: number): number {
+  if (isComposeClosedCurve(curve)) {
+    const wrapped = parameter % span
+    return wrapped < 0 ? wrapped + span : wrapped
+  }
+  return Math.min(span, Math.max(0, parameter))
+}
+
+/** 折线的顶点列，`line` 视为两顶点折线。 */
+function curveVertices(curve: ComposeLineCurve | ComposePolylineCurve): readonly ComposePosition[] {
+  return curve.kind === 'line' ? [curve.start, curve.end] : curve.vertices
+}
+
+/**
+ * 曲线上参数处的点。
+ *
+ * @returns `path` 或退化几何返回 `null`。
+ * @public
+ */
+export function composeCurvePointAtParameter(
+  curve: ComposeCurve,
+  parameter: ComposeCurveParameter,
+): ComposePosition | null {
+  const span = composeCurveParameterSpan(curve)
+  if (span === null) return null
+  const wrapped = wrapParameter(curve, parameter, span)
+  if (curve.kind === 'arc') {
+    const direction = curve.sweep >= 0 ? 1 : -1
+    const point = composeArcPointAt(curve, curve.startAngle + direction * wrapped)
+    return { x: point.x, y: point.y }
+  }
+  if (curve.kind === 'path') return null
+  const vertices = curveVertices(curve)
+  const index = Math.min(Math.floor(wrapped), span - 1)
+  const t = wrapped - index
+  const start = vertices[index]!
+  const end = vertices[(index + 1) % vertices.length]!
+  return { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t }
+}
+
+/**
+ * 曲线上离给定点最近的参数。
+ *
+ * @remarks
+ * 弧上按方位角取：落在扫掠内就是走过的角量，落在扫掠外取离得近的那个端头——与
+ * `pointToComposeArcDistance` 是同一条判断。
+ *
+ * @returns `path` 或退化几何返回 `null`。
+ * @public
+ */
+export function nearestComposeCurveParameter(
+  curve: ComposeCurve,
+  point: { readonly x: number; readonly y: number },
+): ComposeCurveParameter | null {
+  const span = composeCurveParameterSpan(curve)
+  if (span === null) return null
+  if (curve.kind === 'arc') {
+    const dx = point.x - curve.center.x
+    const dy = point.y - curve.center.y
+    if (dx === 0 && dy === 0) return 0
+    const bearing = (Math.atan2(dy, dx) * 180) / Math.PI
+    const travelled = composeArcTravelledDegrees(curve, bearing)
+    if (isComposeFullCircle(curve) || travelled <= span) return travelled
+    const start = composeArcPointAt(curve, curve.startAngle)
+    const end = composeArcPointAt(curve, curve.startAngle + curve.sweep)
+    return composeSquaredDistance(start, point) <= composeSquaredDistance(end, point) ? 0 : span
+  }
+  if (curve.kind === 'path') return null
+  const vertices = curveVertices(curve)
+  const segments = composePolylineSegments(vertices, curve.kind === 'polyline' && curve.closed)
+  let best: { readonly parameter: number; readonly distance: number } | null = null
+  segments.forEach((segment, index) => {
+    const nearest = closestPointOnComposeSegment(segment, point)
+    const distance = composeSquaredDistance(nearest, point)
+    if (best && distance >= best.distance) return
+    const length = composeSquaredDistance(segment.start, segment.end)
+    const t = length === 0
+      ? 0
+      : Math.sqrt(composeSquaredDistance(segment.start, nearest) / length)
+    best = { parameter: index + Math.min(1, t), distance }
+  })
+  return best ? (best as { parameter: number }).parameter : null
+}
+
+/** {@link sliceComposeCurve} 的结果。 @public */
+export interface ComposeCurveSlice {
+  /** 被去掉的那一截；整条被去掉时就是原曲线。 */
+  readonly removed: ComposeCurve
+  /** 剩下的曲线，零到两条，各取能表达它的最窄 kind。 */
+  readonly remaining: readonly ComposeCurve[]
+}
+
+/** 两个参数视为同一处的容差。 */
+const PARAMETER_EPSILON = 1e-9
+
+/** 顶点列取最窄 kind：两个点是 `line`，更多是开放 `polyline`。 */
+function narrowestOpenCurve(
+  points: readonly ComposePosition[],
+  cornerRadius: number | undefined,
+): ComposeCurve {
+  if (points.length === 2) return { kind: 'line', start: points[0]!, end: points[1]! }
+  return {
+    kind: 'polyline',
+    closed: false,
+    vertices: points,
+    ...(cornerRadius !== undefined ? { cornerRadius } : {}),
+  }
+}
+
+/**
+ * 折线上从 `p0` 正向走到 `p1` 的那一截，`p1` 可以越过闭合折线的收尾点。
+ *
+ * @remarks
+ * 起点与终点落在顶点上时不重复推那个顶点：`[A, B, C, A]` 与 `[A, B, C]` 闭合，是两种表示，
+ * 而这里的产物永远是开放折线，重合顶点只会在特征点与夹点派生里凭空多出一个候选。
+ */
+function polylinePiece(
+  curve: ComposeLineCurve | ComposePolylineCurve,
+  p0: number,
+  p1: number,
+  cornerRadius: number | undefined,
+): ComposeCurve {
+  const vertices = curveVertices(curve)
+  const points: ComposePosition[] = [composeCurvePointAtParameter(curve, p0)!]
+  for (let k = Math.floor(p0) + 1; k < p1 - PARAMETER_EPSILON; k += 1) {
+    if (k - p0 <= PARAMETER_EPSILON) continue
+    points.push(vertices[k % vertices.length]!)
+  }
+  points.push(composeCurvePointAtParameter(curve, p1)!)
+  return narrowestOpenCurve(points, cornerRadius)
+}
+
+/**
+ * 按两个参数从曲线上切掉一截。
+ *
+ * @remarks
+ * `from` 与 `to` 都在曲线自己的参数轴上；闭合几何（闭合折线、整圆）按**正向**从 `from` 走到
+ * `to`，因此 `from > to` 表示被去掉的那一截越过收尾点。开放几何要求 `from < to`。
+ *
+ * 剩下的曲线各取能表达它的最窄 kind：整圆去掉一截仍是 `arc`、一段弧被剪中间成两段 `arc`、
+ * 折线中段去掉成两条、端段去掉即少一个顶点、只有一段的直线去掉即什么都不剩。**闭合折线去掉
+ * 一段即变开放**，顶点从缺口处重排；`cornerRadius` 原样保留——它只作用于「角」，开放折线的
+ * 两个端头不是角。
+ *
+ * 求交与切片都按**尖角顶点**而不按圆角后的轮廓：多段线的顶点没有 bulge，落在角弧里的位置没法
+ * 落成一个顶点。代价是剪口与画出来的弧差一个圆角的距离。
+ *
+ * @returns `path`、退化几何或非法区间返回 `null`。
+ * @public
+ */
+export function sliceComposeCurve(
+  curve: ComposeCurve,
+  from: ComposeCurveParameter,
+  to: ComposeCurveParameter,
+): ComposeCurveSlice | null {
+  const span = composeCurveParameterSpan(curve)
+  if (span === null || curve.kind === 'path') return null
+  const closed = isComposeClosedCurve(curve)
+  const start = wrapParameter(curve, from, span)
+  const end = wrapParameter(curve, to, span)
+
+  if (curve.kind === 'arc') {
+    const direction = curve.sweep >= 0 ? 1 : -1
+    const arc = (at: number, length: number): ComposeArcCurve => ({
+      ...curve,
+      startAngle: curve.startAngle + direction * at,
+      sweep: direction * length,
+    })
+    if (closed) {
+      const length = ((end - start) % 360 + 360) % 360
+      if (length <= PARAMETER_EPSILON) return { removed: curve, remaining: [] }
+      return { removed: arc(start, length), remaining: [arc(end, 360 - length)] }
+    }
+    if (end - start <= PARAMETER_EPSILON) return null
+    const remaining: ComposeCurve[] = []
+    if (start > PARAMETER_EPSILON) remaining.push(arc(0, start))
+    if (end < span - PARAMETER_EPSILON) remaining.push(arc(end, span - end))
+    return { removed: arc(start, end - start), remaining }
+  }
+
+  const cornerRadius = curve.kind === 'polyline' ? curve.cornerRadius : undefined
+  if (closed) {
+    const length = ((end - start) % span + span) % span
+    if (length <= PARAMETER_EPSILON) return { removed: curve, remaining: [] }
+    return {
+      removed: polylinePiece(curve, start, start + length, undefined),
+      remaining: [polylinePiece(curve, start + length, start + span, cornerRadius)],
+    }
+  }
+  if (end - start <= PARAMETER_EPSILON) return null
+  const remaining: ComposeCurve[] = []
+  if (start > PARAMETER_EPSILON) remaining.push(polylinePiece(curve, 0, start, cornerRadius))
+  if (end < span - PARAMETER_EPSILON) remaining.push(polylinePiece(curve, end, span, cornerRadius))
+  return { removed: polylinePiece(curve, start, end, undefined), remaining }
 }

@@ -55,6 +55,22 @@ function vertices(polyline: Locator) {
   })
 }
 
+/** 一条 `<line>` 的两个端点，页面坐标。 */
+function lineEndpoints(line: Locator) {
+  return line.evaluate((node) => {
+    const shape = node as unknown as SVGLineElement
+    const ctm = shape.getScreenCTM()!
+    const point = (x: number, y: number) => {
+      const p = new DOMPoint(x, y).matrixTransform(ctm)
+      return { x: p.x, y: p.y }
+    }
+    return [
+      point(shape.x1.baseVal.value, shape.y1.baseVal.value),
+      point(shape.x2.baseVal.value, shape.y2.baseVal.value),
+    ]
+  })
+}
+
 async function worldToScreen(page: Page) {
   const view = await page.evaluate(() => {
     const scene = document.querySelector('.compose-stage__scene') as HTMLElement
@@ -159,7 +175,7 @@ test('OpenSpec: stage-engine / 节点在支路不足时自删 / 删掉搭上去�
 
 test('OpenSpec: stage / 导线在顶点模式里的 Delete / 点亮中间段按 Delete 剪断', async ({ page }) => {
   await page.goto('/')
-  const { stage, surface, commandInput, polylines } = setup(page)
+  const { stage, surface, commandInput, polylines, lines } = setup(page)
   await expect(surface).toBeVisible()
 
   const A = { x: 280, y: 300 }
@@ -180,16 +196,12 @@ test('OpenSpec: stage / 导线在顶点模式里的 Delete / 点亮中间段按 
 
   await stage.press('Delete')
 
-  // 中间那一整段没了：两条各两个顶点，剪口留下一个看得见的缺口。
-  await expect(polylines).toHaveCount(2)
-  const first = await vertices(polylines.nth(0))
-  const second = await vertices(polylines.nth(1))
-  expect(first).toHaveLength(2)
-  expect(second).toHaveLength(2)
-  const gap = Math.hypot(
-    first[1]!.x - second[0]!.x,
-    first[1]!.y - second[0]!.y,
-  )
+  // 中间那一整段没了：两条各两个顶点（两点取最窄的 kind，画成 <line>），剪口留下一个看得见的缺口。
+  await expect(polylines).toHaveCount(0)
+  await expect(lines).toHaveCount(2)
+  const first = await lineEndpoints(lines.nth(0))
+  const second = await lineEndpoints(lines.nth(1))
+  const gap = Math.min(...first.flatMap((a) => second.map((b) => Math.hypot(a.x - b.x, a.y - b.y))))
   expect(gap).toBeGreaterThan(20)
 
   // 一步撤销回到一条。

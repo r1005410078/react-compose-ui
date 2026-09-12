@@ -116,6 +116,7 @@ const DRAWING_COMMANDS = [
   ['ARC', 'drawArc', 'arc'],
   ['ARROW', 'drawArrow', 'arrow'],
   ['WIRE', 'drawWire', 'wire'],
+  ['TRIM', 'trim', 'trim'],
 ] as const
 
 /**

@@ -15,6 +15,7 @@ export {
 } from './shape-commands'
 export { planStageDraftingEdits, type StageDraftingEditQuery } from './drafting-edits'
 export { createStageEraseCommand, createStageEraseSession } from './erase-command'
+export { createStageTrimCommand, createStageTrimSession } from './trim-command'
 export {
   createStageCopyCommand,
   createStageCopySession,
@@ -40,6 +41,10 @@ export {
   createStageDraftingPointPlugin,
   STAGE_DRAFTING_POINT_PLUGIN_ID,
 } from './drafting-point-plugin'
+export {
+  createStageDraftingPickPlugin,
+  STAGE_DRAFTING_PICK_PLUGIN_ID,
+} from './drafting-pick-plugin'
 export type {
   StageDraftingContext,
   StageDraftingEffect,

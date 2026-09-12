@@ -27,6 +27,7 @@ export type StageToolbarIconName =
   | 'smart-snap'
   | 'text'
   | 'wire'
+  | 'trim'
   | 'zoom-in'
   | 'zoom-out'
 
@@ -398,6 +399,14 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="M3.5 6H10v8h6.5" />
         {portMark(3.5, 6)}
         {portMark(16.5, 14)}
+      </>
+    ),
+    // 剪刀：两片刀刃交叉、两个指环在下，与光标旁的徽标同一个形状。
+    trim: (
+      <>
+        <circle cx="6" cy="14.5" r="2.5" />
+        <circle cx="14" cy="14.5" r="2.5" />
+        <path d="M7.8 12.6L15.5 3.5M12.2 12.6L4.5 3.5" />
       </>
     ),
     'zoom-in': (

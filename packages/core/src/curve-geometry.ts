@@ -970,3 +970,173 @@ export function composeRegularPolygonVertices(
   }
   return vertices
 }
+
+/**
+ * 两条形状的一个交点，带它在两条形状上各自的参数。
+ *
+ * @remarks
+ * 参数是**形状自己的**：线段是 `t ∈ [0, 1]`，弧是从起始角沿扫掠方向走过的角量（度）。
+ * 修剪要的正是这个数——「从落点向两边走到第一个交点」在一维参数上就是排序取邻居，拿回坐标
+ * 再反算一次参数会在弧上多绕一次 `atan2`，还会把落在扫掠外的候选算进来。
+ *
+ * @public
+ */
+export interface ComposeShapeIntersection {
+  readonly point: ComposePlanarPoint
+  /** 在第一条形状上的参数。 */
+  readonly a: number
+  /** 在第二条形状上的参数。 */
+  readonly b: number
+}
+
+/**
+ * 参数空间里的相触容差。
+ *
+ * @remarks
+ * T 形相接（一条线的端头落在另一条线身上）是接线图上最多的一种相接，而那个端头的 `t` 在
+ * 浮点上会落成 `1.0000000002`。取参数空间的小量而不是距离：参数已经归一化，与线段长短无关。
+ */
+const TOUCH_TOLERANCE = 1e-6
+
+/** 把 `[−ε, 1 + ε]` 内的参数收进 `[0, 1]`；之外返回 `null`。 */
+function clampUnit(t: number): number | null {
+  if (t < -TOUCH_TOLERANCE || t > 1 + TOUCH_TOLERANCE) return null
+  return Math.min(1, Math.max(0, t))
+}
+
+/**
+ * 从起始角沿扫掠方向走到某个方位所经过的角量。
+ *
+ * @remarks
+ * 与 {@link composeArcContainsAngle} 用**同一个**换算——那边回答「在不在扫掠内」，这边回答
+ * 「走了多远」，两处各算一次的话正负扫掠的处理必然漂移。
+ *
+ * @public
+ */
+export function composeArcTravelledDegrees(arc: ComposeArcShape, degrees: number): number {
+  return arc.sweep >= 0
+    ? normalizeDegrees(degrees - arc.startAngle)
+    : normalizeDegrees(arc.startAngle - degrees)
+}
+
+/** 点相对圆心的方位角，度。 */
+function bearingDegrees(arc: ComposeArcShape, point: ComposePlanarPoint): number {
+  return Math.atan2(point.y - arc.center.y, point.x - arc.center.x) / TO_RADIANS
+}
+
+/**
+ * 两条线段的交点。
+ *
+ * @remarks
+ * 平行与共线一律返回空而不抛错：共线重叠的两条线在图上是「叠着画」，没有一个可以叫做交点
+ * 的地方。端点相触算交点（容差见 {@link TOUCH_TOLERANCE}）。
+ *
+ * @public
+ */
+export function intersectComposeSegments(
+  first: ComposeSegmentShape,
+  second: ComposeSegmentShape,
+): readonly ComposeShapeIntersection[] {
+  const rx = first.end.x - first.start.x
+  const ry = first.end.y - first.start.y
+  const sx = second.end.x - second.start.x
+  const sy = second.end.y - second.start.y
+  const denominator = rx * sy - ry * sx
+  if (Math.abs(denominator) <= Number.EPSILON * (Math.abs(rx * sy) + Math.abs(ry * sx) + 1)) {
+    return []
+  }
+  const qx = second.start.x - first.start.x
+  const qy = second.start.y - first.start.y
+  const t = clampUnit((qx * sy - qy * sx) / denominator)
+  const u = clampUnit((qx * ry - qy * rx) / denominator)
+  if (t === null || u === null) return []
+  return [{ point: { x: first.start.x + t * rx, y: first.start.y + t * ry }, a: t, b: u }]
+}
+
+/**
+ * 线段与圆弧的交点。
+ *
+ * @remarks
+ * 解 `|A + t·r − C|² = R²` 的二次方程；相切时判别式为零，只产出一个交点。落在扫掠范围之外的
+ * 根不算——那个点在圆上，但不在画出来的弧上。
+ *
+ * @public
+ */
+export function intersectComposeSegmentArc(
+  segment: ComposeSegmentShape,
+  arc: ComposeArcShape,
+): readonly ComposeShapeIntersection[] {
+  const rx = segment.end.x - segment.start.x
+  const ry = segment.end.y - segment.start.y
+  const dx = segment.start.x - arc.center.x
+  const dy = segment.start.y - arc.center.y
+  const a = rx * rx + ry * ry
+  if (a === 0) return []
+  const b = 2 * (dx * rx + dy * ry)
+  const c = dx * dx + dy * dy - arc.radius * arc.radius
+  let discriminant = b * b - 4 * a * c
+  // 相切的判别式在浮点上会落成一个极小的负数；按相对量放过它。
+  if (discriminant < 0) {
+    if (discriminant < -1e-9 * (b * b + 1)) return []
+    discriminant = 0
+  }
+  const root = Math.sqrt(discriminant)
+  const candidates = discriminant === 0
+    ? [-b / (2 * a)]
+    : [(-b - root) / (2 * a), (-b + root) / (2 * a)]
+  const hits: ComposeShapeIntersection[] = []
+  candidates.forEach((raw) => {
+    const t = clampUnit(raw)
+    if (t === null) return
+    const point = { x: segment.start.x + t * rx, y: segment.start.y + t * ry }
+    const bearing = bearingDegrees(arc, point)
+    if (!composeArcContainsAngle(arc, bearing)) return
+    hits.push({ point, a: t, b: composeArcTravelledDegrees(arc, bearing) })
+  })
+  return hits
+}
+
+/**
+ * 两条圆弧的交点。
+ *
+ * @remarks
+ * 圆与圆的闭式解：同心（含重合）返回空——重合的两个圆没有一个可以叫做交点的地方；相离与
+ * 内含返回空；相切一个点。每个候选还要落在**两条**弧的扫掠内。
+ *
+ * @public
+ */
+export function intersectComposeArcs(
+  first: ComposeArcShape,
+  second: ComposeArcShape,
+): readonly ComposeShapeIntersection[] {
+  const dx = second.center.x - first.center.x
+  const dy = second.center.y - first.center.y
+  const distance = Math.hypot(dx, dy)
+  if (distance <= Number.EPSILON) return []
+  const r1 = first.radius
+  const r2 = second.radius
+  const slack = 1e-9 * (r1 + r2 + distance)
+  if (distance > r1 + r2 + slack || distance < Math.abs(r1 - r2) - slack) return []
+  const along = (r1 * r1 - r2 * r2 + distance * distance) / (2 * distance)
+  const height = Math.sqrt(Math.max(0, r1 * r1 - along * along))
+  const px = first.center.x + (along * dx) / distance
+  const py = first.center.y + (along * dy) / distance
+  const offsets = height === 0 ? [0] : [height, -height]
+  const hits: ComposeShapeIntersection[] = []
+  offsets.forEach((offset) => {
+    const point = {
+      x: px + (offset * -dy) / distance,
+      y: py + (offset * dx) / distance,
+    }
+    const firstBearing = bearingDegrees(first, point)
+    const secondBearing = bearingDegrees(second, point)
+    if (!composeArcContainsAngle(first, firstBearing)) return
+    if (!composeArcContainsAngle(second, secondBearing)) return
+    hits.push({
+      point,
+      a: composeArcTravelledDegrees(first, firstBearing),
+      b: composeArcTravelledDegrees(second, secondBearing),
+    })
+  })
+  return hits
+}

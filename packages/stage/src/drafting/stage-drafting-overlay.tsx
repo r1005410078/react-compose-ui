@@ -43,6 +43,32 @@ function hourglassPath(center: StagePoint): string {
   return `M${left} ${top}H${right}L${left} ${bottom}H${right}Z`
 }
 
+/** 修剪预览里的一截：世界折线、两头的剪口与它自己的描边色。 @internal */
+export interface StageTrimOverlayPiece {
+  readonly outline: readonly StagePoint[]
+  readonly cuts: readonly { readonly point: StagePoint; readonly direction: StagePoint }[]
+  /** Entity 自己的描边色；读不到时退回 accent。 */
+  readonly stroke: string | null
+}
+
+/** 修剪的悬停预览与拖动轨迹。 @internal */
+export interface StageTrimOverlay {
+  readonly pieces: readonly StageTrimOverlayPiece[]
+  /** 拖动中的轨迹，世界坐标；点选悬停时为 `null`。 */
+  readonly trail: readonly StagePoint[] | null
+}
+
+/**
+ * 剪口短划的半长（屏幕像素）。
+ *
+ * @remarks
+ * 与线垂直、比线宽长得多：它回答「这一截的两头在这里」，压在线上要一眼能读出来。
+ */
+const CUT_MARK_HALF = 6
+
+/** 徽标离拾取框右下角的偏移（屏幕像素）：贴着框但不压住它。 */
+const BADGE_OFFSET = 5
+
 /** {@link StageDraftingOverlay} 的属性。 @internal */
 export interface StageDraftingOverlayProps {
   readonly viewport: StageViewport
@@ -94,6 +120,22 @@ export interface StageDraftingOverlayProps {
    * 而绘图会话不在仲裁器里——它是 Stage 自己的状态。
    */
   readonly outlines: readonly StageRect[]
+  /**
+   * 修剪的预览；不在等 `pick` 时为 `null`。
+   *
+   * @remarks
+   * 被去掉的那一截**不换色**：按 Entity 自己的描边色改成点画、再压一层画布底色淡掉。一条红
+   * 导线上涂任何颜色都读不出来，淡掉在每种墨上都读得出来。剪口用自己的颜色。
+   */
+  readonly trim: StageTrimOverlay | null
+  /**
+   * 提示声明的光标徽标；缺席不画。
+   *
+   * @remarks
+   * 画在拾取框的右下、刀尖指向框，按**同一个** `crosshair` 解析结果画——解析说不画时它也不画，
+   * 系统光标的隐藏因此仍然只有一个来源。角度固定，不跟着被剪的那一段转。
+   */
+  readonly badge: 'scissors' | null
 }
 
 /**
@@ -127,6 +169,8 @@ export function StageDraftingOverlay({
   rubberBand,
   trackingRay,
   outlines,
+  trim,
+  badge,
 }: StageDraftingOverlayProps) {
   const snapScreen = snap ? worldToScreen(snap.point, viewport) : null
   const previewPoints = previewOutline
@@ -163,6 +207,60 @@ export function StageDraftingOverlay({
         testIdPrefix="stage"
       />
       <StageDynamicInputLayer annotation={dynamicInput} testIdPrefix="stage" />
+      {crosshair && badge === 'scissors' ? (
+        <g
+          className="compose-stage__drafting-badge"
+          data-testid="stage-drafting-badge"
+          transform={`translate(${crosshair.center.x + crosshair.boxRadius + BADGE_OFFSET} ${crosshair.center.y + crosshair.boxRadius + BADGE_OFFSET - 2}) rotate(-45 6 6)`}
+        >
+          <circle cx="2.6" cy="9.6" r="2.2" />
+          <circle cx="9.4" cy="9.6" r="2.2" />
+          <path d="M4 8L10.5 0.5M8 8L1.5 0.5" />
+        </g>
+      ) : null}
+      {trim?.pieces.map((piece, position) => {
+        const points = piece.outline
+          .map((point) => worldToScreen(point, viewport))
+          .map(({ x, y }) => `${x},${y}`)
+          .join(' ')
+        return (
+          <g data-testid="stage-trim-piece" key={`${position}:${points}`}>
+            <polyline className="compose-stage__trim-dim" points={points} />
+            <polyline
+              className="compose-stage__trim-ghost"
+              points={points}
+              style={piece.stroke ? { stroke: piece.stroke } : undefined}
+            />
+            {piece.cuts.map((cut, cutIndex) => {
+              const center = worldToScreen(cut.point, viewport)
+              // 视口没有旋转，世界方向就是屏幕方向；剪口与线垂直。
+              const nx = -cut.direction.y * CUT_MARK_HALF
+              const ny = cut.direction.x * CUT_MARK_HALF
+              return (
+                <line
+                  className="compose-stage__trim-cut"
+                  data-testid="stage-trim-cut"
+                  key={cutIndex}
+                  x1={center.x - nx}
+                  x2={center.x + nx}
+                  y1={center.y - ny}
+                  y2={center.y + ny}
+                />
+              )
+            })}
+          </g>
+        )
+      })}
+      {trim?.trail ? (
+        <polyline
+          className="compose-stage__trim-trail"
+          data-testid="stage-trim-trail"
+          points={trim.trail
+            .map((point) => worldToScreen(point, viewport))
+            .map(({ x, y }) => `${x},${y}`)
+            .join(' ')}
+        />
+      ) : null}
       {rayOrigin && rayUnit ? (
         <line
           className="compose-stage__drafting-tracking-ray"

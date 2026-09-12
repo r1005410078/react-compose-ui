@@ -325,6 +325,15 @@ export interface StageInteractionContext {
    * @defaultValue false
    */
   readonly draftingAwaitingPoint?: boolean
+  /**
+   * 绘图命令是否正在等待一个**落在对象上的点**（`pick`）。
+   *
+   * @remarks
+   * 与 `draftingAwaitingPoint` 互斥，由提示的 `accepts` 决定；同样只是一个布尔。
+   *
+   * @defaultValue false
+   */
+  readonly draftingAwaitingPick?: boolean
   /** 最新受控选择，按宿主顺序排列。 */
   readonly selectedIds: readonly string[]
   /**
@@ -413,6 +422,15 @@ export type StageInteractionEffect =
    * 渲染标记，在这里再解一次会得到两份可能分叉的答案。
    */
   | { readonly type: 'drafting.point'; readonly point: StagePoint }
+  /**
+   * 一次 `pick`：按下的世界点，以及指针离开过按下点时的整笔轨迹（没动过为 `null`）。
+   *
+   * @remarks
+   * 引擎不解算任何一截：轨迹碰到了谁、剪掉哪一截由持有文档的宿主决定。
+   */
+  | { readonly type: 'drafting.pick'; readonly point: StagePoint; readonly trail: readonly StagePoint[] | null }
+  /** 拖动中的轨迹逐帧回传；取消或松手时为 `null`。 */
+  | { readonly type: 'drafting.pick-trail'; readonly trail: readonly StagePoint[] | null }
   | { readonly type: 'command.dispatch'; readonly command: EditorCommand }
   | {
       readonly type: 'drawing.commit'

@@ -10,7 +10,15 @@ import type { ComposeKeybinding } from '../keybinding'
  *
  * @public
  */
-export type ComposeCommandInputKind = 'point' | 'text' | 'keyword' | 'selection'
+/**
+ * 会话可声明接受的输入种类。
+ *
+ * @remarks
+ * `pick` 是「落在对象上的点」：既不是 `point`（它不过点输入管线——吸附会把落点挪到光标底下那
+ * 截线之外，而用户瞄的正是那截线；等待它的一步也不算「正在取点」），也不是 `selection`
+ * （它要说出落在对象的**哪儿**，且不改选择集）。
+ */
+export type ComposeCommandInputKind = 'point' | 'text' | 'keyword' | 'selection' | 'pick'
 
 /** 一个可在提示中键入的关键字选项。 @public */
 export interface ComposeCommandKeyword {
@@ -146,6 +154,15 @@ export interface ComposeCommandPrompt {
    * @defaultValue 缺席即跟随会话级设置
    */
   readonly constrain?: 'ortho'
+  /**
+   * 这一步要在光标旁画的徽标；缺席不画。
+   *
+   * @remarks
+   * 由**提示自己声明**而不由宿主按命令 id 反推，与 `cursorInput` 同一条判断。它只是呈现，
+   * 不改变任何输入的解释。v1 只有剪刀：等待选择对象的命令画的是同一个拾取框，而 `ERASE` 与
+   * `TRIM` 都删东西——两条命令光标一模一样、差别只写在屏幕底部，用户的眼睛此刻却在光标上。
+   */
+  readonly badge?: 'scissors'
 }
 
 /** 世界坐标中的一个点。 @public */
@@ -172,6 +189,17 @@ export type ComposeCommandInput =
    * 选择，要么自己提示，收到的是同一种东西。
    */
   | { readonly kind: 'selection'; readonly ids: readonly string[] }
+  /**
+   * 一个或多个落在对象上的点。
+   *
+   * @remarks
+   * `targets` 是数组：一笔拖过多个对象时 MUST 作为**一次**输入推进——一次输入、一个事务。
+   * 点一下是长度为 1 的退化情形。标识对本包仍是不透明字符串，点只是两个数。
+   */
+  | {
+      readonly kind: 'pick'
+      readonly targets: readonly { readonly id: string; readonly point: ComposeCommandPoint }[]
+    }
   /** 直接确认；有 `defaultKeyword` 时等价于键入它，否则被拒绝。 */
   | { readonly kind: 'accept' }
   /** 取消整条命令。 */

@@ -83,7 +83,14 @@ export interface StageVertexDeleteOptions {
    * 由宿主注入：引擎不认识导线，与夹点求解的轴对齐选项是同一条既有边界。
    */
   readonly boundEnds?: readonly ('start' | 'end')[]
-  /** 这是不是一条导线；只有导线的段夹点才落到 `cut`。 */
+  /**
+   * 这是不是一条导线。
+   *
+   * @remarks
+   * 只影响只有一段的直线：它的平移夹点在导线上表示「整条线」，以 `cut-edge` 说出来；普通直线
+   * 的平移夹点仍是「不是顶点」。折线的段夹点**不按它门禁**——中间段分两条、闭合变开放对导线与
+   * 普通折线一视同仁。
+   */
   readonly wire?: boolean
 }
 
@@ -229,8 +236,9 @@ function cubicSegment(cubic: ComposeCubicShape): ComposeCubicSegment {
  *
  * @remarks
  * 只受理**顶点**夹点：控制手柄表达别的自由度，在它上面按 `Delete` 没有正确答案，因此以
- * `unsupported` 说出来而不是静默不动。段夹点在**导线**上例外——用户此刻抓着的正是「这一段」，
- * 而那条拒绝回答不了它，因此那一档落到 `cut`。不是导线的曲线一个字节不变。
+ * `unsupported` 说出来而不是静默不动。折线的段夹点例外——用户此刻抓着的正是「这一段」，
+ * 而那条拒绝回答不了它，因此那一档落到 `cut`：中间段分两条、闭合折线变开放，导线与普通
+ * 折线一视同仁。
  *
  * 相邻两段合并成一段，**保留两侧各自外侧的那个控制点**：那两个点表达的是留下来的两个顶点上
  * 的切向，删掉中间那一个不该把它们一起改掉。形状会变——那正是用户要求的。
@@ -256,7 +264,8 @@ export function deleteStageCurveVertex(
   if (curve.kind === 'polyline') {
     const segment = parseSegmentIndex(gripId)
     if (segment !== null) {
-      if (options?.wire !== true) return rejected('unsupported')
+      // 闭合折线去掉任何一段都变成开放折线：矩形的一条边要让给符号，正是抓着一段时想做的事。
+      if (curve.closed) return { status: 'cut', segmentIndex: segment }
       // 中间段 ⇔ 两侧各至少还剩一段，因此剪出来的两半都还有两个顶点。
       return segment >= 1 && segment <= curve.vertices.length - 3
         ? { status: 'cut', segmentIndex: segment }

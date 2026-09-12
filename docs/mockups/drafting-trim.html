@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>修剪：一下点掉一截</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page-bg: #f4f6f9;
+    --page-panel: #ffffff;
+    --page-ink: #141a22;
+    --page-muted: #5a6472;
+    --page-line: #dde3ec;
+    --page-accent: #1f6feb;
+    --page-todo: #b45309;
+    --page-done: #2f855a;
+
+    /* 画布 token —— 取自 packages/stage/src/styles.css 与 ui-context 的深色主题 */
+    --canvas: #11151b;
+    --canvas-border: #2c3542;
+    --ink: #dfe7f3;
+    --wire: #ff3b30;
+    --accent: #3687ff;
+    --port: #38bdf8;
+    --hot: #f2545b;
+    --snap: #ffa53c;
+    --cut: #e15bd0;
+    --cursor: #e6edf7;
+    --note: #7d8797;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0d1117;
+      --page-panel: #151b23;
+      --page-ink: #e6edf7;
+      --page-muted: #99a3b2;
+      --page-line: #262f3b;
+      --page-accent: #4d9cff;
+      --page-todo: #f59e0b;
+      --page-done: #48bb78;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #0d1117;
+    --page-panel: #151b23;
+    --page-ink: #e6edf7;
+    --page-muted: #99a3b2;
+    --page-line: #262f3b;
+    --page-accent: #4d9cff;
+    --page-todo: #f59e0b;
+    --page-done: #48bb78;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: 'IBM Plex Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { max-width: var(--measure); color: var(--page-muted); margin: 0; }
+  h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 4px; }
+  .section-head p { max-width: var(--measure); margin: 0; color: var(--page-muted); }
+
+  .answers { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .answer {
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .answer .q {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+  .answer .a { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .answer .why { font-size: 13.5px; color: var(--page-muted); line-height: 1.6; }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      var(--canvas);
+    border: 1px solid var(--canvas-border);
+  }
+  .stage svg { display: block; width: 100%; height: auto; }
+  /* 绿实线圈 = 已经落地；琥珀虚线圈留给还没做的部分（本稿此刻一处都没有）。 */
+  .stage.todo { outline: 2px dashed var(--page-todo); outline-offset: 3px; }
+  .stage.done { outline: 2px solid var(--page-done); outline-offset: 3px; }
+
+  /* 画布内的笔 —— 与 wire-modes.html 同一套。 */
+  .ink { stroke: var(--ink); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .wire { stroke: var(--wire); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .sym { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+  .ghost { stroke-dasharray: 4 3; opacity: 0.32; }
+  .cut { stroke: var(--cut); stroke-width: 2; stroke-linecap: butt; fill: none; }
+  .cutdot { fill: var(--cut); }
+  .pick { stroke: var(--cursor); stroke-width: 1; stroke-opacity: 0.75; fill: none; }
+  .badge { stroke: var(--cursor); stroke-width: 1.2; stroke-opacity: 0.9; fill: none; stroke-linecap: round; }
+  .trail { stroke: var(--accent); stroke-width: 1.2; fill: none; stroke-dasharray: 3 3; opacity: 0.9; }
+  .sel { stroke: var(--accent); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .port { fill: var(--port); }
+  .free { fill: none; stroke: #8b97a8; stroke-width: 1.5; stroke-dasharray: 2.4 2.2; }
+  .junction { fill: var(--wire); }
+  .hot { fill: var(--hot); stroke: var(--hot); stroke-width: 1.5; }
+  .grip { fill: #181b20; fill-opacity: 0.55; stroke: var(--accent); stroke-width: 1.5; }
+  .lock { stroke: var(--snap); stroke-width: 1.4; fill: none; }
+  .lbl { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; fill: var(--note); }
+  .note { font-family: 'IBM Plex Sans SC', sans-serif; font-size: 12px; fill: var(--note); }
+  .note.cutc { fill: var(--cut); }
+  .note.portc { fill: var(--port); }
+  .note.warn { fill: var(--snap); }
+  .divider { stroke: var(--canvas-border); stroke-width: 1; }
+  .cmd-bg { fill: #1a1f27; stroke: #2c3542; }
+  .cmd-k { font-family: 'IBM Plex Sans SC', sans-serif; font-size: 12.5px; fill: var(--note); }
+  .cmd-v { font-family: 'IBM Plex Sans SC', sans-serif; font-size: 12.5px; fill: #e6edf7; }
+  .symtxt { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; fill: var(--ink); }
+
+  .steps { display: flex; flex-direction: column; gap: 40px; }
+  .step { display: flex; flex-direction: column; gap: 12px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-n {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--page-accent);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+  .step-title { font-weight: 600; letter-spacing: -0.01em; }
+  .step-note { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .step-note code, p code, td code, li code, .why code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--page-accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .trio { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .pair figure, .trio figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  figcaption { font-size: 13.5px; color: var(--page-muted); }
+  figcaption b { color: var(--page-ink); font-weight: 600; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 680px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--page-line); vertical-align: top; }
+  th {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+    font-weight: 500;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  td a { color: var(--page-accent); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .swatch {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: -1px;
+    border: 1px solid rgb(128 128 128 / 35%);
+  }
+
+  .callout {
+    background: color-mix(in srgb, var(--page-accent) 7%, var(--page-panel));
+    border: 1px solid color-mix(in srgb, var(--page-accent) 26%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .callout.todo {
+    background: color-mix(in srgb, var(--page-todo) 8%, var(--page-panel));
+    border-color: color-mix(in srgb, var(--page-todo) 34%, transparent);
+  }
+  .callout strong { font-weight: 600; }
+  .callout p { margin: 0; font-size: 14px; max-width: var(--measure); }
+
+  .open { border-left: 3px solid var(--page-line); padding: 2px 0 2px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .open p { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .opens { display: flex; flex-direction: column; gap: 18px; }
+
+  footer {
+    border-top: 1px solid var(--page-line);
+    padding-top: 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  footer ul { margin: 0; padding-left: 18px; }
+  footer a { color: var(--page-accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SDD 补充 · 绘图交互 · 已落地</div>
+    <h1>修剪：一下点掉一截</h1>
+    <p class="lede">
+      「剪刀」在这个产品里应该是什么：光标落在哪一截，就去掉哪一截——截的两头是它与任何别的曲线的<strong>最近交点</strong>，
+      没有交点就到顶点、没有顶点就到头。一条命令 <code>TRIM</code>，覆盖直线、折线、矩形、圆与导线，
+      不用先选「切割边」。本稿把每一种情况并排画出来。画布片段按 Stage 的真实 token 1:1 绘制；
+      <strong style="color:var(--page-done)">绿实线圈 = 已经落地</strong>（OpenSpec 变更 <code>add-trim-command</code>）。与本稿的两处偏离：
+      拖动中命令行不换提示，仍写着「选择要修剪的一截」；接线点作为切割边的排除由既有的
+      <code>isJunction</code> 谓词承担，不另加一条。
+    </p>
+  </header>
+
+  <section>
+    <div class="answers">
+      <div class="answer">
+        <div class="q">剪刀剪的是什么</div>
+        <div class="a">光标底下的那一截</div>
+        <div class="why">
+          不是「在一点上剪开」。在一点上剪开产出两个重合的端点，屏幕上与没剪之前逐像素相同——用户按了一下，图上什么都没变。
+          去掉一截留下看得见的缺口，那是这次操作唯一的反馈。这与已落地的导线剪断是同一条判断。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">截的两头在哪</div>
+        <div class="a">最近的交点，其次顶点，其次端头</div>
+        <div class="why">
+          <strong>图上所有曲线都是切割边</strong>，不用先选（AutoCAD 2021 起的 Quick 模式、Fusion 360 与 Sketch 都这么做）。
+          一截的边界从光标处向两边走，遇到第一个交点或顶点就停。一条独立的线没有任何边界，那一截就是整条线。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">怎么知道会剪掉多少</div>
+        <div class="a">悬停即预览，点下即落地</div>
+        <div class="why">
+          将被去掉的那一截淡成幽灵、两头各画一道剪口。Fusion 360 把它涂红，我们不能——红是导线的墨。
+          按住拖过多条，轨迹碰到的每一截一起去掉，一个事务。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <strong>剪口用自己的颜色，形状是一道与线垂直的短划</strong>
+    <p>
+      <span class="swatch" style="background:#e15bd0"></span><strong>剪口 #e15bd0</strong>——「这一截的两头在这里」；
+      <span class="swatch" style="background:#ff3b30"></span>导线红是墨，
+      <span class="swatch" style="background:#ffa53c"></span>捕捉橙回答「吸上了没有」，
+      <span class="swatch" style="background:#f2545b"></span>热夹点回答「有一次编辑正在进行」，
+      <span class="swatch" style="background:#3687ff"></span>accent 回答「这是选中的」。
+      剪口回答的是第五个问题，因此不借任何一个；<code>danger</code> 也不借——它在这块画布上是「失效」，而修剪不是缺陷。
+      将被去掉的那一截<strong>不换色</strong>，只淡到 32% 并改成点画：一条红导线上涂任何颜色都读不出来，淡掉在每种墨上都读得出来。
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>别人怎么做</h2>
+      <p>「剪刀」在不同产品里是三件不同的事：去掉一截（CAD 的 TRIM、Sketch）、在一点剪开（Illustrator、KiCad）、拿刀划开实心形状（Knife）。我们要的是第一件。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>产品 · 工具</th><th>一下点掉什么</th><th>边界怎么定</th><th>预览与批量</th><th>取不取</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="https://help.autodesk.com/view/ACD/2026/ENU/?guid=GUID-B1A185EF-07C6-4C53-A76F-05ADE11F5C32">AutoCAD · TRIM</a>（Quick 模式）</td>
+            <td>点到的那一截，到两侧最近交点为止</td>
+            <td>所有对象自动是切割边；没有交点的对象<strong>整个删掉</strong></td>
+            <td>无悬停预览；按住拖动画自由轨迹、或点两点画围栏，碰到的都剪；<code>Shift</code> 切成延伸</td>
+            <td><strong>取</strong>：边界规则、自动切割边、拖动批量、无交点删整条。不取 Shift 延伸（本稿不做延伸）</td>
+          </tr>
+          <tr>
+            <td>AutoCAD · BREAK</td>
+            <td>两点之间的一截；<code>@</code> 表示在一点打断</td>
+            <td>用户自己指定两点</td>
+            <td>无</td>
+            <td>不取。在一点打断正是导线剪断已经否掉的形态；两点之间的截由 TRIM 用交点表达</td>
+          </tr>
+          <tr>
+            <td><a href="https://help.autodesk.com/view/fusion360/ENU/?guid=SKT-TRIM-EXTEND">Fusion 360 · Sketch Trim</a></td>
+            <td>悬停高亮的那一截</td>
+            <td>同 AutoCAD；无交点删整条</td>
+            <td><strong>悬停把将被删的那一截涂红</strong>；按住拖动「刷」过多条</td>
+            <td><strong>取</strong>：悬停预览是这套交互里最关键的一处。颜色换成我们自己的</td>
+          </tr>
+          <tr>
+            <td><a href="https://help.solidworks.com/2024/English/SolidWorks/sldworks/c_Trim_Entities.htm">SolidWorks · Trim Entities</a></td>
+            <td>五档：Power trim（拖过）、Corner、Trim away inside / outside、Trim to closest</td>
+            <td>按档位：拖过 / 两条边界之间 / 最近交点</td>
+            <td>Power trim 拖动即删</td>
+            <td>只取 Power trim 与 Trim to closest 的合体。五档是五个模式，屏幕上读不出此刻在哪一档</td>
+          </tr>
+          <tr>
+            <td><a href="https://medium.com/sketch-app/what-s-up-with-sketch-s-scissors-tool-ebdf4d57276f">Sketch · Scissors</a></td>
+            <td>点到的<strong>那一段</strong>（两个顶点之间）</td>
+            <td>顶点，不看交点</td>
+            <td>悬停高亮那一段；中间段去掉即分成两条子路径，闭合形状变开放</td>
+            <td>取它的「闭合 → 开放」与「中间段 → 两条」。边界从顶点扩成「交点或顶点」，因为接线图上的线大多没有拐点、只有交叉</td>
+          </tr>
+          <tr>
+            <td><a href="https://helpx.adobe.com/illustrator/desktop/manage-objects/edit-objects/cut-objects.html">Illustrator · Scissors / Knife</a></td>
+            <td>Scissors 在点击处剪开成两条（两个重合锚点）；Knife 自由划刀切实心形状</td>
+            <td>用户点的那一点 / 刀痕</td>
+            <td>无预览</td>
+            <td>不取。剪开在屏幕上看不见；划刀面向填色图形，这里的图形绝大多数是空心线框</td>
+          </tr>
+          <tr>
+            <td><a href="https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers">Figma · 顶点模式</a></td>
+            <td>没有剪刀。选中一段按 <code>Delete</code> 去掉那一段；<code>Shift+Delete</code> 删点并愈合</td>
+            <td>顶点</td>
+            <td>无</td>
+            <td>这正是我们今天导线段夹点上 <code>Delete</code> 的形态；本稿把它推广到所有折线，作为 TRIM 的退化情形</td>
+          </tr>
+          <tr>
+            <td>Altium · 导线</td>
+            <td>删掉一段导线到最近的节点为止（remove a segment up to that junction）</td>
+            <td>节点</td>
+            <td>无</td>
+            <td>已取（导线剪断）。TRIM 在导线上剪到节点，剩两支路的节点随即合并，与既有规则自动一致</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="step-note">
+      共有的性质只有一条：<strong>用户指着的是屏幕上的一截，不是一个点、也不是一个对象</strong>。
+      AutoCAD 与 Fusion 的边界是交点，Sketch 与 Figma 的边界是顶点。接线图上两者都有——一条横线被三条竖线穿过没有一个顶点，
+      而一个矩形四条边上没有一个交点。因此边界取两者的并集，从光标处向两边走到第一个就停。
+    </p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>每一种情况</h2>
+      <p>三格一组：之前 · 悬停（预览）· 落地。光标是<strong>拾取框加一个剪刀徽标</strong>——修剪不取点，因此没有十字线；徽标说的是「这一下会剪」，在空白处也在说。</p>
+    </div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">01</span><span class="step-title">两条直线相交：去掉交点一侧的那一截</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="两条直线相交，修剪去掉光标那一侧到交点的一截">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g><path class="ink" d="M30 130H270"/><path class="ink" d="M150 40V220"/></g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M30 130H150"/><path class="ink" d="M150 40V220"/>
+            <path class="ink ghost" d="M150 130H270"/>
+            <path class="cut" d="M150 120V140"/>
+            <rect class="pick" x="214" y="124" width="12" height="12"/><g class="badge" transform="translate(231 139) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="160" y="112">剪口在交点上</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="ink" d="M30 130H150"/><path class="ink" d="M150 40V220"/>
+            <text class="note" x="160" y="160">横线缩到交点，竖线不动</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">最基本的一档。竖线是横线的切割边，但它<strong>不需要被选</strong>：光标落在横线右半上，从落点向两边走，左边第一个停下的地方是交点、右边是端头，这一截就是「交点到右端」。竖线自己一个字节不动——切割边不是被作用的对象。落地写的是 <code>entity.curve.set</code>，横线的 <code>end</code> 挪到交点。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">02</span><span class="step-title">线穿过矩形：挖掉中间，一条变两条</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="一条线穿过矩形，修剪矩形内的那一截，线变成两条">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g><rect class="ink" x="70" y="60" width="160" height="140"/><path class="ink" d="M20 130H280"/></g>
+          <g transform="translate(300 0)">
+            <rect class="ink" x="70" y="60" width="160" height="140"/>
+            <path class="ink" d="M20 130H70"/><path class="ink" d="M230 130H280"/>
+            <path class="ink ghost" d="M70 130H230"/>
+            <path class="cut" d="M70 120V140"/><path class="cut" d="M230 120V140"/>
+            <rect class="pick" x="144" y="124" width="12" height="12"/><g class="badge" transform="translate(161 139) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="150" y="112" text-anchor="middle">两侧各一个交点</text>
+          </g>
+          <g transform="translate(600 0)">
+            <rect class="ink" x="70" y="60" width="160" height="140"/>
+            <path class="ink" d="M20 130H70"/><path class="ink" d="M230 130H280"/>
+            <text class="note" x="150" y="160" text-anchor="middle">两个 Entity：左半留原 id，右半新建</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">两侧都有交点时挖掉的是中间，一条线因此变成<strong>两条 Entity</strong>——左半留在原 Entity 上（id 不变，选中与撤销都还认得它），右半是新建的，呈现整份复制。这与导线剪断、搭接断线是同一条既有路径。点矩形<strong>外侧</strong>那一截则是 01 的情形：缩短。矩形是切割边而不是被作用对象，它四条边都不动。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">03</span><span class="step-title">圆被直线穿过：圆变成弧</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="直线穿过圆，修剪上半圆，整圆变成一段弧">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g><circle class="ink" cx="150" cy="130" r="70"/><path class="ink" d="M40 130H260"/></g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M80 130A70 70 0 0 0 220 130"/><path class="ink" d="M40 130H260"/>
+            <path class="ink ghost" d="M80 130A70 70 0 0 1 220 130"/>
+            <path class="cut" d="M70 130H90"/><path class="cut" d="M210 130H230"/>
+            <rect class="pick" x="144" y="54" width="12" height="12"/><g class="badge" transform="translate(161 69) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="150" y="46" text-anchor="middle">剪口与弧垂直：沿半径</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="ink" d="M80 130A70 70 0 0 0 220 130"/><path class="ink" d="M40 130H260"/>
+            <text class="note" x="150" y="230" text-anchor="middle">kind 仍是 arc，sweep 从 360 变成 180</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">整圆是扫掠 360 的弧，因此剪掉一截之后<strong>仍然是同一种 kind</strong>：起始角挪到一个交点、扫掠角缩到另一个，不需要新类型，也不需要把它拍扁成多段线。一段弧被剪中间则是 02 的形态：两段弧、两个 Entity。反过来点<strong>直线在圆内</strong>的那一截，圆是切割边，直线在圆内断开——与 02 逐字相同。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">04</span><span class="step-title">矩形的一条边：闭合变开放</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="修剪矩形的一条边，闭合多段线变成开放的三段折线">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g><rect class="ink" x="70" y="60" width="160" height="140"/></g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M230 60H70V200H230"/>
+            <path class="ink ghost" d="M230 60V200"/>
+            <path class="cut" d="M220 60H240"/><path class="cut" d="M220 200H240"/>
+            <rect class="pick" x="224" y="124" width="12" height="12"/><g class="badge" transform="translate(241 139) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="150" y="46" text-anchor="middle">没有交点，边界是两个顶点</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="ink" d="M230 60H70V200H230"/>
+            <text class="note" x="150" y="230" text-anchor="middle">closed → false，顶点重排让缺口落在两端</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">矩形是四顶点的闭合多段线，一条边就是一段。这一段上没有交点，边界退到<strong>顶点</strong>——去掉整段。闭合形状去掉任何一段都变成开放折线（Sketch 的 Scissors 正是这条），<code>closed</code> 置 false、顶点序列从缺口处重排，因此不会凭空多出一个重合顶点。仍是同一个 Entity、同一个 <code>rect</code> Preset。</p>
+        <div class="pair">
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 420 200" role="img" aria-label="圆角矩形去掉右边之后，两个断口处的圆角消失"><rect class="ink" x="70" y="40" width="160" height="120" rx="20"/><path class="ink ghost" d="M230 60V140"/><path class="cut" d="M220 60H240"/><path class="cut" d="M220 140H240"/><rect class="pick" x="224" y="94" width="12" height="12"/><g class="badge" transform="translate(241 109) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><text class="note cutc" x="150" y="28" text-anchor="middle">圆角矩形：边界仍是顶点，角弧算在相邻段里</text></svg></div>
+            <figcaption><b>圆角矩形</b>：<code>cornerRadius</code> 是一个值管所有角，钳制在读取时。去掉右边时，右上与右下两个角弧属于「右边这一段的两头」——它们随这一段一起消失。</figcaption>
+          </figure>
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 420 200" role="img" aria-label="落地之后的开放圆角折线：内部两个角仍圆，两个端头是尖的"><path class="ink" d="M230 40H90A20 20 0 0 0 70 60V140A20 20 0 0 0 90 160H230"/><text class="note" x="150" y="28" text-anchor="middle">端头没有角，因此没有圆角</text></svg></div>
+            <figcaption><b>落地</b>：开放折线的两个端头不是角，<code>cornerRadius</code> 对它们没有意义；内部两个角照旧圆。字段一个字节不改——圆角本来就只作用于「角」。</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">05</span><span class="step-title">有拐点的折线：中间段剪成两条，端段缩短</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="修剪折线的中间段，折线变成两条">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g><path class="ink" d="M40 190H110V70H210V190"/></g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M40 190H110V70"/><path class="ink" d="M210 70V190"/>
+            <path class="ink ghost" d="M110 70H210"/>
+            <path class="cut" d="M110 60V80"/><path class="cut" d="M210 60V80"/>
+            <rect class="pick" x="154" y="64" width="12" height="12"/><g class="badge" transform="translate(171 79) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="160" y="48" text-anchor="middle">边界是两个拐点</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="ink" d="M40 190H110V70"/><path class="ink" d="M210 70V190"/>
+            <text class="note" x="160" y="230" text-anchor="middle">左半留原 Entity，右半新建</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">这正是已落地的导线剪断，推广到所有折线：中间段去掉即分成两条。一段上若还有交点，边界是交点而不是拐点（06）。</p>
+        <div class="trio">
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 300 170" role="img" aria-label="端段：去掉外侧那一段，折线缩短一个顶点"><path class="ink" d="M40 140H110V50H210"/><path class="ink ghost" d="M210 50V140"/><path class="cut" d="M200 50H220"/><rect class="pick" x="204" y="89" width="12" height="12"/><g class="badge" transform="translate(221 104) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><text class="note" x="150" y="30" text-anchor="middle">端段：折线少一个顶点</text></svg></div>
+            <figcaption><b>端段</b>：边界一头是拐点、一头是端头。落地即删掉外侧那个顶点，仍是一个 Entity。</figcaption>
+          </figure>
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 300 170" role="img" aria-label="只有一段的线：那一截就是整条线，整条删除"><path class="ink ghost" d="M50 130L250 50"/><rect class="pick" x="144" y="84" width="12" height="12"/><g class="badge" transform="translate(161 99) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><text class="note" x="150" y="30" text-anchor="middle">只有一段、没有交点：整条</text></svg></div>
+            <figcaption><b>单段孤线</b>：两头都走到了端头，这一截就是整条线——落地等于 <code>ERASE</code>。规则没有例外，预览已经把整条画成幽灵。</figcaption>
+          </figure>
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 300 170" role="img" aria-label="一段上落着另一条线的交点时，边界是交点而不是拐点"><path class="ink" d="M40 140H110V50H210V140"/><path class="ink" d="M160 20V80"/><path class="ink ghost" d="M160 50H210"/><path class="cut" d="M160 40V60"/><path class="cut" d="M210 40V60"/><rect class="pick" x="179" y="44" width="12" height="12"/><g class="badge" transform="translate(196 59) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><text class="note" x="150" y="160" text-anchor="middle">交点压过拐点：只掉半段</text></svg></div>
+            <figcaption><b>段上有交点</b>：从光标向左走先遇到交点，边界就停在那里；右边到拐点。落地时交点成为新顶点。</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">06</span><span class="step-title">一段上多个交点：只掉光标两侧最近的那一格</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="一条横线被三条竖线穿过，修剪只去掉光标所在的那一格">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g><path class="ink" d="M30 130H270"/><path class="ink" d="M90 60V200"/><path class="ink" d="M150 60V200"/><path class="ink" d="M210 60V200"/></g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M30 130H90"/><path class="ink" d="M150 130H270"/>
+            <path class="ink" d="M90 60V200"/><path class="ink" d="M150 60V200"/><path class="ink" d="M210 60V200"/>
+            <path class="ink ghost" d="M90 130H150"/>
+            <path class="cut" d="M90 120V140"/><path class="cut" d="M150 120V140"/>
+            <rect class="pick" x="114" y="124" width="12" height="12"/><g class="badge" transform="translate(131 139) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="120" y="112" text-anchor="middle">只这一格</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="ink" d="M30 130H90"/><path class="ink" d="M150 130H270"/>
+            <path class="ink" d="M90 60V200"/><path class="ink" d="M150 60V200"/><path class="ink" d="M210 60V200"/>
+            <text class="note" x="150" y="230" text-anchor="middle">再点右边一格就再掉一格</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">「最近」是这条规则的全部：从光标处向两边走、第一个交点就停。要掉两格就点两下，或者拖过去（07）。这与 AutoCAD 逐字相同，也是接线图上最常见的动作——母线被一排支路穿过，要断开其中一格。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">07</span><span class="step-title">按住拖过多条：轨迹碰到的每一截一起去掉</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="按住拖动画一条轨迹，轨迹碰到的四截一起被修剪">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">拖动中</text><text class="lbl" x="616" y="24">松手</text>
+          <g><path class="ink" d="M30 110H270"/><path class="ink" d="M30 160H270"/><path class="ink" d="M100 50V220"/><path class="ink" d="M200 50V220"/></g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M30 110H100"/><path class="ink" d="M200 110H270"/>
+            <path class="ink" d="M30 160H100"/><path class="ink" d="M200 160H270"/>
+            <path class="ink" d="M100 110V220"/><path class="ink" d="M200 50V160"/>
+            <path class="ink ghost" d="M100 110H200"/><path class="ink ghost" d="M100 160H200"/>
+            <path class="ink ghost" d="M100 50V110"/><path class="ink ghost" d="M200 160V220"/>
+            <g class="cut"><path d="M100 100V120"/><path d="M200 100V120"/><path d="M100 150V170"/><path d="M200 150V170"/><path d="M90 110H110"/><path d="M190 160H210"/></g>
+            <path class="trail" d="M60 80C110 100 160 150 240 190"/>
+            <circle class="cutdot" cx="60" cy="80" r="2.5"/>
+            <rect class="pick" x="234" y="184" width="12" height="12"/><g class="badge" transform="translate(251 199) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="150" y="238" text-anchor="middle">轨迹碰到四截，四截都淡</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="ink" d="M30 110H100"/><path class="ink" d="M200 110H270"/>
+            <path class="ink" d="M30 160H100"/><path class="ink" d="M200 160H270"/>
+            <path class="ink" d="M100 110V220"/><path class="ink" d="M200 50V160"/>
+            <text class="note" x="150" y="238" text-anchor="middle">一个事务，撤销一步全回来</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">松手即修剪，Escape 放弃这一笔:</text></g>
+        </svg></div>
+        <p class="step-note">按下不动松手是一次点选；<strong>指针离开过按下点</strong>就成了轨迹——与画布上「点亮 vs 拖动」同一条判据，不设位移阈值。轨迹只是一串屏幕点，每一段轨迹与每一条曲线求交，碰到哪一截就把它加进这一笔；同一截碰两次只算一次。松手落地一个事务（共享 <code>mergeKey</code>），撤销一步全回来。轨迹本身画成 accent 点画——它是「将要产出的」那一族。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">08</span><span class="step-title">导线：剪到节点，剩两支路的节点随即合并</span></div>
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="修剪 T 形接线的支路，节点只剩两条支路，自动合并成一条导线">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g>
+            <rect class="sym" x="125" y="30" width="50" height="34" rx="3"/><text class="symtxt" x="150" y="52" text-anchor="middle">KM1</text>
+            <path class="wire" d="M40 150H150"/><path class="wire" d="M150 150H260"/><path class="wire" d="M150 150V64"/>
+            <circle class="junction" cx="150" cy="150" r="3.5"/><circle class="port" cx="150" cy="64" r="3.5"/>
+          </g>
+          <g transform="translate(300 0)">
+            <rect class="sym" x="125" y="30" width="50" height="34" rx="3"/><text class="symtxt" x="150" y="52" text-anchor="middle">KM1</text>
+            <path class="wire" d="M40 150H150"/><path class="wire" d="M150 150H260"/>
+            <path class="wire ghost" d="M150 150V64"/>
+            <circle class="junction" cx="150" cy="150" r="3.5"/><circle class="port" cx="150" cy="64" r="3.5"/>
+            <rect class="pick" x="144" y="100" width="12" height="12"/><g class="badge" transform="translate(161 115) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g>
+            <text class="note cutc" x="165" y="110">整条支路：两头是节点与端口</text>
+          </g>
+          <g transform="translate(600 0)">
+            <rect class="sym" x="125" y="30" width="50" height="34" rx="3"/><text class="symtxt" x="150" y="52" text-anchor="middle">KM1</text>
+            <path class="wire" d="M40 150H260"/>
+            <text class="note" x="150" y="190" text-anchor="middle">支路降到 2 → 节点消失、两条并成一条</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">选择要修剪的一截，或按住拖过多条（回车结束）:</text></g>
+        </svg></div>
+        <p class="step-note">导线上不需要任何特判。支路是一条只有一段的导线，两头分别绑着节点与端口，因此这一截就是整条支路；它消失之后节点只剩两条支路——既有规则在同一个事务里把节点收掉、两条并成一条。绑定跟着被去掉的那一截走：端口那头的绑定随支路一起消失，这与顶点模式里「绑定端顶点删不掉」<strong>不矛盾</strong>——那条拒绝的理由是删掉顶点后绑定留在原地、下一段变斜，而这里绑定与顶点一起走，剩下的线没有任何一段变形。<strong>交叉不是交点</strong>：一条线从导线上方穿过不产生节点，但它仍是切割边——几何求交与电气连通是两件事。</p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">09</span><span class="step-title">拒绝：说出来，线一个字节不动</span></div>
+        <div class="trio">
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 300 170" role="img" aria-label="锁定的对象拒绝修剪"><path class="ink" d="M30 110H270"/><path class="ink" d="M150 40V180"/><rect class="pick" x="204" y="104" width="12" height="12"/><g class="badge" transform="translate(221 119) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><g class="lock" transform="translate(228 74)"><rect x="0" y="6" width="14" height="10" rx="2"/><path d="M3 6V4a4 4 0 0 1 8 0v2"/></g><g transform="translate(0 132)"><rect class="cmd-bg" x="12" y="0" width="276" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">已锁定，不能修剪</text></g></svg></div>
+            <figcaption><b>锁定</b>：悬停不出预览，点下说明。锁保护的是几何，修剪改的正是几何。</figcaption>
+          </figure>
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 300 170" role="img" aria-label="接线点拒绝修剪"><path class="wire" d="M40 110H260"/><path class="wire" d="M150 110V40"/><circle class="junction" cx="150" cy="110" r="3.5"/><rect class="pick" x="144" y="104" width="12" height="12"/><g class="badge" transform="translate(161 119) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><g transform="translate(0 132)"><rect class="cmd-bg" x="12" y="0" width="276" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">接线点不能修剪，剪它的支路</text></g></svg></div>
+            <figcaption><b>接线点</b>：它是一个 <code>resize: 'none'</code> 的曲线，形状不是作者的意图。拾取框压在节点上时命中的是节点，不是底下的导线。</figcaption>
+          </figure>
+          <figure>
+            <div class="stage done"><svg viewBox="0 0 300 170" role="img" aria-label="文字、图片与组件实例不是曲线，拒绝修剪"><rect class="sym" x="60" y="40" width="80" height="60" rx="3"/><text class="symtxt" x="100" y="75" text-anchor="middle">QF1</text><path class="ink" d="M140 70H260"/><rect class="pick" x="66" y="46" width="12" height="12"/><g class="badge" transform="translate(83 61) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g><g transform="translate(0 132)"><rect class="cmd-bg" x="12" y="0" width="276" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">只有曲线可以修剪</text></g></svg></div>
+            <figcaption><b>不是曲线</b>：文字、图片、容器与组件实例没有「一截」可言。它们的<b>边</b>也不做切割边——盒不是轮廓。</figcaption>
+          </figure>
+        </div>
+        <p class="step-note">三种拒绝互相可分，且都是说出来的——「点了没反应」与点错在屏幕上无法区分。第四种是 <code>path</code>（贝塞尔）：v1 不做，说明「贝塞尔路径暂不支持修剪」；它的截要解贝塞尔求交，而工程符号图导进来一个 <code>path</code> 都没有。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>一条命令，两个入口</h2>
+      <p>「货架不得成为任何能力的唯一入口」。修剪走命令行与工具栏各一格；段夹点上的 <code>Delete</code> 是它的退化情形。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>入口</th><th>怎么到</th><th>此刻</th><th>做什么</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>TRIM</code></td>
+            <td>命令行敲 <code>TRIM</code> / <code>TR</code>；绘图货架一格</td>
+            <td>空闲</td>
+            <td>启动会话。提示「选择要修剪的一截，或按住拖过多条（回车结束）:」。<strong>不给单键</strong>——<code>T</code> 已归文字工具，与 <code>POLYGON</code> 同一条：给一个记不住的键比不给更差</td>
+          </tr>
+          <tr>
+            <td>悬停</td>
+            <td>会话进行中移动指针</td>
+            <td>拾取框压住一截</td>
+            <td>那一截淡成幽灵、两头画剪口。拾取框半边长读 <code>COMPOSE_CURVE_PICK_TOLERANCE</code>，与点选同一个数；框的右下角挂一个<strong>剪刀徽标</strong>。<strong>没有十字线</strong>：修剪不取点</td>
+          </tr>
+          <tr>
+            <td>点一下</td>
+            <td>按下不动松手</td>
+            <td>拾取框压住一截</td>
+            <td>去掉那一截，一个事务，标签「修剪 {名字}」。会话<strong>留着</strong>继续剪下一截（AutoCAD 同），<code>Enter</code> / <code>Escape</code> / 右键结束</td>
+          </tr>
+          <tr>
+            <td>按住拖</td>
+            <td>指针离开过按下点</td>
+            <td>轨迹</td>
+            <td>轨迹碰到的每一截一起去掉，一个事务。拖动中 <code>Escape</code> 放弃这一笔、会话留着</td>
+          </tr>
+          <tr>
+            <td>撤销</td>
+            <td><code>Ctrl+Z</code></td>
+            <td>会话进行中</td>
+            <td>每一下是独立事务，逐下回退。<strong>不做会话内 <code>U</code></strong>：Stage 没有撤销端口，而 <code>LINE</code> 的 <code>U</code> 是删自己建的那条，这里没有「自己建的」</td>
+          </tr>
+          <tr>
+            <td>段夹点 <code>Delete</code></td>
+            <td>顶点模式点亮一个段条形</td>
+            <td>有夹点被会话作用着</td>
+            <td><span style="color:var(--page-done)">已推广到所有折线</span>——中间段分两条、闭合变开放，端段与唯一一段仍拒绝（缩短一截与删整条各有入口）。同一份规划、两个入口</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout done">
+      <strong>光标要说「这一下会剪」，而拾取框说不了</strong>
+      <p>
+        等待选择对象的命令（<code>ERASE</code>、<code>MOVE</code>）在光标旁画的正是这同一个拾取框，而 <code>ERASE</code> 与 <code>TRIM</code> 都是删东西的——
+        两条命令光标一模一样、差别只写在屏幕底部的命令行里，用户的眼睛此刻却在光标上（与动态输入印在光标旁是同一条理由）。
+        悬停预览只在压住一截时才出现，光标在空白处走的那几秒，屏幕上没有任何东西说此刻在剪。
+        因此在拾取框右下角挂一个<strong>剪刀徽标</strong>（AutoCAD 2015 起的 cursor badge、Fusion 与 SolidWorks 的修剪光标都这么做）。
+        <strong>是徽标不是换光标</strong>：拾取框必须留着——它是靶区、半边长是容差的事实来源，而一把剪刀的热点在哪儿（刀尖？交叉点？）说不清；
+        徽标由画拾取框的那一层一起画，系统光标的隐藏仍然只有 <code>resolveComposeCanvasCrosshair</code> 一个来源，不另开一条 <code>cursor: url()</code>。
+        <strong>刀尖指向拾取框</strong>（徽标在框的右下，因此整把剪刀转 45°、尖朝左上）：剪刀说的是「剪这里」，尖朝上摆在框旁边只是一个装饰。角度固定，不跟着被剪的那一段转——徽标说的是命令，不是这一截的方向，跟着转会让它在密集图上每帧抖。拒绝档（锁定、接线点、非曲线）徽标照旧——它说的是命令，不是这一下能不能成；能不能成由预览与命令行回答。
+      </p>
+    </div>
+    <div class="callout done">
+      <strong>它是命令不是模式</strong>
+      <p>
+        与 <code>ERASE</code>、<code>MOVE</code> 同一档：由词启动、有明确的进出、<code>Escape</code> 退出，会话进行中画布照常平移缩放。它不改任何手势的语义——顶点模式的 <code>Delete</code> 不变，点选不变。
+        与 <code>LINE</code> 不同的是<strong>它不取点</strong>，因此拾取框不带十字线、右键不是回车而是结束。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>边界规则的一句话</h2>
+      <p>三处（悬停预览、点选落地、拖动落地）读同一份纯函数，否则「看见的那一截」与「掉的那一截」会不是同一截。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>从光标处向一边走，先遇到</th><th>停在</th><th>落地写什么</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>另一条曲线的交点</td><td>交点</td><td>交点成为这一侧的新端点或新顶点（弧：新的起始角 / 扫掠角）</td></tr>
+          <tr><td>本曲线的顶点（拐点）</td><td>顶点</td><td>顶点保留，它变成一条的末端；另一侧同理</td></tr>
+          <tr><td>端头</td><td>端头</td><td>这一侧没有剩余；两侧都是端头即整条删除</td></tr>
+          <tr><td>回到光标（整圆）</td><td>另一侧的交点</td><td>整圆上只有一个交点时不剪：一个点剪不开一个圈，说明「至少要两个交点」</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="step-note">
+      交点按<strong>世界坐标</strong>求（各曲线投影到盒、再乘世界矩阵，与命中、框选同一条链），弧与弧、弧与线精确求交，贝塞尔拍扁——与非等比缩放那条同一个选择。
+      两侧的边界与光标在<strong>同一条曲线上</strong>；切割边可以是任何曲线，含导线、圆、折线，也含自己（折线自交时另一段也是边界）。
+      T 形相接（一条线的端头落在另一条线身上）算交点：那正是接线图上最多的一种相接。
+    </p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>刻意不做的</h2>
+    </div>
+    <div class="opens">
+      <div class="open">
+        <h3>不做延伸（<code>Shift</code> 切成 EXTEND）</h3>
+        <p>延伸要选一个目标边界，而修剪不用。两件事共用一个键、一个提示、一个光标，屏幕上读不出此刻按下去会加长还是剪短。<code>Shift</code> 先留着不占。</p>
+      </div>
+      <div class="open">
+        <h3>不做「在一点剪开」（BREAK / Illustrator Scissors）</h3>
+        <p>产出两个重合的端点，屏幕上与没剪之前逐像素相同，那正是导线设计里否掉的假接头。要把一条线分成两条改不同颜色，剪掉一小截再拖端点回去，或者等 <code>EXPLODE</code>。</p>
+      </div>
+      <div class="open">
+        <h3>不做先选切割边的两步式</h3>
+        <p>AutoCAD 标准模式那一档的价值是「只有选中的边才切」——在密集图纸上少剪。但它要一个模式开关与两段提示，而 06 那条「只掉最近一格」已经把误剪的范围压到一格，多点一下比多选一步便宜。</p>
+      </div>
+      <div class="open">
+        <h3>不做刀（Knife）</h3>
+        <p>刀切的是填色形状的面积，产出两个填色形状。这里的图形绝大多数是空心线框；矩形默认空心正是为了不盖住里面的符号。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>待定</h2>
+    </div>
+    <div class="opens">
+      <div class="open">
+        <h3>圆角矩形：剪口落在角弧上</h3>
+        <p>04 里剪口落在直段上，角弧跟着相邻段走。若一条线恰好穿过角弧（交点在圆角里），交点没法落成一个顶点——多段线的顶点没有 bulge。v1 倾向于把交点按尖角顶点求（与「紧包围盒仍由顶点决定」同一条），代价是剪口与画出来的弧差一个圆角的距离；另一条路是拒绝并说明。</p>
+      </div>
+      <div class="open">
+        <h3>拾取框同时压住两条线</h3>
+        <p>交点附近拾取框会同时盖住两条。取<strong>离光标最近的那一条</strong>，与点选一致；悬停预览因此只亮一截，用户挪一下指针就换到另一条。</p>
+      </div>
+      <div class="open">
+        <h3>剪成两条之后的名字与动画轨道</h3>
+        <p>左半留原 Entity（名字、轨道、绑定都在），右半复制呈现但<strong>不复制轨道</strong>——位置轨道指着旧的盒，复制过去只会动错。与导线剪断今天的做法一致，先不改。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>本稿画的是提案；数据模型与命令骨架照抄既有 <code>ERASE</code>（两次序共用状态机）与导线剪断规划（<code>planStageWireCut</code>），交点求解是 <code>core/curve-geometry.ts</code> 里要新增的一组纯函数。</div>
+    <div>调研来源：</div>
+    <ul>
+      <li><a href="https://help.autodesk.com/view/ACD/2026/ENU/?guid=GUID-B1A185EF-07C6-4C53-A76F-05ADE11F5C32">AutoCAD 2026 · TRIM (Command)</a> · <a href="https://help.autodesk.com/cloudhelp/2021/ENU/AutoCAD-Product-Insights/files/GUID-E0C31199-27BA-48AA-8649-73FA3262E035.htm">Hold Shift to Toggle Between TRIM and EXTEND</a></li>
+      <li><a href="https://help.autodesk.com/view/fusion360/ENU/?guid=SKT-TRIM-EXTEND">Fusion · Trim or extend sketch geometry</a> · <a href="https://productdesignonline.com/tips-and-tricks/how-to-use-the-trim-command-in-fusion-360/">How to Use the Trim Command in Fusion 360</a></li>
+      <li><a href="https://help.solidworks.com/2024/English/SolidWorks/sldworks/c_Trim_Entities.htm">SOLIDWORKS 2024 · Trim Entities</a> · <a href="https://www.goengineer.com/blog/solidworks-trim-entities-command-capabilities">GoEngineer · Trim Entities Command Capabilities</a></li>
+      <li><a href="https://medium.com/sketch-app/what-s-up-with-sketch-s-scissors-tool-ebdf4d57276f">Peter Nowell · What's Up With Sketch's Scissors Tool?</a></li>
+      <li><a href="https://helpx.adobe.com/illustrator/desktop/manage-objects/edit-objects/cut-objects.html">Illustrator · Cut objects using the Knife and Scissors tools</a></li>
+      <li><a href="https://help.figma.com/hc/en-us/articles/360039957634-Edit-vector-layers">Figma · Edit vector layers</a> · <a href="https://www.figma.com/blog/delete-and-heal-for-vector-networks/">Delete and Heal for Vector Networks</a></li>
+      <li><a href="https://www.affinity.studio/help/tools-tools-knife/">Affinity · Knife Tool</a></li>
+    </ul>
+  </footer>
+
+</div>
+
+</body>
+</html>

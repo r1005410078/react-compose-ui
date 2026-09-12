@@ -1,3 +1,4 @@
+import { createStageDraftingPickPlugin } from '../drafting/drafting-pick-plugin'
 import { createStageDraftingPointPlugin } from '../drafting/drafting-point-plugin'
 import { createStageCurveCornerPlugin } from './curve-corner-plugin'
 import { createStageDrawPlugin } from './draw-plugin'
@@ -42,6 +43,7 @@ export const STAGE_EXTRACTED_PLUGIN_FACTORIES: readonly (() => StageInteractionP
   createStageTextEditGuardPlugin,
   createStagePanPlugin,
   createStageDraftingPointPlugin,
+  createStageDraftingPickPlugin,
   createStagePaintSamplePlugin,
   createStagePathPlugin,
   createStagePaintPlugin,
