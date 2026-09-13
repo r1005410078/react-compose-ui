@@ -29,8 +29,8 @@
     --dangling: #f59e0b;
     --cursor: #e6edf7;
     --note: #7d8797;
-    /* 本稿提议的填充默认色：一块中性的分区底，不宣称任何语义。 */
-    --hatch: #3f5068;
+    /* 落地的填充默认色：一块中性的分区底，不宣称任何语义。对符号墨 8.67:1、对导线红 3.19:1。 */
+    --hatch: #2f3b4d;
 
     --measure: 68ch;
   }
@@ -138,7 +138,7 @@
     border: 1px solid var(--canvas-border);
   }
   .stage svg { display: block; width: 100%; height: auto; }
-  /* 琥珀虚线圈 = 本稿提议、尚未落地；绿实线圈留给已经落地的部分。 */
+  /* 绿实线圈 = 已落地。琥珀虚线圈留给还没落地的部分，本页已经没有了。 */
   .stage.todo { outline: 2px dashed var(--page-todo); outline-offset: 3px; }
   .stage.done { outline: 2px solid var(--page-done); outline-offset: 3px; }
 
@@ -284,14 +284,16 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">SDD 补充 · 绘图交互 · 提案</div>
+    <div class="eyebrow">SDD 补充 · 绘图交互 · 已落地</div>
     <h1>填充：点一下，填满围出来的那块面</h1>
     <p class="lede">
       今天的填充属于<strong>对象</strong>——一个矩形的底色是它自己 <code>Appearance.backgroundPaint</code> 上的一个字段。
       但用户指着的常常是一<strong>块面</strong>：矩形的三条边加上圆弧的一段围出来的那块。两者都要有，而且必须是两件东西。
       本稿提的是第二件：一条 <code>HATCH</code> 命令，点一下把光标底下那块面落成一个新的 Entity。
       边界是图上<strong>所有</strong>可见曲线，交点即拐角——与已落地的 <code>TRIM</code> 是同一份边界、同一种输入、同一套求交数学。
-      画布片段按 Stage 的真实 token 1:1 绘制；<strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿提议、尚未落地</strong>。
+      画布片段按 Stage 的真实 token 1:1 绘制；<strong style="color:var(--page-done)">绿实线圈 = 已落地</strong>，
+      九格全部落地。<strong>落地推翻了本稿的三条规则</strong>（自由端、射线要一直往外试、共线重叠的边要合成一条），
+      各自记在下面对应的那一格里；默认色也从本稿画的 <code>#3f5068</code> 换成了量过对比度的 <code>#2f3b4d</code>。
     </p>
   </header>
 
@@ -467,7 +469,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">01</span><span class="step-title">圆压在矩形上：填矩形内、圆外的那块面</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="一个圆压在矩形上边，填充矩形内圆外的那块面，边界是三条直边加一段圆弧">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="一个圆压在矩形上边，填充矩形内圆外的那块面，边界是三条直边加一段圆弧">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">今天</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
           <g>
@@ -509,7 +511,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">02</span><span class="step-title">边界恰好是一个对象时，改它，不新建</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="桶点在只由一个矩形围出的区域里时改这个矩形的填充，点在由矩形和直线拼出的区域里时新建一个填充对象">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="桶点在只由一个矩形围出的区域里时改这个矩形的填充，点在由矩形和直线拼出的区域里时新建一个填充对象">
           <line class="divider" x1="300" y1="0" x2="300" y2="280"/><line class="divider" x1="600" y1="0" x2="600" y2="280"/>
           <text class="lbl" x="16" y="24">边界恰好是这个矩形</text><text class="lbl" x="316" y="24">边界是拼出来的</text><text class="lbl" x="616" y="24">场景树里的差别</text>
 
@@ -579,7 +581,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">03</span><span class="step-title">里面还有东西：岛就是 <code>evenodd</code></span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="矩形内部有一个圆和一个小方块，填充挖空这两个岛">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="矩形内部有一个圆和一个小方块，填充挖空这两个岛">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
           <g>
@@ -615,7 +617,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">04</span><span class="step-title">四条各自不闭合的线，围出一块闭合的面</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="四条互相穿过的直线围出一块矩形区域，填充落成闭合多段线">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="四条互相穿过的直线围出一块矩形区域，填充落成闭合多段线">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
           <g>
@@ -650,7 +652,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">05</span><span class="step-title">不封闭：拒绝，并且指出断口在哪</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="边界有缺口时填充被拒绝，断口处画出琥珀色记号">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="边界有缺口时填充被拒绝，断口处画出琥珀色记号">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">点了一下</text><text class="lbl" x="616" y="24">补上那一段之后</text>
           <g>
@@ -685,7 +687,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">06</span><span class="step-title">边界动了：v1 不自动跟随，但重算只要一下</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="移动圆之后填充停在原处，按重新生成按当前边界重算">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="移动圆之后填充停在原处，按重新生成按当前边界重算">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">填好了</text><text class="lbl" x="316" y="24">把圆拖走</text><text class="lbl" x="616" y="24">重新生成</text>
           <g>
@@ -719,7 +721,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">07</span><span class="step-title">层序：压在最靠后的那条边界之下</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="填充插在最前会盖住区域内的符号，插在边界之下才正确">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="填充插在最前会盖住区域内的符号，插在边界之下才正确">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">插在最前</text><text class="lbl" x="616" y="24">插在边界之下</text>
           <g>
@@ -753,7 +755,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">08</span><span class="step-title">工具栏上的那一格：一个油漆桶</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 150" role="img" aria-label="绘图工具栏上加一格油漆桶，排在修剪之后，代价是尾部一格收进更多">
+        <div class="stage done"><svg viewBox="0 0 900 150" role="img" aria-label="绘图工具栏上加一格油漆桶，排在修剪之后，代价是尾部一格收进更多">
           <rect x="20" y="26" width="514" height="52" rx="9" fill="#1a1f27" stroke="#2c3542"/>
           <g class="ink" stroke-width="1.5">
             <g transform="translate(40 34)"><path d="M8 26L26 8"/></g>
@@ -801,7 +803,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">09</span><span class="step-title">怎么给桶换颜色</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="换填充色的三处：工具栏的色板弹出层、命令行的颜色关键字、以及属性面板改已填好的那块">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="换填充色的三处：工具栏的色板弹出层、命令行的颜色关键字、以及属性面板改已填好的那块">
           <line class="divider" x1="300" y1="0" x2="300" y2="280"/><line class="divider" x1="600" y1="0" x2="600" y2="280"/>
           <text class="lbl" x="16" y="24">改「下一次」填什么色</text><text class="lbl" x="316" y="24">同一件事，用键盘</text><text class="lbl" x="616" y="24">改「已经填好」的那块</text>
 
@@ -813,7 +815,7 @@ Hatch: {
             <text class="lbl" x="70" y="110">本页用过</text>
             <rect class="swatch-chip" x="70" y="120" width="26" height="26" rx="5" fill="#ff3b30"/>
             <rect class="swatch-chip on" x="104" y="120" width="26" height="26" rx="5" fill="#f59e0b"/>
-            <rect class="swatch-chip" x="138" y="120" width="26" height="26" rx="5" fill="#3f5068"/>
+            <rect class="swatch-chip" x="138" y="120" width="26" height="26" rx="5" fill="#2f3b4d"/>
             <line class="divider" x1="70" y1="160" x2="228" y2="160"/>
             <text class="note" x="70" y="182">自定义…</text>
             <text class="note" x="150" y="250" text-anchor="middle">桶里那块，就是下一次会填的颜色</text>
@@ -828,7 +830,7 @@ Hatch: {
             <text class="cmd-k" x="32" y="144">颜色：</text><text class="cmd-v" x="72" y="144">输入 #rrggbb 或选一个:</text>
             <rect class="swatch-chip" x="214" y="132" width="16" height="16" rx="3" fill="#ff3b30"/>
             <rect class="swatch-chip on" x="236" y="132" width="16" height="16" rx="3" fill="#f59e0b"/>
-            <rect class="swatch-chip" x="258" y="132" width="16" height="16" rx="3" fill="#3f5068"/>
+            <rect class="swatch-chip" x="258" y="132" width="16" height="16" rx="3" fill="#2f3b4d"/>
             <text class="note" x="150" y="250" text-anchor="middle">货架不得是任何能力的唯一入口</text>
           </g>
 
@@ -839,8 +841,8 @@ Hatch: {
             <rect class="grip" x="232" y="154" width="8" height="8"/><rect class="grip" x="52" y="154" width="8" height="8"/>
             <rect class="pop" x="20" y="182" width="262" height="36" rx="6"/>
             <text class="cmd-k" x="34" y="205">外观 · 背景</text>
-            <rect class="swatch-chip" x="128" y="190" width="20" height="20" rx="4" fill="#3f5068"/>
-            <text class="cmd-v" x="158" y="205">#3f5068</text>
+            <rect class="swatch-chip" x="128" y="190" width="20" height="20" rx="4" fill="#2f3b4d"/>
+            <text class="cmd-v" x="158" y="205">#2f3b4d</text>
             <text class="note" x="150" y="250" text-anchor="middle">既有的属性面板，一行代码都不用写</text>
           </g>
         </svg></div>
@@ -848,7 +850,7 @@ Hatch: {
           <strong>图标就是色板，不另给一个色块。</strong>「按这个按钮会发生什么」与「这次会填成什么颜色」是同一个问题，
           用两个东西回答只会让它们有机会说得不一样。
           本格与 08 画的是<strong>选过颜色之后</strong>的样子（<span class="swatch" style="background:#f59e0b"></span>琥珀），
-          01–07 画的是<strong>还没选过</strong>时的中性默认（<span class="swatch" style="background:#3f5068"></span>石板）——
+          01–07 画的是<strong>还没选过</strong>时的中性默认（<span class="swatch" style="background:#2f3b4d"></span>石板）——
           这两个状态在屏幕上必须一眼可分，否则「桶里那块是什么」这句话就没有兑现。
         </p>
         <div class="callout">
@@ -881,7 +883,9 @@ Hatch: {
         <p class="step-note">
           <strong>色板里是「这一页已经用过的颜色」，不是一份内置色表。</strong>内置一份等于替宿主做了一个多半要改的决定——
           与「不内置电压等级色表」是同一条。而第二块区域十有八九和第一块同色，这份列表因此正好是最常用的那几个。
-          它<strong>不引入任何文档字段</strong>：扫一遍文档里带 <code>Hatch</code> 的 Entity 就有。
+          它<strong>不引入任何文档字段</strong>：扫一遍文档就有。落地扫的是带 <code>Curve</code> 的 Entity 而不是带
+          <code>Hatch</code> 的——读取走 <code>getComposeCurveFill</code>，<strong>与渲染和命中同一个入口</strong>，
+          因此「色板上列出来的」与「图上看得见的」不可能分家；手动填过色的矩形也因此进得了色板，而那正是用户想复用的那一档。
           代价说在明处：重开编辑器之后桶回到中性色。这很便宜——色板是从这一页算出来的，你上次用的颜色就在弹出层第一行。
         </p>
         <p class="step-note">
@@ -1025,8 +1029,68 @@ Hatch: {
 
   <section>
     <div class="section-head">
+      <h2>落地时改了什么</h2>
+      <p>本稿写下、而实现推翻的。每一条都写进了变更的 spec，因此这里记的是<strong>为什么</strong>，不是差异清单。</p>
+    </div>
+    <div class="opens">
+      <div class="open">
+        <h3>自由端掉头绕回去，失败改由「环没围住落点」判定</h3>
+        <p>
+          本稿写的是「绕行走到一个没有出边的节点就判失败，并在那里画断口」。推翻它的是<strong>一根线头</strong>——
+          一条画了一半的导线、一根符号的引出线，从边界伸进面里、另一端悬空。它<strong>不分割任何东西</strong>，
+          填充本该照常成立；而原规则会在那里失败，并且<strong>断口记号指向的不是缝</strong>。
+          那是一次错误的诊断，比不诊断更糟，而这类线头在接线图上到处都是。
+          新规则是在自由端上掉头走回去（留下一条零宽的缝，在产物里裁掉），于是绕行<strong>总能闭合</strong>，
+          失败改由「围出来的环没有围住落点」判定——边界真缺了一段时，绕行会从那个缺口走到外面去。
+          <strong>诊断反而更准</strong>：报的是这一圈上遇到的全部自由端，而一个真缺口的两侧正好是两个自由端；
+          原规则只能报「第一个走不下去的地方」。<strong>这不是把间隙放过去</strong>——0.5px 的缝仍然被拒，与 04 逐字一致，
+          掉头绕过的是线头，不是缝。
+        </p>
+      </div>
+      <div class="open">
+        <h3>射线要一条一条往外试，不能只取最近的那一条</h3>
+        <p>
+          落点在一个环形区域里时，射线先穿过的是那块面的<strong>内</strong>边界（被挖空的那座岛），
+          从它起手绕出来的环根本不含落点。因此要按距离由近及远一条一条起手，直到绕出来的环围住落点为止。
+          本稿把这一步写成了「取最近的那一条边起手」，那在带岛的图上求出来的是岛的轮廓而不是那块面。
+        </p>
+      </div>
+      <div class="open">
+        <h3>共线重叠的两条边界不是无害的，建图时要收成一条</h3>
+        <p>
+          本稿把它列在「待定」里，说「多半无害，但要有用例钉住」。落地发现<strong>它不无害</strong>：
+          <code>intersectComposeSegments</code> 对共线重叠返回空，于是射线穿过叠在一起的两条边会在<strong>同一个距离上</strong>
+          得到两个交点，而那一档分不出「穿过去了」还是「擦到了」——每一个射线方向都退化，整块面求不出来。
+          用户看到的是一个明明围好了的矩形填不上色。因此建图时把两端节点相同、中点重合的子边<strong>收成一条</strong>：
+          两条画在一起的边界线在图上本来就是一条边界。用例钉住了这一条。
+        </p>
+      </div>
+      <div class="open">
+        <h3>新增一条：环上相邻且共线的两段并成一段</h3>
+        <p>
+          节点是交点造出来的，而<strong>交点不一定是这块面的角</strong>——一根线头顶在边中间会把它切成两条，
+          留下的顶点不携带任何形状信息，而顶点正是用户接下来要拖的东西。
+          这是浮点共线判定而<strong>不是一条容差</strong>：真差一点点的两段边在图上就是一个角。
+        </p>
+      </div>
+      <div class="open">
+        <h3>重新生成与过期判定走宿主注入的端口</h3>
+        <p>
+          本稿把这两件事画在 Inspector 上，没说它们住在哪个包。落地撞上架构边界：<code>materials</code>
+          <strong>不依赖 <code>stage-engine</code></strong>，而「这块填充过期了没有」与「照 seed 再求一遍」都要跑求面算法。
+          因此加了 <code>ComposeHatchEditPort</code>（<code>isStale</code> / <code>regenerate</code>），由宿主注入，物料只画按钮与记号。
+          这<strong>不是新造一条机制</strong>——Paint 编辑的 <code>paintEditPort</code> 早就是同一条边界的同一个解法。
+          端口可缺席，缺席时只显示 <code>seed</code>、不画按钮（一个按下去什么都不会发生的入口比没有更糟），
+          <code>materials</code> 因此仍可独立嵌入。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
       <h2>待定</h2>
-      <p>本稿没有回答、而实现之前要有答案的。</p>
+      <p>本稿没有回答的八条里，落地回答了四条（各自记在上面那一节或这里）。剩下的仍然待定。</p>
     </div>
     <div class="opens">
       <div class="open">
@@ -1040,20 +1104,13 @@ Hatch: {
         </p>
       </div>
       <div class="open">
-        <h3>过期状态怎么被看见——这一条不能拖到 v2</h3>
+        <h3 style="color:var(--page-done)">已回答 · 过期状态怎么被看见</h3>
         <p>
-          所有做了关联的产品里，用户抱怨的都不是「它会断」，而是<strong>「断了我不知道」</strong>。
-          KiCad 的答案是在跑 DRC 与生成输出之前警告区域还没重填，Altium 的答案是把重填做成一个带「保持原样」的提示。
-          本稿 v1 的 Inspector 上写着「边界已改变」——<strong>但没说这句话是怎么算出来的</strong>，而不重算就不知道边界变没变。
-          一个便宜的答案是<strong>只在这块填充被选中时重算一次</strong>：那正是用户在问这个问题的时刻，一次 O(N²) 不是每帧 O(N²)。
-          要不要这么做、以及选中一块填充因此变慢多少，是实现之前要量的。
-        </p>
-      </div>
-      <div class="open">
-        <h3>共线重叠的两条边界</h3>
-        <p>
-          <code>intersectComposeSegments</code> 对平行与<strong>共线重叠</strong>返回空——「没有哪一个点能被称作交点」。
-          两条画在一起的边界线因此不产生节点，绕行会从其中一条上直接走过去。多半无害，但要有用例钉住它到底走成什么样。
+          本稿留的问题是「Inspector 上写着『边界已改变』，但没说这句话是怎么算出来的」。
+          落地取的正是本稿猜的那个便宜答案：<strong>只在这块填充被选中时重算一次</strong>，那正是用户在问这个问题的时刻，
+          一次 O(N²) 不是每帧 O(N²)。判定本身是一句话——<strong>照 seed 再求一遍，看几何变没变</strong>：
+          求解是确定性的，同一份输入给出逐位相同的结果，因此不需要任何额外的状态来记「边界动过没有」。
+          呈现走 <code>ComposeHatchEditPort.isStale</code>，与那颗「重新生成」按钮同一个端口。
         </p>
       </div>
       <div class="open">
@@ -1071,15 +1128,24 @@ Hatch: {
         </p>
       </div>
       <div class="open">
-        <h3>首次默认色取什么</h3>
+        <h3 style="color:var(--page-done)">已回答 · 首次默认色取 <code>#2f3b4d</code></h3>
         <p>
-          「记住上次用的」已经在 08 里定了，剩下的只有<strong>第一次</strong>那一下。
-          中间一度把理由写成「区域没有最常见的那一档，所以只能给个中性的占位」——<strong>那是一句推辞，不是一条理由</strong>。
-          真正的理由是正面的：<strong>区域填充的角色是垫在符号底下的一层底</strong>，它必须让上面的墨读得出来。
-          这与导线红取「最常见的那一档」是同一条判据的两个答案——导线问的是「它通常是什么」，底色问的是「它得让什么东西看得清」。
-          低饱和、压得住的深色因此不是将就，是这个角色要求的。待定的只是<strong>取值</strong>：
-          场景背景默认透明，填充是会被发布出去的真实像素，所以它要在深色画布与白底页面上都成立。
-          导线红当初按这条量过对比度（编辑画布 ≈5.1:1、白底页面 ≈3.6:1），这一块也得量，本稿画的 <code>#3f5068</code> 还没量过。
+          理由那一半本稿已经写对了，而且不需要改：<strong>区域填充的角色是垫在符号底下的一层底</strong>，
+          它必须让上面的墨读得出来；这与导线红取「最常见的那一档」是同一条判据的两个答案。
+          落地补的是<strong>取值</strong>，按导线红那套量了对比度：<code>#2f3b4d</code> 对符号墨色（<code>#d8e2f1</code>）
+          <strong>8.67:1</strong>、对导线红（<code>#ff3b30</code>）<strong>3.19:1</strong>，两者都过 WCAG 非文本对比的 3:1。
+        </p>
+        <p>
+          本稿画的 <code>#3f5068</code> <strong>没有量过，而且量下来不合格</strong>——它在导线红下只有 <strong>2.31:1</strong>，
+          一条红导线压在那块底上读不出来，而那正是这张图上每天发生的事。
+        </p>
+        <p>
+          <strong>还有一条约束被证明是不可能满足的</strong>：同时要求「对符号墨过 3:1」「对导线红过 3:1」
+          「对深色画布底（<code>#1d2025</code>）也过 3:1」「还得是低饱和的深色」，
+          在整个色相环上穷举下来<strong>无解</strong>——第三条与第四条互相排斥，压得住的深色必然贴近画布底。
+          取舍因此写在明处：放掉「与画布底的对比」那一条（<code>#2f3b4d</code> 对它只有 <strong>1.44:1</strong>），
+          因为填充<strong>本来就是一块面</strong>，它与背景的边界由它自己的面积说清楚，而墨与红是压在它<strong>上面</strong>的、
+          只能靠对比读出来。这条取舍连同三个测量值一起写在 <code>COMPOSE_DEFAULT_HATCH_COLOR</code> 的 TSDoc 上。
         </p>
       </div>
       <div class="open">
@@ -1094,16 +1160,19 @@ Hatch: {
       <div class="open">
         <h3>场景树里它叫什么</h3>
         <p>
-          「填充 1」读不出是哪一块。可能按边界对象命名，也可能就按区域大小排序编号。暂无答案。
+          「填充 1」读不出是哪一块。可能按边界对象命名，也可能就按区域大小排序编号。<strong>仍无答案</strong>——
+          v1 落成的正是 Preset 默认那一档（<code>填充</code> + 自动编号），因为编不出更好的名字时，
+          与其发明一套只在这一个 Preset 上成立的命名规则，不如让它和别的对象一样。
         </p>
       </div>
     </div>
   </section>
   <footer>
     <div>
-      本稿画的是提案，一行代码都还没有。命令骨架照抄已落地的 <code>TRIM</code>（同一种 <code>pick</code> 输入、同一条手势插件、
-      同一套世界坐标求交），求面的绕行算法是 <code>core/curve-region.ts</code> 里要新增的一组纯函数。
-      落地前按仓库规则先走 OpenSpec 变更提案。
+      <strong>本稿已经落地</strong>（OpenSpec 变更 <code>add-hatch-command</code>）。命令骨架照抄已落地的 <code>TRIM</code>
+      （同一种 <code>pick</code> 输入、同一条手势插件、同一套世界坐标求交），求面的绕行算法落在
+      <code>core/curve-region.ts</code>，是一组纯函数。实现推翻了本稿的三条规则、补了一条新的，
+      都记在「落地时改了什么」那一节，并已写回变更的 spec —— 这一页与 spec 不一致时以 spec 为准。
     </div>
     <div>
       两处调研留的尾巴：AutoCAD 的间隙容差变量是 <code>HPGAPTOL</code> 而不是 <code>HPGAPTOLERANCE</code>（本稿没有采用它，记在这里免得下一个人抄错）；
