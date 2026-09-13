@@ -65,6 +65,6 @@
 ## 7. 收尾
 
 - [x] 7.1 `bun run lint && bun run typecheck && bun run test && bun run build`
-- [ ] 7.2 `bun run test:e2e`
+- [x] 7.2 `bun run test:e2e`
 - [x] 7.3 `docs/mockups/drafting-hatch.html` 的琥珀圈按落地情况收成绿圈，并重发 artifact（同一个 URL）
 - [x] 7.4 按需同步 `AGENTS.md`（填充与对象填色的关系、两支判定、间隙容差的取舍）
