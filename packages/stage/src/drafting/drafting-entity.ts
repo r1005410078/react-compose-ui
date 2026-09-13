@@ -383,6 +383,28 @@ export function stageCurveToParent(
   return toParentCurve(curve, toParent, rotationDegrees)
 }
 
+/**
+ * 把一个世界坐标的点换算到某个既有 Entity 的**父级**局部坐标。
+ *
+ * @remarks
+ * 与 {@link stageCurveToParent} 是同一条换算的点版本：填充的锚点住在 Entity 局部空间，而重新
+ * 生成要先把它搬回世界求面、再搬回来写下去，两头必须是同一份矩阵。
+ *
+ * @internal
+ */
+export function stagePointToParent(
+  context: StageDraftingCommitContext,
+  point: StagePoint,
+  entityId: string,
+): StagePoint {
+  const parentId = getEntityParentId(context.document, entityId)
+  if (!parentId) return point
+  const inverse = invertMatrix(
+    getEntityWorldMatrix(context.document, context.layoutSnapshot, parentId),
+  )
+  return applyMatrix(inverse, point)
+}
+
 /** {@link createStageDraftingCurveCommand} 的结果。 @internal */
 export interface StageDraftingCurveCommand {
   readonly command: EditorCommand

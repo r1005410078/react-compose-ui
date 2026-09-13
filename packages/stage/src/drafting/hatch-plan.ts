@@ -12,6 +12,7 @@ import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
   getComposeAppearance,
   getComposeCurve,
+  composeCurveInnerAnchor,
   getComposeHatch,
   normalizeComposeCurveGeometry,
   type ComposeCurve,
@@ -29,8 +30,10 @@ import type { ComposeHatchState } from '@compose-ui/component-registry'
 import {
   createStageDraftingCurveCommand,
   stageCurveToParent,
+  stagePointToParent,
   type StageDraftingCommitContext,
 } from './drafting-entity'
+import { batchStageCommands } from './wire-tap'
 
 /** {@link planStageHatch} 的入参。 @internal */
 export interface StageHatchPlanOptions {
@@ -166,16 +169,25 @@ export function stageHatchPreviewRings(curve: ComposeCurve): readonly (readonly 
 }
 
 /**
- * 拿一块填充自己的 `seed` 把当初那次求解原样再跑一遍。
+ * 拿一块填充自己的锚点把当初那次求解原样再跑一遍，并把锚点与边界清单一起写回。
  *
  * @remarks
- * **同一个算法、同一个输入、没有第二套规则**——这正是 `Hatch` 只存 `seed`、不存边界对象标识的
- * 理由：存了就要回答「这条边是与哪个对象的第几个交点」，而一条直线穿过一个圆有两个交点，
- * 选哪一个是个启发式。
+ * **同一个算法、同一个输入、没有第二套规则**——它与每帧跑的那条派生求解读的是同一份解算，
+ * 差别只在**谁按下的**：派生只在清单没变时动手，这一条是用户明确说「按现在的边界重来」。
  *
- * `seed` 是 **Entity 局部坐标**，因此先经这块填充自己的世界矩阵搬回世界空间。它跟着 Entity 走，
- * 所以整块填充被移动过之后仍然指着同一个位置——而边界没跟着动的话，求出来的就是另一块面，
- * 那正是「过期」。
+ * 锚点是 **Entity 局部坐标**，因此先经这块填充自己的世界矩阵搬回世界空间。它跟着 Entity 走，
+ * 所以整块填充被移动过之后仍然指着同一个位置。
+ *
+ * **三样东西一起写，在一个事务里**：几何、重取的锚点、新的边界清单。只写几何是不够的，而这
+ * 不是洁癖——
+ * - 盒跟着新几何变了，而锚点是**相对盒**的，不重写它的话每按一次「重新生成」锚点就往外漂
+ *   一点，几次之后掉到界外，此后这块填充再也重算不回来；
+ * - 清单不更新的话，这块填充此后**永远跟不上**——派生那一侧比对的是存着的那份，而它记的还是
+ *   上一次那几个边界。用户按下那一下想说的正是「现在这几个才是我的边界」。
+ *
+ * 锚点重取到新几何的**最大内切圆圆心**，与派生那一侧逐字相同：两条路走出不同的锚点，等于同
+ * 一块填充按不同入口重算会得到不同结果。退化到求不出圆心时退回原来那个世界位置——那一档不该
+ * 顺手把锚点扔掉。
  *
  * @returns 求不出来（边界改到围不出面了）时返回 `null`。
  * @internal
@@ -188,10 +200,11 @@ export function planStageHatchRegeneration(
   const entity = context.document.entities[entityId]
   const hatch = entity ? getComposeHatch(entity) : undefined
   const matrix = context.index.getWorldMatrix(entityId)
-  if (!hatch || !matrix) return null
+  if (!entity || !hatch || !matrix) return null
+  const worldSeed = applyMatrix(matrix, hatch.seed)
   const resolution = resolveStageHatchRegion(
     context.index,
-    applyMatrix(matrix, hatch.seed),
+    worldSeed,
     options.isJunction ? { isJunction: options.isJunction } : {},
   )
   /*
@@ -200,8 +213,43 @@ export function planStageHatchRegeneration(
    * 走到正确的那一支，而这里替他选会留下一块他没要求过的重复对象。
    */
   if (resolution.status !== 'create') return null
-  return createStageDraftingCurveCommand(context, resolution.curve, { replace: entityId })?.command
-    ?? null
+  const geometry = createStageDraftingCurveCommand(
+    context,
+    resolution.curve,
+    { replace: entityId },
+  )?.command
+  if (!geometry) return null
+
+  const normalized = normalizeComposeCurveGeometry(
+    stageCurveToParent(context, resolution.curve, entityId),
+  )
+  const parentSeed = stagePointToParent(context, worldSeed, entityId)
+  const anchor = composeCurveInnerAnchor(normalized.curve) ?? {
+    x: parentSeed.x - normalized.offset.x,
+    y: parentSeed.y - normalized.offset.y,
+  }
+  const next: EditorCommand = {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.updateComponent,
+    payload: {
+      entityId,
+      key: COMPOSE_BUILTIN_COMPONENT_KEYS.hatch,
+      value: {
+        seed: { x: anchor.x, y: anchor.y },
+        // 空清单不写：`boundaryIds` 的校验拒绝空数组，而「没有边界」的含义就是「不跟随」。
+        ...(resolution.boundaryIds.length > 0
+          ? { boundaryIds: [...resolution.boundaryIds] }
+          : {}),
+      } as unknown as JsonValue,
+    },
+    meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
+  }
+  // 几何与 `Hatch` 分成两条会产生一个可观察的不一致中间态，撤销也变两步。
+  return batchStageCommands(context.idFactory, [geometry, next], entity.name, {
+    label: entity.name,
+    source: 'stage',
+    targetIds: [entityId],
+  }) ?? geometry
 }
 
 /**
