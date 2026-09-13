@@ -106,7 +106,43 @@ export interface ComposeEditorPreferences {
    * @defaultValue `'fade'`
    */
   readonly crosshairStyle: ComposeEditorCrosshairStyle
+  /**
+   * 是否显示世界坐标轴与原点标记。
+   *
+   * @remarks
+   * 与十字光标样式同一档的**用户偏好**，不是工作区会话开关：三个内建工作区的画布表现刚刚
+   * 被统一过，再加一个按工作区分叉的开关会重演同一个困惑。
+   *
+   * 坐标轴贯穿全图且永远在，而十字光标只在取点时出现——两者在屏幕上难以区分，这正是本开关
+   * 存在的理由。它同时管两条轴线与原点标记：两者回答同一个问题。
+   *
+   * @defaultValue true
+   */
+  readonly showWorldAxes: boolean
+  /**
+   * 十字光标单侧长度占图面短边的百分比，**1 到 100 的整数**。
+   *
+   * @remarks
+   * **整条照抄 AutoCAD 的 `CURSORSIZE`**：同样的取值范围、同样的「占屏幕尺寸的百分比」
+   * 语义、同样的默认值 5，选项对话框里同样配一个数值框加滑块。5 是几十年密集图纸用出来的
+   * 值，而十字线的长度是观感问题——照抄那个久经使用的默认值比自己推一个更可靠。
+   *
+   * 它是长度的**唯一**事实来源——工作区会话开关不再携带臂长。同一个数有两处来源时，界面上
+   * 改了一处而另一处覆盖回去，用户读到的是「设置没生效」。
+   *
+   * 与画笔样式（`crosshairStyle`）是**两个正交的维度**：画笔管线怎么画，长度管线多长。设置
+   * 面板里必须分成两组各自带说明——把它们混在一组里，用户会把「渐隐 / 晕圈」读成长短。
+   *
+   * @defaultValue 5
+   */
+  readonly crosshairSize: number
 }
+
+/** 十字光标长度的取值范围，与 AutoCAD `CURSORSIZE` 相同。 @public */
+export const COMPOSE_CROSSHAIR_SIZE_RANGE = { min: 1, max: 100 } as const
+
+/** 十字光标长度的默认值，同样照抄 AutoCAD `CURSORSIZE`。 @public */
+export const COMPOSE_CROSSHAIR_SIZE_DEFAULT = 5
 
 /** 十字光标样式；与 Stage 的 prop 同一个联合。 @public */
 export type ComposeEditorCrosshairStyle = ComposeCanvasCrosshairStyle
@@ -285,6 +321,8 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
     workspace: createDefaultComposeEditorWorkspacePreferences(),
     palette: { mode: 'grid' },
     crosshairStyle: 'fade',
+    showWorldAxes: true,
+    crosshairSize: 5,
   }
 }
 
@@ -384,6 +422,21 @@ export function normalizeComposeEditorWorkspacePreferences(
 }
 
 
+/**
+ * 把任意输入钳成合法的十字光标长度。
+ *
+ * @remarks
+ * 缺席或非有限数回落**默认值**而不是钳到范围端点：`NaN` 表达的是「这不是一个数」，把它当成
+ * 最小值或最大值都是替用户做了一个他没表达过的选择，而默认值至少是这个字段的既定答案。
+ */
+function normalizeCrosshairSize(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return COMPOSE_CROSSHAIR_SIZE_DEFAULT
+  return Math.min(
+    COMPOSE_CROSSHAIR_SIZE_RANGE.max,
+    Math.max(COMPOSE_CROSSHAIR_SIZE_RANGE.min, Math.round(value)),
+  )
+}
+
 export function normalizeComposeEditorPreferences(
   preferences: ComposeEditorPreferences,
 ): ComposeEditorPreferences {
@@ -423,6 +476,12 @@ export function normalizeComposeEditorPreferences(
     crosshairStyle: (preferences as Partial<ComposeEditorPreferences>).crosshairStyle === 'halo'
       ? 'halo'
       : 'fade',
+    // 同样是后加的字段：缺席或不是布尔一律回落显示，保持既有画面。
+    showWorldAxes: (preferences as Partial<ComposeEditorPreferences>).showWorldAxes !== false,
+    // 同样是后加的字段：缺席、非有限数或越界都钳进 [1,100] 并取整，缺席回落贯穿图面。
+    crosshairSize: normalizeCrosshairSize(
+      (preferences as Partial<ComposeEditorPreferences>).crosshairSize,
+    ),
   }
 }
 

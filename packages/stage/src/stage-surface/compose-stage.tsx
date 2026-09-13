@@ -1465,6 +1465,7 @@ function ComposeStageReady({
         <StageWorldUnderlay
           frameBounds={frameBounds}
           gridLines={gridLines}
+          worldAxes={policy?.worldAxes ?? true}
           worldOriginScreen={worldOriginScreen}
         />
         <StageSceneLayer

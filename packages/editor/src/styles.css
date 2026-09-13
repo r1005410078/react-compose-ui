@@ -1872,6 +1872,73 @@
   accent-color: var(--compose-accent);
 }
 
+/* 数值框 + 滑块：同一个值的两个入口，照抄 AutoCAD 的 Crosshair size。 */
+.compose-editor__settings-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.compose-editor__settings-slider input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--compose-accent);
+}
+
+.compose-editor__settings-slider input[type='number'] {
+  box-sizing: border-box;
+  width: 68px;
+  height: 30px;
+  border: 1px solid var(--compose-border-strong);
+  border-radius: 5px;
+  background: var(--compose-surface-control);
+  color: var(--compose-text-strong);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.compose-editor__settings-slider input[type='number']:focus-visible {
+  border-color: var(--compose-focus);
+  box-shadow: 0 0 0 1px var(--compose-focus);
+  outline: none;
+}
+
+.compose-editor__settings-unit {
+  color: var(--compose-text-muted);
+  font-size: 12px;
+}
+
+/* 一节里的第二级标题：画笔与长度是两个维度，各自领一组选项。 */
+.compose-editor__settings-subhead {
+  margin: 0 0 8px;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.compose-editor__settings-hint + .compose-editor__settings-subhead {
+  margin-top: 16px;
+}
+
+/* 画布分类里的勾选行：与单选卡同高、同底，只是控件换成 checkbox。 */
+.compose-editor__settings-check {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--compose-border);
+  border-radius: 5px;
+  background: var(--compose-surface-control);
+  padding: 0 9px;
+  color: var(--compose-text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.compose-editor__settings-check input {
+  accent-color: var(--compose-accent);
+}
+
 /* 单选行下面的一句说明：与只读手势的描述同一档色。 */
 .compose-editor__settings-hint {
   margin: 10px 0 0;

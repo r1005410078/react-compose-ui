@@ -43,9 +43,13 @@ describe('工作区定义与注入', () => {
     expect(COMPOSE_DEFAULT_WORKSPACES).toHaveLength(3)
     expect([page?.id, drawing?.id, animation?.id])
       .toEqual([COMPOSE_PAGE_WORKSPACE_ID, COMPOSE_DRAWING_WORKSPACE_ID, COMPOSE_ANIMATION_WORKSPACE_ID])
-    // 会话开关只有十字光标臂长不同，其余逐字相同。
-    expect({ ...page!.session, crosshairSize: 0 }).toEqual({ ...drawing!.session, crosshairSize: 0 })
-    expect([page!.session.crosshairSize, drawing!.session.crosshairSize]).toEqual([5, 100])
+    /*
+     * 会话开关三边**逐字相同**：臂长曾经是唯一的差异（页面 5 / 动画 5 / 绘图 100），而那个
+     * 分叉在屏幕上无法解释——臂长没有工具栏开关，用户读不出「这是我自己设的」还是「这个
+     * 工作区本来就这样」，切一次工作区就看见同一个光标长得不一样。
+     */
+    expect(page!.session).toEqual(drawing!.session)
+    expect(page!.session).toEqual(animation!.session)
     // 新建种子在两处不同：网格步长，以及对齐吸附。
     expect([page!.seeds.grid.stepX, drawing!.seeds.grid.stepX]).toEqual([8, 10])
     // 网格吸附两边都开：关掉的是 Figma 式参考线那一层，不是整条吸附。徒手画的外框与分区框

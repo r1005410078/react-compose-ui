@@ -12,6 +12,8 @@ export {
   normalizeComposeEditorPreferences,
   normalizeComposeEditorWorkspacePreferences,
   type ComposeEditorKeybinding,
+  COMPOSE_CROSSHAIR_SIZE_DEFAULT,
+  COMPOSE_CROSSHAIR_SIZE_RANGE,
   type ComposeEditorCrosshairStyle,
   type ComposeEditorPreferences,
   type ComposeEditorShortcutAction,

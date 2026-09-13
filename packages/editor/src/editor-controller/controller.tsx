@@ -1046,6 +1046,8 @@ export interface ComposeEditorController {
    * 只因为 Stage 的 props 由 controller 组装。
    */
   readonly crosshairStyle: ComposeCanvasCrosshairStyle
+  /** 是否显示世界坐标轴与原点标记；与画笔样式同族，由编辑器从用户偏好同步进来。 */
+  readonly worldAxes: boolean
   /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
   readonly interactionController: StageInteractionController
   /** 替换当前选择。 */
@@ -1062,6 +1064,7 @@ export interface ComposeEditorController {
   readonly setPolarIncrement: (degrees: number) => void
   readonly setCrosshairSize: (size: number) => void
   readonly setCrosshairStyle: (style: ComposeCanvasCrosshairStyle) => void
+  readonly setWorldAxes: (visible: boolean) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   /** 安装或卸载 dispatch 改写层（传 `null` 卸载）；同一时刻只有一个改写层生效。 */
@@ -1255,12 +1258,15 @@ export function useComposeEditorController({
   const [gridVisible, setGridVisible] = useState(true)
   const [transformGizmo, setTransformGizmo] = useState(false)
   /*
-   * 十字光标臂长：贯穿图面，与 `DEFAULT_WORKSPACE_SESSION` 逐字相同（三个内建工作区共用
-   * 那一份）。它仍是会话开关——宿主与工作区都能改，改过之后切回来还在。
+   * 十字光标臂长：AutoCAD `CURSORSIZE` 的默认值 5。事实来源是编辑器偏好 `crosshairSize`，
+   * 由编辑器同步进来——它曾经是工作区会话开关，而三边统一之后那一处就成了界面上够不着的
+   * 第二个来源。
    */
-  const [crosshairSize, setCrosshairSize] = useState(100)
+  const [crosshairSize, setCrosshairSize] = useState(5)
   // 画笔样式由编辑器从用户偏好同步进来；默认渐隐是用户选定的默认。
   const [crosshairStyle, setCrosshairStyle] = useState<ComposeCanvasCrosshairStyle>('fade')
+  // 坐标轴同样由编辑器从用户偏好同步进来；默认显示，保持既有画面。
+  const [worldAxes, setWorldAxes] = useState(true)
   const [snapRestore, setSnapRestore] = useState({
     grid: document.canvas.grid.snapEnabled,
     nodes: document.canvas.smartSnap.nodes,
@@ -1685,8 +1691,8 @@ export function useComposeEditorController({
   }), [dispatch, registry, layoutSession.runtime, sceneTreeCommands.clipboard])
 
   const stagePolicy = useMemo<ComposeStagePolicy>(
-    () => ({ gridVisible }),
-    [gridVisible],
+    () => ({ gridVisible, worldAxes }),
+    [gridVisible, worldAxes],
   )
 
   const stageProps = useMemo<ComposeStageProps>(() => ({
@@ -2095,6 +2101,7 @@ export function useComposeEditorController({
     polarIncrement,
     crosshairSize,
     crosshairStyle,
+    worldAxes,
     interactionController,
     setSelectedIds,
     setExpandedIds,
@@ -2106,6 +2113,7 @@ export function useComposeEditorController({
     setPolarIncrement,
     setCrosshairSize,
     setCrosshairStyle,
+    setWorldAxes,
     dispatch,
     setCommandRewrite,
     createComponentFromSelection,

@@ -91,13 +91,16 @@ test('OpenSpec: editor-preferences / 十字光标样式是编辑器偏好 / 绘�
   const crosshair = stage.getByTestId('stage-crosshair')
   await expect(crosshair).toHaveAttribute('data-crosshair-style', 'fade')
 
-  // 臂长贯穿图面：渐变的跨度就是图面短边，衰减因此必须在可见的那半段里完成。
+  /*
+   * 渐变的跨度就是臂长，而臂长现在由编辑器偏好 `crosshairSize` 承载、默认 5%——它已经不是
+   * 工作区会话开关，因此绘图工作区与页面工作区一样长。
+   */
   const reach = await stage.locator('linearGradient').first().evaluate((gradient) => Math.hypot(
     Number(gradient.getAttribute('x2')) - Number(gradient.getAttribute('x1')),
     Number(gradient.getAttribute('y2')) - Number(gradient.getAttribute('y1')),
   ))
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
-  expect(reach).toBeCloseTo(Math.min(surface.width, surface.height), 0)
+  expect(reach).toBeCloseTo(Math.min(surface.width, surface.height) * 0.05, 0)
 
   await page.keyboard.press('Escape')
   await editor.getByRole('button', { name: '应用菜单' }).click()
@@ -147,3 +150,81 @@ test('OpenSpec: stage / Stage 十字光标 / 剪刀徽标与拾取框同一支�
   expect(badge).not.toBe(surfaceBg)
 })
 
+/*
+ * 坐标轴与十字光标在屏幕上难以区分——都是贯穿图面的亮线，而坐标轴永远在、光标只在取点时
+ * 出现。这条断的是开关真的到达了画布，以及它**同时**收走两条轴线与原点标记：只关一半会
+ * 留下一个孤零零的小十字。网格必须不受影响。
+ */
+test('OpenSpec: editor-preferences / 世界坐标轴显示是编辑器偏好 / 在设置里关掉', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const axes = stage.locator('.compose-stage__axis')
+  const origin = stage.getByTestId('stage-world-origin')
+  const grid = stage.getByTestId('stage-grid')
+
+  await expect(axes).toHaveCount(2)
+  await expect(origin).toHaveCount(1)
+
+  await editor.getByRole('button', { name: '应用菜单' }).click()
+  await editor.getByRole('menuitem', { name: '设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await dialog.getByRole('button', { name: '画布' }).click()
+  const toggle = dialog.getByRole('checkbox', { name: '显示世界坐标轴' })
+  await expect(toggle).toBeChecked()
+  await toggle.uncheck()
+  await dialog.getByRole('button', { name: '关闭设置' }).click()
+
+  await expect(axes).toHaveCount(0)
+  await expect(origin).toHaveCount(0)
+  // 网格回答的是别的问题，不受影响。
+  await expect(grid).toBeVisible()
+})
+
+/*
+ * 画笔与长度是两个正交的维度。用户把「渐隐 / 晕圈」读成了长短，选晕圈期待短十字、得到的
+ * 仍是长十字——因为那一组选的是画笔。这条断两件事：长度真的可选，且改长度不动画笔。
+ */
+test('OpenSpec: editor-preferences / 十字光标长度是编辑器偏好 / 数值框与滑块联动，改完画布真的变长', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = await awaitPoint(page)
+  const armLength = () => stage.locator('[data-stage-crosshair-line]').first()
+    .evaluate((line) => {
+      const box = line.getBoundingClientRect()
+      return Math.round(Math.max(box.width, box.height))
+    })
+  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const shorterEdge = Math.min(surface.width, surface.height)
+
+  // 默认是 AutoCAD 的 5%：只在光标附近画一小截。
+  expect(await armLength()).toBeCloseTo(Math.round(shorterEdge * 0.05), -1)
+
+  await page.keyboard.press('Escape')
+  await editor.getByRole('button', { name: '应用菜单' }).click()
+  await editor.getByRole('menuitem', { name: '设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await dialog.getByRole('button', { name: '画布' }).click()
+  // 画笔与长度是两个独立的维度：改长度不动画笔。
+  await dialog.getByRole('radiogroup', { name: '画笔' })
+    .getByRole('radio', { name: '晕圈' }).click()
+
+  // 数值框与滑块是同一个值的两个入口，照抄 AutoCAD 的 Crosshair size。
+  const slider = dialog.getByRole('slider', { name: '长度' })
+  const box = dialog.getByRole('spinbutton', { name: '长度百分比' })
+  await expect(slider).toHaveValue('5')
+  await expect(box).toHaveValue('5')
+  await box.fill('100')
+  await expect(slider).toHaveValue('100')
+  await dialog.getByRole('button', { name: '关闭设置' }).click()
+
+  await awaitPoint(page)
+  expect(await armLength()).toBeCloseTo(Math.round(shorterEdge), -1)
+  await expect(stage.getByTestId('stage-crosshair')).toHaveAttribute('data-crosshair-style', 'halo')
+
+  // 切换工作区不再把长度改回去：它已经不是会话开关。
+  await page.keyboard.press('Escape')
+  await editor.getByRole('radiogroup', { name: '工作区' }).getByRole('radio', { name: '绘图' }).click()
+  await awaitPoint(page)
+  expect(await armLength()).toBeCloseTo(Math.round(shorterEdge), -1)
+})

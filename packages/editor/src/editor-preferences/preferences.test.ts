@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMPOSE_CROSSHAIR_SIZE_DEFAULT,
+  COMPOSE_CROSSHAIR_SIZE_RANGE,
   createDefaultComposeEditorPreferences,
   findComposeEditorShortcutConflict,
   formatComposeEditorKeybinding,
@@ -271,6 +273,60 @@ describe('editor preferences', () => {
       } as unknown as ComposeEditorPreferences).crosshairStyle
       expect(withStyle('halo')).toBe('halo')
       expect(withStyle('dashed')).toBe('fade')
+    })
+  })
+
+  describe('OpenSpec: editor-preferences / 世界坐标轴显示是编辑器偏好', () => {
+    it('默认显示', () => {
+      expect(createDefaultComposeEditorPreferences().showWorldAxes).toBe(true)
+    })
+
+    it('旧偏好缺这一段或值非法都回落显示', () => {
+      const legacy = { ...createDefaultComposeEditorPreferences() } as Partial<ComposeEditorPreferences>
+      delete (legacy as Record<string, unknown>).showWorldAxes
+      expect(normalizeComposeEditorPreferences(legacy as ComposeEditorPreferences).showWorldAxes).toBe(true)
+      const withValue = (showWorldAxes: unknown) => normalizeComposeEditorPreferences({
+        ...createDefaultComposeEditorPreferences(),
+        showWorldAxes,
+      } as unknown as ComposeEditorPreferences).showWorldAxes
+      // 只有显式 false 关掉；'no' 这类非布尔按既有纪律回落到保持现状。
+      expect(withValue(false)).toBe(false)
+      expect(withValue('no')).toBe(true)
+      expect(withValue(undefined)).toBe(true)
+    })
+  })
+
+  describe('OpenSpec: editor-preferences / 十字光标长度是编辑器偏好', () => {
+    const sizeOf = (crosshairSize: unknown) => normalizeComposeEditorPreferences({
+      ...createDefaultComposeEditorPreferences(),
+      crosshairSize,
+    } as unknown as ComposeEditorPreferences).crosshairSize
+
+    it('默认值与取值范围都照抄 AutoCAD 的 CURSORSIZE', () => {
+      expect(createDefaultComposeEditorPreferences().crosshairSize).toBe(5)
+      expect(COMPOSE_CROSSHAIR_SIZE_DEFAULT).toBe(5)
+      expect(COMPOSE_CROSSHAIR_SIZE_RANGE).toEqual({ min: 1, max: 100 })
+    })
+
+    it('越界钳住、小数取整', () => {
+      expect(sizeOf(5)).toBe(5)
+      expect(sizeOf(0)).toBe(1)
+      expect(sizeOf(-20)).toBe(1)
+      expect(sizeOf(300)).toBe(100)
+      expect(sizeOf(7.6)).toBe(8)
+    })
+
+    /*
+     * 缺席与非有限数回落**默认值**而不是钳到范围端点：`NaN` 表达的是「这不是一个数」，把它
+     * 当成 1 或 100 都是替用户做了一个他没表达过的选择。
+     */
+    it('缺席与非有限数都回落默认值', () => {
+      const legacy = { ...createDefaultComposeEditorPreferences() } as Partial<ComposeEditorPreferences>
+      delete (legacy as Record<string, unknown>).crosshairSize
+      expect(normalizeComposeEditorPreferences(legacy as ComposeEditorPreferences).crosshairSize).toBe(5)
+      expect(sizeOf(Number.NaN)).toBe(5)
+      expect(sizeOf('5')).toBe(5)
+      expect(sizeOf(undefined)).toBe(5)
     })
   })
 })
