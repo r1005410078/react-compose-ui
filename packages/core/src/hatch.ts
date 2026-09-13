@@ -22,20 +22,46 @@ import {
  * 可选的 `Hatch` Component。
  *
  * @remarks
- * 只有一个字段。**不存边界对象的标识**：存了就要回答「这条边是与哪个对象的第几个交点」，
- * 而一条直线穿过一个圆有两个交点，选哪一个是个启发式。重算是拿 `seed` 把当初那次求解原样
- * 再跑一遍——同一个算法、同一个输入、没有第二套规则。
+ * **不存「边」级引用**（某条边是与哪个对象的第几个交点，或用到了哪几段）：一条直线穿过一个
+ * 圆有两个交点，选哪一个是个启发式；而段下标在顶点被增删之后就错位。`boundaryIds` 是
+ * **Entity 级**的，它不回答「第几个交点」，只回答「围出这块面的是哪几个对象」，因此不受这条
+ * 禁令约束。
+ *
+ * 也**不存烘死的环几何**——`Curve` 就是那份几何，存第二份等于给同一个形状造两个事实来源，
+ * 与导线「自由端不存坐标」是同一条判断。
+ * 用 `JsonObject &` 交叉而不是 `extends`：索引签名的 `JsonValue` 不接受 `undefined`，而
+ * `boundaryIds` 是可选的；`ComposeWire`、`ComposeAppearance` 与 `ComposeGridItem` 出于同样
+ * 原因采用这种写法。
  * @public
  */
-export interface ComposeHatch extends JsonObject {
+export type ComposeHatch = JsonObject & {
   /**
-   * 求出这块面时用的那个落点。
+   * 这块面的**锚点**：求解从这一点出发。
    *
    * @remarks
    * **Entity 局部坐标**（盒左上角为原点），与 `Ports.position`、`Curve` 的盒局部几何同一个
    * 空间。因此移动这块填充不改写 `seed`——它表达的仍是同一个位置。
+   *
+   * 它是**这块面的身份**而不是「当初那一下点在哪儿」：跟随成功时宿主会把它重取到新几何的
+   * 最大内切圆圆心，好让它离每一条边界都尽可能远。落点停在用户点的角落时，它迟早会在某次
+   * 变形之后被吞进另一块面——而那个错误在屏幕上看不见。
    */
   readonly seed: ComposePosition
+  /**
+   * 围出这块面的那几个 Entity 的 id。
+   *
+   * @remarks
+   * **缺席即不跟随**（与 `Hatch` 自己「缺席即不是填充」、`Clip`「缺席即不裁剪」同一条）。
+   * 这条回退让本字段不需要迁移：既有的每一块填充都没有它，因此行为逐字不变——仍然只标过期、
+   * 仍然要按一下「重新生成」，而那一下会把清单补上。
+   *
+   * 它有**两个用途，而且是同一件事的两面**：与一次事务的 `targetIds` 求交决定**要不要**为
+   * 这块填充重求（绝大多数事务与任何填充都不相干，交集为空时一次都不跑）；与重求出来的那份
+   * 比对决定**跟不跟**（拓扑变了就不替用户换形状）。
+   *
+   * 空数组非法：不围出任何东西的清单读不出意图，不再需要时删掉整个字段。
+   */
+  readonly boundaryIds?: readonly string[]
 }
 
 /**
@@ -71,7 +97,7 @@ export interface ComposeHatchValidationIssue {
   readonly message: string
 }
 
-const HATCH_FIELDS = ['seed'] as const
+const HATCH_FIELDS = ['seed', 'boundaryIds'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -102,6 +128,18 @@ export function collectComposeHatchValidationIssues(
   // 全部理由。不再需要重算时删掉整个 Component，与 Ports「空列表非法」是同一条判断。
   if (!isFinitePosition(value.seed)) {
     issues.push({ path: ['seed'], message: 'seed 必须是有限的 x/y' })
+  }
+  /*
+   * `boundaryIds` 可缺席——缺席即不跟随，这条回退让既有文档不需要迁移。但**空数组非法**：
+   * 缺席与空列表会让「跟不跟随」在两处读出不同答案，与 `Ports`「空 items 非法」、
+   * `cornerRadius`「0 非法」是同一条判断。
+   */
+  if (value.boundaryIds !== undefined) {
+    if (!Array.isArray(value.boundaryIds) || value.boundaryIds.length === 0) {
+      issues.push({ path: ['boundaryIds'], message: 'boundaryIds 必须是非空数组' })
+    } else if (value.boundaryIds.some((id) => typeof id !== 'string' || id.length === 0)) {
+      issues.push({ path: ['boundaryIds'], message: 'boundaryIds 的每一项必须是非空字符串' })
+    }
   }
   return issues
 }

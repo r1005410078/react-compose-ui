@@ -1,7 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { resolveComposeCurveRegion } from './curve-region'
+import { composeCurveInnerAnchor, resolveComposeCurveRegion } from './curve-region'
 import { composeRoundedPolylineOutline } from './curve-geometry'
+import { isPointInsideComposeCurve, type ComposeCurve, type ComposeSubpath } from './curve'
 import type { ComposeOutlinePiece, ComposePlanarPoint } from './curve-geometry'
+
+/** 一条正方形子路径；直线段按协议规范化成控制点落在弦上的三次段。 */
+function squareSubpath(x: number, y: number, size: number): ComposeSubpath {
+  const corners = [
+    { x, y }, { x: x + size, y }, { x: x + size, y: y + size }, { x, y: y + size },
+  ]
+  return {
+    start: corners[0]!,
+    closed: true,
+    segments: corners.map((from, index) => {
+      const to = corners[(index + 1) % corners.length]!
+      return {
+        c1: { x: from.x + (to.x - from.x) / 3, y: from.y + (to.y - from.y) / 3 },
+        c2: { x: from.x + (to.x - from.x) * 2 / 3, y: from.y + (to.y - from.y) * 2 / 3 },
+        to,
+      }
+    }),
+  }
+}
 
 function segment(
   from: readonly [number, number],
@@ -276,5 +296,71 @@ describe('resolveComposeCurveRegion', () => {
     if (result.status !== 'resolved') throw new Error('expected resolved')
     // 交叉点把两条对角边各切成两段，下面那个环只用得到其中一段。
     expect(result.sources.some((entry) => entry.used < entry.subEdges)).toBe(true)
+  })
+})
+
+describe('OpenSpec: compose-document / 求出一块面的最大内切圆圆心', () => {
+  const closed = (vertices: readonly { x: number; y: number }[]): ComposeCurve => (
+    { kind: 'polyline', closed: true, vertices }
+  )
+
+  it('矩形取中心', () => {
+    const anchor = composeCurveInnerAnchor(closed([
+      { x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 },
+    ]))
+    expect(anchor).toBeDefined()
+    expect(anchor!.x).toBeCloseTo(100, 0)
+    expect(anchor!.y).toBeCloseTo(50, 0)
+  })
+
+  it('L 形不取包围盒中心——那个点根本不在面里', () => {
+    /*
+     * 这条是判别性的：包围盒中心是 (50,50)，而它落在 L 形缺掉的那个象限里。
+     * 取中心的实现会在这里返回一个面外的点，而面外的点下一次变形必然掉出去。
+     */
+    const lShape = closed([
+      { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 30 },
+      { x: 30, y: 30 }, { x: 30, y: 100 }, { x: 0, y: 100 },
+    ])
+    const anchor = composeCurveInnerAnchor(lShape)
+    expect(anchor).toBeDefined()
+    expect(isPointInsideComposeCurve(lShape, anchor!)).toBe(true)
+    expect(isPointInsideComposeCurve(lShape, { x: 50, y: 50 })).toBe(false)
+  })
+
+  it('洞把圆心推开，且推出来的点不在洞里', () => {
+    // 正中一个大洞：evenodd 的两条子路径，与求面产出带岛填充时落成的形状一致。
+    const withHole: ComposeCurve = {
+      kind: 'path',
+      fillRule: 'evenodd',
+      subpaths: [
+        squareSubpath(0, 0, 200),
+        squareSubpath(60, 60, 80),
+      ],
+    }
+    const anchor = composeCurveInnerAnchor(withHole)
+    expect(anchor).toBeDefined()
+    // 读的是与渲染、命中同一个入口，因此「看得见的洞」与「推开圆心的洞」是同一个洞。
+    expect(isPointInsideComposeCurve(withHole, anchor!)).toBe(true)
+    const insideHole = { x: 100, y: 100 }
+    expect(isPointInsideComposeCurve(withHole, insideHole)).toBe(false)
+  })
+
+  it('离每一条边界都最远：细长条取在中线上', () => {
+    // 20 高的细长条，圆心的 y 必须落在 10 附近——贴边的点会被上界剪掉。
+    const anchor = composeCurveInnerAnchor(closed([
+      { x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 20 }, { x: 0, y: 20 },
+    ]))
+    expect(anchor).toBeDefined()
+    expect(anchor!.y).toBeCloseTo(10, 0)
+  })
+
+  it('退化的面返回缺席，而不是一个落在边界上的点', () => {
+    expect(composeCurveInnerAnchor({
+      kind: 'line', start: { x: 0, y: 0 }, end: { x: 100, y: 0 },
+    })).toBeUndefined()
+    expect(composeCurveInnerAnchor(closed([
+      { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 50, y: 0 },
+    ]))).toBeUndefined()
   })
 })
