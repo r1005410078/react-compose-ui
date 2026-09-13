@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: 填充解算有两支，由边界是谁决定`
+- TO: `### Requirement: 填充解算有三支，由边界与图上那块墨决定`
+
 ## MODIFIED Requirements
 
 ### Requirement: 填充解算有三支，由边界与图上那块墨决定
