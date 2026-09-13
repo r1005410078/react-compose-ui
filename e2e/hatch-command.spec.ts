@@ -276,3 +276,50 @@ test('OpenSpec: stage / HATCH / 换色有两条入口', async ({ page }) => {
   await expect(fills.first()).toHaveAttribute('fill', '#2f3b4d')
   await commandInput.press('Escape')
 })
+
+/**
+ * 桶的剪影在最难的那一档漆色下也成立。
+ *
+ * @remarks
+ * 取的是**每套主题各自最难的那一档**而不是三档都拍：深色主题怕近黑的漆（轮廓若跟着漆色就
+ * 整枚沉进 chrome 里），浅色主题怕近白的漆。常规那一档在两边都成立，拍它换不来任何信息。
+ *
+ * 这是「只有漆面填当前色、桶身轮廓走 `currentColor`」那条决定的**视觉形式**；它的结构形式
+ * 由工具栏的组件测试钉住（三笔里只有一笔带内联 fill）。
+ */
+async function paintBucket(page: Page, commandInput: Locator, color: string) {
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await commandInput.fill('C')
+  await commandInput.press('Enter')
+  await commandInput.fill(color)
+  await commandInput.press('Enter')
+  await commandInput.press('Escape')
+}
+
+test('OpenSpec: editor-workspace-layout / 工具栏图标可以带一个运行期的颜色 / 剪影在两套主题下都成立', async ({ page }) => {
+  const { commandInput, editor } = await open(page)
+  const bucket = editor.locator('[data-toolbar-item="HATCH"] button[data-command-id="HATCH"]')
+
+  // 深色主题（默认）最难的一档：近黑的漆。
+  await paintBucket(page, commandInput, '#1b1f26')
+  await expect(bucket).toHaveScreenshot('hatch-icon-dark-near-black.png', {
+    animations: 'disabled',
+    caret: 'hide',
+  })
+
+  // 换到浅色主题，最难的一档是近白的漆。
+  const appMenuButton = editor.getByRole('button', { name: '应用菜单' })
+  await appMenuButton.click()
+  await editor.getByRole('menuitem', { name: '设置' }).click()
+  const settingsDialog = page.getByRole('dialog', { name: '设置' })
+  await settingsDialog.getByRole('radio', { name: '浅色' }).click()
+  await expect(editor).toHaveAttribute('data-compose-theme', 'light')
+  await settingsDialog.getByRole('button', { name: '关闭设置' }).click()
+
+  await paintBucket(page, commandInput, '#f7f9fc')
+  await expect(bucket).toHaveScreenshot('hatch-icon-light-near-white.png', {
+    animations: 'disabled',
+    caret: 'hide',
+  })
+})

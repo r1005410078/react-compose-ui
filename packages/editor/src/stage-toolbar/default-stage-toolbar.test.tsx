@@ -296,6 +296,22 @@ describe('OpenSpec: editor-workspace-layout / 工具栏图标可以带一个运�
     expect(paint()).toContain('rgb(163, 75, 47)')
   })
 
+  it('只有漆面带内联色，桶身轮廓走 currentColor', () => {
+    /*
+     * 这是「剪影在任何漆色下都成立」那条的**结构形式**：整桶填色时近白的漆在深底、近黑的漆
+     * 在浅底都会与轮廓糊成一块，桶就没了。轮廓不带内联 fill，因此它跟着主题的 `currentColor`
+     * 走，与漆色无关。
+     */
+    renderToolbar('select', null, 'polar', '#f7f9fc')
+    const paths = [...shelfButton()!.querySelectorAll('path')]
+    expect(paths).toHaveLength(3)
+    const painted = paths.filter((path) => path.getAttribute('style')?.includes('fill'))
+    expect(painted).toHaveLength(1)
+    expect(painted[0]!.getAttribute('style')).toContain('rgb(247, 249, 252)')
+    // 其余两笔（提梁与桶身）一个内联 fill 都没有。
+    expect(paths.filter((path) => path.hasAttribute('style'))).toHaveLength(1)
+  })
+
   it('色板是换色的第二条入口，当前色带选中态', () => {
     const { setHatchColor } = renderToolbar()
     fireEvent.click(globalThis.document.querySelector<HTMLButtonElement>(

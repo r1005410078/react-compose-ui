@@ -49,7 +49,7 @@
       轮廓 `currentColor`、只有漆面填色）
 - [x] 5.4 目录项 + 绘图货架第 17 格（排在 `TRIM` 之后）；页面货架不加
 - [x] 5.5 工具栏 split button 与色板弹出层
-- [ ] 5.6 视觉回归：两套主题 × 近白/近黑/常规三档漆色，桶的剪影都成立
+- [x] 5.6 视觉回归：两套主题 × 近白/近黑/常规三档漆色，桶的剪影都成立
 
 ## 6. 端到端
 
@@ -67,4 +67,4 @@
 - [ ] 7.1 `bun run lint && bun run typecheck && bun run test && bun run build`
 - [ ] 7.2 `bun run test:e2e`
 - [ ] 7.3 `docs/mockups/drafting-hatch.html` 的琥珀圈按落地情况收成绿圈，并重发 artifact（同一个 URL）
-- [ ] 7.4 按需同步 `AGENTS.md`（填充与对象填色的关系、两支判定、间隙容差的取舍）
+- [x] 7.4 按需同步 `AGENTS.md`（填充与对象填色的关系、两支判定、间隙容差的取舍）
