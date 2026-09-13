@@ -585,6 +585,23 @@ export function ComposeEditor({
     controller.setCrosshairStyle(crosshairStyle)
   }, [controller, crosshairStyle])
 
+  // 坐标轴同族：同样是偏好，同样由编辑器往 controller 里写。
+  const showWorldAxes = resolvedPreferences.showWorldAxes
+  useEffect(() => {
+    if (typeof controller?.setWorldAxes !== 'function') return
+    controller.setWorldAxes(showWorldAxes)
+  }, [controller, showWorldAxes])
+
+  /*
+   * 长度同样是偏好。它曾经住在工作区会话开关里，而三个内建工作区统一之后那一处就成了够不着
+   * 的事实来源——界面上没有任何控件能改它。搬到这里之后，切换工作区不再碰它。
+   */
+  const crosshairSize = resolvedPreferences.crosshairSize
+  useEffect(() => {
+    if (typeof controller?.setCrosshairSize !== 'function') return
+    controller.setCrosshairSize(crosshairSize)
+  }, [controller, crosshairSize])
+
   const autoRecordAnimationId = animationMode.active && animationMode.autoRecord
     ? animationMode.animationId
     : null
@@ -2268,14 +2285,12 @@ export function ComposeEditor({
         angleConstraint: controller.angleConstraint,
         polarIncrement: controller.polarIncrement,
         gridVisible: controller.gridVisible,
-        crosshairSize: controller.crosshairSize,
         transformGizmo: controller.transformGizmo,
       }),
       set: (next) => {
         controller.setAngleConstraint(next.angleConstraint)
         controller.setPolarIncrement(next.polarIncrement)
         controller.setGridVisible(next.gridVisible)
-        controller.setCrosshairSize(next.crosshairSize)
         controller.setTransformGizmo(next.transformGizmo)
       },
     }

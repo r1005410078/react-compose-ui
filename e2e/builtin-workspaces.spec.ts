@@ -54,7 +54,8 @@ test('OpenSpec: editor-workspace-layout / 内建工作区 / 绘图的初始布�
 
   const pageLibrary = (await libraryPanel(editor).boundingBox())!
 
-  // 页面：十字光标贯穿图面——三个内建工作区的会话开关此后逐字相同，臂长不再分叉。
+  // 页面：十字光标是 AutoCAD 默认的 5%。长度已不再是工作区会话开关，它由编辑器偏好
+  // `crosshairSize` 承载——切换工作区不再碰它，因此这里断的是「切过去之后还是一样长」。
   await startCommand(page, stage, 'LINE')
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
   await page.mouse.move(surface.x + 300, surface.y + 240)
@@ -91,8 +92,8 @@ test('OpenSpec: editor-workspace-layout / 内建工作区 / 绘图的初始布�
   /*
    * 4) 十字光标与页面工作区**一样长**。
    *
-   * 这里曾经断「绘图 > 页面的 5 倍」——臂长是三边唯一剩下的默认值差异，而那个分叉在屏幕上
-   * 无法解释：臂长没有工具栏开关，用户读不出「这是我自己设的」还是「这个工作区本来就这样」。
+   * 这里曾经断「绘图 > 页面的 5 倍」。臂长先是被统一，随后整个搬去了编辑器偏好——工作区
+   * 那一处统一之后就成了界面上够不着的第二个事实来源。
    */
   await startCommand(page, stage, 'LINE')
   await page.mouse.move(surface.x + 300, surface.y + 240)

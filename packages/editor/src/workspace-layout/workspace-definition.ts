@@ -107,8 +107,6 @@ export interface ComposeWorkspaceSession {
   readonly angleConstraint: ComposeAngleConstraint
   readonly polarIncrement: number
   readonly gridVisible: boolean
-  /** 十字光标臂长，图面短边的百分比；5 是 AutoCAD `CURSORSIZE` 的默认值，100 贯穿图面。 */
-  readonly crosshairSize: number
   readonly transformGizmo: boolean
 }
 
@@ -241,16 +239,11 @@ const ANIMATION_WORKSPACE_LAYOUT_PRESET: ComposeWorkspaceLayoutPreset = {
  * 内建的默认会话开关：与 controller 的初值逐字相同，**三个内建工作区共用这一份**。
  *
  * @remarks
- * 十字光标臂长曾经是三边唯一的差异（页面 5 / 动画 5 / 绘图 100），为此还有一个只覆盖这一个
- * 字段的 `DRAWING_WORKSPACE_SESSION`。那个分叉在屏幕上无法解释：臂长没有工具栏开关，用户
- * 读不出「这是我自己设的」还是「这个工作区本来就这样」，切一次工作区就看见同一个光标长得
- * 不一样。
- *
- * 统一取 100 而不是 5：5 只是 AutoCAD `CURSORSIZE` 的默认值、不是针对页面排版给出的理由，
- * 而 100 承载着绘图的跨图对齐——统一到 5 会**移除一项能力**，统一到 100 只是让另外两个工作区
- * 也具备它。长臂在图纸上抢眼这条顾虑由默认的渐隐画笔承担，那正是它存在的全部理由。
- *
- * 臂长仍是**会话开关**：用户在某个工作区里改过之后切回来还在。统一的是默认值，不是机制。
+ * 十字光标臂长曾经在这里，而且是三边唯一的差异（页面 5 / 动画 5 / 绘图 100）。那个分叉在
+ * 屏幕上无法解释：臂长没有工具栏开关，用户读不出「这是我自己设的」还是「这个工作区本来就
+ * 这样」。统一之后工作区这一处就成了一个**够不着的事实来源**——三边同值，而界面上没有任何
+ * 控件能改它。它因此整个搬去了编辑器偏好 `crosshairSize`，那里有照抄 AutoCAD 的数值框加
+ * 滑块。
  *
  * @internal
  */
@@ -258,7 +251,6 @@ export const DEFAULT_WORKSPACE_SESSION: ComposeWorkspaceSession = {
   angleConstraint: 'polar',
   polarIncrement: 45,
   gridVisible: true,
-  crosshairSize: 100,
   transformGizmo: false,
 }
 

@@ -12,6 +12,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
 import {
+  COMPOSE_CROSSHAIR_SIZE_RANGE,
   COMPOSE_EDITOR_SHORTCUT_ACTIONS,
   createDefaultComposeEditorPreferences,
   findComposeEditorShortcutConflict,
@@ -95,8 +96,10 @@ export function SettingsDialog({
     ? languageMatches
     : category === 'language'
   // 「画布」这一节眼下只有十字光标；检索词命中分类名、节名或任一选项都算命中。
-  const canvasMatches = [t.canvas, t.crosshair, t.crosshairFade, t.crosshairHalo]
-    .some((item) => item.toLocaleLowerCase(locale).includes(normalizedQuery))
+  const canvasMatches = [
+    t.canvas, t.crosshair, t.crosshairPen, t.crosshairFade, t.crosshairHalo,
+    t.crosshairReach, t.crosshairReachValue, t.worldAxes,
+  ].some((item) => item.toLocaleLowerCase(locale).includes(normalizedQuery))
   const showCanvas = normalizedQuery
     ? canvasMatches
     : category === 'canvas'
@@ -123,6 +126,22 @@ export function SettingsDialog({
   }
   const setCrosshairStyle = (crosshairStyle: ComposeEditorCrosshairStyle) => {
     onChange({ ...preferences, crosshairStyle })
+  }
+  const setShowWorldAxes = (showWorldAxes: boolean) => {
+    onChange({ ...preferences, showWorldAxes })
+  }
+  /*
+   * 数值框与滑块是同一个值的两个入口（AutoCAD 的既有解法）：滑块粗调并把可取范围画出来，
+   * 数值框精确给数。钳制留在这里而不是只靠 input 的 min/max——键入的值可以越界，而 `NaN`
+   * （清空输入框）MUST 不写进偏好，否则一次删除就把长度变成非法值。
+   */
+  const setCrosshairSize = (raw: number) => {
+    if (!Number.isFinite(raw)) return
+    const crosshairSize = Math.min(
+      COMPOSE_CROSSHAIR_SIZE_RANGE.max,
+      Math.max(COMPOSE_CROSSHAIR_SIZE_RANGE.min, Math.round(raw)),
+    )
+    onChange({ ...preferences, crosshairSize })
   }
   const replaceShortcut = (
     action: ComposeEditorShortcutAction,
@@ -259,8 +278,13 @@ export function SettingsDialog({
             {showCanvas ? (
               <section>
                 <h3>{t.crosshair}</h3>
+                {/*
+                  * 画笔与长度是**两个正交的维度**，因此分成两组各自带说明。混在一组里时用户
+                  * 会把「渐隐 / 晕圈」读成长短——那正是「选晕圈期待短十字、得到长十字」的来源。
+                  */}
+                <h4 className="compose-editor__settings-subhead">{t.crosshairPen}</h4>
                 <div
-                  aria-label={t.crosshair}
+                  aria-label={t.crosshairPen}
                   className="compose-editor__settings-options"
                   role="radiogroup"
                 >
@@ -280,6 +304,41 @@ export function SettingsDialog({
                   ))}
                 </div>
                 <p className="compose-editor__settings-hint">{t.crosshairHint}</p>
+                <h4 className="compose-editor__settings-subhead">{t.crosshairReach}</h4>
+                <div className="compose-editor__settings-slider">
+                  <input
+                    aria-label={t.crosshairReach}
+                    max={COMPOSE_CROSSHAIR_SIZE_RANGE.max}
+                    min={COMPOSE_CROSSHAIR_SIZE_RANGE.min}
+                    onChange={(event) => setCrosshairSize(event.target.valueAsNumber)}
+                    type="range"
+                    value={preferences.crosshairSize}
+                  />
+                  <input
+                    aria-label={t.crosshairReachValue}
+                    max={COMPOSE_CROSSHAIR_SIZE_RANGE.max}
+                    min={COMPOSE_CROSSHAIR_SIZE_RANGE.min}
+                    onChange={(event) => setCrosshairSize(event.target.valueAsNumber)}
+                    type="number"
+                    value={preferences.crosshairSize}
+                  />
+                  <span className="compose-editor__settings-unit">%</span>
+                </div>
+                <p className="compose-editor__settings-hint">{t.crosshairReachHint}</p>
+              </section>
+            ) : null}
+            {showCanvas ? (
+              <section>
+                <h3>{t.worldAxes}</h3>
+                <label className="compose-editor__settings-check">
+                  <input
+                    checked={preferences.showWorldAxes}
+                    onChange={(event) => setShowWorldAxes(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>{t.worldAxesLabel}</span>
+                </label>
+                <p className="compose-editor__settings-hint">{t.worldAxesHint}</p>
               </section>
             ) : null}
             {showShortcuts && visibleActions.length > 0 ? (
