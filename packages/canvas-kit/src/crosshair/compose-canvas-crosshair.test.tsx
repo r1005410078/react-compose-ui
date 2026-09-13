@@ -119,20 +119,31 @@ describe('OpenSpec: canvas-kit / 十字光标样式', () => {
   })
 
   /*
-   * 这条钉的是**可读性**，不是某一组具体的数：第一版曲线从中心就开始衰减，在 512px 的臂上
-   * 把整条线压得比均匀实线还弱，而渐变本身反倒看不出来（两端都淡，没有对比）。臂的主体因此
-   * 必须保持满不透明，只让末梢淡出。
+   * 这条钉的是**渐隐在图面内真的看得见**，而不是某一组具体的数。
+   *
+   * 判据来自几何：`reach` 是图面短边乘臂长百分比，而臂从光标最远只走到图面边缘，因此臂长
+   * 取 100 时竖直臂的可见部分最多到 offset 0.5。衰减若排在那之后，就整个发生在图面之外——
+   * 上一版把满不透明段设成 55% 正是这个错，绘图工作区里渐隐与晕圈逐像素难分。
    */
-  it('臂的主体不衰减，只有末梢淡出', () => {
+  it('衰减落在图面可见的那半段里，且落点附近不让步', () => {
     draw({ box: false })
     const stops = Array.from(document.querySelectorAll('linearGradient')[0]!.querySelectorAll('stop'))
       .map((stop) => ({
         offset: Number(stop.getAttribute('offset')),
         opacity: Number(stop.getAttribute('stop-opacity')),
       }))
-    // 满不透明的那一段至少覆盖一半臂长。
-    const opaqueReach = Math.max(...stops.filter((stop) => stop.opacity === 1).map((stop) => stop.offset))
-    expect(opaqueReach).toBeGreaterThanOrEqual(0.5)
+    const opacityAt = (offset: number) => {
+      const upper = stops.findIndex((stop) => stop.offset >= offset)
+      const before = stops[upper - 1]
+      const after = stops[upper]!
+      if (!before) return after.opacity
+      const t = (offset - before.offset) / (after.offset - before.offset)
+      return before.opacity + (after.opacity - before.opacity) * t
+    }
+    // 落点附近仍是实线：可读性不让步。
+    expect(opacityAt(0.1)).toBe(1)
+    // 竖直臂在图面内最远只到 0.5，那里必须已经明显淡下去，否则渐隐发生在图面之外。
+    expect(opacityAt(0.5)).toBeLessThanOrEqual(0.5)
     // 末端淡出，但不到 0。
     const last = stops[stops.length - 1]!
     expect(last.offset).toBe(1)
