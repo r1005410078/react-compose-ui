@@ -352,6 +352,30 @@ export interface StageDraftingHatchOptions {
   readonly belowIds: readonly string[]
 }
 
+/**
+ * 把一条世界坐标的曲线换算到某个既有 Entity 的**父级**局部坐标。
+ *
+ * @remarks
+ * 与 {@link createStageDraftingCurveCommand} 里那一步是**同一份换算**，抽出来是因为「判断这块
+ * 填充过不过期」只需要换算的结果、不需要那条命令：各写一遍的话，两处对同一份几何算出的局部
+ * 坐标会在某些旋转下差一点点，而症状是「明明没动过却一直显示过期」。
+ *
+ * @internal
+ */
+export function stageCurveToParent(
+  context: StageDraftingCommitContext,
+  curve: ComposeCurve,
+  entityId: string,
+): ComposeCurve {
+  const parentId = getEntityParentId(context.document, entityId)
+  const inverse = parentId
+    ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parentId))
+    : null
+  const toParent = (point: StagePoint) => (inverse ? applyMatrix(inverse, point) : point)
+  const rotationDegrees = inverse ? Math.atan2(inverse.b, inverse.a) * 180 / Math.PI : 0
+  return toParentCurve(curve, toParent, rotationDegrees)
+}
+
 /** {@link createStageDraftingCurveCommand} 的结果。 @internal */
 export interface StageDraftingCurveCommand {
   readonly command: EditorCommand

@@ -44,11 +44,11 @@
 ## 5. 物料与图标（materials / editor）
 
 - [x] 5.1 `hatch` Preset：有填充、无描边、`paletteHidden: 'toolbar'`；默认色**先量对比度再定**
-- [ ] 5.2 Inspector：「重新生成」与失效标记；填充色走既有外观分组
+- [x] 5.2 Inspector：「重新生成」与失效标记；填充色走既有外观分组
 - [x] 5.3 `StageToolbarIcon` 接受可选颜色参数（`style` 内联）；新增 `hatch` 图标（20 画幅、
       轮廓 `currentColor`、只有漆面填色）
 - [x] 5.4 目录项 + 绘图货架第 17 格（排在 `TRIM` 之后）；页面货架不加
-- [ ] 5.5 工具栏 split button 与色板弹出层
+- [x] 5.5 工具栏 split button 与色板弹出层
 - [ ] 5.6 视觉回归：两套主题 × 近白/近黑/常规三档漆色，桶的剪影都成立
 
 ## 6. 端到端

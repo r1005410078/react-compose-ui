@@ -34,6 +34,7 @@ import {
   useComposeToolbarShelf,
 } from './toolbar-shelf'
 import type { ComposeToolbarItem, ComposeToolbarShelf } from './toolbar-shelf'
+import { composeHatchSwatches } from './hatch-swatches'
 
 type DefaultStageToolbarProps = {
   /** 正在跑的那条命令的 id；绘图命令按钮的按下态读它。 */
@@ -52,6 +53,10 @@ type DefaultStageToolbarProps = {
   readonly shortcuts?: ComposeEditorPreferences['shortcuts']
   /** 启动一条命令会话；与在命令行里键入这个名字等价。 */
   readonly startCommand: (commandId: string) => void
+  /** `HATCH` 这一次的填充色；桶身印它。 */
+  readonly hatchColor: string
+  /** 从色板换色；命令里的 `C` 关键字是这条能力的第二个入口。 */
+  readonly setHatchColor: (color: string) => void
   /**
    * 打开「自定义工具栏」对话框；缺席时右键菜单里那一项不出现。
    *
@@ -288,6 +293,8 @@ export function DefaultStageToolbar({
   transformGizmo,
   shortcuts,
   startCommand,
+  hatchColor,
+  setHatchColor,
   onCustomize,
   onShelfChange,
   shelf,
@@ -322,6 +329,17 @@ export function DefaultStageToolbar({
     setOpen: setPolarMenuOpen,
     triggerRef: polarMenuTriggerRef,
   } = useToolbarMenu('compose-editor-polar-menu')
+  const {
+    close: closeHatchMenu,
+    focusFirstItem: focusFirstHatchItem,
+    id: hatchMenuId,
+    menuRef: hatchMenuRef,
+    onMenuKeyDown: onHatchMenuKeyDown,
+    onTriggerKeyDown: onHatchTriggerKeyDown,
+    open: hatchMenuOpen,
+    setOpen: setHatchMenuOpen,
+    triggerRef: hatchMenuTriggerRef,
+  } = useToolbarMenu('compose-editor-hatch-menu')
   const {
     close: closeMoreMenu,
     focusFirstItem: focusFirstMoreItem,
@@ -692,6 +710,79 @@ export function DefaultStageToolbar({
           </button>
         ),
       })),
+    },
+    {
+      key: 'hatch',
+      items: [
+        {
+          key: 'HATCH',
+          label: messages.hatch,
+          icon: <StageToolbarIcon name="hatch" paint={hatchColor} />,
+          pressed: activeCommandId === 'HATCH',
+          activate: () => startCommand('HATCH'),
+          render: () => (
+            /*
+             * Split button：主键启动命令，▾ 开色板。这不与「框选判定不给开关」那条冲突——
+             * 那一条禁止的是给同一个动作的**参数**再造一个更慢的入口，而颜色不是 `HATCH`
+             * 的一个参数档位，它是跨命令留着的一份状态，与极轴的增量角同类。
+             */
+            <div className="compose-editor__toolbar-menu-anchor" data-toolbar-item="HATCH">
+              <button
+                {...titled('HATCH', messages.hatch, 'HATCH')}
+                aria-pressed={activeCommandId === 'HATCH'}
+                data-command-id="HATCH"
+                type="button"
+                onClick={() => startCommand('HATCH')}
+              >
+                <StageToolbarIcon name="hatch" paint={hatchColor} />
+              </button>
+              <button
+                {...titled('hatch-color', messages.hatchColor)}
+                aria-controls={hatchMenuId}
+                aria-expanded={hatchMenuOpen}
+                aria-haspopup="menu"
+                className="compose-editor__toolbar-menu-trigger"
+                ref={hatchMenuTriggerRef}
+                type="button"
+                onClick={() => {
+                  setHatchMenuOpen((open) => !open)
+                  focusFirstHatchItem()
+                }}
+                onKeyDown={onHatchTriggerKeyDown}
+              >
+                <StageToolbarIcon name="chevron-down" />
+              </button>
+              {hatchMenuOpen ? (
+                <div
+                  aria-label={messages.hatchColor}
+                  className="compose-editor__toolbar-menu compose-editor__toolbar-swatches"
+                  id={hatchMenuId}
+                  ref={hatchMenuRef}
+                  role="menu"
+                  onKeyDown={onHatchMenuKeyDown}
+                >
+                  {composeHatchSwatches(document).map((color) => (
+                    <button
+                      key={color}
+                      aria-checked={hatchColor === color}
+                      aria-label={color}
+                      className="compose-editor__toolbar-swatch"
+                      data-swatch={color}
+                      role="menuitemradio"
+                      style={{ background: color }}
+                      type="button"
+                      onClick={() => {
+                        setHatchColor(color)
+                        closeHatchMenu()
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ),
+        },
+      ],
     },
   ]
   /**

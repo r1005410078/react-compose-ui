@@ -190,6 +190,8 @@ function ComposeStageReady({
   handleRef,
   onActiveCommandChange,
   angleConstraint,
+  hatchColor,
+  onHatchColorChange,
   onAngleConstraintChange,
   polarIncrement,
   layoutSnapshot,
@@ -732,6 +734,8 @@ function ComposeStageReady({
     isGeometryEditable,
     pickRadius,
     ...(angleConstraint ? { angleConstraint } : {}),
+    ...(hatchColor ? { hatchColor } : {}),
+    ...(onHatchColorChange ? { onHatchColorChange } : {}),
     ...(onAngleConstraintChange ? { onAngleConstraintChange } : {}),
     ...(polarIncrement === undefined ? {} : { polarIncrement }),
   })

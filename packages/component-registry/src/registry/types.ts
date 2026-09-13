@@ -29,6 +29,32 @@ export interface ComposePaintEditPort {
   }): void
 }
 
+/**
+ * Inspector 与宿主填充求解之间的无 DOM 桥接。
+ *
+ * @remarks
+ * 与 {@link ComposePaintEditPort} 同一条理由：**Registry 与物料包不依赖 `stage-engine`**，而
+ * 「这块填充过期了没有」与「照 seed 再求一遍」都要跑求面算法。因此物料只画按钮与记号，答案
+ * 由持有求解器的宿主给。
+ *
+ * 缺席时 Inspector 只显示 `seed`——`materials` 是可独立嵌入的包，不能要求每个宿主都接一个
+ * Stage。
+ *
+ * @public
+ */
+export interface ComposeHatchEditPort {
+  /**
+   * 这块填充与当前的边界还对得上吗。
+   *
+   * @remarks
+   * 一次调用跑一遍求面（O(N²) 的两两求交），因此**只在这块填充被选中时问**——那时 Inspector
+   * 正好要画这一格。缺口不是错误：边界被改到围不出面了，同样是「过期」。
+   */
+  isStale(input: { readonly entityId: string }): boolean
+  /** 拿这块填充的 `seed` 把当初那次求解原样再跑一遍，并把新几何写回去。 */
+  regenerate(input: { readonly entityId: string }): void
+}
+
 /** Renderer 获得的 Stage/Preview 共享上下文。 @public */
 export interface ComposeRendererProps {
   /** 当前只读 Entity。 */
@@ -202,6 +228,8 @@ export interface ComposeEntityInspectorContext {
   readonly paintEditPort?: ComposePaintEditPort
   /** 可选的节点目录桥接；物料把它交给属性面板的 node editor。 */
   readonly nodeEditPort?: ComposeNodeEditPort
+  /** 可选的填充求解桥接；Registry 与物料包不依赖 `stage-engine`。 */
+  readonly hatchEditPort?: ComposeHatchEditPort
 }
 
 /** Renderer Props Inspector 的上下文。 @public */

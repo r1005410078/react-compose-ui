@@ -2,7 +2,12 @@ import { CommandPanelWithActions } from './command-panel-actions'
 import { createComposeEditorActionHandlers } from './action-catalog'
 import type { ComposeEditorActionId } from './action-catalog'
 import type { ComposeEditorActionHandler, ComposeEditorActionHandlerContext } from './action-catalog'
-import { ComposeComponentPalette } from '@compose-ui/stage'
+import {
+  ComposeComponentPalette,
+  isStageJunctionEntity,
+  planStageHatchRegeneration,
+  stageHatchIsStale,
+} from '@compose-ui/stage'
 import {
   ComposeComponentLibraryPanel,
   ComposeComponentAssetIcon,
@@ -24,6 +29,7 @@ import {
 } from '@compose-ui/stage-engine'
 import {
   COMPOSE_COMPONENT_SCHEMA_VERSION,
+  COMPOSE_DEFAULT_HATCH_COLOR,
   getComposeFrame,
   BUILTIN_COMMAND_TYPES,
   composeInstancePathHostId,
@@ -63,6 +69,7 @@ import type { ComposeCommandPreset } from '@compose-ui/command-panel'
 import type {
   ComposeEntityRegistry,
   ComposeNodeEditPort,
+  ComposeHatchEditPort,
   ComposePaintEditPort,
 } from '@compose-ui/component-registry'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
@@ -1035,6 +1042,14 @@ export interface ComposeEditorController {
    */
   readonly gridVisible: boolean
   readonly angleConstraint: ComposeAngleConstraint
+  /**
+   * `HATCH` 这一次的填充色。
+   *
+   * @remarks
+   * 与上面那几个的差别是它**不进工作区的会话开关**：那些回答「这个工作区里画布怎么看」，而
+   * 填充色回答「上一次用了什么」，与在哪个工作区无关。
+   */
+  readonly hatchColor: string
   readonly polarIncrement: number
   /** 十字光标臂长，图面短边的百分比；5 是 AutoCAD `CURSORSIZE` 的默认值。 */
   readonly crosshairSize: number
@@ -1059,6 +1074,7 @@ export interface ComposeEditorController {
   readonly setTransformGizmo: (visible: boolean) => void
   readonly setGridVisible: (visible: boolean) => void
   readonly setAngleConstraint: (constraint: ComposeAngleConstraint) => void
+  readonly setHatchColor: (color: string) => void
   readonly setPolarIncrement: (degrees: number) => void
   readonly setCrosshairSize: (size: number) => void
   readonly setCrosshairStyle: (style: ComposeCanvasCrosshairStyle) => void
@@ -1233,6 +1249,17 @@ export function useComposeEditorController({
    * 与网格显示同一条判断。默认极轴——它只在光标靠近某条射线时才吸，不挡任何画法。
    */
   const [angleConstraint, setAngleConstraint] = useState<ComposeAngleConstraint>('polar')
+  /**
+   * `HATCH` 这一次的填充色。
+   *
+   * @remarks
+   * 由 controller 持有的理由与角度约束逐字相同：工具栏的桶身要印出当前色，而事实来源只能有
+   * 一份。但它**不进工作区的会话开关**——那些是「这个工作区里画布怎么看」，而填充色是上一次
+   * 用了什么，与在哪个工作区无关；做成会话开关只会让每个另存的工作区多抄一个字段。
+   *
+   * 它同样不写文档、不写偏好：合法性不在方不方便，在**值有没有被印出来**，而桶身印着它。
+   */
+  const [hatchColor, setHatchColor] = useState(COMPOSE_DEFAULT_HATCH_COLOR)
   const [polarIncrement, setPolarIncrement] = useState(45)
   /**
    * Stage 的命令式句柄与它上报的当前命令 id。
@@ -1709,6 +1736,8 @@ export function useComposeEditorController({
     onActiveCommandChange: setActiveCommandId,
     angleConstraint,
     onAngleConstraintChange: setAngleConstraint,
+    hatchColor,
+    onHatchColorChange: setHatchColor,
     polarIncrement,
     crosshairSize,
     crosshairStyle,
@@ -1737,6 +1766,7 @@ export function useComposeEditorController({
     setViewport,
     autoFitActiveFrame,
     angleConstraint,
+    hatchColor,
     polarIncrement,
     crosshairSize,
     crosshairStyle,
@@ -1816,6 +1846,39 @@ export function useComposeEditorController({
       : null,
     [document, layoutState],
   )
+  /**
+   * 填充求解的桥接：Registry 与物料包不依赖 `stage-engine`，因此这两个答案由持有求解器的这一侧给。
+   *
+   * @remarks
+   * **两条都只在这块填充被选中时跑**——Inspector 打开的那一刻问一次「过期没有」，按钮按下时
+   * 再求一次。一次是 O(N²) 的两两求交，不进每帧路径。
+   *
+   * 接线节点不当边界这条谓词在这里注入，与画布上那条读同一个 `isStageJunctionEntity`。
+   */
+  const hatchEditPort = useMemo<ComposeHatchEditPort>(() => {
+    const context = sceneIndex && layoutState.status === 'ready'
+      ? {
+        document,
+        layoutSnapshot: layoutState.snapshot,
+        index: sceneIndex,
+        registry,
+        idFactory: nextId,
+        activeFrameId: document.rootIds[0] ?? null,
+      }
+      : null
+    return {
+      isStale: ({ entityId }) => (context
+        ? stageHatchIsStale(context, entityId, { isJunction: isStageJunctionEntity })
+        : false),
+      regenerate: ({ entityId }) => {
+        if (!context) return
+        const command = planStageHatchRegeneration(context, entityId, {
+          isJunction: isStageJunctionEntity,
+        })
+        if (command) dispatch(command)
+      },
+    }
+  }, [dispatch, document, layoutState, nextId, registry, sceneIndex])
   const fitContainer = useCallback(() => {
     const selectedContainerId = selectedIds.length === 1
       && document.entities[selectedIds[0]!]
@@ -2047,6 +2110,7 @@ export function useComposeEditorController({
       layoutSnapshot={layoutState.status === 'ready' ? layoutState.snapshot : undefined}
       nodeEditPort={nodeEditPort}
       paintEditPort={paintEditPort}
+      hatchEditPort={hatchEditPort}
       registry={registry}
       scriptScope={scriptScope}
     />
@@ -2061,6 +2125,7 @@ export function useComposeEditorController({
       key={selectedEntity.id}
       nodeEditPort={nodeEditPort}
       paintEditPort={paintEditPort}
+      hatchEditPort={hatchEditPort}
       registry={registry}
       scriptScope={scriptScope}
     />
@@ -2089,6 +2154,7 @@ export function useComposeEditorController({
     transformGizmo,
     gridVisible,
     angleConstraint,
+    hatchColor,
     polarIncrement,
     crosshairSize,
     crosshairStyle,
@@ -2100,6 +2166,7 @@ export function useComposeEditorController({
     setTransformGizmo,
     setGridVisible,
     setAngleConstraint,
+    setHatchColor,
     setPolarIncrement,
     setCrosshairSize,
     setCrosshairStyle,
@@ -2174,6 +2241,8 @@ export function useComposeEditorController({
         tool={tool}
         angleConstraint={angleConstraint}
         setAngleConstraint={setAngleConstraint}
+        hatchColor={hatchColor}
+        setHatchColor={setHatchColor}
         polarIncrement={polarIncrement}
         setPolarIncrement={setPolarIncrement}
       />

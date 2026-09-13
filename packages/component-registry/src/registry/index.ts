@@ -19,6 +19,7 @@ export {
   type ComposeMissingComponentInspectorProps,
   type ComposeEntityPreset,
   type ComposeNodeEditPort,
+  type ComposeHatchEditPort,
   type ComposePaintEditPort,
   type ComposeEntityRegistry,
   type ComposeEntityRegistryOptions,

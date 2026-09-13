@@ -36,6 +36,18 @@ MUST NOT 静默留在原地：所有做了关联的产品里，用户抱怨的�
 填充色 MUST 走既有的外观分组（`Appearance.backgroundPaint`），MUST NOT 另开一个字段——
 外观 Inspector、数据绑定与外观动画轨道因此一行都不用写。
 
+**求解 MUST 由宿主经端口注入**，物料包 MUST NOT 自己跑求面：`materials` 不依赖 `stage-engine`，
+而「过期没有」与「再求一遍」两个答案都要跑那套算法。端口 MUST 可缺席——缺席时 Inspector 只
+显示 `seed` 且不画那颗按钮，本包因此仍可独立嵌入。这与 Paint 编辑走 `paintEditPort` 是同一条
+既有边界的同一次应用。
+
+「过期没有」MUST 只在这块填充**被选中**时求一次：一次是 O(N²) 的两两求交，不进每帧路径。
+
+#### Scenario: 端口缺席时只显示取点
+
+- **WHEN** 宿主没有注入填充求解端口
+- **THEN** Inspector 显示 `seed`，且不出现「重新生成」按钮
+
 #### Scenario: 重新生成按当前边界重算
 
 - **WHEN** 边界对象被移动之后，用户对这块填充按「重新生成」

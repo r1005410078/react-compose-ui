@@ -10,18 +10,23 @@
 import {
   BUILTIN_COMMAND_TYPES,
   getComposeAppearance,
+  getComposeCurve,
+  getComposeHatch,
+  normalizeComposeCurveGeometry,
   type ComposeCurve,
   type ComposeEntity,
   type EditorCommand,
   type JsonValue,
 } from '@compose-ui/core'
 import {
+  applyMatrix,
   resolveStageHatchRegion,
   type StageHatchRejection,
   type StagePoint,
 } from '@compose-ui/stage-engine'
 import {
   createStageDraftingCurveCommand,
+  stageCurveToParent,
   type StageDraftingCommitContext,
 } from './drafting-entity'
 
@@ -156,4 +161,77 @@ export function stageHatchPreviewRings(curve: ComposeCurve): readonly (readonly 
     })
     return ring
   })
+}
+
+/**
+ * 拿一块填充自己的 `seed` 把当初那次求解原样再跑一遍。
+ *
+ * @remarks
+ * **同一个算法、同一个输入、没有第二套规则**——这正是 `Hatch` 只存 `seed`、不存边界对象标识的
+ * 理由：存了就要回答「这条边是与哪个对象的第几个交点」，而一条直线穿过一个圆有两个交点，
+ * 选哪一个是个启发式。
+ *
+ * `seed` 是 **Entity 局部坐标**，因此先经这块填充自己的世界矩阵搬回世界空间。它跟着 Entity 走，
+ * 所以整块填充被移动过之后仍然指着同一个位置——而边界没跟着动的话，求出来的就是另一块面，
+ * 那正是「过期」。
+ *
+ * @returns 求不出来（边界改到围不出面了）时返回 `null`。
+ * @internal
+ */
+export function planStageHatchRegeneration(
+  context: StageDraftingCommitContext,
+  entityId: string,
+  options: Pick<StageHatchPlanOptions, 'isJunction'> = {},
+): EditorCommand | null {
+  const entity = context.document.entities[entityId]
+  const hatch = entity ? getComposeHatch(entity) : undefined
+  const matrix = context.index.getWorldMatrix(entityId)
+  if (!hatch || !matrix) return null
+  const resolution = resolveStageHatchRegion(
+    context.index,
+    applyMatrix(matrix, hatch.seed),
+    options.isJunction ? { isJunction: options.isJunction } : {},
+  )
+  /*
+   * 只受理 `create` 那一支。`fill` 意味着这块面的边界如今恰好是某一个对象的完整几何——那时该
+   * 去改那个对象的填充，而不是把这块填充重画成与它逐像素重合的第二份墨。用户拿桶再点一下就
+   * 走到正确的那一支，而这里替他选会留下一块他没要求过的重复对象。
+   */
+  if (resolution.status !== 'create') return null
+  return createStageDraftingCurveCommand(context, resolution.curve, { replace: entityId })?.command
+    ?? null
+}
+
+/**
+ * 这块填充与当前的边界还对得上吗。
+ *
+ * @remarks
+ * 判据是**照 seed 再求一遍，看几何变不变**：求解是确定性的，同一份输入给出逐位相同的结果，
+ * 因此几何一变就说明边界动过。求不出来（缺口、落点掉到界外）同样算过期——那正是 AutoCAD 最
+ * 常被抱怨的那一档，而它在那边是**静默**的。
+ *
+ * 一次调用跑一遍 O(N²) 的两两求交，因此只在这块填充被选中时问。
+ *
+ * @internal
+ */
+export function stageHatchIsStale(
+  context: StageDraftingCommitContext,
+  entityId: string,
+  options: Pick<StageHatchPlanOptions, 'isJunction'> = {},
+): boolean {
+  const entity = context.document.entities[entityId]
+  const hatch = entity ? getComposeHatch(entity) : undefined
+  const matrix = context.index.getWorldMatrix(entityId)
+  if (!hatch || !matrix) return false
+  const resolution = resolveStageHatchRegion(
+    context.index,
+    applyMatrix(matrix, hatch.seed),
+    options.isJunction ? { isJunction: options.isJunction } : {},
+  )
+  if (resolution.status !== 'create') return true
+  const current = getComposeCurve(entity)
+  const next = normalizeComposeCurveGeometry(
+    stageCurveToParent(context, resolution.curve, entityId),
+  ).curve
+  return JSON.stringify(current) !== JSON.stringify(next)
 }

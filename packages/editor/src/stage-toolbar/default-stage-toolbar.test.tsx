@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import {
   createDefaultCanvasSettings,
 } from '@compose-ui/core'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultComposeEditorPreferences } from '../editor-preferences'
 import { DefaultStageToolbar } from './default-stage-toolbar'
 
@@ -19,6 +19,7 @@ function renderToolbar(
   tool: import('@compose-ui/stage').ComposeStageTool = 'select',
   activeCommandId: string | null = null,
   angleConstraint: import('@compose-ui/core').ComposeAngleConstraint = 'polar',
+  hatchColor = '#2f3b4d',
 ) {
   const setTool = vi.fn()
   const setTransformGizmo = vi.fn()
@@ -27,6 +28,7 @@ function renderToolbar(
   const toggleSnap = vi.fn()
   const setAngleConstraint = vi.fn()
   const setPolarIncrement = vi.fn()
+  const setHatchColor = vi.fn()
   render(
     <DefaultStageToolbar
       activeCommandId={activeCommandId}
@@ -49,9 +51,20 @@ function renderToolbar(
       setAngleConstraint={setAngleConstraint}
       polarIncrement={45}
       setPolarIncrement={setPolarIncrement}
+      hatchColor={hatchColor}
+      setHatchColor={setHatchColor}
     />,
   )
-  return { setAngleConstraint, setGridSize, setPolarIncrement, setTool, setTransformGizmo, startCommand, toggleSnap }
+  return {
+    setAngleConstraint,
+    setGridSize,
+    setHatchColor,
+    setPolarIncrement,
+    setTool,
+    setTransformGizmo,
+    startCommand,
+    toggleSnap,
+  }
 }
 
 describe('DefaultStageToolbar', () => {
@@ -251,5 +264,48 @@ describe('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / �
     renderToolbar('select')
     const rectangle = window.document.querySelector('[data-toolbar-item="RECTANGLE"]')
     expect(rectangle).toHaveAttribute('data-toolbar-role', 'tool')
+  })
+})
+
+describe('OpenSpec: editor-workspace-layout / 工具栏图标可以带一个运行期的颜色', () => {
+  // 上一个顶层 describe 没有 afterEach(cleanup)，它留下的 toolbar 还挂在 DOM 上；按 `data-`
+  // 定位会先抓到那一份陈旧的。先清再渲染，本块的查询因此只看得见自己这一次。
+  beforeEach(cleanup)
+  afterEach(cleanup)
+
+  /*
+   * 按名字取会同时抓到「更多」菜单里那一项——量宽在 jsdom 里恒为 0，因此每一格都被判成溢出。
+   * 栏上那一颗由货架的 `data-toolbar-item` 定位。
+   */
+  const shelfButton = () => globalThis.document
+    .querySelector<HTMLButtonElement>('[data-toolbar-item="HATCH"] button[data-command-id="HATCH"]')
+
+  it('主键启动 HATCH，与在命令行敲这个词等价', () => {
+    const { startCommand } = renderToolbar()
+    fireEvent.click(shelfButton()!)
+    expect(startCommand).toHaveBeenCalledWith('HATCH')
+  })
+
+  it('桶身印着当前填充色，换一个色就换一份漆', () => {
+    // jsdom 把 `style` 归一成 `rgb()`，因此断的是归一之后的形式。
+    const paint = () => shelfButton()?.querySelector('path[style]')?.getAttribute('style')
+    renderToolbar('select', null, 'polar', '#2f3b4d')
+    expect(paint()).toContain('rgb(47, 59, 77)')
+    cleanup()
+    renderToolbar('select', null, 'polar', '#a34b2f')
+    expect(paint()).toContain('rgb(163, 75, 47)')
+  })
+
+  it('色板是换色的第二条入口，当前色带选中态', () => {
+    const { setHatchColor } = renderToolbar()
+    fireEvent.click(globalThis.document.querySelector<HTMLButtonElement>(
+      '[data-toolbar-item="HATCH"] .compose-editor__toolbar-menu-trigger',
+    )!)
+    const swatches = screen.getAllByRole('menuitemradio')
+    // 空白文档上色板只有默认色那一档，而它恒在第一位：一张空页上也要有东西可点。
+    expect(swatches[0]?.getAttribute('data-swatch')).toBe('#2f3b4d')
+    expect(swatches[0]?.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(swatches[0]!)
+    expect(setHatchColor).toHaveBeenCalledWith('#2f3b4d')
   })
 })

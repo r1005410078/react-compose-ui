@@ -394,6 +394,26 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   readonly angleConstraint?: ComposeAngleConstraint
   readonly onAngleConstraintChange?: (next: ComposeAngleConstraint) => void
   /**
+   * `HATCH` 这一次的填充色。
+   *
+   * @remarks
+   * **给出即受控**，与角度约束同一条：工具栏的色板要画出当前色，而事实来源只能有一份。不给
+   * 时由 Stage 自己持有，默认取 `COMPOSE_DEFAULT_HATCH_COLOR`——`stage` 是可独立嵌入的包，
+   * 不能要求每个宿主都接一个工具栏。
+   *
+   * 它是会话级视图状态，MUST NOT 写进文档也 MUST NOT 写进偏好：合法性不在方不方便，在**值
+   * 有没有被印出来**，而桶身就印着它。
+   */
+  readonly hatchColor?: string
+  /**
+   * 命令进行中用 `C` 关键字换了色时回调。
+   *
+   * @remarks
+   * 换色有**两条入口**——工具栏的色板与命令里的 `C`，因为货架不得成为任何能力的唯一入口。
+   * 受控时这一条把命令那一侧的变化交回宿主，两条入口因此写的是同一份状态。
+   */
+  readonly onHatchColorChange?: (color: string) => void
+  /**
    * 极轴的增量角（度）；射线按它成族生成。
    *
    * @remarks
