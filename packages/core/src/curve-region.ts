@@ -53,7 +53,14 @@ export type ComposeCurveRegionResult =
     readonly curve: ComposeCurve
     /** 外环之内被挖空的岛数量；为 0 时 `curve` 没有 `fillRule`。 */
     readonly islandCount: number
-    /** 外环用到的每一条输入片段的出处。 */
+    /**
+     * 产物用到的每一条输入片段的出处，**外环与岛都算**。
+     *
+     * @remarks
+     * 岛一并算进来，是因为一座岛同样是围出这块面的边界——画出来的那个洞就是它。跟随那一侧
+     * 拿这份出处推出边界清单，少了挖洞的那个对象，下一次按清单重求时它根本不在输入里，洞会
+     * 被悄悄补平。
+     */
     readonly sources: readonly ComposeCurveRegionSource[]
   }
   /**
@@ -827,17 +834,24 @@ export function resolveComposeCurveRegion(
       freeEnds(graph, traced).forEach((point) => gaps.push(point))
       continue
     }
+    const islandLoops = resolveIslands(graph, walked, polygon)
+    const islands = islandLoops.map((island) => loopPieces(graph, island))
+    const outline = loopPieces(graph, loop)
     /*
      * 出处按**去重之后**的子边算：叠在一起的两条边收成了一条，那一条只算在留下的那个出处上。
      * 推论是「两个一模一样的矩形叠在一起」时没有哪一个是完整的，于是走新建那一支——填哪一个
      * 本来就没有答案，新建至少是用户看得见的那一块。
+     *
+     * **岛的边一并算进来**：一座岛同样是围出这块面的边界，画出来的洞就是它。只报外环那一份
+     * 的症状不在这一步——它在**跟随**那一侧：清单里少了挖洞的那个对象，下一次按清单重求时它
+     * 根本不在输入里，于是洞被悄悄补平，而用户没有动过它。
      */
     const subEdgeTotals = new Map<number, number>()
     graph.subEdges.forEach((edge) => {
       subEdgeTotals.set(edge.source, (subEdgeTotals.get(edge.source) ?? 0) + 1)
     })
     const usedBySource = new Map<number, number>()
-    new Set(loop.map(edgeOf)).forEach((edge) => {
+    new Set([loop, ...islandLoops].flat().map(edgeOf)).forEach((edge) => {
       const source = graph.subEdges[edge]!.source
       usedBySource.set(source, (usedBySource.get(source) ?? 0) + 1)
     })
@@ -845,8 +859,6 @@ export function resolveComposeCurveRegion(
       .map(([index, used]) => ({ index, used, subEdges: subEdgeTotals.get(index) ?? used }))
       .sort((a, b) => a.index - b.index)
 
-    const islands = resolveIslands(graph, walked, polygon).map((island) => loopPieces(graph, island))
-    const outline = loopPieces(graph, loop)
     const curve: ComposeCurve = islands.length === 0 && piecesAreStraight(outline)
       ? {
         kind: 'polyline',

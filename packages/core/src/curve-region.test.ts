@@ -284,6 +284,19 @@ describe('resolveComposeCurveRegion', () => {
     expect(result.sources.some((entry) => entry.index === 1)).toBe(false)
   })
 
+  it('岛的出处一并报出来——洞也是边界', () => {
+    /*
+     * 只报外环的症状不在这一步，而在**跟随**那一侧：清单里少了挖洞的那个圆，下一次按清单
+     * 重求时它根本不在输入里，洞被悄悄补平，而用户没有动过它。
+     */
+    const edges = [...rectangleEdges(0, 0, 200, 200), circle(100, 100, 40)]
+    const result = resolveComposeCurveRegion(edges, { x: 20, y: 20 })
+    if (result.status !== 'resolved') throw new Error('expected resolved')
+    expect(result.islandCount).toBe(1)
+    // 圆是第 5 条输入片段（下标 4），它只出现在岛上，不在外环上。
+    expect(result.sources.some((entry) => entry.index === 4)).toBe(true)
+  })
+
   it('8 字形的一个环用不满它自己', () => {
     // 一条自交的闭合折线：两个环都出自它，但点中的只是其中一个。
     const lobes: ComposeOutlinePiece[] = [

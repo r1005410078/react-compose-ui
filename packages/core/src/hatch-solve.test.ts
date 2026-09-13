@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveComposeHatches } from './hatch-solve'
-import { getComposeCurve } from './curve'
+import { getComposeCurve, isPointInsideComposeCurve } from './curve'
 import { getComposeHatch } from './hatch'
 import type { ComposeDocument, ComposeLayoutSnapshot, JsonObject } from './document-types'
 import type { ComposeCurve } from './curve'
@@ -109,6 +109,34 @@ function bisected(lineX: number) {
   ])
 }
 
+/** 盒局部的整圆几何——扫掠 360 的弧，圆心在盒中心。 */
+const disc = (r: number): ComposeCurve => ({
+  kind: 'arc', center: { x: r, y: r }, radius: r, startAngle: 0, sweep: 360,
+})
+
+/**
+ * 一个矩形中间挖一个圆洞，填充是整块带洞的面。
+ *
+ * 矩形 (100,100)–(500,400)，圆心 (300,250) 半径 60。
+ */
+function holed(circleX: number) {
+  return scene([
+    { id: 'rect', curve: rect(400, 300), x: 100, y: 100, width: 400, height: 300 },
+    { id: 'disc', curve: disc(60), x: circleX, y: 190, width: 120, height: 120 },
+    {
+      id: 'fill',
+      curve: {
+        kind: 'path',
+        fillRule: 'evenodd',
+        subpaths: [],
+      } as unknown as ComposeCurve,
+      x: 100, y: 100, width: 400, height: 300,
+      // 锚点落在洞与左边之间，不在洞里。
+      hatch: { seed: { x: 50, y: 150 }, boundaryIds: ['rect', 'disc'] },
+    },
+  ])
+}
+
 describe('OpenSpec: compose-document / 填充几何跟着边界求解，不逐条路径回写', () => {
   it('边界移动之后填充跟上', () => {
     const { document, snapshot } = bisected(360)
@@ -211,5 +239,44 @@ describe('OpenSpec: compose-document / 填充几何跟着边界求解，不逐�
     const resolved = resolveComposeHatches(without, snapshot)
     expect(resolved.document).toBe(without)
     expect(getComposeCurve(without.entities.fill)).toBeDefined()
+  })
+})
+
+describe('OpenSpec: compose-document / 填充几何跟着边界求解 / 洞也是边界', () => {
+  it('挖洞的那个对象在清单里，跟随之后洞还在', () => {
+    /*
+     * 判别性落在 `fillRule` 上：清单里少了挖洞的那个圆时，它根本不在这一次求解的输入里，
+     * 洞会被**悄悄补平**成一块实心的面——而用户没有动过它。这条曾经真的发生过：出处只报
+     * 外环，于是落地时写下的清单里就没有那个圆。
+     */
+    const { document, snapshot } = holed(240)
+    const resolved = resolveComposeHatches(document, snapshot)
+    const curve = getComposeCurve(resolved.document.entities.fill!)
+    expect(curve?.kind).toBe('path')
+    if (curve?.kind !== 'path') return
+    expect(curve.fillRule).toBe('evenodd')
+    expect(curve.subpaths).toHaveLength(2)
+  })
+
+  it('洞挪了位置，填充跟着挪', () => {
+    const before = holed(240)
+    const after = holed(300)
+    const holeOf = (scene_: ReturnType<typeof holed>) => {
+      const curve = getComposeCurve(resolveComposeHatches(scene_.document, scene_.snapshot)
+        .document.entities.fill!)
+      if (curve?.kind !== 'path') throw new Error('expected path')
+      return curve.subpaths[1]!.start.x
+    }
+    expect(holeOf(after) - holeOf(before)).toBeCloseTo(60, 6)
+  })
+
+  it('锚点不会被重取到洞里', () => {
+    // 最大内切圆圆心按 `fillRule` 判内外，因此洞把它推开——看得见的洞与推开圆心的洞是同一个。
+    const { document, snapshot } = holed(240)
+    const resolved = resolveComposeHatches(document, snapshot)
+    const fill = resolved.document.entities.fill!
+    const hatch = getComposeHatch(fill)!
+    const curve = getComposeCurve(fill)!
+    expect(isPointInsideComposeCurve(curve, hatch.seed)).toBe(true)
   })
 })
