@@ -5,7 +5,7 @@ import { drawContainer, selectContainer } from './support/test-helpers'
 /**
  * 缩放手柄的尺寸读数。
  *
- * 容器的边长与本次位移都取网格步长 8 的整数倍，落点因此正好落在格点上——吸附不会把读数挪走，
+ * 容器的边长与本次位移都取网格步长 4 的整数倍，落点因此正好落在格点上——吸附不会把读数挪走，
  * 用例于是不必关掉它。`?no-auto-fit` 把缩放钉在 1，屏幕位移与世界位移因此相等：
  * `world = (屏幕 − 视口) / zoom`，自动适配一开这些绝对值全部失效。
  */
@@ -84,12 +84,12 @@ test('OpenSpec: stage / 缩放手柄的尺寸读数 / 值取吸附之后的包�
   await selectContainer(editor)
 
   /*
-   * 43 不是网格步长 8 的整数倍：读数必须是吸附之后的 688，不是裸指针的 691。读裸指针的
+   * 43 不是网格步长 4 的整数倍：读数必须是吸附之后的 692，不是裸指针的 691。读裸指针的
    * 症状是框里的数与选区框差几个像素——而那正是用户要对齐的地方。
    */
   await grabHandle(page, editor.getByTestId('stage-resize-se'), { x: 43, y: 32 })
 
-  expect(await readout(stage, 0)).toBe('688')
+  expect(await readout(stage, 0)).toBe('692')
 
   await release(page)
 })

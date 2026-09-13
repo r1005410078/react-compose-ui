@@ -254,9 +254,9 @@ export const DEFAULT_WORKSPACE_SESSION: ComposeWorkspaceSession = {
   transformGizmo: false,
 }
 
-/** 页面的新建种子：8×8 网格、对齐吸附开，与 `createDefaultCanvasSettings` 逐字相同。 @internal */
+/** 页面的新建种子：4×4 网格、对齐吸附开，与 `createDefaultCanvasSettings` 逐字相同。 @internal */
 export const DEFAULT_WORKSPACE_SEEDS: ComposeWorkspaceSeeds = {
-  grid: { stepX: 8, stepY: 8, snapEnabled: true },
+  grid: { stepX: 4, stepY: 4, snapEnabled: true },
   smartSnap: { nodes: true, guides: true },
 }
 

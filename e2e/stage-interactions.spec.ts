@@ -404,7 +404,7 @@ test('OpenSpec: stage / 画布平移手势 / 空闲张手且拖动时握手', as
 })
 
 
-test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍显示网格并保持 8 单位吸附', async ({ page }) => {
+test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍显示网格并保持网格单位吸附', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
 
@@ -445,7 +445,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
   const xField = editor.getByRole('spinbutton', { name: '位置 X', exact: true })
-  await expect.poll(async () => Number(await xField.inputValue()) % 8).toBe(0)
+  await expect.poll(async () => Number(await xField.inputValue()) % 4).toBe(0)
 
   const resize = stage.getByTestId('stage-resize-se')
   const resizeBox = await resize.boundingBox()
@@ -464,7 +464,7 @@ test('OpenSpec: stage / 自适应网格标尺与世界原点 / 最低缩放仍�
   expectedHistoryCount += 1
   await expect(historyEntries).toHaveCount(expectedHistoryCount)
   const widthField = editor.getByRole('combobox', { name: '尺寸宽度', exact: true })
-  await expect.poll(async () => Number(await widthField.inputValue()) % 8).toBe(0)
+  await expect.poll(async () => Number(await widthField.inputValue()) % 4).toBe(0)
 })
 
 
@@ -1084,8 +1084,8 @@ test('OpenSpec: stage-engine / Headless 绘制会话 / 非 100% 缩放下绘制�
     inspector.getByRole('combobox', { name: '尺寸高度' }).inputValue(),
   ])
   for (const reading of readings) {
-    // 吸附把四条边都拉回 8 网格，因此读数是整数且是 8 的倍数——没有小数需要保留。
+    // 吸附把四条边都拉回网格（默认步长 4），因此读数是整数且是 4 的倍数——没有小数需要保留。
     expect(reading).toMatch(/^-?\d+$/)
-    expect(Number(reading) % 8).toBe(0)
+    expect(Number(reading) % 4).toBe(0)
   }
 })

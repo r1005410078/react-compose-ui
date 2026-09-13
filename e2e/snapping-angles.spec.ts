@@ -183,6 +183,18 @@ test('OpenSpec: stage-engine / 特征点捕捉 / 靶区随网格步长放大，�
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const marker = stage.getByTestId('stage-drafting-snap')
 
+  // 步长钉死成 8：本条量的是「靶区随步长放大多少」，跟着默认值走会让它在默认值变化时
+  // 莫名其妙地红——15 像素落在基数与放大后靶区之间这件事，是由步长算出来的。
+  await editor.getByRole('button', { name: '网格大小' }).click()
+  await editor.getByRole('menu', { name: '网格大小' })
+    .getByRole('menuitem', { name: '画布设置' })
+    .click()
+  const settings = editor.getByRole('dialog', { name: '画布网格与吸附设置' })
+  await settings.getByRole('textbox', { name: 'X 步长' }).fill('8')
+  await settings.getByRole('textbox', { name: 'Y 步长' }).fill('8')
+  await settings.getByRole('button', { name: '应用' }).click()
+  await expect(settings).toBeHidden()
+
   // 端点刻意**不落在网格上**（步长 8）：落在网格上时网格与捕捉给出同一个答案，这条就没有
   // 判别力了。真实图纸上的端点本来也很少正好是步长的倍数。
   const end = { x: 403, y: 305 }

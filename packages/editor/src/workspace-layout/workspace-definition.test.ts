@@ -51,7 +51,7 @@ describe('工作区定义与注入', () => {
     expect(page!.session).toEqual(drawing!.session)
     expect(page!.session).toEqual(animation!.session)
     // 新建种子在两处不同：网格步长，以及对齐吸附。
-    expect([page!.seeds.grid.stepX, drawing!.seeds.grid.stepX]).toEqual([8, 10])
+    expect([page!.seeds.grid.stepX, drawing!.seeds.grid.stepX]).toEqual([4, 10])
     // 网格吸附两边都开：关掉的是 Figma 式参考线那一层，不是整条吸附。徒手画的外框与分区框
     // 仍然要网格接着。
     expect([page!.seeds.grid.snapEnabled, drawing!.seeds.grid.snapEnabled]).toEqual([true, true])

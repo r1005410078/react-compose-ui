@@ -220,8 +220,8 @@ test('OpenSpec: editor-workspace-layout / 新建文档种子 / 绘图里新建�
   }
 
   await createPage('页面种子')
-  // 页面：8 格，对齐吸附两项都开——它是搭大屏时把控件对齐到邻居的那一层。
-  expect(await canvasSettings()).toEqual({ stepX: '8', nodes: true, guides: true })
+  // 页面：4 格（界面设计的基础模数），对齐吸附两项都开——它是搭大屏时把控件对齐到邻居的那一层。
+  expect(await canvasSettings()).toEqual({ stepX: '4', nodes: true, guides: true })
 
   await switcher.getByRole('radio', { name: '绘图' }).click()
   await expect(switcher.getByRole('radio', { name: '绘图' })).toHaveAttribute('aria-checked', 'true')
