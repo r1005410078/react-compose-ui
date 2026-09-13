@@ -9,6 +9,7 @@
 
 import {
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_BUILTIN_COMPONENT_KEYS,
   getComposeAppearance,
   getComposeCurve,
   getComposeHatch,
@@ -24,6 +25,7 @@ import {
   type StageHatchRejection,
   type StagePoint,
 } from '@compose-ui/stage-engine'
+import type { ComposeHatchState } from '@compose-ui/component-registry'
 import {
   createStageDraftingCurveCommand,
   stageCurveToParent,
@@ -203,35 +205,77 @@ export function planStageHatchRegeneration(
 }
 
 /**
- * 这块填充与当前的边界还对得上吗。
+ * 断开关联：删掉 `Hatch`，这个 Entity 变回一条普通闭合多段线。
  *
  * @remarks
- * 判据是**照 seed 再求一遍，看几何变不变**：求解是确定性的，同一份输入给出逐位相同的结果，
- * 因此几何一变就说明边界动过。求不出来（缺口、落点掉到界外）同样算过期——那正是 AutoCAD 最
- * 常被抱怨的那一档，而它在那边是**静默**的。
+ * 几何与填充色**一个字节都不动**——断开的是「跟着边界走」这件事，不是这块墨。它本来就是一条
+ * 闭合多段线，因此不需要为「脱离关联的填充」发明任何新东西；`Hatch` 缺席即不是填充，这与
+ * `Clip` 缺席即不裁剪是同一条。
+ *
+ * 这一条**不需要求面**，与另外两条同住一个端口是因为它们都答同一格 Inspector 上的事：端口
+ * 缺席时那三颗按钮一起不画。
+ *
+ * MUST NOT 做成「跟不跟随」的布尔开关——那会造出一块看不见的状态，两块长得一样的填充一块跟
+ * 一块不跟，而屏幕上没有任何东西解释为什么。
+ *
+ * @returns 这个 Entity 上本来就没有 `Hatch` 时返回 `null`。
+ * @internal
+ */
+export function planStageHatchDetach(
+  context: StageDraftingCommitContext,
+  entityId: string,
+  label: (name: string) => string,
+): EditorCommand | null {
+  const entity = context.document.entities[entityId]
+  if (!entity || !getComposeHatch(entity)) return null
+  return {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.removeComponent,
+    payload: { entityId, key: COMPOSE_BUILTIN_COMPONENT_KEYS.hatch },
+    meta: { label: label(entity.name), source: 'inspector', targetIds: [entityId] },
+  }
+}
+
+/**
+ * 这块填充与当前的边界是什么关系——三档。
+ *
+ * @remarks
+ * 判据是**照锚点再求一遍，看几何变不变**：求解是确定性的，同一份输入给出逐位相同的结果，
+ * 因此几何一变就说明边界动过。
+ *
+ * 三档的分界在**求不求得出面**上：求不出来（缺口、锚点掉到界外、边界被剪断）是 `broken`，
+ * 求得出但与当前几何不同是 `stale`。把这两档收成一个「过期」曾经是 v1 的做法，而它让
+ * 「按一下重新生成就好了」与「先去把那条缝补上」读起来是同一句话——前者按一下就回来，
+ * 后者按多少下都没用。
+ *
+ * `fill` 那一支算 `stale` 而不是 `current`：它意味着这块面的边界如今恰好是某一个对象的完整
+ * 几何，与这块填充自己的几何是两回事；{@link planStageHatchRegeneration} 在那一支不动手，
+ * 因此说成「跟不上了」正好，而说成「一致」是错的。
  *
  * 一次调用跑一遍 O(N²) 的两两求交，因此只在这块填充被选中时问。
  *
  * @internal
  */
-export function stageHatchIsStale(
+export function stageHatchState(
   context: StageDraftingCommitContext,
   entityId: string,
   options: Pick<StageHatchPlanOptions, 'isJunction'> = {},
-): boolean {
+): ComposeHatchState {
   const entity = context.document.entities[entityId]
   const hatch = entity ? getComposeHatch(entity) : undefined
   const matrix = context.index.getWorldMatrix(entityId)
-  if (!hatch || !matrix) return false
+  // 还没有布局盒（新建的那一帧）时不报任何问题：那不是边界的毛病。
+  if (!hatch || !matrix) return 'current'
   const resolution = resolveStageHatchRegion(
     context.index,
     applyMatrix(matrix, hatch.seed),
     options.isJunction ? { isJunction: options.isJunction } : {},
   )
-  if (resolution.status !== 'create') return true
+  if (resolution.status === 'rejected') return 'broken'
+  if (resolution.status !== 'create') return 'stale'
   const current = getComposeCurve(entity)
   const next = normalizeComposeCurveGeometry(
     stageCurveToParent(context, resolution.curve, entityId),
   ).curve
-  return JSON.stringify(current) !== JSON.stringify(next)
+  return JSON.stringify(current) === JSON.stringify(next) ? 'current' : 'stale'
 }

@@ -25,7 +25,7 @@ export { ComposeComponentPalette, type ComposeComponentPaletteProps } from './co
  * `createStageDeleteEntitiesCommand` 一份实现，它需要这条谓词才认得出节点。
  */
 export { isStageJunctionEntity, STAGE_JUNCTION_PRESET_ID } from './drafting'
-export { planStageHatchRegeneration, stageHatchIsStale } from './drafting'
+export { planStageHatchDetach, planStageHatchRegeneration, stageHatchState } from './drafting'
 export type {
   ComposeStageClipboard,
   ComposeStageDispatch,

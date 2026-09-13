@@ -31,10 +31,10 @@
 
 ## 5. 端口与 Inspector（component-registry / materials）
 
-- [ ] 5.1 `ComposeHatchEditPort` 加 `detach`；`isStale` 升级成三档状态查询
-- [ ] 5.2 Inspector：三档文案、「断开关联」按钮、「取点」改口成「锚点」
-- [ ] 5.3 端口缺席时不画那几颗按钮
-- [ ] 5.4 组件测试：三档各一条、断开之后 `Hatch` 消失而几何与填充色保留、端口缺席
+- [x] 5.1 `ComposeHatchEditPort` 加 `detach`；`isStale` 升级成三档状态查询
+- [x] 5.2 Inspector：三档文案、「断开关联」按钮、「取点」改口成「锚点」
+- [x] 5.3 端口缺席时不画那几颗按钮
+- [x] 5.4 组件测试：三档各一条、断开之后 `Hatch` 消失而几何与填充色保留、端口缺席
 
 ## 6. 端到端
 
