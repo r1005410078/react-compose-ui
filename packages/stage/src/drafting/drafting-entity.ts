@@ -348,7 +348,14 @@ export interface StageDraftingHatchOptions {
   readonly seed: StagePoint
   /** 这一次的填充色。 */
   readonly color: string
-  /** 围出这块面的那些 Entity；填充插到它们**之下**。 */
+  /**
+   * 围出这块面的那些 Entity。
+   *
+   * @remarks
+   * 它有**两个用途，而且是同一份**：填充插到它们**之下**（层序），以及写进
+   * `Hatch.boundaryIds` 供跟随使用。为跟随再求一次是纯粹的浪费——这一份就是求解刚刚给出的
+   * 那一份。
+   */
   readonly belowIds: readonly string[]
 }
 
@@ -564,6 +571,11 @@ export function createStageDraftingCurveCommand(
             x: seedLocal.x - normalized.offset.x,
             y: seedLocal.y - normalized.offset.y,
           },
+          /*
+           * 边界清单与层序读的是**同一份** id。空清单不写——`boundaryIds` 的校验拒绝空数组，
+           * 而「没有边界」在这里的含义就是「不跟随」，那正是缺席表达的。
+           */
+          ...(hatch.belowIds.length > 0 ? { boundaryIds: [...hatch.belowIds] } : {}),
         },
         Appearance: {
           ...(seed.seed.components.Appearance as Record<string, unknown>),

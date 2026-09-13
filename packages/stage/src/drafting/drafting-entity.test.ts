@@ -113,6 +113,42 @@ describe('createStageDraftingCurveCommand 的 Preset 选择', () => {
   })
 })
 
+describe('OpenSpec: stage / 填充落地时记下边界清单', () => {
+  const closed: ComposeCurve = {
+    kind: 'polyline',
+    closed: true,
+    vertices: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 60 }, { x: 0, y: 60 }],
+  }
+
+  /** 从产出的 `entity.create` 载荷里把 `Hatch` 掏出来。 */
+  function hatchOf(command: { readonly payload: unknown } | null) {
+    const payload = command?.payload as { entity?: { components?: Record<string, unknown> } }
+    return payload?.entity?.components?.Hatch as
+      { seed?: unknown; boundaryIds?: readonly string[] } | undefined
+  }
+
+  it('新建那一支写下清单，取的是层序用的同一份', () => {
+    const created = createStageDraftingCurveCommand(commitContext([]), closed, {
+      hatch: { seed: { x: 20, y: 30 }, color: '#2f3b4d', belowIds: ['rect', 'circle'] },
+    })
+    expect(hatchOf(created?.command ?? null)?.boundaryIds).toEqual(['rect', 'circle'])
+  })
+
+  it('没有边界时不写清单——缺席即不跟随，而空数组是非法的', () => {
+    const created = createStageDraftingCurveCommand(commitContext([]), closed, {
+      hatch: { seed: { x: 20, y: 30 }, color: '#2f3b4d', belowIds: [] },
+    })
+    const hatch = hatchOf(created?.command ?? null)
+    expect(hatch?.seed).toBeDefined()
+    expect(hatch && 'boundaryIds' in hatch).toBe(false)
+  })
+
+  it('不是填充的曲线不写 Hatch', () => {
+    const created = createStageDraftingCurveCommand(commitContext([]), closed)
+    expect(hatchOf(created?.command ?? null)).toBeUndefined()
+  })
+})
+
 describe('createStageDraftingCurveCommand 的替换那一支', () => {
   /** 真实文档里每个 Entity 都带着这两个 Component；替身少了它们读出来是 undefined。 */
   const chrome = {
