@@ -9,8 +9,10 @@
 
 import {
   BUILTIN_COMMAND_TYPES,
+  COMPOSE_BUILTIN_COMPONENT_KEYS,
   getComposeAppearance,
   getComposeCurve,
+  composeCurveInnerAnchor,
   getComposeHatch,
   normalizeComposeCurveGeometry,
   type ComposeCurve,
@@ -24,11 +26,14 @@ import {
   type StageHatchRejection,
   type StagePoint,
 } from '@compose-ui/stage-engine'
+import type { ComposeHatchState } from '@compose-ui/component-registry'
 import {
   createStageDraftingCurveCommand,
   stageCurveToParent,
+  stagePointToParent,
   type StageDraftingCommitContext,
 } from './drafting-entity'
+import { batchStageCommands } from './wire-tap'
 
 /** {@link planStageHatch} 的入参。 @internal */
 export interface StageHatchPlanOptions {
@@ -164,16 +169,25 @@ export function stageHatchPreviewRings(curve: ComposeCurve): readonly (readonly 
 }
 
 /**
- * 拿一块填充自己的 `seed` 把当初那次求解原样再跑一遍。
+ * 拿一块填充自己的锚点把当初那次求解原样再跑一遍，并把锚点与边界清单一起写回。
  *
  * @remarks
- * **同一个算法、同一个输入、没有第二套规则**——这正是 `Hatch` 只存 `seed`、不存边界对象标识的
- * 理由：存了就要回答「这条边是与哪个对象的第几个交点」，而一条直线穿过一个圆有两个交点，
- * 选哪一个是个启发式。
+ * **同一个算法、同一个输入、没有第二套规则**——它与每帧跑的那条派生求解读的是同一份解算，
+ * 差别只在**谁按下的**：派生只在清单没变时动手，这一条是用户明确说「按现在的边界重来」。
  *
- * `seed` 是 **Entity 局部坐标**，因此先经这块填充自己的世界矩阵搬回世界空间。它跟着 Entity 走，
- * 所以整块填充被移动过之后仍然指着同一个位置——而边界没跟着动的话，求出来的就是另一块面，
- * 那正是「过期」。
+ * 锚点是 **Entity 局部坐标**，因此先经这块填充自己的世界矩阵搬回世界空间。它跟着 Entity 走，
+ * 所以整块填充被移动过之后仍然指着同一个位置。
+ *
+ * **三样东西一起写，在一个事务里**：几何、重取的锚点、新的边界清单。只写几何是不够的，而这
+ * 不是洁癖——
+ * - 盒跟着新几何变了，而锚点是**相对盒**的，不重写它的话每按一次「重新生成」锚点就往外漂
+ *   一点，几次之后掉到界外，此后这块填充再也重算不回来；
+ * - 清单不更新的话，这块填充此后**永远跟不上**——派生那一侧比对的是存着的那份，而它记的还是
+ *   上一次那几个边界。用户按下那一下想说的正是「现在这几个才是我的边界」。
+ *
+ * 锚点重取到新几何的**最大内切圆圆心**，与派生那一侧逐字相同：两条路走出不同的锚点，等于同
+ * 一块填充按不同入口重算会得到不同结果。退化到求不出圆心时退回原来那个世界位置——那一档不该
+ * 顺手把锚点扔掉。
  *
  * @returns 求不出来（边界改到围不出面了）时返回 `null`。
  * @internal
@@ -186,10 +200,11 @@ export function planStageHatchRegeneration(
   const entity = context.document.entities[entityId]
   const hatch = entity ? getComposeHatch(entity) : undefined
   const matrix = context.index.getWorldMatrix(entityId)
-  if (!hatch || !matrix) return null
+  if (!entity || !hatch || !matrix) return null
+  const worldSeed = applyMatrix(matrix, hatch.seed)
   const resolution = resolveStageHatchRegion(
     context.index,
-    applyMatrix(matrix, hatch.seed),
+    worldSeed,
     options.isJunction ? { isJunction: options.isJunction } : {},
   )
   /*
@@ -198,40 +213,117 @@ export function planStageHatchRegeneration(
    * 走到正确的那一支，而这里替他选会留下一块他没要求过的重复对象。
    */
   if (resolution.status !== 'create') return null
-  return createStageDraftingCurveCommand(context, resolution.curve, { replace: entityId })?.command
-    ?? null
+  const geometry = createStageDraftingCurveCommand(
+    context,
+    resolution.curve,
+    { replace: entityId },
+  )?.command
+  if (!geometry) return null
+
+  const normalized = normalizeComposeCurveGeometry(
+    stageCurveToParent(context, resolution.curve, entityId),
+  )
+  const parentSeed = stagePointToParent(context, worldSeed, entityId)
+  const anchor = composeCurveInnerAnchor(normalized.curve) ?? {
+    x: parentSeed.x - normalized.offset.x,
+    y: parentSeed.y - normalized.offset.y,
+  }
+  const next: EditorCommand = {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.updateComponent,
+    payload: {
+      entityId,
+      key: COMPOSE_BUILTIN_COMPONENT_KEYS.hatch,
+      value: {
+        seed: { x: anchor.x, y: anchor.y },
+        // 空清单不写：`boundaryIds` 的校验拒绝空数组，而「没有边界」的含义就是「不跟随」。
+        ...(resolution.boundaryIds.length > 0
+          ? { boundaryIds: [...resolution.boundaryIds] }
+          : {}),
+      } as unknown as JsonValue,
+    },
+    meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
+  }
+  // 几何与 `Hatch` 分成两条会产生一个可观察的不一致中间态，撤销也变两步。
+  return batchStageCommands(context.idFactory, [geometry, next], entity.name, {
+    label: entity.name,
+    source: 'stage',
+    targetIds: [entityId],
+  }) ?? geometry
 }
 
 /**
- * 这块填充与当前的边界还对得上吗。
+ * 断开关联：删掉 `Hatch`，这个 Entity 变回一条普通闭合多段线。
  *
  * @remarks
- * 判据是**照 seed 再求一遍，看几何变不变**：求解是确定性的，同一份输入给出逐位相同的结果，
- * 因此几何一变就说明边界动过。求不出来（缺口、落点掉到界外）同样算过期——那正是 AutoCAD 最
- * 常被抱怨的那一档，而它在那边是**静默**的。
+ * 几何与填充色**一个字节都不动**——断开的是「跟着边界走」这件事，不是这块墨。它本来就是一条
+ * 闭合多段线，因此不需要为「脱离关联的填充」发明任何新东西；`Hatch` 缺席即不是填充，这与
+ * `Clip` 缺席即不裁剪是同一条。
+ *
+ * 这一条**不需要求面**，与另外两条同住一个端口是因为它们都答同一格 Inspector 上的事：端口
+ * 缺席时那三颗按钮一起不画。
+ *
+ * MUST NOT 做成「跟不跟随」的布尔开关——那会造出一块看不见的状态，两块长得一样的填充一块跟
+ * 一块不跟，而屏幕上没有任何东西解释为什么。
+ *
+ * @returns 这个 Entity 上本来就没有 `Hatch` 时返回 `null`。
+ * @internal
+ */
+export function planStageHatchDetach(
+  context: StageDraftingCommitContext,
+  entityId: string,
+  label: (name: string) => string,
+): EditorCommand | null {
+  const entity = context.document.entities[entityId]
+  if (!entity || !getComposeHatch(entity)) return null
+  return {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.removeComponent,
+    payload: { entityId, key: COMPOSE_BUILTIN_COMPONENT_KEYS.hatch },
+    meta: { label: label(entity.name), source: 'inspector', targetIds: [entityId] },
+  }
+}
+
+/**
+ * 这块填充与当前的边界是什么关系——三档。
+ *
+ * @remarks
+ * 判据是**照锚点再求一遍，看几何变不变**：求解是确定性的，同一份输入给出逐位相同的结果，
+ * 因此几何一变就说明边界动过。
+ *
+ * 三档的分界在**求不求得出面**上：求不出来（缺口、锚点掉到界外、边界被剪断）是 `broken`，
+ * 求得出但与当前几何不同是 `stale`。把这两档收成一个「过期」曾经是 v1 的做法，而它让
+ * 「按一下重新生成就好了」与「先去把那条缝补上」读起来是同一句话——前者按一下就回来，
+ * 后者按多少下都没用。
+ *
+ * `fill` 那一支算 `stale` 而不是 `current`：它意味着这块面的边界如今恰好是某一个对象的完整
+ * 几何，与这块填充自己的几何是两回事；{@link planStageHatchRegeneration} 在那一支不动手，
+ * 因此说成「跟不上了」正好，而说成「一致」是错的。
  *
  * 一次调用跑一遍 O(N²) 的两两求交，因此只在这块填充被选中时问。
  *
  * @internal
  */
-export function stageHatchIsStale(
+export function stageHatchState(
   context: StageDraftingCommitContext,
   entityId: string,
   options: Pick<StageHatchPlanOptions, 'isJunction'> = {},
-): boolean {
+): ComposeHatchState {
   const entity = context.document.entities[entityId]
   const hatch = entity ? getComposeHatch(entity) : undefined
   const matrix = context.index.getWorldMatrix(entityId)
-  if (!hatch || !matrix) return false
+  // 还没有布局盒（新建的那一帧）时不报任何问题：那不是边界的毛病。
+  if (!hatch || !matrix) return 'current'
   const resolution = resolveStageHatchRegion(
     context.index,
     applyMatrix(matrix, hatch.seed),
     options.isJunction ? { isJunction: options.isJunction } : {},
   )
-  if (resolution.status !== 'create') return true
+  if (resolution.status === 'rejected') return 'broken'
+  if (resolution.status !== 'create') return 'stale'
   const current = getComposeCurve(entity)
   const next = normalizeComposeCurveGeometry(
     stageCurveToParent(context, resolution.curve, entityId),
   ).curve
-  return JSON.stringify(current) !== JSON.stringify(next)
+  return JSON.stringify(current) === JSON.stringify(next) ? 'current' : 'stale'
 }

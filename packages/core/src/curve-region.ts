@@ -22,13 +22,20 @@ import {
   intersectComposeSegmentArc,
   intersectComposeSegments,
   isComposeFullCircle,
+  pointToComposeSegmentDistance,
   type ComposeArcShape,
   type ComposeOutlinePiece,
   type ComposePlanarPoint,
   type ComposeSegmentShape,
   type ComposeShapeIntersection,
 } from './curve-geometry'
-import type { ComposeCubicSegment, ComposeCurve, ComposeSubpath } from './curve'
+import {
+  composeCurveSegments,
+  isPointInsideComposeCurve,
+  type ComposeCubicSegment,
+  type ComposeCurve,
+  type ComposeSubpath,
+} from './curve'
 import type { ComposePosition } from './document-types'
 
 /**
@@ -46,7 +53,14 @@ export type ComposeCurveRegionResult =
     readonly curve: ComposeCurve
     /** 外环之内被挖空的岛数量；为 0 时 `curve` 没有 `fillRule`。 */
     readonly islandCount: number
-    /** 外环用到的每一条输入片段的出处。 */
+    /**
+     * 产物用到的每一条输入片段的出处，**外环与岛都算**。
+     *
+     * @remarks
+     * 岛一并算进来，是因为一座岛同样是围出这块面的边界——画出来的那个洞就是它。跟随那一侧
+     * 拿这份出处推出边界清单，少了挖洞的那个对象，下一次按清单重求时它根本不在输入里，洞会
+     * 被悄悄补平。
+     */
     readonly sources: readonly ComposeCurveRegionSource[]
   }
   /**
@@ -820,17 +834,24 @@ export function resolveComposeCurveRegion(
       freeEnds(graph, traced).forEach((point) => gaps.push(point))
       continue
     }
+    const islandLoops = resolveIslands(graph, walked, polygon)
+    const islands = islandLoops.map((island) => loopPieces(graph, island))
+    const outline = loopPieces(graph, loop)
     /*
      * 出处按**去重之后**的子边算：叠在一起的两条边收成了一条，那一条只算在留下的那个出处上。
      * 推论是「两个一模一样的矩形叠在一起」时没有哪一个是完整的，于是走新建那一支——填哪一个
      * 本来就没有答案，新建至少是用户看得见的那一块。
+     *
+     * **岛的边一并算进来**：一座岛同样是围出这块面的边界，画出来的洞就是它。只报外环那一份
+     * 的症状不在这一步——它在**跟随**那一侧：清单里少了挖洞的那个对象，下一次按清单重求时它
+     * 根本不在输入里，于是洞被悄悄补平，而用户没有动过它。
      */
     const subEdgeTotals = new Map<number, number>()
     graph.subEdges.forEach((edge) => {
       subEdgeTotals.set(edge.source, (subEdgeTotals.get(edge.source) ?? 0) + 1)
     })
     const usedBySource = new Map<number, number>()
-    new Set(loop.map(edgeOf)).forEach((edge) => {
+    new Set([loop, ...islandLoops].flat().map(edgeOf)).forEach((edge) => {
       const source = graph.subEdges[edge]!.source
       usedBySource.set(source, (usedBySource.get(source) ?? 0) + 1)
     })
@@ -838,8 +859,6 @@ export function resolveComposeCurveRegion(
       .map(([index, used]) => ({ index, used, subEdges: subEdgeTotals.get(index) ?? used }))
       .sort((a, b) => a.index - b.index)
 
-    const islands = resolveIslands(graph, walked, polygon).map((island) => loopPieces(graph, island))
-    const outline = loopPieces(graph, loop)
     const curve: ComposeCurve = islands.length === 0 && piecesAreStraight(outline)
       ? {
         kind: 'polyline',
@@ -864,4 +883,114 @@ export function resolveComposeCurveRegion(
     return { status: 'open', gaps: unique }
   }
   return { status: 'outside' }
+}
+
+/**
+ * 求一块面的**最大内切圆圆心**——离每一条边界都尽可能远的那个点。
+ *
+ * @remarks
+ * 它回答的是「这块面的身份放在哪一点」。填充跟着边界走时，锚点如果停在用户当初点的地方，
+ * 它**迟早**会在某次变形之后被吞进另一块面——用户点填充时爱点在空的地方，也就是角落，
+ * 而角落最容易被吞。重取到内切圆圆心之后它离每条边界都最远，边界要吞掉它就得先把整块面压扁
+ * 到比这个内切圆还窄，**而那时求解本来就会失败**——于是结果是「标失效」这个看得见的答案，
+ * 而不是「悄悄换成另一块面」这个看不见的答案。
+ *
+ * 算法是 Mapbox `polylabel` 的那一支：四叉细分 + 优先队列，每个格子用「圆心到边界的距离 +
+ * 半对角线」作为它内部可能达到的上界，上界不超过当前最优就整格丢掉。
+ *
+ * **两个入口都是既有的**：到边界的距离走 `composeCurveSegments`，内外判定走
+ * `isPointInsideComposeCurve`（它已经按 `fillRule` 分派）。因此带洞的面天然是对的——
+ * 洞里的点判定为外部，距离又把圆心从洞边推开，**看得见的洞与推开圆心的洞是同一个洞**。
+ *
+ * 弧与贝塞尔边由 `composeCurveSegments` 采样成折线。本函数**只用来选一个点、不产出任何
+ * 几何**，因此这处近似不违反「这块画布上每条几何都是真几何」。
+ *
+ * **不为它做缓存**：`isPointInsideComposeCurve` 每次调用都会把曲线重新拍成环，看起来该缓存
+ * 一份，但量下来一次 600×400 矩形 2.6ms、一次整圆 0.1ms——而它**每次跟随只跑一次**，
+ * 跟随本身已经是一次 O(N²) 的两两求交。缓存换来的是一条与渲染、命中不共用入口的私有路径，
+ * 那正是「看得见的洞与点不中的洞不是同一个洞」的来路。
+ *
+ * @param curve - 已投影进盒坐标系的几何（与 `isPointInsideComposeCurve` 同一个空间）。
+ * @returns 面已经没有内部（面积为零、或细到采样分辨率之下）时返回 `undefined`，
+ *          由调用方决定怎么办——**不返回一个落在边界上的点**：那种点下一次变形必然掉出去。
+ * @public
+ */
+export function composeCurveInnerAnchor(curve: ComposeCurve): ComposePosition | undefined {
+  const segments = composeCurveSegments(curve)
+  if (segments.length === 0) return undefined
+
+  let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity
+  for (const { start, end } of segments) {
+    minX = Math.min(minX, start.x, end.x); maxX = Math.max(maxX, start.x, end.x)
+    minY = Math.min(minY, start.y, end.y); maxY = Math.max(maxY, start.y, end.y)
+  }
+  const width = maxX - minX
+  const height = maxY - minY
+  if (!(width > 0) || !(height > 0)) return undefined
+
+  /** 带符号的到边界距离：面内为正，面外为负。负值让格子的上界自动把外部区域压下去。 */
+  const signedDistance = (point: ComposePlanarPoint) => {
+    let best = Infinity
+    for (const segment of segments) {
+      best = Math.min(best, pointToComposeSegmentDistance(segment, point))
+    }
+    return isPointInsideComposeCurve(curve, point) ? best : -best
+  }
+
+  interface Cell {
+    readonly x: number
+    readonly y: number
+    /** 半边长。 */
+    readonly h: number
+    readonly d: number
+    /** 这个格子内部可能达到的最大距离——细分的上界。 */
+    readonly max: number
+  }
+  const makeCell = (x: number, y: number, h: number): Cell => {
+    const d = signedDistance({ x, y })
+    return { x, y, h, d, max: d + h * Math.SQRT2 }
+  }
+
+  // 精度取短边的千分之一：再细下去换不来可见的位移，而这个点只用来做下一次求解的起点。
+  const precision = Math.min(width, height) / 1000
+  const cellSize = Math.min(width, height)
+  let best = makeCell(minX + width / 2, minY + height / 2, 0)
+
+  /*
+   * 种子网格铺满包围盒。只从中心一个格子出发是不够的：凹形（L 形、带大洞的环）的中心可能落在
+   * 面外，那一格的上界会把真正的最优区域一起剪掉。
+   */
+  const queue: Cell[] = []
+  const step = cellSize / 2
+  for (let x = minX; x < maxX; x += step) {
+    for (let y = minY; y < maxY; y += step) {
+      queue.push(makeCell(x + step / 2, y + step / 2, step / 2))
+    }
+  }
+  // 包围盒中心单独试一次：矩形上它就是答案，省掉整轮细分。
+  for (const cell of queue) {
+    if (cell.d > best.d) best = cell
+  }
+
+  // 上界最大的先细分——优先队列的效果，而这里的规模（几百个格子）用线性取最大更简单。
+  let guard = 20000
+  while (queue.length > 0 && guard-- > 0) {
+    let index = 0
+    for (let i = 1; i < queue.length; i += 1) {
+      if (queue[i]!.max > queue[index]!.max) index = i
+    }
+    const cell = queue.splice(index, 1)[0]!
+    // 这一格再怎么细分也超不过已知最优，整格丢掉。
+    if (cell.max - best.d <= precision) continue
+    const h = cell.h / 2
+    for (const [dx, dy] of [[-h, -h], [h, -h], [-h, h], [h, h]] as const) {
+      const child = makeCell(cell.x + dx, cell.y + dy, h)
+      if (child.d > best.d) best = child
+      queue.push(child)
+    }
+  }
+
+  // 圆心落在边界上或外面，说明这块面没有真正的内部——不返回一个下次必然掉出去的点。
+  if (!(best.d > precision)) return undefined
+  return toPosition({ x: best.x, y: best.y })
 }

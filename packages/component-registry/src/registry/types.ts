@@ -30,6 +30,19 @@ export interface ComposePaintEditPort {
 }
 
 /**
+ * 一块填充与它边界的三档关系。
+ *
+ * @remarks
+ * 三档 MUST 互不相同：**还跟着**（`current`）、**跟不上了**（`stale`，照锚点求得出面，但它
+ * 与当前几何不同——拓扑变了，跟上就等于一次用户没要求过的形状改变）、**边界没了**
+ * （`broken`，锚点处已经求不出封闭的面）。与悬空的导线绑定「还没配 / 配错了 / 配的东西没了」
+ * 是同一套判断：把它们收成一个布尔，用户读到的是同一句话在说两件事。
+ *
+ * @public
+ */
+export type ComposeHatchState = 'current' | 'stale' | 'broken'
+
+/**
  * Inspector 与宿主填充求解之间的无 DOM 桥接。
  *
  * @remarks
@@ -44,15 +57,24 @@ export interface ComposePaintEditPort {
  */
 export interface ComposeHatchEditPort {
   /**
-   * 这块填充与当前的边界还对得上吗。
+   * 这块填充与当前的边界是什么关系。
    *
    * @remarks
    * 一次调用跑一遍求面（O(N²) 的两两求交），因此**只在这块填充被选中时问**——那时 Inspector
-   * 正好要画这一格。缺口不是错误：边界被改到围不出面了，同样是「过期」。
+   * 正好要画这一格。
    */
-  isStale(input: { readonly entityId: string }): boolean
-  /** 拿这块填充的 `seed` 把当初那次求解原样再跑一遍，并把新几何写回去。 */
+  state(input: { readonly entityId: string }): ComposeHatchState
+  /** 拿这块填充的锚点把当初那次求解原样再跑一遍，并把新几何写回去。 */
   regenerate(input: { readonly entityId: string }): void
+  /**
+   * 断开关联：删掉 `Hatch`，这个 Entity 变回一条普通闭合多段线。
+   *
+   * @remarks
+   * 几何与填充色都留着——断开的是「跟着边界走」这件事，不是这块墨。这条**不需要求面**，
+   * 与另外两条同住一个端口是因为它们回答的是同一格 Inspector 上的同一件事：端口缺席时那
+   * 三颗按钮一起不画。
+   */
+  detach(input: { readonly entityId: string }): void
 }
 
 /** Renderer 获得的 Stage/Preview 共享上下文。 @public */

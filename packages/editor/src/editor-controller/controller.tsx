@@ -5,8 +5,9 @@ import type { ComposeEditorActionHandler, ComposeEditorActionHandlerContext } fr
 import {
   ComposeComponentPalette,
   isStageJunctionEntity,
+  planStageHatchDetach,
   planStageHatchRegeneration,
-  stageHatchIsStale,
+  stageHatchState,
 } from '@compose-ui/stage'
 import {
   ComposeComponentLibraryPanel,
@@ -1859,8 +1860,9 @@ export function useComposeEditorController({
    * 填充求解的桥接：Registry 与物料包不依赖 `stage-engine`，因此这两个答案由持有求解器的这一侧给。
    *
    * @remarks
-   * **两条都只在这块填充被选中时跑**——Inspector 打开的那一刻问一次「过期没有」，按钮按下时
-   * 再求一次。一次是 O(N²) 的两两求交，不进每帧路径。
+   * **要求面的那两条只在这块填充被选中时跑**——Inspector 打开的那一刻问一次「现在是哪一档」，
+   * 「重新生成」按下时再求一次。一次是 O(N²) 的两两求交，不进每帧路径。断开关联不求面，它只
+   * 是删掉一个 Component。
    *
    * 接线节点不当边界这条谓词在这里注入，与画布上那条读同一个 `isStageJunctionEntity`。
    */
@@ -1876,14 +1878,19 @@ export function useComposeEditorController({
       }
       : null
     return {
-      isStale: ({ entityId }) => (context
-        ? stageHatchIsStale(context, entityId, { isJunction: isStageJunctionEntity })
-        : false),
+      state: ({ entityId }) => (context
+        ? stageHatchState(context, entityId, { isJunction: isStageJunctionEntity })
+        : 'current'),
       regenerate: ({ entityId }) => {
         if (!context) return
         const command = planStageHatchRegeneration(context, entityId, {
           isJunction: isStageJunctionEntity,
         })
+        if (command) dispatch(command)
+      },
+      detach: ({ entityId }) => {
+        if (!context) return
+        const command = planStageHatchDetach(context, entityId, (name) => `断开「${name}」的关联`)
         if (command) dispatch(command)
       },
     }

@@ -52,6 +52,7 @@ export {
   type ComposeEntityPreset,
   type ComposeNodeEditPort,
   type ComposeHatchEditPort,
+  type ComposeHatchState,
   type ComposePaintEditPort,
   type ComposeEntityRegistry,
   type ComposeEntityRegistryOptions,

@@ -283,14 +283,16 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">SDD 补充 · 绘图交互 · 提案</div>
+    <div class="eyebrow">SDD 补充 · 绘图交互 · 已落地</div>
     <h1>填充跟着边界走</h1>
     <p class="lede">
       <a href="./drafting-hatch.html">上一份</a>落地的填充是<strong>手动</strong>关联的：边界动了，填充停在原处，
       Inspector 上标一句「已过期」，按一下「重新生成」才跟上。那一份把「自动关联怎么做」整条留在了「待定」第一条，
       理由不是工作量——是它有一个<strong>没有答案的问题</strong>：边界动了之后落点可能落进另一块面，于是形状会在用户
       没碰这块填充的情况下整个换掉。本稿回答它。
-      画布片段按 Stage 的真实 token 1:1 绘制；<strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿提议、尚未落地</strong>。
+      本稿已经落地（OpenSpec <code>add-hatch-association</code>）：画布片段按 Stage 的真实 token 1:1 绘制，
+      <strong style="color:var(--page-done)">绿实线圈 = 已落地</strong>。落地时推翻了一条决策、补了三条这里没写出来的判断，
+      全部记在下面<a href="#landed">「落地时改了什么」</a>。
     </p>
   </header>
 
@@ -298,10 +300,12 @@
     <div class="answers">
       <div class="answer">
         <div class="q">什么时候算</div>
-        <div class="a">这次事务碰了我的边界，才算</div>
+        <div class="a">每次 solve，在自己那几个边界里</div>
         <div class="why">
-          存一份<strong>边界清单</strong>，与事务的 <code>targetIds</code> 求交；交集为空就一次都不跑。
-          这个清单<strong>不用新算</strong>——落地那一刻已经算出来了，现在拿它决定插在哪一层，之后就扔了。
+          存一份<strong>边界清单</strong>，求解只在这几个对象里跑，因此是 O(k²) 而不是 O(N²)。
+          清单<strong>不用新算</strong>——落地那一刻已经算出来了，它今天就被用来决定插在哪一层。
+          <em>提案原来写的是「挂在事务提交上、与 <code>targetIds</code> 求交」，落地时推翻了——
+          见<a href="#landed">落地时改了什么</a>第一条。</em>
         </div>
       </div>
       <div class="answer">
@@ -316,8 +320,8 @@
         <div class="q">落点是什么</div>
         <div class="a">这块面的身份，不是你点的那一下</div>
         <div class="why">
-          跟随之后把它重取到<strong>最大内切圆的圆心</strong>——离边界最远，下一次变形才扛得住。
-          v1 里两者恰好相同（那块面刚从那一点求出来），而身份要跟着面走。
+          跟随<strong>成功</strong>之后把它重取到<strong>最大内切圆的圆心</strong>——离边界最远，下一次变形才扛得住。
+          刚填出来那一刻不动它：用户点的地方就是他心里那块面。
         </div>
       </div>
     </div>
@@ -435,7 +439,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">01</span><span class="step-title">一次边界改动，三种结果</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 320" role="img" aria-label="拖矩形顶点时填充跟随，圆整个挪出去时标过期，边界被剪开时标失效">
+        <div class="stage done"><svg viewBox="0 0 900 320" role="img" aria-label="拖矩形顶点时填充跟随，圆整个挪出去时标过期，边界被剪开时标失效">
           <line class="divider" x1="300" y1="0" x2="300" y2="276"/><line class="divider" x1="600" y1="0" x2="600" y2="276"/>
           <text class="lbl" x="16" y="24">拖矩形的右下角</text><text class="lbl" x="316" y="24">把圆整个挪出去</text><text class="lbl" x="616" y="24">剪掉右边那条边</text>
 
@@ -484,7 +488,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">02</span><span class="step-title">清单是过滤器：没碰到就一次都不跑</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="移动不在边界清单里的符号不触发重算，移动清单里的圆才触发一次">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="移动不在边界清单里的符号不触发重算，移动清单里的圆才触发一次">
           <line class="divider" x1="450" y1="0" x2="450" y2="256"/>
           <text class="lbl" x="16" y="24">挪一个符号（不在清单里）</text><text class="lbl" x="466" y="24">挪那个圆（在清单里）</text>
 
@@ -528,7 +532,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">03</span><span class="step-title">落点是这块面的身份，不是你点的那一下</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="落点停在用户点的地方时会被胀大的圆吞进另一块面，重取到最大内切圆圆心之后离每一条边界都最远">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="落点停在用户点的地方时会被胀大的圆吞进另一块面，重取到最大内切圆圆心之后离每一条边界都最远">
           <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
           <text class="lbl" x="16" y="24">落地时：你点在这儿</text><text class="lbl" x="316" y="24">圆胀大，落点被吞了</text><text class="lbl" x="616" y="24">重取到最大内切圆圆心</text>
 
@@ -582,7 +586,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">04</span><span class="step-title">只在提交那一刻算，手势期不动</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="拖动边界的过程中填充停在原处，松手提交之后才跟上">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="拖动边界的过程中填充停在原处，松手提交之后才跟上">
           <line class="divider" x1="450" y1="0" x2="450" y2="256"/>
           <text class="lbl" x="16" y="24">拖动中</text><text class="lbl" x="466" y="24">松手</text>
 
@@ -617,7 +621,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">05</span><span class="step-title">不想让它跟了：断开关联</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="Inspector 上断开关联之后填充变回一条普通的闭合多段线">
+        <div class="stage done"><svg viewBox="0 0 900 300" role="img" aria-label="Inspector 上断开关联之后填充变回一条普通的闭合多段线">
           <line class="divider" x1="450" y1="0" x2="450" y2="256"/>
           <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="466" y="24">断开之后</text>
 
@@ -657,7 +661,7 @@ Hatch: {
 
       <div class="step">
         <div class="step-head"><span class="step-n">06</span><span class="step-title">为什么不是「顺手建一个 Group 包起来」</span></div>
-        <div class="stage todo"><svg viewBox="0 0 900 320" role="img" aria-label="自动分组会让导线跨父级而使文档非法，也会把层序压平从而盖住区域里的符号">
+        <div class="stage done"><svg viewBox="0 0 900 320" role="img" aria-label="自动分组会让导线跨父级而使文档非法，也会把层序压平从而盖住区域里的符号">
           <line class="divider" x1="450" y1="0" x2="450" y2="266"/>
           <text class="lbl" x="16" y="24">一、导线被留在组外</text><text class="lbl" x="466" y="24">二、组只占一个层，符号被压在下面</text>
 
@@ -726,8 +730,10 @@ Hatch: {
           <tr><td>协议</td><td><code>core/hatch.ts</code></td><td><code>boundaryIds?: string[]</code> 与它的校验；缺席即不跟随，因此<strong>不需要迁移</strong></td></tr>
           <tr><td>选点</td><td><code>core/curve-region.ts</code></td><td>新增「最大内切圆圆心」纯函数；弧边采样成折线，<strong>只用来选点，不产出几何</strong></td></tr>
           <tr><td>落地</td><td><code>stage/drafting/drafting-entity.ts</code></td><td>把已经算出来的 <code>belowIds</code> <strong>顺手存进 <code>Hatch</code></strong>——今天它只被用来定层序，之后就扔了</td></tr>
-          <tr><td>跟随</td><td>宿主的事务后置钩子</td><td><code>targetIds</code> ∩ <code>boundaryIds</code>；非空才为那几块重求，结果并进<strong>同一个事务</strong></td></tr>
-          <tr><td>端口</td><td><code>component-registry</code> 的 <code>ComposeHatchEditPort</code></td><td>加一个 <code>detach</code>；<code>isStale</code> / <code>regenerate</code> 原样</td></tr>
+          <tr><td>跟随</td><td><code>core/hatch-solve.ts</code> + <code>layout-engine</code></td><td><strong>落地时换了地方</strong>：不挂事务，做成 <code>resolveComposeHatches</code>，由布局 Runtime 在每次 solve 里跑，与 <code>resolveComposeWires</code> 并排</td></tr>
+          <tr><td>出处</td><td><code>core/curve-region.ts</code></td><td><strong>落地时补的</strong>：<code>sources</code> 把<strong>岛</strong>的边一并算进来，否则挖洞的那个对象不在清单里</td></tr>
+          <tr><td>端口</td><td><code>component-registry</code> 的 <code>ComposeHatchEditPort</code></td><td>加一个 <code>detach</code>；<code>isStale</code> 升级成 <code>state</code>，答三档</td></tr>
+          <tr><td>重新生成</td><td><code>stage/drafting/hatch-plan.ts</code></td><td><strong>落地时补的</strong>：几何、重取的锚点、新清单三样写在<strong>一个事务</strong>里</td></tr>
           <tr><td>物料</td><td><code>materials/hatch/inspector.tsx</code></td><td>三档状态文案（一致 / 已过期 / 已断开）、「断开关联」按钮；「取点」改口成「锚点」</td></tr>
           <tr><td>呈现</td><td><code>stage/drafting/stage-drafting-overlay.tsx</code></td><td>失效那一档在断开的节点上画琥珀记号，复用已有的那一套</td></tr>
           <tr><td>不动</td><td>—</td><td><code>resolveComposeCurveRegion</code>、<code>Curve</code> 协议与版本号、<code>HATCH</code> 命令与它的两支、层序、色板、图标</td></tr>
@@ -735,9 +741,122 @@ Hatch: {
       </table>
     </div>
     <p class="step-note">
-      <strong>跟随不是一条新命令，也不是一个新模式。</strong>它是既有的那一次求解挂在事务上跑一遍，
+      <strong>跟随不是一条新命令，也不是一个新模式。</strong>它是既有的那一次求解<strong>每次 solve 跑一遍</strong>，
       因此命令行、光标、徽标、预览一个像素都不变；用户学不到任何新东西，这正是想要的。
+      「挂在事务上」是本稿原来的写法，落地时被推翻了——见下一节第一条。
     </p>
+  </section>
+
+  <section id="landed">
+    <div class="section-head">
+      <h2>落地时改了什么</h2>
+      <p>本稿写下的判断里有一条被推翻、三条是写代码时才冒出来的。都记在这儿，不改上面那几格。</p>
+    </div>
+    <div class="opens">
+
+      <div class="open">
+        <h3>跟随从「挂在事务上」改成「像导线一样派生」</h3>
+        <p>
+          本稿原来的写法是：事务提交时拿 <code>targetIds</code> ∩ <code>boundaryIds</code>，非空就为那几块重求，
+          结果并进同一个事务。<strong>两件事推翻了它。</strong>
+        </p>
+        <p>
+          其一，<strong>拿不到那份输入</strong>：要在派发前求出新几何，得先有改动<em>之后</em>的布局快照（世界矩阵与盒），
+          而那要跑一次 Yoga——<code>stage</code> 按架构边界不依赖 <code>layout-engine</code>。
+        </p>
+        <p>
+          其二，也是更要紧的一条：那正是这个仓库<strong>为导线明令禁止过的「逐条路径回写」</strong>——
+          「移动、方向键、Inspector、撤销、粘贴、导入与组件刷新都会改端口位置，漏一条的症状是线错位」。
+          填充的边界会被<strong>同样这些路径</strong>改动，而挂在事务上的跟随一条都接不到撤销、粘贴、导入与外部同步。
+        </p>
+        <p>
+          现在是 <code>resolveComposeHatches(document, snapshot)</code>，由布局 Runtime 在每次 solve 里调用，
+          与 <code>resolveComposeWires</code> 并排，文档与快照<strong>成对</strong>返回（求解会改填充自己的盒，
+          分头产出会让命中读到的盒与渲染画出的几何差一帧）。
+          <strong>「撤销一步全回去」因此是白拿的</strong>：跟随不进历史，撤销回到改动之前，填充跟着回去是求解的结果。
+        </p>
+      </div>
+
+      <div class="open">
+        <h3>跟随只在存下来的那几个边界里求，因此是 O(k²) 而不是 O(N²)</h3>
+        <p>
+          写实现时才看清的一条：<code>HATCH</code> 那一次要从整张图找出边界，而跟随<strong>已经知道边界是谁了</strong>——
+          k 通常是两三个。本稿「清单同时是过滤器」那一条因此几乎是白拿的。
+        </p>
+        <p>
+          它有一个代价，写在函数注释里：此后新画的、穿过这块面的线<strong>不参与</strong>求解，填充停在原处。
+          而那本来就是今天的行为。
+        </p>
+      </div>
+
+      <div class="open">
+        <h3>岛也是边界——只报外环会让洞被悄悄补平</h3>
+        <p>
+          <code>resolveComposeCurveRegion</code> 报的 <code>sources</code> 原先只覆盖<strong>外环</strong>，
+          于是落地时写下的清单里<strong>没有挖洞的那个对象</strong>。下一次按清单重求时它根本不在输入里，
+          洞被悄悄补平成一块实心的面——而用户没有动过它。
+        </p>
+        <p>
+          是上一份那条「矩形里的圆被挖空」的端到端把这件事说出来的：它在跟随落地的那一刻当场变红。
+          修法是让 <code>sources</code> 把岛的边一并算进来——<strong>一座岛同样是围出这块面的边界，画出来的那个洞就是它。</strong>
+          「边界恰好是某一个对象的完整几何」那一支不受影响，它本来就要求没有岛。
+        </p>
+      </div>
+
+      <div class="open">
+        <h3>挡每帧的账要挡在取锚点之前，而不是求面之前</h3>
+        <p>
+          本稿写的是「清单里每个 Entity 的盒与几何都没变时连求都不求」。量完发现<strong>挡错了地方</strong>：
+          一块两边界的面，<strong>求面 0.011ms，取锚点（最大内切圆）1.16ms</strong>——差一百倍。
+        </p>
+        <p>
+          因此挡在取锚点之前：求出来的几何与当前几何<strong>逐位相同</strong>就到此为止。
+          五十块填充从每次 solve <strong>59ms 降到 1.09ms</strong>，而那 59ms 是每一次方向键微调都要付的。
+          反过来那条更省的过滤没做，理由是它换来的只有那 0.011ms，却要在纯函数外面养一份跨帧的缓存。
+        </p>
+        <p>
+          这一道同时修了一处语义错误：此前每一次 solve 都会重取锚点，连刚填出来、还没有任何边界动过的那一块也不例外，
+          而本稿 03 写的是「<strong>只在跟随成功之后重取</strong>」。
+        </p>
+      </div>
+
+      <div class="open">
+        <h3>「重新生成」把三样写在一个事务里，不只写几何</h3>
+        <p>
+          上一份落地的「重新生成」只发一条 <code>entity.curve.set</code>。跟随落地之后这变成两个问题，
+          而第二个是<strong>上一份就有、只是那时没有第二个消费者读它</strong>的缺陷：
+        </p>
+        <p>
+          清单不更新 → 这块填充此后<strong>永远跟不上</strong>（派生那一侧比对的是存着的那份，而它记的还是上一次那几个边界）；
+          锚点不重取 → 盒跟着新几何变了而锚点是<strong>相对盒</strong>的，每按一次就往外漂一点，几次之后掉到界外，此后再也重算不回来。
+        </p>
+        <p>
+          推论是本稿没写出来的一条<strong>迁移路径</strong>：一块没有清单的既有填充，第一次「重新生成」就把清单补上，此后开始跟随。
+        </p>
+      </div>
+
+      <div class="open">
+        <h3>多了两条拒绝：跨父级、旋转过的边界</h3>
+        <p>
+          求解走 <code>snapshot.boxes</code>，同父级下盒坐标才可比——与 <code>wire.parent-mismatch</code>
+          「限制在同一父级把『嵌套时静默错位』变成一条读得出来的问题」逐字相同。
+        </p>
+        <p>
+          旋转是新加的一条：盒到父级只是<strong>平移</strong>，带旋转时那条平移说的是另一个形状。
+          判据是<strong>一个错的面比不跟随糟得多</strong>。
+        </p>
+      </div>
+
+      <div class="open">
+        <h3>三档里的第三支：边界「恰好是某一个对象的完整几何」算过期</h3>
+        <p>
+          本稿只想到「求得出 / 求不出」两种失败。实际还有第三种：边界改着改着，这块面的边界<strong>恰好</strong>变成了
+          某一个对象的完整几何。「重新生成」在那一支本来就不动手（那时该去改那个对象的填充，而不是画一块与它逐像素重合的墨），
+          因此说成「跟不上了」正好，说成「一致」是错的。
+        </p>
+      </div>
+
+    </div>
   </section>
 
   <section>
@@ -786,15 +905,19 @@ Hatch: {
   <section>
     <div class="section-head">
       <h2>待定</h2>
-      <p>本稿没有回答、而实现之前要有答案的。</p>
+      <p>本稿没有回答的。落地之后其中三条有了答案，标在各自开头。</p>
     </div>
     <div class="opens">
       <div class="open">
-        <h3>手势期要不要跟着变形</h3>
+        <h3>手势期要不要跟着变形 · <span style="color:var(--page-done)">量过了，暂不做</span></h3>
         <p>
-          本稿只在提交那一刻算（见 04），因此拖动过程中填充不动、松手跳一下。要不要为手势期付这笔账<strong>要先量</strong>：
-          候选经包围盒筛选之后通常只剩这块面周围的三五个对象，可能比「两两求交」这个说法听起来便宜得多。
-          真做也只该为<strong>受影响的那几块</strong>跑，而不是所有填充。
+          落地之后这一档是<strong>由构造成立</strong>的：夹点拖动与普通移动走的是本地预览，文档根本没有变，
+          因此求解没有新的输入；真会每帧 solve 的 resize 与网格移动那两档由 <code>previewing</code> 显式跳过。
+        </p>
+        <p>
+          要不要为手势期付这笔账，数拿到了：<strong>求面 0.011ms</strong>——比预想的便宜得多，真正贵的是取锚点（1.16ms），
+          而手势期本来就不该重取锚点。因此它<strong>不再是一个量的问题</strong>，而是一个产品问题：
+          拖动中一直在变形的填充读起来是不是比「松手才跟上」更好。这一稿不做。
         </p>
       </div>
       <div class="open">
@@ -806,18 +929,26 @@ Hatch: {
         </p>
       </div>
       <div class="open">
-        <h3>一次事务改了很多边界</h3>
+        <h3>一次事务改了很多边界 · <span style="color:var(--page-done)">量过了，不用上限</span></h3>
         <p>
-          框选一百个对象一起挪时，交集可能命中几十块填充，于是一次事务里跑几十次求解。
-          需要一个上限、还是需要在超过某个数量时退回「全部标过期」，要量过才知道。
-          退回那一档<strong>是安全的</strong>——它就是上一份已经落地的行为。
+          量出来的是：五十块填充<strong>全都要重算</strong>时一次 solve 约 65ms，而它们都不动时是 1.09ms。
+          65ms 只在「框选一百个对象一起挪」的那一下出现，而那一下本来就是一次大改动；
+          稳态的 1.09ms 才是每一次方向键微调要付的，那个数已经在预算里。
+        </p>
+        <p>
+          因此<strong>不设上限</strong>——上限会造出一个「超过多少块就换一套行为」的暗门，
+          而用户读不出自己什么时候跨过了它。真要做，先做「只重算受影响的那几块」，那条不改变任何语义。
         </p>
       </div>
       <div class="open">
-        <h3>撤销之后清单对不对得上</h3>
+        <h3>撤销之后清单对不对得上 · <span style="color:var(--page-done)">问题随决策一起消失了</span></h3>
         <p>
-          跟随写进同一个事务，因此撤销一步几何与清单一起回去。但<strong>跨多步撤销</strong>时，
-          中间某一步更新过清单，回退到更早的状态时清单是否仍然自洽，要有用例钉住。
+          这一条的前提是「跟随写进同一个事务」，而那条决策被推翻了：跟随是<strong>派生</strong>的，根本不进历史。
+          撤销回到改动之前的文档，填充跟着回去是求解的结果——因此不存在「清单与几何各自停在不同步骤上」这种状态。
+          端到端里有一条钉住它：拖完边界按一次 <code>Ctrl+Z</code>，填充回到原来的宽度。
+        </p>
+        <p>
+          「重新生成」那一条<strong>仍然</strong>写文档（它是用户明确按下的一次编辑），三样写在一个事务里，撤销一步整组回去。
         </p>
       </div>
       <div class="open">
@@ -833,9 +964,11 @@ Hatch: {
 
   <footer>
     <div>
-      本稿画的是提案，一行代码都还没有；它接着<a href="./drafting-hatch.html">《填充：点一下，填满围出来的那块面》</a>往下写，
+      本稿已经落地（OpenSpec <code>add-hatch-association</code>）；它接着<a href="./drafting-hatch.html">《填充：点一下，填满围出来的那块面》</a>往下写，
       回答那一份「待定」的第一条与第二条。求解复用已落地的 <code>resolveComposeCurveRegion</code>，
-      落地前按仓库规则先走 OpenSpec 变更提案。
+      落地时给它补了一处：<strong>出处要把岛的边一并算进来</strong>。
+      提案里写下的判断有一条被推翻、三条是写代码时才冒出来的，都记在<a href="#landed">「落地时改了什么」</a>，
+      上面那几格<strong>保持提案时的样子</strong>——改掉它们会让这份文档读起来像是一次就想对了。
     </div>
     <div>
       一处调研留的尾巴：AutoCAD 的 <code>HPASSOC</code> 只说明「边界变成开的就失联」，

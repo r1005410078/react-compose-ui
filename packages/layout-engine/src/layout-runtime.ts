@@ -9,6 +9,7 @@ import {
   isComposeGridLayout,
   projectComposeGridCell,
   resolveComposeAppearance,
+  resolveComposeHatches,
   resolveComposeWires,
   solveComposeGrid,
   type ComposeAlignContent,
@@ -874,11 +875,21 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
         this.emit()
         return
       }
-      const resolved = resolveComposeWires(this.document, {
+      const wired = resolveComposeWires(this.document, {
         revision: ++this.revision,
         boxes: Object.freeze(boxes),
         diagnostics: Object.freeze(diagnostics),
       })
+      /*
+       * 填充跟着边界走，与导线并排——两者都是**求解不存储**：边界动了之后重解那段代码因此
+       * 根本不存在，移动、方向键、Inspector、撤销、粘贴、导入与外部同步全部自动正确。
+       *
+       * **预览档跳过**：手势期每帧都会 solve 一次，而求面是两两求交；导线只要查一个端口的
+       * 位置，付得起每帧的账，填充付不起。代价写在明处——拖动过程中填充停在原处，松手才跟上。
+       */
+      const resolved = this.previewing
+        ? wired
+        : resolveComposeHatches(wired.document, wired.snapshot)
       this.setState({
         status: 'ready',
         document: resolved.document,
