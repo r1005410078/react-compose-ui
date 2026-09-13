@@ -603,7 +603,9 @@ function ComposeStageReady({
     specifyHatchColor: messages.draftingSpecifyHatchColor,
     invalidHatchColor: messages.draftingInvalidHatchColor,
     hatchFillLabel: messages.draftingHatchFillLabel,
+    hatchRecolorLabel: messages.draftingHatchRecolorLabel,
     hatchWillFill: messages.draftingHatchWillFill,
+    hatchWillRecolor: messages.draftingHatchWillRecolor,
     hatchWillCreate: messages.draftingHatchWillCreate,
     hatchRejection: (reason: StageHatchRejection) => ({
       open: messages.hatchRejectOpen,

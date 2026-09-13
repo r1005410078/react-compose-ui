@@ -149,6 +149,72 @@ test('OpenSpec: stage-engine / HATCH / 线穿过矩形时只填被点的那半�
   await commandInput.press('Escape')
 })
 
+test('OpenSpec: stage-engine / HATCH / 对已经填过色的那块面再点一次是改色，不叠一块', async ({ page }) => {
+  const { commandInput, fills, prompt, stage, strokes } = await open(page)
+  await run(commandInput, 'RECTANGLE', ['200,200', '600,500'], false)
+  await run(commandInput, 'LINE', ['400,150', '400,550'])
+  await expect(strokes).toHaveCount(2)
+  const view = await worldToScreen(page)
+  expect(view.zoom).not.toBe(1)
+
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await page.mouse.click(view.at(300, 350).x, view.at(300, 350).y)
+  await commandInput.press('Escape')
+  await expect(fills).toHaveCount(1)
+  const before = await entityIds(stage)
+
+  // 换个颜色，对**同一块面**再点一次。
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await commandInput.fill('C')
+  await commandInput.press('Enter')
+  await commandInput.fill('#a34b2f')
+  await commandInput.press('Enter')
+  // 松手之前就要说出这一下会落在哪一支。
+  await page.mouse.move(view.at(300, 350).x, view.at(300, 350).y)
+  await expect(prompt).toContainText('将改变这块填充的颜色')
+  await page.mouse.click(view.at(300, 350).x, view.at(300, 350).y)
+  await commandInput.press('Escape')
+
+  /*
+   * 判别性在**数量**上：没有这一支时会在原来那块上面叠一块，两块几何逐像素重合、颜色不同，
+   * 屏幕上看起来只是换了个颜色——而下面那块再也点不到，点五次就是五个。
+   */
+  await expect(fills).toHaveCount(1)
+  expect(await entityIds(stage)).toEqual(before)
+  await expect(fills.first()).toHaveAttribute('fill', '#a34b2f')
+})
+
+test('OpenSpec: stage-engine / HATCH / 面被劈开之后不再是同一块，两半都新建', async ({ page }) => {
+  const { commandInput, fills, stage } = await open(page)
+  await run(commandInput, 'RECTANGLE', ['200,200', '600,500'], false)
+  const view = await worldToScreen(page)
+
+  // 先把整个矩形填上：它是一个完整几何，因此走「改它自己的填充」那一支。
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await page.mouse.click(view.at(300, 350).x, view.at(300, 350).y)
+  await commandInput.press('Escape')
+  const filled = await entityIds(stage)
+
+  // 一条线把它劈成两半，再各填一次：两半都不是那块老填充，因此都新建。
+  await run(commandInput, 'LINE', ['400,150', '400,550'])
+  for (const x of [300, 500]) {
+    await commandInput.fill('HATCH')
+    await commandInput.press('Enter')
+    await page.mouse.click(view.at(x, 350).x, view.at(x, 350).y)
+    await commandInput.press('Escape')
+  }
+  /*
+   * 判别性在这里：两半是**全等**的矩形，归一化之后 `Curve` 逐位相同——只比几何不比归一化
+   * 偏移的话，填了左半再点右半会被判成「就是那一块」，右半永远填不上。
+   */
+  expect((await entityIds(stage)).length).toBe(filled.length + 3)
+  // 矩形自己（它的 backgroundPaint）加两块新填充。
+  await expect(fills).toHaveCount(3)
+})
+
 test('OpenSpec: stage / HATCH / 悬停时命令行说出这一下会落在哪一支', async ({ page }) => {
   const { commandInput, prompt, strokes } = await open(page)
   // 左边一个谁也不穿的矩形（改它自己那一支），右边一个被线切开的（新建那一支）。

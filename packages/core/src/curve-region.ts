@@ -764,6 +764,30 @@ function resolveIslands(
   return islands
 }
 
+
+/**
+ * 把一圈轮廓片段旋转到一个**只由这块面决定**的起点。
+ *
+ * @remarks
+ * 环是一个圈，从哪一段开始写下来在几何上没有区别——但求解从射线**第一次穿过**的那条边起手，
+ * 而射线是从落点射出去的，因此**在同一块面里点不同的地方会写出起点不同的同一个环**。
+ *
+ * 这在屏幕上看不出来，却让「这一次求出来的，是不是上一次求出来的那一个」这句判断失效：
+ * 填过一块面之后换个位置再点一次，逐位比较会说「不是同一块」，于是又叠一块上去。
+ * 因此起点取**字典序最小的那个顶点**（先 x 后 y）：走向已经由右手法则定死，起点定死之后，
+ * 同一块面的产物就只由这块面决定。
+ */
+function canonicalRing(pieces: readonly ComposeOutlinePiece[]): readonly ComposeOutlinePiece[] {
+  if (pieces.length < 2) return pieces
+  let best = 0
+  for (let index = 1; index < pieces.length; index += 1) {
+    const point = pieceStart(pieces[index]!)
+    const winner = pieceStart(pieces[best]!)
+    if (point.x < winner.x || (point.x === winner.x && point.y < winner.y)) best = index
+  }
+  return best === 0 ? pieces : [...pieces.slice(best), ...pieces.slice(0, best)]
+}
+
 /**
  * 求出包含 `seed` 的那块面。
  *
@@ -835,8 +859,8 @@ export function resolveComposeCurveRegion(
       continue
     }
     const islandLoops = resolveIslands(graph, walked, polygon)
-    const islands = islandLoops.map((island) => loopPieces(graph, island))
-    const outline = loopPieces(graph, loop)
+    const islands = islandLoops.map((island) => canonicalRing(loopPieces(graph, island)))
+    const outline = canonicalRing(loopPieces(graph, loop))
     /*
      * 出处按**去重之后**的子边算：叠在一起的两条边收成了一条，那一条只算在留下的那个出处上。
      * 推论是「两个一模一样的矩形叠在一起」时没有哪一个是完整的，于是走新建那一支——填哪一个

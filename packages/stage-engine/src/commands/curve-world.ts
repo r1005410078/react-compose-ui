@@ -17,6 +17,9 @@
 
 import {
   composeCurveSegments,
+  getComposeLayoutItem,
+  jsonEqual,
+  normalizeComposeCurveGeometry,
   composePolylineOutline,
   composePolylineSegments,
   getComposeCurve,
@@ -26,7 +29,8 @@ import {
   type ComposeOutlinePiece,
   type ComposeSegmentShape,
 } from '@compose-ui/core'
-import { applyMatrix, type StageMatrix } from '../geometry'
+import type { ComposeDocument, ComposeLayoutSnapshot, JsonValue } from '@compose-ui/core'
+import { applyMatrix, stageCurveToParent, type StageMatrix } from '../geometry'
 import type { StageSceneIndex } from '../hit-testing'
 
 /**
@@ -127,4 +131,38 @@ export function stageWorldOutline(
   return stageWorldShapes(curve, matrix).map((shape) => (shape.kind === 'arc'
     ? { kind: 'arc', arc: shape.arc }
     : { kind: 'segment', segment: shape.segment }))
+}
+
+/**
+ * 一条世界曲线，是不是**正好**落在某个既有 Entity 已经存着的那份几何上。
+ *
+ * @remarks
+ * 比的是**落地写入用的那个空间**：父级局部、归一化之后的 `Curve`，**加上那个归一化偏移**。
+ * 求解是确定性的（同一份输入给出逐位相同的结果），因此这不是一次浮点比较，而是在问
+ * 「这一次求出来的，是不是上一次写进去的那一个」。
+ *
+ * **偏移必须一起比。**`Curve` 归一化之后紧包围盒的左上角恒在原点，位置整个住在
+ * `LayoutItem.offset` 里——只比 `Curve` 的话，一个矩形被竖线劈成的左右两半是**全等**的，
+ * 于是填了左半再点右半会被判成「就是那一块」，右半永远填不上。
+ *
+ * 比较方式与 `entity.curve.set` 自己那条 noop 判断逐字相同（`jsonEqual` 比 `Curve` 与
+ * `offset`），因此两处对「没有变化」给出同一个答案。
+ *
+ * @public
+ */
+export function stageCurveMatchesEntity(
+  document: ComposeDocument,
+  snapshot: ComposeLayoutSnapshot,
+  curve: ComposeCurve,
+  entityId: string,
+): boolean {
+  const entity = document.entities[entityId]
+  const current = entity ? getComposeCurve(entity) : undefined
+  const item = entity ? getComposeLayoutItem(entity) : undefined
+  if (!current || !item) return false
+  const next = normalizeComposeCurveGeometry(
+    stageCurveToParent(document, snapshot, curve, entityId),
+  )
+  return jsonEqual(current as unknown as JsonValue, next.curve as unknown as JsonValue)
+    && jsonEqual(item.offset as unknown as JsonValue, next.offset as unknown as JsonValue)
 }
