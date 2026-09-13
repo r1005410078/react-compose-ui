@@ -280,3 +280,18 @@ describe('OpenSpec: compose-document / 填充几何跟着边界求解 / 洞也�
     expect(isPointInsideComposeCurve(curve, hatch.seed)).toBe(true)
   })
 })
+
+describe('OpenSpec: compose-document / 填充几何跟着边界求解 / 几何没变时不重取锚点', () => {
+  it('求出来的几何逐位相同就到此为止，锚点保持原值', () => {
+    /*
+     * 刚填出来的那块面，用户点的地方就是他心里那块面——此时把锚点挪到内切圆圆心会让
+     * 「重新生成」变得不可预测。这一道同时是全部的性能账：求面 0.011ms，取锚点 1.16ms。
+     */
+    const settled = resolveComposeHatches(bisected(300).document, bisected(300).snapshot)
+    const once = getComposeHatch(settled.document.entities.fill!)!
+    const twice = resolveComposeHatches(settled.document, settled.snapshot)
+    // 第二遍什么都不写，因此连文档的引用都不变。
+    expect(twice.document).toBe(settled.document)
+    expect(getComposeHatch(twice.document.entities.fill!)).toEqual(once)
+  })
+})
