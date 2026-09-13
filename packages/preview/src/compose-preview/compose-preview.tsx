@@ -440,6 +440,18 @@ function ComposePreviewReady({
       aria-label={props['aria-label'] ?? 'Compose preview'}
       data-compose-core={COMPOSE_UI_CORE_PACKAGE}
       data-compose-ui="preview"
+      /*
+       * `fit` 生效时根节点 MUST 撑满宿主盒子。
+       *
+       * 量 `fit` 的那个 wrapper 是 `height: 100%`，而百分比高度要求**每一层祖先**都有确定
+       * 高度；本节点是 `<section>`，高度天生是 auto，于是百分比退化成 auto、wrapper 贴着
+       * 内容高（也就是 `Frame.size.height`）。症状很有欺骗性：纵轴比例恒等于 1，
+       * `contain` 取两轴较小者，因此**只会缩小、永远不放大，也永远不管高度**——整屏预览
+       * 里 1280 × 720 的场景摆进 1675 × 996 的屏幕，读数写着 1:1 看起来像是刻意的。
+       *
+       * 宿主自己的 `style` 排在后面：这是默认值，不是强制值。
+       */
+      style={fit === 'none' ? props.style : { width: '100%', height: '100%', ...props.style }}
     >
       {layoutSnapshot.diagnostics.length > 0 ? (
         <span
