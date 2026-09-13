@@ -766,9 +766,10 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await stage.press('Control+Shift+z')
   await expect(frame.locator(':scope > .compose-stage__node.is-container')).toHaveCount(1)
 
+  // 文字此刻在刚建好的 Group 里，单击选中的是 Group；⌘ 点击是无视门槛的深选。
   await stage.locator('.compose-stage__node.is-renderer').filter({
     hasText: 'Text',
-  }).click()
+  }).click({ modifiers: ['Meta'] })
   const textInspector = editor.getByRole('region', { name: 'Text 属性', exact: true })
   await expandInspectorSection(textInspector, '文本')
   await expect(textInspector.getByRole('button', { name: '内容' })).toHaveCount(0)

@@ -8,10 +8,12 @@ import {
   type ComposeEntity,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
-import type {
-  StageInteractionHit,
-  StageRect,
-  StageViewport,
+import {
+  getEntityParentId,
+  resolveStageGroupHit,
+  type StageInteractionHit,
+  type StageRect,
+  type StageViewport,
 } from '@compose-ui/stage-engine'
 import type { ComposeStageTool } from '../../types'
 import { nextInstanceDrillDownTarget, resolveInstanceDrillDownPath } from './instance-drilldown'
@@ -111,6 +113,19 @@ export function useStageInstanceDrilldown(
       // 一次双击由两个 pointerdown 组成，只在偶数计数上下钻，保证一次双击恰好前进一层；
       // 用 >= 2 会让 count 2 和 3 各触发一次，一次双击直接跳两层。
       && peekClickCount(event) % 2 === 0
+      /*
+       * 实例被一个还没进入的 Group 门着时，这次双击的含义是「进那个 Group」而不是「进实例」：
+       * 单击解算出来的对象不是实例自己，就把这一下交给内核，由它穿过 Group 那一层。
+       * 判据按**单击**解算（不带连击计数）——带上计数解算出来的可能正是实例自己（穿过门槛
+       * 落到的直接子级），而那一下仍然只该选中实例。
+       */
+      && resolveStageGroupHit({
+        document,
+        getParentId: (entityId) => getEntityParentId(document, entityId),
+        entityId: entity.id,
+        selectedIds,
+        deep: event.metaKey || event.ctrlKey,
+      }).entityId === entity.id
     ) {
       const path = resolveInstanceDrillDownPath(
         event.currentTarget,

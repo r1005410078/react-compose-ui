@@ -12,6 +12,7 @@ import {
   resolveMarqueeHitTest,
 } from '../hit-testing'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
+import { resolveStageEntityHit } from './group-hit'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type {
   StageInteractionHit,
@@ -201,11 +202,15 @@ export function createStageMarqueeConvergePlugin(): StageInteractionPlugin {
     priority: priorityOf(STAGE_MARQUEE_CONVERGE_PLUGIN_ID),
     claim(event: StagePointerDownEvent, ctx: StagePluginContext) {
       if (event.hit.kind !== 'entity') return null
+      // 先过 Group 门槛再判收敛：命中一个锁定 Group 的子级，看到的必须是那个锁定的 Group。
+      const resolved = resolveStageEntityHit(event, ctx)
+      if (!resolved) return null
+      const hit = { ...event.hit, entityId: resolved.entityId }
       const { context } = ctx
-      if (!shouldConvergeToMarquee(context.tool, context.document, event.hit, event.modifiers)) {
+      if (!shouldConvergeToMarquee(context.tool, context.document, hit, event.modifiers)) {
         return null
       }
-      return claimStageMarquee(event, ctx, event.hit.entityId)
+      return claimStageMarquee(event, ctx, hit.entityId)
     },
   }
 }

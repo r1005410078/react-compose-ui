@@ -1,5 +1,6 @@
 import { applyMatrix, invertMatrix, screenToWorld } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
+import { resolveStageEntityHit } from './group-hit'
 import { shouldConvergeToMarquee } from './marquee-plugin'
 import type { StageClaimResult, StageInteractionPlugin, StagePluginContext, StagePointerDownEvent } from './stage-kernel-profile'
 
@@ -45,8 +46,15 @@ export function createStageGeometryEditFallbackPlugin(): StageInteractionPlugin 
       if (event.clickCount !== 2 || context.tool !== 'select') return null
       if (!context.isGeometryEditable) return null
       // 只接管本来会变成框选的那一下；命中一个具体 Entity 的双击属于那个 Entity 自己。
-      const convergent = event.hit.kind === 'entity'
-        && shouldConvergeToMarquee(context.tool, context.document, event.hit, event.modifiers)
+      // 实体命中先过 Group 门槛，与收敛插件读同一个解算结果。
+      const resolved = resolveStageEntityHit(event, ctx)
+      const convergent = event.hit.kind === 'entity' && resolved !== null
+        && shouldConvergeToMarquee(
+          context.tool,
+          context.document,
+          { ...event.hit, entityId: resolved.entityId },
+          event.modifiers,
+        )
       if (event.hit.kind !== 'surface' && !convergent) return null
 
       const world = screenToWorld(event.point, context.viewport)

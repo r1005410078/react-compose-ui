@@ -11,6 +11,7 @@ import type { StageMoveAxis } from '../gesture-planning'
 import { resolveStageClickSelection } from '../hit-testing'
 import { resolveTransformTargets } from '../gesture-planning'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
+import { resolveStageEntityHit } from './group-hit'
 import { captureStageSpatialBaseline, type StageSpatialBaselineCheck } from './spatial-baseline'
 import type { StageDropTarget } from '../hit-testing'
 import type { StageInteractionModifiers } from '../interaction-controller'
@@ -190,9 +191,10 @@ export function claimStageMove(
  * 实体选中并拖动插件。
  *
  * @remarks
- * 画布上最常走的一条路径：在实体上按下先改选区，随后按工具决定这次按下变成什么——
- * select 工具下的双击进入原地文字编辑（**不**开始移动），select/move 工具下未锁定的目标开始
- * 拖动，其余情形只改选区。
+ * 画布上最常走的一条路径：在实体上按下先把命中过一遍 Group 门槛（{@link resolveStageEntityHit}：
+ * 单击选最外层没进入的 Group、双击穿过一层、`command` 深选），对解算出来的对象改选区，随后按
+ * 工具决定这次按下变成什么——双击穿过 Group 的那一下只改选区；select 工具下的双击进入原地
+ * 文字编辑（**不**开始移动），select/move 工具下未锁定的目标开始拖动，其余情形只改选区。
  *
  * 无论是否开始移动，这次按下都被消费：选区已经改过了，再交给后续插件会让同一次按下既改选区
  * 又起框。
@@ -206,9 +208,10 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
     id: STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID,
     priority: priorityOf(STAGE_ENTITY_SELECT_MOVE_PLUGIN_ID),
     claim(event: StagePointerDownEvent, ctx: StagePluginContext): StageClaimResult {
-      if (event.hit.kind !== 'entity') return null
+      const resolved = resolveStageEntityHit(event, ctx)
+      if (!resolved) return null
       const { context } = ctx
-      const entity = context.document.entities[event.hit.entityId]
+      const entity = context.document.entities[resolved.entityId]
       // 命中一个不存在的 Entity：命中判定与文档已经脱节，这次按下就此打住，不落到框选。
       if (!entity) return 'consumed'
 
@@ -221,6 +224,13 @@ export function createStageEntitySelectMovePlugin(): StageInteractionPlugin {
         shift: event.modifiers.shift,
       })
       ctx.apply([{ type: 'selection.change', selectedIds: nextSelection }])
+
+      /*
+       * 双击穿过了一层 Group：这一下的全部含义是「进到这一层」。既不开始移动（指针马上就要
+       * 抬起来），也不进入文字或几何编辑——进去之后再双击一次才是对那一个做什么，与「双击
+       * 组件实例逐层下钻」同一条规则。
+       */
+      if (resolved.descended) return 'consumed'
 
       const locked = getComposeLock(entity).locked
       // 双击可编辑 Entity 进入原地编辑，且不开始移动手势——否则一次双击会同时打开编辑器并

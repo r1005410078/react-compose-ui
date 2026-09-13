@@ -9,6 +9,7 @@ export * from './drop-target'
 export * from './grid-drop'
 export * from './marquee-selection'
 export * from './selection-mode'
+export * from './group-selection'
 export {
   collectStageRevealedPorts,
   collectStageWireEnds,
