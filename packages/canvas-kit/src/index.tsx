@@ -35,6 +35,7 @@ export {
   resolveComposeCanvasCrosshair,
   type ComposeCanvasCrosshair,
   type ComposeCanvasCrosshairInput,
+  type ComposeCanvasCrosshairStyle,
   type ComposeCanvasCrosshairLayerProps,
 } from './crosshair'
 export {

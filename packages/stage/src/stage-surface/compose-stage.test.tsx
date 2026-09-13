@@ -319,6 +319,7 @@ function renderStage(
     viewport?: { readonly x: number; readonly y: number; readonly zoom: number }
     commands?: import('../types').ComposeStageProps['commands']
     showCrosshair?: boolean
+    crosshairStyle?: import('../types').ComposeStageProps['crosshairStyle']
     onShortcutAction?: import('../types').ComposeStageProps['onShortcutAction']
     onActiveCommandChange?: (commandId: string | null) => void
     /**
@@ -348,6 +349,7 @@ function renderStage(
       onShortcutAction={options.onShortcutAction}
       onActiveCommandChange={options.onActiveCommandChange}
       showCrosshair={options.showCrosshair}
+      crosshairStyle={options.crosshairStyle}
       document={value}
       layoutSnapshot={options.snapshot ?? layoutSnapshot(value)}
       onSelectedIdsChange={selectionSpy}
@@ -2421,6 +2423,31 @@ describe('绘图模式', () => {
     hover('touch')
     expect(lines()).toHaveLength(0)
     expect(root.hasAttribute('data-crosshair')).toBe(false)
+  })
+
+  it('OpenSpec: stage / Stage 十字光标样式 / 宿主选晕圈与缺席即渐隐', () => {
+    measureSurfaceAs(1000, 800)
+    const halos = () => screen.getByRole('application', { name: 'Stage' })
+      .querySelectorAll('[data-stage-crosshair-halo]')
+    const hover = () => fireEvent.pointerMove(screen.getByTestId('stage-surface'), {
+      clientX: 120, clientY: 90, pointerId: 1, pointerType: 'mouse',
+    })
+
+    // 缺席即渐隐：四条线各自渐变描边，没有晕圈线。
+    renderStage(document())
+    startLine()
+    hover()
+    expect(crosshairLines()).toHaveLength(4)
+    expect(halos()).toHaveLength(0)
+    expect((crosshairLines()[0] as SVGLineElement).style.stroke).toMatch(/^url\(/)
+    cleanup()
+
+    // 宿主选晕圈：四条晕圈线垫在四条十字线之下。
+    renderStage(document(), { crosshairStyle: 'halo' })
+    startLine()
+    hover()
+    expect(crosshairLines()).toHaveLength(4)
+    expect(halos()).toHaveLength(4)
   })
 
   it('OpenSpec: stage / Stage 十字光标 / 等待选择对象时只有拾取框', () => {

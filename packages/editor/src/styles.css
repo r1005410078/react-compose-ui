@@ -1872,6 +1872,14 @@
   accent-color: var(--compose-accent);
 }
 
+/* 单选行下面的一句说明：与只读手势的描述同一档色。 */
+.compose-editor__settings-hint {
+  margin: 10px 0 0;
+  color: var(--compose-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .compose-editor__settings-section-title {
   display: flex;
   align-items: center;

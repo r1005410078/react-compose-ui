@@ -39,6 +39,15 @@ function lines() {
   return document.querySelectorAll('[data-probe-crosshair-line]')
 }
 
+function halos() {
+  return document.querySelectorAll('[data-probe-crosshair-halo]')
+}
+
+function endpoints(list: NodeListOf<Element>) {
+  return Array.from(list, (line) =>
+    ['x1', 'y1', 'x2', 'y2'].map((name) => line.getAttribute(name)).join(','))
+}
+
 describe('OpenSpec: canvas-kit / 共享十字光标组件', () => {
   it('两个形态布尔独立生效', () => {
     draw({ box: false })
@@ -86,5 +95,50 @@ describe('OpenSpec: canvas-kit / 共享十字光标组件', () => {
 
   it('两个形态布尔都为假时不绘制', () => {
     expect(resolveComposeCanvasCrosshair(input({ lines: false, box: false }))).toBeNull()
+  })
+})
+
+describe('OpenSpec: canvas-kit / 十字光标样式', () => {
+  it('缺席即渐隐', () => {
+    draw({ box: false })
+    expect(resolveComposeCanvasCrosshair(input())?.style).toBe('fade')
+    expect(lines()).toHaveLength(4)
+    expect(halos()).toHaveLength(0)
+    // 每条臂各自一份用户空间渐变，描边指向它。
+    const gradients = document.querySelectorAll('linearGradient')
+    expect(gradients).toHaveLength(4)
+    gradients.forEach((gradient) => {
+      expect(gradient.getAttribute('gradientUnits')).toBe('userSpaceOnUse')
+    })
+    lines().forEach((line) => {
+      expect((line as SVGLineElement).style.stroke).toMatch(/^url\(/)
+    })
+    // 远端仍可见：最后一个色标的不透明度不为 0。
+    const stops = Array.from(gradients[0]!.querySelectorAll('stop'))
+    expect(Number(stops[stops.length - 1]?.getAttribute('stop-opacity'))).toBeGreaterThan(0)
+  })
+
+  it('晕圈在主线之下', () => {
+    draw({ style: 'halo' })
+    expect(lines()).toHaveLength(4)
+    expect(halos()).toHaveLength(4)
+    // 晕圈线在文档序上先于每一条十字线：后画的压在先画的上面。
+    const all = Array.from(document.querySelectorAll('line'))
+    const haloIndexes = all.flatMap((line, index) =>
+      line.hasAttribute('data-probe-crosshair-halo') ? [index] : [])
+    const firstLine = all.findIndex((line) => line.hasAttribute('data-probe-crosshair-line'))
+    expect(Math.max(...haloIndexes)).toBeLessThan(firstLine)
+    // 拾取框同样带晕圈；十字线不再用渐变。
+    expect(document.querySelectorAll('rect.compose-canvas__crosshair-halo')).toHaveLength(1)
+    expect(document.querySelectorAll('linearGradient')).toHaveLength(0)
+  })
+
+  it('样式不改几何', () => {
+    draw({ style: 'fade' })
+    const fade = endpoints(lines())
+    cleanup()
+    draw({ style: 'halo' })
+    expect(endpoints(lines())).toEqual(fade)
+    expect(endpoints(halos())).toEqual(fade)
   })
 })

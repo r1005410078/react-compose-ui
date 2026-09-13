@@ -1258,6 +1258,15 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   外接：框内一律抓得到，宁可少说不可多说），并且定义就写在它派生的那个常量旁边。
   隐藏系统光标的作用域由调用方决定，Stage **只能罩
   到图面**——命令行由 Stage 自己渲染且就在 Stage 里，连它一起收走会让文本光标消失。
+  **十字光标有两种画笔样式，样式是用户偏好、臂长是工作区会话开关，两者正交。**`fade`（渐隐，
+  默认）让每条臂从中心向远端淡出，贯穿图面的臂不再与图纸的墨抢眼；`halo`（晕圈）在主线之下垫
+  一条画布底色的粗线，压在红导线与白符号上都读得出。样式住在 `ComposeEditorPreferences.
+  crosshairStyle`（设置 › 画布），不按工作区各记一份——晕圈在页面与绘图里都是晕圈，没有分歧的
+  场景，做成会话开关只会让每个另存的工作区多抄一个字段。渐变按 `userSpaceOnUse` 逐条臂给出
+  （高度为零的水平线上按包围盒的渐变方向无定义），id 用 `useId`（同页多画布不串），描边写在
+  `style` 上（样式表的 `stroke` 规则压过呈现属性）。晕圈线**不带** `crosshair-line` 标记：
+  它不是十字线，数十字线的用例仍数到四条。晕圈色 token 回落到工作区底色，Stage 的浅色主题
+  把它指向图面自己的 `surface-control`——垫的是图面的底，不是工作区的底。
 - `@compose-ui/stage-engine` 是无 React、无 DOM 的坐标、场景索引、吸附、手势状态机与空间命令
   包，只能依赖 `core`、`interaction-kernel` 与 `commands`，不得依赖任何 React chrome、registry
   或 UI Context 包。仲裁器与注册表来自 `interaction-kernel`，Stage 侧只保留 `StageKernelProfile`

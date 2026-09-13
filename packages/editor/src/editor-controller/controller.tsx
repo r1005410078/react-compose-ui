@@ -77,6 +77,7 @@ import {
 import type {
   ComposeStageDelegatableAction,
   ComposeStageHandle,
+  ComposeCanvasCrosshairStyle,
   ComposeStagePolicy,
   ComposeStageProps,
   ComposeStageServices,
@@ -1037,6 +1038,14 @@ export interface ComposeEditorController {
   readonly polarIncrement: number
   /** 十字光标臂长，图面短边的百分比；5 是 AutoCAD `CURSORSIZE` 的默认值。 */
   readonly crosshairSize: number
+  /**
+   * 十字光标画笔样式。
+   *
+   * @remarks
+   * 它**不是**会话开关：编辑器把用户偏好里的值同步进来，工作区切换不碰它。住在 controller
+   * 只因为 Stage 的 props 由 controller 组装。
+   */
+  readonly crosshairStyle: ComposeCanvasCrosshairStyle
   /** 当前实例 Palette 与 Stage 共享的无 UI 交互控制器。 */
   readonly interactionController: StageInteractionController
   /** 替换当前选择。 */
@@ -1052,6 +1061,7 @@ export interface ComposeEditorController {
   readonly setAngleConstraint: (constraint: ComposeAngleConstraint) => void
   readonly setPolarIncrement: (degrees: number) => void
   readonly setCrosshairSize: (size: number) => void
+  readonly setCrosshairStyle: (style: ComposeCanvasCrosshairStyle) => void
   /** 向同一 runtime 派发结构化命令。 */
   readonly dispatch: (command: EditorCommand) => CommandDispatchResult
   /** 安装或卸载 dispatch 改写层（传 `null` 卸载）；同一时刻只有一个改写层生效。 */
@@ -1246,6 +1256,8 @@ export function useComposeEditorController({
   const [transformGizmo, setTransformGizmo] = useState(false)
   // 十字光标臂长：AutoCAD `CURSORSIZE` 的默认值；绘图类工作区会把它拉到贯穿图面。
   const [crosshairSize, setCrosshairSize] = useState(5)
+  // 画笔样式由编辑器从用户偏好同步进来；默认渐隐是用户选定的默认。
+  const [crosshairStyle, setCrosshairStyle] = useState<ComposeCanvasCrosshairStyle>('fade')
   const [snapRestore, setSnapRestore] = useState({
     grid: document.canvas.grid.snapEnabled,
     nodes: document.canvas.smartSnap.nodes,
@@ -1699,6 +1711,7 @@ export function useComposeEditorController({
     onAngleConstraintChange: setAngleConstraint,
     polarIncrement,
     crosshairSize,
+    crosshairStyle,
     onShortcutAction: runShortcutAction,
     selectedIds,
     onSelectedIdsChange: setSelectedIds,
@@ -1726,6 +1739,7 @@ export function useComposeEditorController({
     angleConstraint,
     polarIncrement,
     crosshairSize,
+    crosshairStyle,
     tool,
     setTool,
     selectedIds,
@@ -2077,6 +2091,7 @@ export function useComposeEditorController({
     angleConstraint,
     polarIncrement,
     crosshairSize,
+    crosshairStyle,
     interactionController,
     setSelectedIds,
     setExpandedIds,
@@ -2087,6 +2102,7 @@ export function useComposeEditorController({
     setAngleConstraint,
     setPolarIncrement,
     setCrosshairSize,
+    setCrosshairStyle,
     dispatch,
     setCommandRewrite,
     createComponentFromSelection,

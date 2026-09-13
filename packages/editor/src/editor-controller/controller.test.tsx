@@ -651,6 +651,19 @@ describe('useComposeEditorController', () => {
     })
   })
 
+  it('OpenSpec: editor-preferences / 十字光标样式是编辑器偏好 / 切成晕圈', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      runtime: editorRuntime,
+      registry,
+    }))
+    // 默认渐隐；setter 写进去的值原样出现在 Stage 的 props 上。
+    expect(result.current.crosshairStyle).toBe('fade')
+    expect(result.current.stageProps.crosshairStyle).toBe('fade')
+    act(() => result.current.setCrosshairStyle('halo'))
+    expect(result.current.stageProps.crosshairStyle).toBe('halo')
+  })
+
   it('展开组件实例时投影内部层级，未展开保持单节点', () => {
     const editorRuntime = createTransactionRuntime({
       document: instanceDocumentFixture(),

@@ -575,6 +575,16 @@ export function ComposeEditor({
     animationWasActive.current = animationMode.active
   }, [animationMode.active, controller])
 
+  /*
+   * 十字光标样式是用户偏好，而 Stage 的 props 由宿主创建的 controller 组装，因此同步方向
+   * 与变换指示器一致：编辑器往 controller 里写。缺 setter 的测试替身照常跳过。
+   */
+  const crosshairStyle = resolvedPreferences.crosshairStyle
+  useEffect(() => {
+    if (typeof controller?.setCrosshairStyle !== 'function') return
+    controller.setCrosshairStyle(crosshairStyle)
+  }, [controller, crosshairStyle])
+
   const autoRecordAnimationId = animationMode.active && animationMode.autoRecord
     ? animationMode.animationId
     : null

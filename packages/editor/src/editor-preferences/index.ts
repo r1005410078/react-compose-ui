@@ -12,6 +12,7 @@ export {
   normalizeComposeEditorPreferences,
   normalizeComposeEditorWorkspacePreferences,
   type ComposeEditorKeybinding,
+  type ComposeEditorCrosshairStyle,
   type ComposeEditorPreferences,
   type ComposeEditorShortcutAction,
   type ComposeEditorShortcutScope,

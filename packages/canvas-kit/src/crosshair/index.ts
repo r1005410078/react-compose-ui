@@ -6,4 +6,5 @@ export {
   resolveComposeCanvasCrosshair,
   type ComposeCanvasCrosshair,
   type ComposeCanvasCrosshairInput,
+  type ComposeCanvasCrosshairStyle,
 } from './crosshair-model'

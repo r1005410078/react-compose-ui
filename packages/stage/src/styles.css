@@ -93,6 +93,12 @@
   --compose-stage-port: #0369a1;
   --compose-stage-wire-free: #5b6675;
   --compose-stage-wire-dangling: #a16207;
+
+  /*
+   * 十字光标晕圈要垫的是**图面**的底色，而浅色主题的图面底是 `surface-control`、不是工作区
+   * 底色；回落到后者会在浅色图面上留一圈灰边。深色主题两者相同，不必指。
+   */
+  --compose-canvas-crosshair-halo: var(--compose-surface-control);
 }
 
 .compose-stage[data-compose-theme='light'] .compose-stage__surface {

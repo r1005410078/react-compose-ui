@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
+import type { ComposeCanvasCrosshairStyle } from '@compose-ui/canvas-kit'
 import type { ComposeCommandDefinition, ComposeKeybinding } from '@compose-ui/commands'
 import type { ComposeAngleConstraint, ComposeLayoutMeasurementPort } from '@compose-ui/core'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
@@ -472,6 +473,16 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * @defaultValue 5
    */
   readonly crosshairSize?: number
+  /**
+   * 十字光标的画笔样式：`fade` 渐隐、`halo` 晕圈。
+   *
+   * @remarks
+   * 原样交给 `@compose-ui/canvas-kit` 的共享十字光标，Stage 不另画一份；它也不参与形态推导
+   * ——画线还是画框仍只由当前等待的输入类型决定。编辑器把它作为用户偏好持有。
+   *
+   * @defaultValue `'fade'`
+   */
+  readonly crosshairStyle?: ComposeCanvasCrosshairStyle
   /**
    * 拾取框的半边长（CSS 像素）。
    *

@@ -25,3 +25,24 @@
   pointer-events: none;
   opacity: 0.85;
 }
+
+/*
+ * 渐隐样式的渐变色标：颜色与均匀描边读**同一个** token，只有不透明度在变。写在 CSS 里而不是
+ * `stop-color` 属性上，与上面的 `stroke` 同一条理由——主题化的唯一入口是这组变量。
+ */
+.compose-canvas__crosshair-stop {
+  stop-color: var(--compose-canvas-crosshair, var(--compose-text, #e6edf5));
+}
+
+/*
+ * 晕圈样式的底线：取画布底色、比主线粗两个像素，主线压在任何墨色上都因此读得出。
+ * 颜色有自己的 token 并回落到工作区底色；图面底色与工作区底色不同的画布（Stage 的浅色主题）
+ * 由调用方把它指过去。
+ */
+.compose-canvas__crosshair-halo {
+  fill: none;
+  stroke: var(--compose-canvas-crosshair-halo, var(--compose-workspace-bg, #11151b));
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-opacity: 0.9;
+}

@@ -40,6 +40,7 @@ export {
 } from './editor-preferences'
 export type {
   ComposeEditorKeybinding,
+  ComposeEditorCrosshairStyle,
   ComposeEditorPreferences,
   ComposeEditorShortcutAction,
   ComposeEditorShortcutScope,
