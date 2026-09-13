@@ -54,7 +54,7 @@ test('OpenSpec: editor-workspace-layout / 内建工作区 / 绘图的初始布�
 
   const pageLibrary = (await libraryPanel(editor).boundingBox())!
 
-  // 页面：十字光标是 AutoCAD 默认的 5%，取点时只在光标附近画一小截。
+  // 页面：十字光标贯穿图面——三个内建工作区的会话开关此后逐字相同，臂长不再分叉。
   await startCommand(page, stage, 'LINE')
   const surface = (await stage.getByTestId('stage-surface').boundingBox())!
   await page.mouse.move(surface.x + 300, surface.y + 240)
@@ -88,10 +88,15 @@ test('OpenSpec: editor-workspace-layout / 内建工作区 / 绘图的初始布�
     .evaluate((element) => element.getBoundingClientRect().height)
   expect(await bottomHeight()).toBeLessThan(40)
 
-  // 4) 十字光标贯穿图面。
+  /*
+   * 4) 十字光标与页面工作区**一样长**。
+   *
+   * 这里曾经断「绘图 > 页面的 5 倍」——臂长是三边唯一剩下的默认值差异，而那个分叉在屏幕上
+   * 无法解释：臂长没有工具栏开关，用户读不出「这是我自己设的」还是「这个工作区本来就这样」。
+   */
   await startCommand(page, stage, 'LINE')
   await page.mouse.move(surface.x + 300, surface.y + 240)
-  await expect.poll(async () => await crosshairReach(page)).toBeGreaterThan(pageReach * 5)
+  await expect.poll(async () => await crosshairReach(page)).toBeCloseTo(pageReach, 0)
   await page.keyboard.press('Escape')
 
   // 5) 命令可用性一个字节不变：在页面里启动得了的命令，在绘图里同样启动得了。这是「不是模式」
