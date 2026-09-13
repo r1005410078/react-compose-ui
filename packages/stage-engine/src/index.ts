@@ -283,11 +283,14 @@ export {
   collectStageWireEnds,
   findStageFeaturePoint,
   resolveStageClickSelection,
+  resolveStageGroupHit,
   resolveStageMarqueeCombine,
 } from './hit-testing'
 export type {
   StageFeaturePoint,
   StageFeatureSnapMode,
+  StageGroupHitQuery,
+  StageGroupHitResolution,
   StageWirePredicate,
   StageRevealedPorts,
   StageSelectionMode,

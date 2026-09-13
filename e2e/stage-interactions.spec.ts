@@ -9,6 +9,9 @@ import { clickCurveStroke, openPageInspector, pointerDrop, drawContainer, drawTe
  * 不能按固定下标取：网格的图层数会随缩放变化（细档淡到 0 时那一层被丢掉），
  * 而且大格分两级。X 轴的层写成 `<间距>px 100%`，取最后一条即最细的那层。
  */
+/** 超过 Stage 的连击间隔，让下一次按下从 1 开始计数。 */
+const DOUBLE_CLICK_SETTLE_MS = 600
+
 const finestGridStepX = (element: Element) => {
   const sizes = getComputedStyle(element).backgroundSize.split(', ')
   const xs = sizes.filter((size) => size.endsWith('100%'))
@@ -624,6 +627,7 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   const childBefore = await child.boundingBox()
   expect(childBefore).not.toBeNull()
   // 取**上边线**而不是盒中心：这个子项是矩形，默认空心，盒内部不命中。
+  // 按住 Control 是深选（Figma 的 ⌘ 点击）：不按的话这一下选中的是 Group 而不是子项。
   const childPoint = {
     x: childBefore!.x + childBefore!.width / 2,
     y: childBefore!.y + 1,
@@ -642,6 +646,88 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
   await page.waitForTimeout(100)
   await expect.poll(async () => (await child.boundingBox())?.x)
     .toBeCloseTo(childX, 1)
+})
+
+
+test('OpenSpec: stage / Group 命中先选组，双击穿过一层 / 单击选组、双击进组、进组后兄弟直选、深选无视门槛', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await drawContainer(page, editor)
+  const frame = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-container')
+  const frameBox = await frame.boundingBox()
+  expect(frameBox).not.toBeNull()
+  const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
+  await pointerDrop(page, rectangleButton, { x: frameBox!.x + 220, y: frameBox!.y + 220 })
+  await pointerDrop(page, rectangleButton, { x: frameBox!.x + 580, y: frameBox!.y + 220 })
+
+  const components = stage.locator('.compose-stage__node.is-renderer')
+  const firstEntityId = await components.nth(0).getAttribute('data-entity-id')
+  const secondEntityId = await components.nth(1).getAttribute('data-entity-id')
+  expect(firstEntityId).not.toBeNull()
+  expect(secondEntityId).not.toBeNull()
+  // 矩形默认空心，盒内部不命中：选中它要点那一圈描边。
+  await clickCurveStroke(components.nth(0))
+  await clickCurveStroke(components.nth(1), { modifiers: ['Shift'] })
+  await stage.press('Control+g')
+  const group = frame.locator(':scope > .compose-stage__node.is-container')
+  await expect(group).toHaveCount(1)
+  const groupBox = await group.boundingBox()
+  expect(groupBox).not.toBeNull()
+  const first = editor.locator(`[data-entity-id="${firstEntityId}"]`)
+  const second = editor.locator(`[data-entity-id="${secondEntityId}"]`)
+  const firstBox = await first.boundingBox()
+  const secondBox = await second.boundingBox()
+  expect(firstBox).not.toBeNull()
+  expect(secondBox).not.toBeNull()
+  const bounds = stage.getByTestId('stage-selection-bounds')
+  const groupInspector = editor.getByRole('region', { name: 'Group 属性', exact: true })
+  const rectangleInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
+  /*
+   * 分组命令之后选区就是新 Group；本条考的是「从没进入的状态点子级」，先清掉选区。
+   * 点的是**根场景**的体（容器左边线之外的那一条）：场景体收敛成框选、原地松手即清空。
+   * 夹具里那个容器是嵌套容器，点它的体会选中它自己；`Escape` 只中止手势，不清选区。
+   */
+  const rootBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  expect(rootBox).not.toBeNull()
+  const deselect = () => page.mouse.click(rootBox!.x + 12, rootBox!.y + rootBox!.height - 12)
+  await deselect()
+  await expect(bounds).toHaveCount(0)
+
+  // 单击子级的描边：选中的是 Group，选框是两个子级的并集。
+  await clickCurveStroke(first)
+  await expect(groupInspector).toBeVisible()
+  // 选框画在盒外一圈描边宽度上，因此只断「差不到几个像素」，不断逐像素相等。
+  const near = (actual: number | undefined, expected: number) =>
+    actual !== undefined && Math.abs(actual - expected) < 4
+  await expect.poll(async () => near((await bounds.boundingBox())?.width, groupBox!.width)).toBe(true)
+
+  // 双击同一处：穿过 Group，选中子级自己。
+  // 先让连击计数过期：紧接着上一次单击的双击会被数成三击，第三下落到子级上就进了几何编辑。
+  await page.waitForTimeout(DOUBLE_CLICK_SETTLE_MS)
+  await first.dblclick({ position: { x: 40, y: 1 } })
+  await expect(rectangleInspector).toBeVisible()
+  await expect.poll(async () => near((await bounds.boundingBox())?.width, firstBox!.width)).toBe(true)
+
+  // 进了组之后单击兄弟：直接选中兄弟，不再回到 Group。
+  await clickCurveStroke(second)
+  await expect(rectangleInspector).toBeVisible()
+  await expect.poll(async () => near((await bounds.boundingBox())?.x, secondBox!.x)).toBe(true)
+
+  // 清掉选区即退出；此后单击子级又回到 Group。
+  await deselect()
+  await clickCurveStroke(second)
+  await expect(groupInspector).toBeVisible()
+
+  // ⌘/Ctrl 点击是深选：无视门槛，直接选中子级。用 Meta 而不是 Control：macOS 上的 Chromium
+  // 会把 Ctrl+左键当成右键，那一下会连带打开右键菜单。
+  await deselect()
+  await clickCurveStroke(first, { modifiers: ['Meta'] })
+  await expect(rectangleInspector).toBeVisible()
+  await expect.poll(async () => near((await bounds.boundingBox())?.x, firstBox!.x)).toBe(true)
 })
 
 

@@ -17,6 +17,14 @@ export interface StageRootHandlersParams {
   /** 已归一化的选区；右键命中选区外的对象时要先改选区。 */
   readonly normalizedSelection: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
+  /**
+   * 把 DOM 命中的 Entity 过一遍 Group 门槛，得到右键真正作用的对象。
+   *
+   * @remarks
+   * 与左键点选读同一份解算（`resolveStageGroupHit`），落在没进入的 Group 的子级上时得到那个
+   * Group；不被门着的命中原样返回。
+   */
+  readonly resolveHitEntity: (entityId: string) => string
   /** 右键菜单的打开入口。 */
   readonly openContextMenu: (event: ReactMouseEvent, payload: string | null) => void
   /**
@@ -98,6 +106,7 @@ export function useStageRootHandlers({
   normalizedSelection,
   onSelectedIdsChange,
   openContextMenu,
+  resolveHitEntity,
   rootRef,
   rulersRef,
   surfaceRef,
@@ -134,9 +143,12 @@ export function useStageRootHandlers({
        * 的地方都会被多出来的那一个搅乱。
        */
       const chrome = (event.target as Element).closest('[data-stage-selection-chrome]')
-      const entityId = target?.dataset.entityId
+      // 右键说的也是「点的是谁」，因此与左键过同一道 Group 门槛：落在没进入的 Group 的子级上，
+      // 菜单打开的是那个 Group 的。标签与选中 chrome 本来就指向顶层容器或已选中的对象，解算是恒等。
+      const rawEntityId = target?.dataset.entityId
         ?? target?.dataset.labelEntityId
         ?? (chrome && normalizedSelection.length === 1 ? normalizedSelection[0]! : null)
+      const entityId = rawEntityId === null ? null : resolveHitEntity(rawEntityId)
       if (entityId && !normalizedSelection.includes(entityId)) {
         onSelectedIdsChange([entityId])
       }

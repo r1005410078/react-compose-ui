@@ -1,6 +1,7 @@
 import { getComposeCurve, getComposeCurveFill, isComposeClosedCurve } from '@compose-ui/core'
 import { applyMatrix, invertMatrix, screenToWorld, type StagePoint } from '../geometry'
 import { STAGE_GESTURE_PRIORITY } from './gesture-priority'
+import { resolveStageEntityHit } from './group-hit'
 import { shouldConvergeToMarquee } from './marquee-plugin'
 import { claimStageMove } from './move-plugin'
 import type {
@@ -108,10 +109,17 @@ export function createStageHollowMoveFallbackPlugin(): StageInteractionPlugin {
        * （锁定的 Hierarchy 直接收敛，不看是不是顶层），删掉它会让「命中一个锁定的非祖先容器」
        * 从接管变成不接管，而那与本条要解决的问题无关。
        */
-      const convergent = event.hit.kind === 'entity'
-        && shouldConvergeToMarquee(context.tool, context.document, event.hit, event.modifiers)
-      const ancestor = event.hit.kind === 'entity'
-        && isAncestorOf(index, event.hit.entityId, entityId)
+      // 实体命中先过 Group 门槛，与收敛插件读同一个解算结果。
+      const resolved = resolveStageEntityHit(event, ctx)
+      const convergent = event.hit.kind === 'entity' && resolved !== null
+        && shouldConvergeToMarquee(
+          context.tool,
+          context.document,
+          { ...event.hit, entityId: resolved.entityId },
+          event.modifiers,
+        )
+      const ancestor = resolved !== null
+        && isAncestorOf(index, resolved.entityId, entityId)
       if (event.hit.kind !== 'surface' && !convergent && !ancestor) return null
 
       const box = index.layoutSnapshot.boxes[entityId]

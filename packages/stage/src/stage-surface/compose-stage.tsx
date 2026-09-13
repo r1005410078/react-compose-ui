@@ -45,6 +45,7 @@ import {
   stageCurveOutline,
   collectStageWireEnds,
   createStageSceneIndex,
+  getEntityParentId,
   getEntityWorldBounds,
   getEntityWorldMatrix,
   resolveStageDropIndicator,
@@ -58,6 +59,7 @@ import {
   type StageHatchRejection,
   type StageTrimRejection,
   type StageWireEnd,
+  resolveStageGroupHit,
 } from '@compose-ui/stage-engine'
 import { fitViewportTo } from './stage-viewport-actions'
 import type {
@@ -1350,6 +1352,13 @@ function ComposeStageReady({
     keyboardRelease,
     normalizedSelection,
     openContextMenu: contextMenu.openAt,
+    // 右键与左键过同一道 Group 门槛；右键没有连击，按单击解算。
+    resolveHitEntity: (entityId) => resolveStageGroupHit({
+      document,
+      getParentId: (id) => getEntityParentId(document, id),
+      entityId,
+      selectedIds: normalizedSelection,
+    }).entityId,
     rootRef,
     rulersRef,
     surfaceRef,
