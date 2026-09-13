@@ -68,7 +68,7 @@
 
 ## 7. 收尾
 
-- [ ] 7.1 `bun run lint && bun run typecheck && bun run test && bun run build`
-- [ ] 7.2 `bun run test:e2e`
+- [x] 7.1 `bun run lint && bun run typecheck && bun run test && bun run build`
+- [x] 7.2 `bun run test:e2e`（344 条全绿）
 - [ ] 7.3 按落地情况更新 `docs/mockups/drafting-hatch-assoc.html` 并重发 artifact（同一个 URL）
-- [ ] 7.4 按需同步 `AGENTS.md`（三档、清单的两个用途、锚点语义的改变、不做分组）
+- [x] 7.4 按需同步 `AGENTS.md`（三档、清单的两个用途、锚点语义的改变、不做分组、岛也是边界）
