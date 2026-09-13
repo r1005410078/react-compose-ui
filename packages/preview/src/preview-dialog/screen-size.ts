@@ -25,14 +25,20 @@ export type ComposePreviewTargetKind = 'scene' | 'component'
  * 目标种类决定的默认 `fit`。
  *
  * @remarks
- * 场景**就是那块屏的全部内容**，换一块屏时它该等比填满（`contain`）；组件**只是屏上的
+ * 场景**就是那块屏的全部内容**，换一块屏时它该等比**铺满**（`cover`）；组件**只是屏上的
  * 一个零件**，换一块屏时它该原大摆在中间（`none`）——把一个 88 × 132 的符号拉伸去填满
  * 1920 × 1080 是荒唐的。这是两种目标之间唯一的实质分叉，其余差别都是文案。
+ *
+ * 铺满取 `cover` 而不是 `contain`：屏幕比例与场景不同时，`contain` 会在两条边留出台面的
+ * 棋盘格，而**这块屏上本来不会有那两条边**——交付出去的大屏是整块亮着的。代价是超出的那一
+ * 圈被裁掉，因此它是等比裁切而不是 `fill` 的两轴各自拉伸：拉伸会改变每一个图形的形状，
+ * 而那是用户从未画过的样子。裁掉多少由窗口比例决定，要看完整的场景就把屏幕尺寸选成场景
+ * 自己的尺寸——那一档 `cover` 与 `contain` 给出同一个答案。
  *
  * @internal
  */
 export function defaultFitForTargetKind(kind: ComposePreviewTargetKind): ComposePreviewFit {
-  return kind === 'component' ? 'none' : 'contain'
+  return kind === 'component' ? 'none' : 'cover'
 }
 
 /** 台面四周留给画板的余量（CSS 像素）。 */
