@@ -1,4 +1,18 @@
 /**
+ * 十字光标的样式。
+ *
+ * @remarks
+ * - `fade`：每条臂从中心向远端淡出。贯穿图面的臂长因此不再与图纸的墨抢眼，而靠中心一段
+ *   仍是实线。
+ * - `halo`：细线之下垫一圈画布底色的粗线。压在红导线或白符号上时主线不会消失。
+ *
+ * 样式只改画笔，不改几何：中心、臂长与在拾取框处断开三条规则对两种样式逐字相同。
+ *
+ * @public
+ */
+export type ComposeCanvasCrosshairStyle = 'fade' | 'halo'
+
+/**
  * 十字光标的一次绘制。
  *
  * @remarks
@@ -9,6 +23,8 @@
 export interface ComposeCanvasCrosshair {
   /** 光标中心的**屏幕**位置，相对图面左上角。 */
   readonly center: { readonly x: number; readonly y: number }
+  /** 画笔样式；解析时缺席即 `fade`。 */
+  readonly style: ComposeCanvasCrosshairStyle
   /** 画十字线。 */
   readonly lines: boolean
   /** 画拾取框。 */
@@ -36,6 +52,12 @@ export interface ComposeCanvasCrosshairInput {
   readonly box: boolean
   readonly boxRadius: number
   readonly size: number
+  /**
+   * 画笔样式。
+   *
+   * @defaultValue `'fade'`
+   */
+  readonly style?: ComposeCanvasCrosshairStyle
 }
 
 /**
@@ -57,8 +79,8 @@ export interface ComposeCanvasCrosshairInput {
 export function resolveComposeCanvasCrosshair(
   input: ComposeCanvasCrosshairInput,
 ): ComposeCanvasCrosshair | null {
-  const { show, pointerType, center, lines, box, boxRadius, size } = input
+  const { show, pointerType, center, lines, box, boxRadius, size, style = 'fade' } = input
   if (!show || pointerType === 'touch' || !center) return null
   if (!lines && !box) return null
-  return { center, lines, box, boxRadius, size }
+  return { center, style, lines, box, boxRadius, size }
 }

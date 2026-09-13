@@ -255,4 +255,22 @@ describe('editor preferences', () => {
       expect(withMode(undefined)).toBe('grid')
     })
   })
+
+  describe('OpenSpec: editor-preferences / 十字光标样式是编辑器偏好', () => {
+    it('默认渐隐', () => {
+      expect(createDefaultComposeEditorPreferences().crosshairStyle).toBe('fade')
+    })
+
+    it('旧偏好缺这一段', () => {
+      const legacy = { ...createDefaultComposeEditorPreferences() } as Partial<ComposeEditorPreferences>
+      delete (legacy as Record<string, unknown>).crosshairStyle
+      expect(normalizeComposeEditorPreferences(legacy as ComposeEditorPreferences).crosshairStyle).toBe('fade')
+      const withStyle = (crosshairStyle: unknown) => normalizeComposeEditorPreferences({
+        ...createDefaultComposeEditorPreferences(),
+        crosshairStyle,
+      } as unknown as ComposeEditorPreferences).crosshairStyle
+      expect(withStyle('halo')).toBe('halo')
+      expect(withStyle('dashed')).toBe('fade')
+    })
+  })
 })

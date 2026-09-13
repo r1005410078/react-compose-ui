@@ -18,6 +18,7 @@ import {
   formatComposeEditorKeybinding,
 } from './preferences'
 import type {
+  ComposeEditorCrosshairStyle,
   ComposeEditorKeybinding,
   ComposeEditorPreferences,
   ComposeEditorShortcutAction,
@@ -53,7 +54,7 @@ function bindingFromEvent(
   }
 }
 
-type SettingsCategory = 'appearance' | 'language' | 'shortcuts'
+type SettingsCategory = 'appearance' | 'language' | 'canvas' | 'shortcuts'
 
 export function SettingsDialog({
   id,
@@ -93,6 +94,12 @@ export function SettingsDialog({
   const showLanguage = normalizedQuery
     ? languageMatches
     : category === 'language'
+  // 「画布」这一节眼下只有十字光标；检索词命中分类名、节名或任一选项都算命中。
+  const canvasMatches = [t.canvas, t.crosshair, t.crosshairFade, t.crosshairHalo]
+    .some((item) => item.toLocaleLowerCase(locale).includes(normalizedQuery))
+  const showCanvas = normalizedQuery
+    ? canvasMatches
+    : category === 'canvas'
   const visibleReadonlyItems = t.readonlyItems.filter(([term, description]) =>
     !normalizedQuery
     || shortcutCategoryMatches
@@ -113,6 +120,9 @@ export function SettingsDialog({
   }
   const setLocale = (nextLocale: ComposeLocale) => {
     onChange({ ...preferences, locale: nextLocale })
+  }
+  const setCrosshairStyle = (crosshairStyle: ComposeEditorCrosshairStyle) => {
+    onChange({ ...preferences, crosshairStyle })
   }
   const replaceShortcut = (
     action: ComposeEditorShortcutAction,
@@ -186,6 +196,7 @@ export function SettingsDialog({
             {([
               ['appearance', t.appearance],
               ['language', t.language],
+              ['canvas', t.canvas],
               ['shortcuts', t.shortcuts],
             ] as const).map(([value, label]) => (
               <button
@@ -243,6 +254,32 @@ export function SettingsDialog({
                     </label>
                   ))}
                 </div>
+              </section>
+            ) : null}
+            {showCanvas ? (
+              <section>
+                <h3>{t.crosshair}</h3>
+                <div
+                  aria-label={t.crosshair}
+                  className="compose-editor__settings-options"
+                  role="radiogroup"
+                >
+                  {([
+                    ['fade', t.crosshairFade],
+                    ['halo', t.crosshairHalo],
+                  ] as const).map(([value, label]) => (
+                    <label key={value}>
+                      <input
+                        checked={preferences.crosshairStyle === value}
+                        name={`${id}-crosshair-style`}
+                        onChange={() => setCrosshairStyle(value)}
+                        type="radio"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="compose-editor__settings-hint">{t.crosshairHint}</p>
               </section>
             ) : null}
             {showShortcuts && visibleActions.length > 0 ? (

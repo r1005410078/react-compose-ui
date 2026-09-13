@@ -224,6 +224,7 @@ function ComposeStageReady({
   autoFitActiveFrame = true,
   showCrosshair = true,
   crosshairSize = 5,
+  crosshairStyle = 'fade',
   pickRadius = COMPOSE_CURVE_PICK_TOLERANCE,
   interactionController,
   idFactory = defaultId,
@@ -872,8 +873,10 @@ function ComposeStageReady({
       ? pickRadius
       : GRIP_PICK_RADIUS,
     size: crosshairSize,
+    style: crosshairStyle,
   }), [
     crosshairSize,
+    crosshairStyle,
     draftingSession.awaitingPick,
     draftingSession.awaitingPoint,
     draftingSession.awaitingSelection,

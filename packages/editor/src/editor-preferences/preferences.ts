@@ -4,6 +4,7 @@ import {
 } from '@compose-ui/commands'
 import type { ComposeKeybinding } from '@compose-ui/commands'
 import { DEFAULT_STAGE_SHORTCUTS } from '@compose-ui/stage'
+import type { ComposeCanvasCrosshairStyle } from '@compose-ui/stage'
 import type { ComposeComponentLibraryMode } from '@compose-ui/component-library'
 import type { ComposeLocale, ComposeTheme } from '@compose-ui/ui-context'
 import { formatComposeKeybinding } from '@compose-ui/components'
@@ -94,7 +95,21 @@ export interface ComposeEditorPreferences {
    * 历史。默认网格：物料是图形，扫形状比读一列名字快。
    */
   readonly palette: ComposeEditorPalettePreferences
+  /**
+   * 十字光标的画笔样式：`fade` 渐隐、`halo` 晕圈。
+   *
+   * @remarks
+   * 与主题、语言同一档的**用户偏好**，不是工作区会话开关：晕圈在页面与绘图里都是晕圈，
+   * 没有按工作区分歧的场景；做成会话开关会让每个另存的工作区多抄一个字段。它不写文档、
+   * 不进撤销历史。臂长（`crosshairSize`）仍归工作区。
+   *
+   * @defaultValue `'fade'`
+   */
+  readonly crosshairStyle: ComposeEditorCrosshairStyle
 }
+
+/** 十字光标样式；与 Stage 的 prop 同一个联合。 @public */
+export type ComposeEditorCrosshairStyle = ComposeCanvasCrosshairStyle
 
 /** 偏好里的物料面板那一半。 @public */
 export interface ComposeEditorPalettePreferences {
@@ -269,6 +284,7 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
     }),
     workspace: createDefaultComposeEditorWorkspacePreferences(),
     palette: { mode: 'grid' },
+    crosshairStyle: 'fade',
   }
 }
 
@@ -403,6 +419,10 @@ export function normalizeComposeEditorPreferences(
     palette: {
       mode: (preferences as Partial<ComposeEditorPreferences>).palette?.mode === 'list' ? 'list' : 'grid',
     },
+    // 同样是后加的字段：缺席或不认识的值一律回落渐隐。
+    crosshairStyle: (preferences as Partial<ComposeEditorPreferences>).crosshairStyle === 'halo'
+      ? 'halo'
+      : 'fade',
   }
 }
 

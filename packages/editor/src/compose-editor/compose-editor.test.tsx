@@ -1383,6 +1383,30 @@ describe('ComposeEditor', () => {
     expect(screen.getByRole('heading', { name: '外观' })).toBeInTheDocument()
   })
 
+  it('OpenSpec: editor-preferences / 设置模态弹框 / 从画布分类切换十字光标样式', () => {
+    const onPreferencesChange = vi.fn()
+    render(<ComposeEditor onPreferencesChange={onPreferencesChange} />)
+    openSettings()
+
+    fireEvent.click(screen.getByRole('button', { name: '画布' }))
+    expect(screen.getByRole('heading', { name: '十字光标' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '外观' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '渐隐（默认）' })).toBeChecked()
+
+    fireEvent.click(screen.getByRole('radio', { name: '晕圈' }))
+    expect(screen.getByRole('radio', { name: '晕圈' })).toBeChecked()
+    expect(onPreferencesChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ crosshairStyle: 'halo' }),
+    )
+
+    // 搜索也够得着这一节：检索词命中的是选项名。
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索设置' }), {
+      target: { value: '晕圈' },
+    })
+    expect(screen.getByRole('heading', { name: '十字光标' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '语言' })).not.toBeInTheDocument()
+  })
+
   it('OpenSpec: editor-preferences / 快捷键输入隔离 / 查看只读手势', () => {
     render(<ComposeEditor />)
     openSettings()

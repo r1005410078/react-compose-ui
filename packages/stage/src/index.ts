@@ -40,5 +40,10 @@ export type {
   ComposeStageShortcuts,
   ComposeStageTool,
 } from './types'
+/**
+ * 十字光标样式；宿主经 `ComposeStageProps.crosshairStyle` 传入，编辑器把它作为偏好持有。
+ * 从本包转导是为了让不依赖 `canvas-kit` 的宿主拿得到这个联合。
+ */
+export type { ComposeCanvasCrosshairStyle } from '@compose-ui/canvas-kit'
 /** `@compose-ui/stage` 的稳定包标识。 @public */
 export const COMPOSE_UI_STAGE_PACKAGE = '@compose-ui/stage' as const
