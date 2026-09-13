@@ -35,6 +35,7 @@ export function createStageDraftingPointPlugin(): StageInteractionPlugin {
       ctx.apply([{
         type: 'drafting.point',
         point: screenToWorld(event.point, ctx.context.viewport),
+        hit: event.hit,
       }])
       return 'consumed'
     },

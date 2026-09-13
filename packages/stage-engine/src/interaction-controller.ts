@@ -421,7 +421,14 @@ export type StageInteractionEffect =
    * 引擎只给出原始世界点：捕捉、正交与网格由宿主经点输入管线求解——它本来就要拿捕捉结果去
    * 渲染标记，在这里再解一次会得到两份可能分叉的答案。
    */
-  | { readonly type: 'drafting.point'; readonly point: StagePoint }
+  /**
+   * 命令取点：按下的世界点，以及这次按下**落在谁身上**。
+   *
+   * @remarks
+   * 引擎在任何命中类型上都接管，但宿主要知道命中：热夹点下按在别的 Entity 上、又没吸上特征点
+   * 时，那一下的含义是换对象而不是取点，而这只有持有会话的宿主判得了。
+   */
+  | { readonly type: 'drafting.point'; readonly point: StagePoint; readonly hit: StageInteractionHit }
   /**
    * 一次 `pick`：按下的世界点，以及指针离开过按下点时的整笔轨迹（没动过为 `null`）。
    *

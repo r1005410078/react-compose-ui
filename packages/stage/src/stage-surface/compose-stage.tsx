@@ -936,7 +936,7 @@ function ComposeStageReady({
     surfaceRef,
     viewport,
     onDrawn: setLastDrawn,
-    onDraftingPoint: (point) => { draftingRef.current?.handlePoint(point) },
+    onDraftingPoint: (point, hit) => { draftingRef.current?.handlePoint(point, hit) },
     onDraftingPick: (point, trail) => { draftingRef.current?.handlePick(point, trail) },
     onDraftingPickTrail: (trail) => { draftingRef.current?.setPickTrail(trail) },
     onToolChange,
