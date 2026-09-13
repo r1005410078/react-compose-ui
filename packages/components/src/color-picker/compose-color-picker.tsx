@@ -105,7 +105,20 @@ export interface ComposeColorPickerProps {
   readonly onEyedropperFallback?: () => void
   /** Popover 可见性变化；Paint 编辑端口可据此锁定/释放画布手柄。 */
   readonly onOpenChange?: (open: boolean) => void
-  /** @internal 供同包 Paint Picker 在其 Popover 内嵌入色彩编辑控件。 */
+  /**
+   * 只渲染色彩编辑内容：不自带 Trigger、不自带 Popover。
+   *
+   * @remarks
+   * 调用方已经有一块打开着的面板（Paint Picker 的 Popover、工具栏那格填充色的面板）时用它——
+   * 嵌一层带 Trigger 的 Picker 会得到「面板里再点一下才出色盘」和一层套一层的弹出层。
+   *
+   * 这一档**由调用方声明**而不由组件猜：组件看不见自己外面有没有一层弹出层。
+   *
+   * 它比默认形态多显示**精确输入**（HEX 与只读 RGBA）与吸管：内嵌时没有 Trigger 上那个色块，
+   * 读数与取色没有别的地方可放。
+   *
+   * @defaultValue false
+   */
   readonly embedded?: boolean
 }
 

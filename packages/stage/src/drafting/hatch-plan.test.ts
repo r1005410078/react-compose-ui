@@ -158,7 +158,12 @@ function bisectedScene(hatch: Record<string, unknown>): ComposeDocument {
         { kind: 'line', start: { x: 0, y: 0 }, end: { x: 0, y: 400 } },
         300, 50, 1, 400,
       ),
-      fill: piece('fill', box(200, 300), 100, 100, 200, 300, {
+      /*
+       * 这块填充是**过期**的：存着的几何只有 150 宽，而现在那条线在 x=300，重求出来是 200 宽。
+       * 夹具必须过期——与当前的面逐位相同时求解会说「这一下是改它的颜色」，那时本来就没有什么
+       * 可重新生成的。
+       */
+      fill: piece('fill', box(150, 300), 100, 100, 150, 300, {
         Composition: { presetId: 'hatch', baseComponentKeys: ['Renderer'], capabilityIds: [] },
         Appearance: { backgroundPaint: { kind: 'solid', color: '#2f3b4d' } },
         Hatch: hatch,
@@ -173,7 +178,7 @@ function solvingContext(document: ComposeDocument): StageDraftingCommitContext {
     frame: { x: 0, y: 0, width: 1000, height: 800 },
     rect: { x: 100, y: 100, width: 400, height: 300 },
     line: { x: 300, y: 50, width: 1, height: 400 },
-    fill: { x: 100, y: 100, width: 200, height: 300 },
+    fill: { x: 100, y: 100, width: 150, height: 300 },
   }
   const snapshot = { boxes, diagnostics: [] } as never
   return {

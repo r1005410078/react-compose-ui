@@ -378,7 +378,7 @@ test('OpenSpec: stage / HATCH / 换色有两条入口', async ({ page }) => {
   await expect(fills.first()).toHaveAttribute('fill', '#a34b2f')
   await commandInput.press('Escape')
 
-  // 二、工具栏的色板；它列的是这一页已经用过的颜色，因此刚才那一档现在在上面。
+  // 二、工具栏那一格的颜色面板；它列的是这一页已经用过的颜色，因此刚才那一档现在在上面。
   const swatchTrigger = editor.locator('[data-toolbar-item="HATCH"] .compose-editor__toolbar-menu-trigger')
   await swatchTrigger.click()
   await expect(editor.locator('[data-swatch="#a34b2f"]')).toHaveCount(1)
@@ -388,6 +388,31 @@ test('OpenSpec: stage / HATCH / 换色有两条入口', async ({ page }) => {
   await commandInput.press('Enter')
   await page.mouse.click(view.at(400, 350).x, view.at(400, 350).y)
   await expect(fills.first()).toHaveAttribute('fill', '#2f3b4d')
+  await commandInput.press('Escape')
+})
+
+test('OpenSpec: stage / HATCH / 颜色面板里挑得出一个图上没用过的颜色', async ({ page }) => {
+  const { commandInput, editor, fills } = await open(page)
+  await run(commandInput, 'RECTANGLE', ['200,200', '600,500'], false)
+  const view = await worldToScreen(page)
+
+  /*
+   * 色板只列**这一页已经用过的**那几档，而「我要一个新颜色」是另一个问题——此前它只有命令行里
+   * 敲 `C` 加十六进制这一条路，那颗 ▾ 打开的一行色块把话说了一半。
+   */
+  await editor.locator('[data-toolbar-item="HATCH"] .compose-editor__toolbar-menu-trigger').click()
+  const panel = editor.getByRole('dialog', { name: '填充色' })
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('[data-swatch="#a34b2f"]')).toHaveCount(0)
+  const hex = panel.getByLabel('HEX').first()
+  await hex.fill('#a34b2f')
+  await hex.blur()
+  await page.keyboard.press('Escape')
+
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await page.mouse.click(view.at(400, 350).x, view.at(400, 350).y)
+  await expect(fills.first()).toHaveAttribute('fill', '#a34b2f')
   await commandInput.press('Escape')
 })
 

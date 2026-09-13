@@ -24,21 +24,21 @@
 
 ## 3. 颜色面板（components / editor）
 
-- [ ] 3.1 `ComposeColorPicker.embedded` 从 `@internal` 升为公开，TSDoc 说清它是哪一档
-- [ ] 3.2 工具栏 `▾` 打开的面板：色板行（单选组）+ 内嵌取色器
-- [ ] 3.3 容器从 `role="menu"` 换成 `role="dialog"`；键盘（Escape 关闭、焦点归还触发器）跟上
-- [ ] 3.4 组件测试：挑一个图上没用过的颜色、色板仍在、Escape 归还焦点
+- [x] 3.1 `ComposeColorPicker.embedded` 从 `@internal` 升为公开，TSDoc 说清它是哪一档
+- [x] 3.2 工具栏 `▾` 打开的面板：色板行（单选组）+ 内嵌取色器
+- [x] 3.3 容器从 `role="menu"` 换成 `role="dialog"`；键盘（Escape 关闭、焦点归还触发器）跟上
+- [x] 3.4 组件测试：挑一个图上没用过的颜色、色板仍在、Escape 归还焦点
 
 ## 4. 端到端
 
-- [ ] 4.1 对同一块面填两次：颜色变了，而 Entity 数量**不变**
-- [ ] 4.2 悬停时命令行说「将改变这块填充的颜色」
-- [ ] 4.3 劈成两半之后点任一半都新建
-- [ ] 4.4 从工具栏面板挑一个新颜色，填出来就是它
-- [ ] 4.5 用例 MUST 在非 100% 缩放下断言
+- [x] 4.1 对同一块面填两次：颜色变了，而 Entity 数量**不变**
+- [x] 4.2 悬停时命令行说「将改变这块填充的颜色」
+- [x] 4.3 劈成两半之后点任一半都新建
+- [x] 4.4 从工具栏面板挑一个新颜色，填出来就是它
+- [x] 4.5 用例 MUST 在非 100% 缩放下断言
 
 ## 5. 收尾
 
-- [ ] 5.1 `bun run lint && bun run typecheck && bun run test && bun run build`
-- [ ] 5.2 `bun run test:e2e`
-- [ ] 5.3 按需同步 `AGENTS.md`（三支、面板不是菜单）
+- [x] 5.1 `bun run lint && bun run typecheck && bun run test && bun run build`
+- [x] 5.2 `bun run test:e2e`（347 条全绿）
+- [x] 5.3 按需同步 `AGENTS.md`（三支、面板不是菜单）
