@@ -1721,12 +1721,18 @@
 }
 
 /*
- * 光标旁的剪刀徽标：与拾取框同一支笔——它是光标的一部分，不是画布上的记号。
+ * 光标旁的剪刀徽标：与拾取框**同一支笔**——它是光标的一部分，不是画布上的记号。
  * 是徽标不是换光标：拾取框必须留着，它是靶区、半边长是容差的事实来源。
+ *
+ * 「同一支笔」曾经只是一句注释：徽标读 `--compose-stage-crosshair`，而拾取框读的是
+ * canvas-kit 的 `--compose-canvas-crosshair`——两个名字像、谁也没被定义过的 token，各自
+ * 落到不同的兜底（硬编码 `#e6edf7` 对 `--compose-text`）。深色主题下两者恰好同值，缺陷
+ * 因此藏着；浅色主题下徽标是 `#e6edf7` 而图面底是近白的 `surface-control`，对比度 1.08:1,
+ * 等于没画，而同一个位置的拾取框是深色的。现在读同一个 token，那句承诺才是真的。
  */
 .compose-stage__drafting-badge {
   fill: none;
-  stroke: var(--compose-stage-crosshair, #e6edf7);
+  stroke: var(--compose-canvas-crosshair, var(--compose-text, #e6edf7));
   stroke-opacity: 0.9;
   stroke-width: 1.2;
   stroke-linecap: round;

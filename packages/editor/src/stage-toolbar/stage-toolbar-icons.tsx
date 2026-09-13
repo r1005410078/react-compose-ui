@@ -11,7 +11,6 @@ export type StageToolbarIconName =
   | 'fit-selection'
   | 'grid'
   | 'line'
-  | 'move'
   | 'ortho'
   | 'pan'
   | 'polar'
@@ -232,20 +231,6 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <path d="M4 16 16 4" />
         {gripMark(4, 16)}
         {gripMark(16, 4)}
-      </>
-    ),
-    /*
-     * 四向箭头。
-     *
-     * TODO(icon-set): 这枚与 `transform-gizmo` 只差中心那个基点方块，而 `move` 工具已经
-     * 随「工具集只保留没有别的入口的动作」一起删除、当前无任何引用。要么删掉它，要么在它
-     * 回来时换一个与指示器分得开的字形——两个长得几乎一样的图标做着不同的事，是最难自己
-     * 发现的一类缺陷。
-     */
-    move: (
-      <>
-        <path d="M10 3.2v13.6M3.2 10h13.6" />
-        <path d="M7.9 5.3 10 3.2l2.1 2.1M7.9 14.7 10 16.8l2.1-2.1M5.3 7.9 3.2 10l2.1 2.1M14.7 7.9 16.8 10l-2.1 2.1" />
       </>
     ),
     pan: (

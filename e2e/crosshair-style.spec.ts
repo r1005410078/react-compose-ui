@@ -112,3 +112,38 @@ test('OpenSpec: editor-preferences / 十字光标样式是编辑器偏好 / 绘�
   await expect(stage.locator('[data-stage-crosshair-halo]')).toHaveCount(4)
   await expect(stage.locator('linearGradient')).toHaveCount(0)
 })
+
+/*
+ * 剪刀徽标与拾取框「同一支笔」曾经只是一句注释：徽标读 `--compose-stage-crosshair`、拾取框
+ * 读 `--compose-canvas-crosshair`，两个谁也没被定义过的 token 落到不同的兜底。深色主题下
+ * 两者恰好同值，缺陷因此藏着——只有浅色主题会暴露：徽标 rgb(230,237,247) 画在近白的图面上，
+ * 对比度 1.08:1，等于没画。因此这条用例 MUST 在浅色主题下断。
+ */
+test('OpenSpec: stage / Stage 十字光标 / 剪刀徽标与拾取框同一支笔', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.getByRole('button', { name: '应用菜单' }).click()
+  await editor.getByRole('menuitem', { name: '设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await dialog.getByRole('radio', { name: '浅色' }).click()
+  await dialog.getByRole('button', { name: '关闭设置' }).click()
+
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const input = stage.getByRole('combobox', { name: '命令行' })
+  await input.click()
+  await input.fill('TRIM')
+  await page.keyboard.press('Enter')
+  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  await page.mouse.move(surface.x + 340, surface.y + 260)
+
+  const stroke = (selector: string) =>
+    stage.locator(selector).first().evaluate((el) => getComputedStyle(el).stroke)
+  const badge = await stroke('.compose-stage__drafting-badge')
+  const pickbox = await stroke('[data-stage-crosshair-box]')
+  expect(badge).toBe(pickbox)
+  // 并且那支笔在浅色图面上读得出来：它不能与图面底色同属一端。
+  const surfaceBg = await stage.locator('.compose-stage__surface').first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(badge).not.toBe(surfaceBg)
+})
+
