@@ -152,6 +152,42 @@ test('OpenSpec: stage / 空白工作区的新建落点 / 切换激活场景后�
   )).toHaveCount(1)
 })
 
+test('OpenSpec: basic-materials / 容器分轴溢出 Inspector / 场景也配得了裁剪与滚动', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const scene = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(scene).toBeVisible()
+
+  // 选中场景本体：场景体不承担点选，command 点体是既有入口。
+  const box = (await scene.boundingBox())!
+  await page.keyboard.down('Meta')
+  await page.mouse.click(box.x + 40, box.y + 40)
+  await page.keyboard.up('Meta')
+  await expect(stage.getByTestId('stage-selection-bounds')).toBeVisible()
+
+  /*
+   * 场景是放在顶层的容器，因此它的容器 Inspector 与普通容器逐项相同——曾经不是：
+   * `createComposeFrameEntity` 不写 `Clip`，Inspector 就退化成一个只读的子项数量，
+   * 而画布上没有第二条入口能给场景配裁剪。缺席的 Clip 读作「可见」，写入时补齐。
+   */
+  const inspector = editor.getByRole('region', { name: '场景 属性', exact: true })
+  const vertical = inspector.getByRole('combobox', { name: '纵向溢出' })
+  await expect(inspector.getByRole('combobox', { name: '横向溢出' })).toHaveValue('visible')
+  await expect(vertical).toHaveValue('visible')
+
+  await vertical.selectOption('scroll')
+  await expect(vertical).toHaveValue('scroll')
+  // 一个轴滚动时另一个轴的 visible 规范化成裁剪，与普通容器同一条命令。
+  await expect(inspector.getByRole('combobox', { name: '横向溢出' })).toHaveValue('clip')
+
+  // 进撤销历史：它是一次文档编辑，不是会话状态。
+  await stage.focus()
+  await page.keyboard.press('Control+z')
+  await expect(vertical).toHaveValue('visible')
+})
+
 test('OpenSpec: editor-workspace-layout / 场景与容器同图标 / 场景行与容器行图标一致', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')

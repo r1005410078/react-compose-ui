@@ -773,6 +773,35 @@ describe('内建 Component inspectors', () => {
     })
   })
 
+  it('OpenSpec: 容器分轴溢出 Inspector / 没有 Clip 的场景照样配得了溢出', () => {
+    const dispatch = vi.fn()
+    const Inspector = inspectorOf('Hierarchy')
+    // `createComposeFrameEntity` 建出来的场景没有 Clip：缺席即不裁剪，两个轴都读「可见」，
+    // 而写入由 `entity.clip.configure` 在同一条命令里补齐 Component。
+    const scene = entity({ Hierarchy: { childIds: [] } })
+    render(
+      <Inspector
+        componentKey="Hierarchy"
+        dispatch={dispatch}
+        entity={scene}
+        readOnly={false}
+        value={scene.components.Hierarchy!}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: '横向溢出' })).toHaveValue('visible')
+    expect(screen.getByRole('combobox', { name: '纵向溢出' })).toHaveValue('visible')
+    fireEvent.change(screen.getByRole('combobox', { name: '横向溢出' }), {
+      target: { value: 'clip' },
+    })
+    const command = dispatch.mock.lastCall?.[0] as EditorCommand
+    expect(command.type).toBe(BUILTIN_COMMAND_TYPES.configureClip)
+    expect(command.payload).toEqual({
+      entityIds: ['entity-a'],
+      horizontal: 'clip',
+      vertical: 'visible',
+    })
+  })
+
   it('OpenSpec: basic-materials / Flex 布局 Component 与紧凑 Inspector / 显示实际面板密度的 Flex 属性', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('Layout')

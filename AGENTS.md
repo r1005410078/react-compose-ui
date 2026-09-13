@@ -56,6 +56,12 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   图标（`frame` Preset 复用 Container 的图标与背景）。唯一的视觉区分是标题标签。
   场景默认外观与 Container 同底色但**边框宽度为 0**：布局求解把边框计入内容盒，而场景是
   绝对坐标的原点，默认边框会让按网格吸附的子级在属性面板里读成 7、15、23。
+  **裁剪与滚动走的也是容器那一条**：`Clip` 是可选 Component，**缺席即不裁剪**，容器 Inspector
+  一律按 `resolveComposeOverflow` 读、按 `entity.clip.configure` 写，而那条命令**补齐**缺席的
+  `Clip`——把关的是 `Hierarchy`（`Clip MUST 依赖 Hierarchy`，补给叶 Entity 会产出校验不过的
+  文档）。按「Component 在不在」分支曾经两头堵死：`createComposeFrameEntity` 建出来的场景
+  （新建场景、空白页面的种子场景、v6 迁移出来的根场景）没有 `Clip`，Inspector 于是退化成一个
+  只读的子项数量，而「添加容器能力」对已有 `Hierarchy` 的 Entity 又是拒绝的。
   场景标题标签是一行 flex：`[播放按钮?] [名称] [激活标记] [尺寸胶囊]`。尺寸胶囊常驻显示
   `Frame.size`，双击打开尺寸弹框（常见分辨率预设 + 自定义宽高）。它是改尺寸的**第二个入口
   而不是第二份事实来源**：与 Inspector 几何分组派发同一条 `entity.frame.size.set`，撤销一步

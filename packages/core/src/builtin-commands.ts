@@ -633,9 +633,14 @@ function configureClipHandler(): CommandHandler {
       }
       const targetIssues = validateTargets(document, ids, { allowLocked: false })
       if (targetIssues.length) return { status: 'rejected', issues: targetIssues }
+      // 缺席的 Clip 由本命令补齐而不是拒绝：`Clip` 是可选 Component，缺席即不裁剪，而场景
+      // （`createComposeFrameEntity`）与 v6 迁移出来的容器都没有它。拒绝的话这些容器只能
+      // 先「添加容器能力」才配得了溢出，而那条入口对已有 Hierarchy 的 Entity 又是拒绝的——
+      // 两头堵死。把关的改成 Hierarchy：`Clip MUST 依赖 Hierarchy`，写给叶 Entity 会产出
+      // 一份校验不过的文档。
       for (const id of ids) {
-        if (!document.entities[id]!.components.Clip) {
-          return issue('component.missing', `Entity ${id} 缺少 Clip`)
+        if (!document.entities[id]!.components.Hierarchy) {
+          return issue('component.missing', `Entity ${id} 缺少 Hierarchy`)
         }
       }
       const normalized = normalizeComposeOverflow(

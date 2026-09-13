@@ -11,7 +11,6 @@ import {
   createDefaultComposeLayoutItem,
   getComposeAppearance,
   adoptComposeCrossAxisSizing,
-  getComposeClip,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
@@ -1348,15 +1347,11 @@ export function createHierarchyInspector(
   return function HierarchyInspector({ entity, dispatch, readOnly }) {
     const zh = useZh()
     const hierarchy = getComposeHierarchy(entity)
-    const clip = getComposeClip(entity)
+    // 缺席的 Clip 按「不裁剪」解析：场景（`createComposeFrameEntity`）与 v6 迁移出来的
+    // 容器都没有这个 Component，而「所有带 Hierarchy 的物料都能配溢出」是本 Inspector 的
+    // 契约——按 Component 在不在来分支会让这些容器少掉两行属性，且画布上没有别的入口。
+    // 写入由 `entity.clip.configure` 补齐 Component，因此这里不需要先添加能力。
     const overflow = resolveComposeOverflow(entity)
-    const childCountSchema = useMemo(() => v.object({
-      childCount: v.pipe(
-        v.number(),
-        v.title(zh ? '子项数量' : 'Child count'),
-        v.metadata({ propertyPanel: { readOnly: true } }),
-      ),
-    }), [zh])
     const schema = useMemo(() => v.object({
       childCount: v.pipe(
         v.number(),
@@ -1383,16 +1378,6 @@ export function createHierarchyInspector(
       ),
     }), [zh])
     if (!hierarchy) return null
-    if (!clip) {
-      return (
-        <ComposePropertyPanel
-          aria-label={zh ? '容器属性' : 'Container properties'}
-          readOnly
-          schema={childCountSchema}
-          value={{ childCount: hierarchy.childIds.length }}
-        />
-      )
-    }
     return (
       <ComposePropertyPanel
         aria-label={zh ? '容器属性' : 'Container properties'}

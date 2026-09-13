@@ -58,6 +58,59 @@ describe('ComposeDocument v7 built-in commands', () => {
     })
   })
 
+  it('OpenSpec: Container 分轴溢出协议 / 给没有 Clip 的容器配溢出时补齐 Component', () => {
+    // 场景（`createComposeFrameEntity`）与 v6 迁移出来的容器都没有 Clip：缺席即不裁剪。
+    // 拒绝的话它们配不了溢出——「添加容器能力」对已有 Hierarchy 的 Entity 又是拒绝的。
+    const container = containerEntity('container')
+    const composition = container.components.Composition as {
+      readonly baseComponentKeys: readonly string[]
+    }
+    const withoutClip = {
+      ...container,
+      components: {
+        ...Object.fromEntries(
+          Object.entries(container.components).filter(([key]) => key !== 'Clip'),
+        ),
+        // `baseComponentKeys` 里的每一项都必须真的存在，拿掉 Component 就要一起拿掉声明。
+        Composition: {
+          ...composition,
+          baseComponentKeys: composition.baseComponentKeys.filter((key) => key !== 'Clip'),
+        },
+      },
+    } as ComposeEntity
+    const runtime = createTransactionRuntime({
+      document: documentFixture({ container: withoutClip }),
+    })
+    expect(runtime.document.entities.container?.components.Clip).toBeUndefined()
+
+    expect(dispatch(runtime, BUILTIN_COMMAND_TYPES.configureClip, {
+      entityIds: ['container'],
+      horizontal: 'clip',
+      vertical: 'scroll',
+    }).status).toBe('committed')
+    expect(runtime.document.entities.container?.components.Clip).toEqual({
+      enabled: true,
+      horizontal: 'clip',
+      vertical: 'scroll',
+    })
+    runtime.undo()
+    expect(runtime.document.entities.container?.components.Clip).toBeUndefined()
+  })
+
+  it('OpenSpec: Container 分轴溢出协议 / 拒绝给没有 Hierarchy 的叶 Entity 配溢出', () => {
+    // Clip MUST 依赖 Hierarchy：补给叶 Entity 会产出一份校验不过的文档。
+    const runtime = createTransactionRuntime({
+      document: documentFixture({ leaf: rendererEntity('leaf') }),
+    })
+    const result = dispatch(runtime, BUILTIN_COMMAND_TYPES.configureClip, {
+      entityIds: ['leaf'],
+      horizontal: 'clip',
+      vertical: 'clip',
+    })
+    expect(result.status).toBe('rejected')
+    expect(runtime.document.entities.leaf?.components.Clip).toBeUndefined()
+  })
+
   it('OpenSpec: command-transaction / Frame 尺寸事务 / 提交并撤销 Frame 尺寸', () => {
     const runtime = createTransactionRuntime({ document: documentFixture() })
     const frameSize = () =>
