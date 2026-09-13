@@ -1254,8 +1254,11 @@ export function useComposeEditorController({
   // 网格显示是 Stage 会话偏好；只影响视觉，不进入文档与撤销历史。
   const [gridVisible, setGridVisible] = useState(true)
   const [transformGizmo, setTransformGizmo] = useState(false)
-  // 十字光标臂长：AutoCAD `CURSORSIZE` 的默认值；绘图类工作区会把它拉到贯穿图面。
-  const [crosshairSize, setCrosshairSize] = useState(5)
+  /*
+   * 十字光标臂长：贯穿图面，与 `DEFAULT_WORKSPACE_SESSION` 逐字相同（三个内建工作区共用
+   * 那一份）。它仍是会话开关——宿主与工作区都能改，改过之后切回来还在。
+   */
+  const [crosshairSize, setCrosshairSize] = useState(100)
   // 画笔样式由编辑器从用户偏好同步进来；默认渐隐是用户选定的默认。
   const [crosshairStyle, setCrosshairStyle] = useState<ComposeCanvasCrosshairStyle>('fade')
   const [snapRestore, setSnapRestore] = useState({
