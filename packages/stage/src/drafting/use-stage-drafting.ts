@@ -107,6 +107,10 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly hatchFillLabel: (name: string) => string
   /** 填充被拒绝时的说明；三种原因三句，互不相同。 */
   readonly hatchRejection: (reason: StageHatchRejection) => string
+  /** 悬停在「会改某个既有对象」那一支上时命令行说的话。 */
+  readonly hatchWillFill: (name: string) => string
+  /** 悬停在「会新建一块」那一支上时命令行说的话。 */
+  readonly hatchWillCreate: string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
@@ -1749,6 +1753,30 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [activeHatchColor, hatching, index, pointer])
 
   /**
+   * 悬停时命令行说的那句话：这一下会改某个既有对象，还是会新建一块。
+   *
+   * @remarks
+   * 两支由**图上看得见的东西**决定，因此这句话与那块半透明的色读**同一个** `hatch` memo——
+   * 各自解算一遍的话，命令行说「将新建」而预览画的却是某个矩形被填上，用户没有任何办法
+   * 判断哪个是真的。
+   *
+   * 这是宿主对提示 `message` 的一次**呈现层覆盖**，不是第二份提示：这一步是谁、收什么输入、
+   * 有哪些关键字全都还是会话说了算——只有「这一下会落在哪一支上」是引擎不知道的，因为它
+   * 既不认识 Preset id 也不建 Entity。光标没有落点（指针在图面外）时不覆盖，那时没有哪一支
+   * 可言。
+   */
+  const hatchPrompt = useMemo(() => {
+    if (!prompt || !hatching || !hatch) return prompt
+    const target = hatch.target === null ? null : document.entities[hatch.target]
+    return {
+      ...prompt,
+      message: target
+        ? messages.hatchWillFill(target.name)
+        : messages.hatchWillCreate,
+    }
+  }, [document.entities, hatch, hatching, messages, prompt])
+
+  /**
    * 一次 `pick`：点一下是按下点底下那一截，拖一笔是轨迹碰到的每一截。
    *
    * @remarks
@@ -1863,7 +1891,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     setPickTrail,
     handlePick,
     pointerType,
-    prompt: enabled ? prompt : null,
+    prompt: enabled ? hatchPrompt : null,
     notice: enabled ? notice : null,
     angleConstraint,
     setAngleConstraint,

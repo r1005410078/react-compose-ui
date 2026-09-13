@@ -67,6 +67,11 @@ async function worldToScreen(page: Page) {
       x: view.left + view.x + x * view.zoom,
       y: view.top + view.y + y * view.zoom,
     }),
+    /** 图面局部屏幕坐标——覆盖层的记号画在这个空间里，不带 surface 的 left/top。 */
+    local: (x: number, y: number) => ({
+      x: view.x + x * view.zoom,
+      y: view.y + y * view.zoom,
+    }),
   }
 }
 
@@ -144,6 +149,34 @@ test('OpenSpec: stage-engine / HATCH / 线穿过矩形时只填被点的那半�
   await commandInput.press('Escape')
 })
 
+test('OpenSpec: stage / HATCH / 悬停时命令行说出这一下会落在哪一支', async ({ page }) => {
+  const { commandInput, prompt, strokes } = await open(page)
+  // 左边一个谁也不穿的矩形（改它自己那一支），右边一个被线切开的（新建那一支）。
+  await run(commandInput, 'RECTANGLE', ['200,200', '500,500'], false)
+  await run(commandInput, 'RECTANGLE', ['700,200', '1100,500'], false)
+  await run(commandInput, 'LINE', ['900,150', '900,550'])
+  await expect(strokes).toHaveCount(3)
+  const view = await worldToScreen(page)
+
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('点一下要填充的区域内部')
+
+  // 悬停在完整矩形里：这一下会改那个矩形，命令行必须在松手**之前**说出来。
+  await page.mouse.move(view.at(350, 350).x, view.at(350, 350).y)
+  await expect(prompt).toContainText('将改变')
+  await expect(prompt).not.toContainText('将新建')
+
+  // 挪到被线切开的那半边：同一个手势，另一支。
+  await page.mouse.move(view.at(800, 350).x, view.at(800, 350).y)
+  await expect(prompt).toContainText('将新建一个填充对象')
+
+  // 挪回去还要能说回来——这句话是悬停的函数，不是一次性的。
+  await page.mouse.move(view.at(350, 350).x, view.at(350, 350).y)
+  await expect(prompt).toContainText('将改变')
+  await commandInput.press('Escape')
+})
+
 test('OpenSpec: stage-engine / HATCH / 矩形里的圆被挖空', async ({ page }) => {
   const { commandInput: input, fills, strokes } = await open(page)
   await run(input, 'RECTANGLE', ['200,200', '600,500'], false)
@@ -181,6 +214,21 @@ test('OpenSpec: stage-engine / HATCH / 不封闭时拒绝并画断口，补上�
   await expect(fills).toHaveCount(0)
   await expect(prompt).toContainText('边界没有闭合')
   await expect(gaps).toHaveCount(2)
+  /*
+   * 断的是**位置**而不只是数量：记号画错地方比不画更糟——它会指着一处没有缝的地方，
+   * 而用户此刻正拿着它去图上找那条缝。两个记号必须落在那两个自由端（世界 200,300 与 200,340）。
+   */
+  const marks = await gaps.evaluateAll((nodes) => nodes
+    .map((node) => ({
+      x: Number(node.getAttribute('cx')),
+      y: Number(node.getAttribute('cy')),
+    }))
+    .sort((a, b) => a.y - b.y))
+  for (const [index, world] of [{ x: 200, y: 300 }, { x: 200, y: 340 }].entries()) {
+    const expected = view.local(world.x, world.y)
+    expect(marks[index]!.x).toBeCloseTo(expected.x, 0)
+    expect(marks[index]!.y).toBeCloseTo(expected.y, 0)
+  }
   await commandInput.press('Escape')
 
   // 补上那一段，同一个位置再点即成。
