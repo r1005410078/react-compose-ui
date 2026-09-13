@@ -140,6 +140,7 @@ describe('Basic ECS materials', () => {
       'rect',
       'wire',
       'junction',
+      'hatch',
     ])
     const container = seedEntity(materials, 'container')
     expect(getComposeHierarchy(container)?.childIds).toEqual([])

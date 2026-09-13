@@ -3,7 +3,6 @@ import {
   composeCurvePointAtParameter,
   composeCurveParameterSpan,
   composeCurveSegments,
-  composePolylineSegments,
   getComposeCurve,
   getComposeLock,
   intersectComposeArcs,
@@ -11,17 +10,15 @@ import {
   intersectComposeSegments,
   isComposeClosedCurve,
   nearestComposeCurveParameter,
-  projectComposeCurveToBox,
   resolveComposeGeometryConstraints,
   sliceComposeCurve,
   translateComposeCurve,
-  type ComposeArcShape,
-  type ComposeCurve,
   type ComposeEntity,
   type ComposeSegmentShape,
   type EditorCommand,
 } from '@compose-ui/core'
-import { applyMatrix, invertMatrix, rectsIntersect, type StageMatrix, type StagePoint } from '../geometry'
+import { applyMatrix, invertMatrix, rectsIntersect, type StagePoint } from '../geometry'
+import { stageBoxCurve, stageWorldShapes, type StageWorldShape } from './curve-world'
 import type { StageSceneIndex } from '../hit-testing'
 import { planStageCurveReplacement } from './curve-split'
 import type { StageJunctionPredicate } from './junction-cleanup'
@@ -94,52 +91,14 @@ export type StageTrimResolution =
   | { readonly status: 'ok'; readonly piece: StageTrimPiece }
   | { readonly status: 'rejected'; readonly reason: StageTrimRejection }
 
-/** 世界坐标下的一条形状，带它对应的曲线参数区间。 */
-type WorldShape =
-  | { readonly kind: 'segment'; readonly segment: ComposeSegmentShape; readonly base: number }
-  | { readonly kind: 'arc'; readonly arc: ComposeArcShape }
-
 /** 参数轴上两个位置视为同一处的容差。 */
 const PARAMETER_EPSILON = 1e-6
 
 /** 求方向用的参数步长。 */
 const TANGENT_STEP = 1e-3
 
-const rotationDegrees = (matrix: StageMatrix) => (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI
-
-/** 把盒局部的曲线搬进世界坐标，拆成可求交的形状。弧在非等比拉伸下已经被投影成折线。 */
-function worldShapes(curve: ComposeCurve, matrix: StageMatrix): readonly WorldShape[] {
-  if (curve.kind === 'arc') {
-    const determinant = matrix.a * matrix.d - matrix.b * matrix.c
-    return [{
-      kind: 'arc',
-      arc: {
-        center: applyMatrix(matrix, curve.center),
-        radius: curve.radius * Math.sqrt(Math.abs(determinant)),
-        startAngle: curve.startAngle + rotationDegrees(matrix),
-        // 镜像矩阵翻转扫掠方向；参数轴（走过的角量）因此在两边都一致。
-        sweep: determinant < 0 ? -curve.sweep : curve.sweep,
-      },
-    }]
-  }
-  if (curve.kind === 'path') {
-    return composeCurveSegments(curve).map((segment, index) => ({
-      kind: 'segment',
-      segment: { start: applyMatrix(matrix, segment.start), end: applyMatrix(matrix, segment.end) },
-      base: index,
-    }))
-  }
-  const vertices = curve.kind === 'line' ? [curve.start, curve.end] : curve.vertices
-  const closed = curve.kind === 'polyline' && curve.closed
-  return composePolylineSegments(vertices, closed).map((segment, index) => ({
-    kind: 'segment',
-    segment: { start: applyMatrix(matrix, segment.start), end: applyMatrix(matrix, segment.end) },
-    base: index,
-  }))
-}
-
 /** 目标形状上与另一条形状的交点参数。 */
-function intersectionParameters(target: WorldShape, other: WorldShape): readonly number[] {
+function intersectionParameters(target: StageWorldShape, other: StageWorldShape): readonly number[] {
   if (target.kind === 'segment') {
     const hits = other.kind === 'segment'
       ? intersectComposeSegments(target.segment, other.segment)
@@ -150,14 +109,6 @@ function intersectionParameters(target: WorldShape, other: WorldShape): readonly
     return intersectComposeSegmentArc(other.segment, target.arc).map((hit) => hit.b)
   }
   return intersectComposeArcs(target.arc, other.arc).map((hit) => hit.a)
-}
-
-/** 盒局部曲线：与命中、捕捉应用同一个盒到几何的变换。 */
-function boxCurve(index: StageSceneIndex, entityId: string): ComposeCurve | null {
-  const entity = index.document.entities[entityId]
-  const curve = entity ? getComposeCurve(entity) : undefined
-  const box = index.layoutSnapshot.boxes[entityId]
-  return curve && box ? projectComposeCurveToBox(curve, box) : null
 }
 
 function rejected(reason: StageTrimRejection): StageTrimResolution {
@@ -193,7 +144,7 @@ export function resolveStageTrimPiece(
   if (resolveComposeGeometryConstraints(entity).resize === 'none') return rejected('fixed-size')
   const source = getComposeCurve(entity)!
   if (source.kind === 'path') return rejected('path')
-  const curve = boxCurve(index, entityId)
+  const curve = stageBoxCurve(index, entityId)
   const matrix = index.getWorldMatrix(entityId)
   // 非等比拉伸过的弧投影成了折线：它的参数轴与文档里那条弧对不上。
   if (!curve || !matrix || curve.kind !== source.kind) return rejected('unsupported')
@@ -204,7 +155,7 @@ export function resolveStageTrimPiece(
   const parameter = nearestComposeCurveParameter(curve, local)
   if (parameter === null) return rejected('unsupported')
 
-  const shapes = worldShapes(curve, matrix)
+  const shapes = stageWorldShapes(curve, matrix)
   const closed = isComposeClosedCurve(curve)
   const boundaries = new Set<number>()
   const addBoundary = (value: number) => {
@@ -226,9 +177,9 @@ export function resolveStageTrimPiece(
     const otherBounds = index.getWorldBounds(other.id)
     if (bounds && otherBounds && !rectsIntersect(bounds, otherBounds)) continue
     const otherMatrix = index.getWorldMatrix(other.id)
-    const otherCurve = boxCurve(index, other.id)
+    const otherCurve = stageBoxCurve(index, other.id)
     if (!otherMatrix || !otherCurve) continue
-    const otherShapes = other.id === entityId ? shapes : worldShapes(otherCurve, otherMatrix)
+    const otherShapes = other.id === entityId ? shapes : stageWorldShapes(otherCurve, otherMatrix)
     shapes.forEach((shape, shapeIndex) => {
       otherShapes.forEach((candidate, candidateIndex) => {
         if (other.id === entityId) {
@@ -340,7 +291,7 @@ export function planStageTrim(
     if (resolution.status !== 'ok' || seen.has(target.id)) continue
     seen.add(target.id)
     const entity = document.entities[target.id]!
-    const curve = boxCurve(index, target.id)!
+    const curve = stageBoxCurve(index, target.id)!
     const { piece } = resolution
     const remaining = piece.whole ? [] : (sliceComposeCurve(curve, piece.from, piece.to)?.remaining ?? [])
     const item = entity.components.LayoutItem as { offset: { x: number; y: number } }
@@ -397,9 +348,9 @@ export function resolveStageTrailTargets(
     if (!getComposeCurve(entity) || !index.isVisible(entity.id)) continue
     if (options.isJunction?.(entity)) continue
     const matrix = index.getWorldMatrix(entity.id)
-    const curve = boxCurve(index, entity.id)
+    const curve = stageBoxCurve(index, entity.id)
     if (!matrix || !curve) continue
-    const shapes = worldShapes(curve, matrix)
+    const shapes = stageWorldShapes(curve, matrix)
     for (const stroke of strokes) {
       for (const shape of shapes) {
         const hits = shape.kind === 'segment'

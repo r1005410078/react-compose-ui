@@ -29,6 +29,12 @@ const messages = {
   trimTitle: '修剪',
   selectTrimTarget: '选择要修剪的一截，或按住拖过多条（回车结束）:',
   expectedPick: '需要点一下要修剪的一截',
+  hatchTitle: '填充',
+  pickHatchPoint: '点一下要填充的区域内部（回车结束）:',
+  expectedHatchPoint: '需要点一下要填充的区域内部',
+  hatchColorKeyword: '颜色',
+  specifyHatchColor: '输入填充色（如 #3f5068）:',
+  invalidHatchColor: '读不出这个颜色，试试 #3f5068',
   arcTitle: '圆弧',
   circleTitle: '圆',
   rectangleTitle: '矩形',
@@ -138,7 +144,7 @@ describe('LINE 命令', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
       'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'POLYGON', 'PLINE',
-      'MOVE', 'COPY', 'ERASE', 'TRIM', 'VERTEX', 'MIRROR',
+      'MOVE', 'COPY', 'ERASE', 'TRIM', 'HATCH', 'VERTEX', 'MIRROR',
       'ALIGNLEFT', 'ALIGNCENTERX', 'ALIGNRIGHT',
       'ALIGNTOP', 'ALIGNCENTERY', 'ALIGNBOTTOM',
       'DISTRIBUTEX', 'DISTRIBUTEY',

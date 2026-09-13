@@ -55,6 +55,7 @@ import {
   type StageGripTarget,
   type StagePoint,
   type StageRect,
+  type StageHatchRejection,
   type StageTrimRejection,
   type StageWireEnd,
 } from '@compose-ui/stage-engine'
@@ -593,6 +594,18 @@ function ComposeStageReady({
     selectTrimTarget: messages.draftingSelectTrimTarget,
     expectedPick: messages.draftingExpectedPick,
     trimLabel: messages.draftingTrimLabel,
+    hatchTitle: messages.draftingHatchTitle,
+    pickHatchPoint: messages.draftingPickHatchPoint,
+    expectedHatchPoint: messages.draftingExpectedHatchPoint,
+    hatchColorKeyword: messages.draftingHatchColorKeyword,
+    specifyHatchColor: messages.draftingSpecifyHatchColor,
+    invalidHatchColor: messages.draftingInvalidHatchColor,
+    hatchFillLabel: messages.draftingHatchFillLabel,
+    hatchRejection: (reason: StageHatchRejection) => ({
+      open: messages.hatchRejectOpen,
+      outside: messages.hatchRejectOutside,
+      locked: messages.hatchRejectLocked,
+    })[reason],
     trimRejection: (reason: StageTrimRejection) => ({
       locked: messages.trimRejectLocked,
       'fixed-size': messages.trimRejectFixedSize,
@@ -1518,6 +1531,9 @@ function ComposeStageReady({
             crosshair={crosshair}
             outlines={draftingSession.outlines}
             trim={draftingSession.trim}
+            hatch={draftingSession.hatch}
+            hatchGaps={draftingSession.hatchGaps}
+            hatchColor={draftingSession.hatchColor}
             badge={draftingSession.badge}
             rubberBand={draftingSession.rubberBand}
             trackingRay={draftingSession.trackingRay}

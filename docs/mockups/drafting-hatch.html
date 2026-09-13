@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>填充：点一下，填满围出来的那块面</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --page-bg: #f4f6f9;
+    --page-panel: #ffffff;
+    --page-ink: #141a22;
+    --page-muted: #5a6472;
+    --page-line: #dde3ec;
+    --page-accent: #1f6feb;
+    --page-todo: #b45309;
+    --page-done: #2f855a;
+
+    /* 画布 token —— 取自 packages/stage/src/styles.css 与 ui-context 的深色主题 */
+    --canvas: #11151b;
+    --canvas-border: #2c3542;
+    --ink: #dfe7f3;
+    --wire: #ff3b30;
+    --accent: #3687ff;
+    --port: #38bdf8;
+    --hot: #f2545b;
+    --snap: #ffa53c;
+    --cut: #e15bd0;
+    --dangling: #f59e0b;
+    --cursor: #e6edf7;
+    --note: #7d8797;
+    /* 本稿提议的填充默认色：一块中性的分区底，不宣称任何语义。 */
+    --hatch: #3f5068;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0d1117;
+      --page-panel: #151b23;
+      --page-ink: #e6edf7;
+      --page-muted: #99a3b2;
+      --page-line: #262f3b;
+      --page-accent: #4d9cff;
+      --page-todo: #f59e0b;
+      --page-done: #48bb78;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #0d1117;
+    --page-panel: #151b23;
+    --page-ink: #e6edf7;
+    --page-muted: #99a3b2;
+    --page-line: #262f3b;
+    --page-accent: #4d9cff;
+    --page-todo: #f59e0b;
+    --page-done: #48bb78;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family: 'IBM Plex Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { max-width: var(--measure); color: var(--page-muted); margin: 0; }
+  h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 4px; }
+  .section-head p { max-width: var(--measure); margin: 0; color: var(--page-muted); }
+
+  .answers { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .answer {
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .answer .q {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+  }
+  .answer .a { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .answer .why { font-size: 13.5px; color: var(--page-muted); line-height: 1.6; }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 5.5%) 0 1px, transparent 1px 80px),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 2.6%) 0 1px, transparent 1px 16px),
+      var(--canvas);
+    border: 1px solid var(--canvas-border);
+  }
+  .stage svg { display: block; width: 100%; height: auto; }
+  /* 琥珀虚线圈 = 本稿提议、尚未落地；绿实线圈留给已经落地的部分。 */
+  .stage.todo { outline: 2px dashed var(--page-todo); outline-offset: 3px; }
+  .stage.done { outline: 2px solid var(--page-done); outline-offset: 3px; }
+
+  /* 画布内的笔 —— 与 drafting-trim.html / wire-modes.html 同一套。 */
+  .ink { stroke: var(--ink); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .wire { stroke: var(--wire); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .sym { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+  .ghost { stroke-dasharray: 4 3; opacity: 0.32; }
+  .pick { stroke: var(--cursor); stroke-width: 1; stroke-opacity: 0.75; fill: none; }
+  .badge { stroke: var(--cursor); stroke-width: 1.2; stroke-opacity: 0.9; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .sel { stroke: var(--accent); stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .selbox { stroke: var(--accent); stroke-width: 1; fill: none; }
+  .grip { fill: #181b20; fill-opacity: 0.55; stroke: var(--accent); stroke-width: 1.5; }
+  .port { fill: var(--port); }
+
+  /* 本稿新增的几支笔。 */
+  .hatch { fill: var(--hatch); stroke: none; }
+  /*
+   * 油漆桶：轮廓走 `currentColor`（跟主题走），**只有漆面填当前色**。整桶填色时
+   * 近白漆在深底上、近黑漆在浅底上都会和轮廓糊成一块，桶的剪影就没了；留出桶口那一截，
+   * 剪影在任何漆色下都成立。
+   * 轮廓是记号（cursor 白），桶里那块是**样本**（当前填充色）——与修剪把幽灵画成
+   * Entity 自己的描边色是同一条：语义用 token，取值用样本。
+   */
+  .bkt-line { stroke: currentcolor; stroke-width: 1.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+  .bkt-paint { fill: var(--hatch); stroke: none; }
+  /* 图面上的徽标归画布词汇：描边跟十字光标同源，与 chrome 里那枚只差描边取自哪儿。 */
+  .bkt-cursor { color: var(--cursor); }
+  .bkt-chrome { color: var(--ink); }
+  .swatch-chip { stroke: rgb(128 128 128 / 45%); stroke-width: 1; }
+  .swatch-chip.on { stroke: var(--accent); stroke-width: 2; }
+  .pop { fill: #1a1f27; stroke: #2c3542; }
+  .hatch.pv { fill-opacity: 0.45; }
+  .gap { stroke: var(--dangling); stroke-width: 1.6; fill: none; stroke-dasharray: 4 3; }
+  .gapdot { fill: none; stroke: var(--dangling); stroke-width: 1.6; }
+
+  .lbl { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; fill: var(--note); }
+  .note { font-family: 'IBM Plex Sans SC', sans-serif; font-size: 12px; fill: var(--note); }
+  .note.warn { fill: var(--dangling); }
+  .note.portc { fill: var(--port); }
+  .note.acc { fill: var(--accent); }
+  .divider { stroke: var(--canvas-border); stroke-width: 1; }
+  .cmd-bg { fill: #1a1f27; stroke: #2c3542; }
+  .cmd-k { font-family: 'IBM Plex Sans SC', sans-serif; font-size: 12.5px; fill: var(--note); }
+  .cmd-v { font-family: 'IBM Plex Sans SC', sans-serif; font-size: 12.5px; fill: #e6edf7; }
+  .cmd-v.warn { fill: var(--dangling); }
+
+  .steps { display: flex; flex-direction: column; gap: 40px; }
+  .step { display: flex; flex-direction: column; gap: 12px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; }
+  .step-n {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--page-accent);
+    letter-spacing: 0.08em;
+    flex: none;
+  }
+  .step-title { font-weight: 600; letter-spacing: -0.01em; }
+  .step-note { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .step-note code, p code, td code, li code, .why code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--page-accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  pre {
+    margin: 0;
+    background: var(--page-panel);
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  pre .c { color: var(--page-muted); }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--page-line); border-radius: 10px; background: var(--page-panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 680px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--page-line); vertical-align: top; }
+  th {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-muted);
+    font-weight: 500;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  td a { color: var(--page-accent); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .swatch {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 3px;
+    margin-right: 7px;
+    vertical-align: -1px;
+    border: 1px solid rgb(128 128 128 / 35%);
+  }
+
+  .callout {
+    background: color-mix(in srgb, var(--page-accent) 7%, var(--page-panel));
+    border: 1px solid color-mix(in srgb, var(--page-accent) 26%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .callout.todo {
+    background: color-mix(in srgb, var(--page-todo) 8%, var(--page-panel));
+    border-color: color-mix(in srgb, var(--page-todo) 34%, transparent);
+  }
+  .callout strong { font-weight: 600; }
+  .callout p { margin: 0; font-size: 14px; max-width: var(--measure); }
+
+  .open { border-left: 3px solid var(--page-line); padding: 2px 0 2px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .open p { margin: 0; color: var(--page-muted); font-size: 14px; max-width: var(--measure); }
+  .opens { display: flex; flex-direction: column; gap: 18px; }
+
+  footer {
+    border-top: 1px solid var(--page-line);
+    padding-top: 20px;
+    color: var(--page-muted);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  footer ul { margin: 0; padding-left: 18px; }
+  footer a { color: var(--page-accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">SDD 补充 · 绘图交互 · 提案</div>
+    <h1>填充：点一下，填满围出来的那块面</h1>
+    <p class="lede">
+      今天的填充属于<strong>对象</strong>——一个矩形的底色是它自己 <code>Appearance.backgroundPaint</code> 上的一个字段。
+      但用户指着的常常是一<strong>块面</strong>：矩形的三条边加上圆弧的一段围出来的那块。两者都要有，而且必须是两件东西。
+      本稿提的是第二件：一条 <code>HATCH</code> 命令，点一下把光标底下那块面落成一个新的 Entity。
+      边界是图上<strong>所有</strong>可见曲线，交点即拐角——与已落地的 <code>TRIM</code> 是同一份边界、同一种输入、同一套求交数学。
+      画布片段按 Stage 的真实 token 1:1 绘制；<strong style="color:var(--page-todo)">琥珀虚线圈 = 本稿提议、尚未落地</strong>。
+    </p>
+  </header>
+
+  <section>
+    <div class="answers">
+      <div class="answer">
+        <div class="q">填的是什么</div>
+        <div class="a">光标底下围出来的那块面</div>
+        <div class="why">
+          不是某个对象的属性。对象的填充照旧——矩形还可以有自己的底色，那条路径一个字节不动。
+          这一件回答的是另一个问题：「这几条线围出来的这块」。两者不能合并，见右下第一段。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">面的边界在哪</div>
+        <div class="a">所有可见曲线，交点即拐角</div>
+        <div class="why">
+          与 <code>TRIM</code> 同一份边界：图上每条曲线自动是边界，<strong>不用先选</strong>。
+          从落点向外走，碰到第一条线就沿着它拐，每到一个交点取最靠右的转向，绕回起点即闭合。
+        </div>
+      </div>
+      <div class="answer">
+        <div class="q">填出来的是什么</div>
+        <div class="a">一个普通 Entity——除非那块面本来就是某个对象</div>
+        <div class="why">
+          不是渲染规则、不是组、不是蒙版，是带 <code>Curve</code> 的普通曲线 Entity，因此选中、改色、绑定、
+          动画轨道与撤销<strong>全部白拿</strong>。而边界<strong>恰好是一个对象的完整几何</strong>时改它的填充、不新建，
+          否则拿桶点一个矩形会凭空多出一个与它重合的东西。见 02。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <strong>为什么不能让矩形的红色自己避开圆</strong>
+    <p>
+      这是最容易想到的解法——「让对象的填充按周围的线裁切」。它错在两处。
+      其一，<strong>一条导线穿过设备外框时，外框的底色会被切成两块</strong>，而接线图上导线天天穿过外框；
+      同一条规则在「圆压住矩形」上看着聪明，在「线穿过矩形」上就是一个缺陷。
+      其二，它让 <code>backgroundPaint</code> 的含义取决于图上<strong>别的</strong>对象——
+      「这个矩形是什么颜色」这个问题的答案要先看它周围有什么，而这个字段还要参与命中、数据绑定与动画采样。
+      因此红与黄是两个对象，不是一个做错了：<strong>红色属于矩形，黄色属于那块面</strong>。
+    </p>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <h2>别人怎么做</h2>
+      <p>做这件事的产品分两类：<strong>从落点反推边界</strong>（本稿要的），与<strong>在作者画好的轮廓里减出填充</strong>（KiCad 的敷铜、Altium 的覆铜）。后者不是同一个交互，但它回答关联性的方式恰恰最值得抄。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>产品 · 工具</th><th>怎么定边界</th><th>产出什么</th><th>关联</th><th>间隙</th><th>取不取</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-410ECEBF-7CC2-4000-A45E-18F1F6BEE423.htm">AutoCAD · HATCH</a>（拾取内部点）</td>
+            <td><strong>射线 + 逆时针绕行</strong>——<code>-HATCH</code> 的帮助原文就是「从指定点沿 +X 射出一条线到遇到的第一个对象，然后<strong>按逆时针方向沿边界绕行</strong>」。候选集是<strong>当前视口里看得见的</strong>那些</td>
+            <td>一个新的 HATCH 实体，同时存三份：烘死的环几何、边界对象的<strong>句柄</strong>、以及<strong>那个落点</strong>（DXF 组码 98/10/20）</td>
+            <td>默认开（<code>HPASSOC</code>=1）。边界改完仍闭合就跟随；<strong>变成开的就静默失联并停在原地</strong></td>
+            <td><code>HPGAPTOL</code>，0–5000 图纸单位，<strong>默认 0</strong></td>
+            <td><strong>取</strong>：算法、自动切割边、<code>HPDRAWORDER</code> 默认「送到边界之后」。不取那个落点的关联用法，见下</td>
+          </tr>
+          <tr>
+            <td><a href="https://helpx.adobe.com/illustrator/desktop/paint-and-fill/learn-painting-basics/about-live-paint.html">Illustrator · Live Paint</a></td>
+            <td>把组里所有路径<strong>拍平到一个平面上</strong>——「没有哪一部分在另一部分的前面或后面」。交点之间的一段叫 edge，围出来的叫 face</td>
+            <td><strong>不产出对象</strong>：颜色是 face 的一个属性</td>
+            <td>有，但 face 的身份不稳定：删掉一条边时两个 face 合并，<strong>按面积大的那个的颜色</strong>留下，另一个静默丢掉</td>
+            <td>Small / Medium / Large / 自定义（数值未公开）</td>
+            <td><strong>不取</strong>。代价见下面那段</td>
+          </tr>
+          <tr>
+            <td><a href="https://helpx.adobe.com/illustrator/using/building-new-shapes-using-shape.html">Illustrator · Shape Builder</a></td>
+            <td>同上的平面图，但作用于当前选区</td>
+            <td>一个新路径，<strong>并替换掉原对象</strong></td>
+            <td><strong>没有</strong>。Adobe 自己的社区专家答「想保持可编辑就别用它，用 Live Paint」</td>
+            <td>3 / 6 / 12 pt，而且是<strong>近似匹配不是上限</strong>——设大了反而测不到小缝</td>
+            <td>不取。边界对象一个都不能动，这是我们与它的根本分歧</td>
+          </tr>
+          <tr>
+            <td><a href="https://www.figma.com/blog/introducing-vector-networks/">Figma · Paint（<code>Shift B</code>）</a></td>
+            <td>在<strong>一个</strong> VectorNode 的图上找环。<code>VectorRegion.loops</code> 存的是<strong>段下标</strong>，不是坐标</td>
+            <td>节点上的一个 region，不产出对象</td>
+            <td>有，而且很稳——因为引用的是下标，拖顶点时填充自然跟着</td>
+            <td>没有，必须真闭合</td>
+            <td><strong>跨不了对象</strong>：要跨两个图层得先 Flatten，而那是破坏性的。这正是我们不能照抄它的地方</td>
+          </tr>
+          <tr>
+            <td><a href="https://wiki.inkscape.org/wiki/Release_notes/0.46">Inkscape · 油漆桶</a></td>
+            <td><strong>按渲染出来的像素漫填</strong>——官方原文「这个工具是感知的，不是几何的」，分辨率<strong>取决于当前缩放</strong></td>
+            <td>一条与任何东西都无关的新 <code>&lt;path&gt;</code></td>
+            <td><strong>没有</strong></td>
+            <td>无 / 2 / 4 / 6 <strong>屏幕</strong>像素，因此也随缩放变</td>
+            <td>不取。同一块区域在两个缩放下得到不同的顶点数，这块画布上每条几何都必须是真几何</td>
+          </tr>
+          <tr>
+            <td><a href="https://affinity.help/designer2/en-US.lproj/pages/Tools/tools_vectorFloodFill.html">Affinity Designer · Vector Flood Fill</a></td>
+            <td>几何的（不是像素的），检测边缘后填满完全封闭的区域</td>
+            <td>一个新形状</td>
+            <td>没有（官方未明说，社区一致认为是一次性的）</td>
+            <td><strong>一点都没有</strong>：「必须由曲线或形状的边完全自封闭」</td>
+            <td><strong>取它这一条</strong>：看过前面所有方案之后仍然选择不做容差，这是本稿最直接的先例</td>
+          </tr>
+          <tr>
+            <td><a href="https://docs.kicad.org/9.0/en/pcbnew/pcbnew.html">KiCad · 敷铜区</a></td>
+            <td>轮廓是<strong>作者画的</strong>，填充按间距减出来</td>
+            <td>区域自己的填充</td>
+            <td><strong>默认手动重填</strong>（<code>B</code>），而且「在生成输出或跑 DRC 之前<strong>会警告你</strong>区域还没重填」</td>
+            <td>—</td>
+            <td><strong>取那条警告</strong>：过期状态必须看得见，见下</td>
+          </tr>
+          <tr>
+            <td><a href="https://www.altium.com/documentation/altium-designer/pcb/internal-power-split-planes">Altium · 内电层分割</a></td>
+            <td><strong>与本稿逐字相同</strong>：随便摆几条线把内电层隔开，「一旦隔离出一块，就产生一个新的分割面」，<strong>双击那块面</strong>给它指定网络</td>
+            <td>什么表示都不存</td>
+            <td>—</td>
+            <td>—</td>
+            <td>它的代价写在自己的文档里：CAM 导出不支持这种分割面，「因为它<strong>无法定出描述每块区域的那条多段线</strong>」</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="step-note">
+      两处直接印证了本稿已经写下的决定。<strong>AutoCAD 的 Normal 岛屿检测在 DXF 里的组码 75 就叫「odd parity」</strong>——
+      「一层层交替挖空」与 <code>fillRule: 'evenodd'</code> 不是相似，是同一件事，因此那一段说的「协议一个字节不改」有出处。
+      <strong>而 Illustrator 把颜色挂在 face 上的账单是公开的</strong>：Live Paint 的 face 不能单独有透明度、效果、外观堆栈，
+      也用不了 Pathfinder、轮廓化描边、剪切蒙版、混合与符号——因为那个颜色<strong>没有对象可以挂</strong>。
+      本稿产出一个真的 Entity，这张账单一分钱都不用付。
+    </p>
+    <div class="callout todo">
+      <strong>调研里最该改变设计的一条：AutoCAD 最常见的失联，就是那个落点</strong>
+      <p>
+        文档只写了「边界改成开的就失联」，而实际被抱怨最多的不是它——是<strong>边界挪了之后，存着的那个落点落到了边界外面，
+        填充于是留在原地</strong>。老手的对策是干脆别用「拾取内部点」，改用「选择边界对象」，因为后者存的是对象句柄而不是一个点。
+        本稿的 <code>Hatch.seed</code> 正是那个点。<strong>这不否定 v1，反而正好说明 v1 为什么必须是手动的</strong>：
+        AutoCAD 那个错之所以糟，是因为它<strong>静默</strong>——没有记号、没有报错，通常是图印出来之后才发现。
+        真正要抄的是 KiCad 与 Altium 的做法——前者在跑 DRC 与生成输出前警告区域没重填，后者把重填做成带「保持原样」按钮的提示。
+        结论落成一句：<strong>关联可以晚点做，过期状态不能晚点做。</strong>
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>协议：一个可选 Component，一个字段</h2>
+      <p>几何的事实来源仍然是 <code>Curve</code>——填充落地之后就是一条普通的闭合多段线或 <code>path</code>。<code>Hatch</code> 只记一件事：这块面是从哪一点找出来的。</p>
+    </div>
+    <pre><code><span class="c">// packages/core/src/hatch.ts —— 可选 Entity Component</span>
+Hatch: {
+  seed: { x: number, y: number }   <span class="c">// Entity 局部坐标，与 Curve 几何、Ports.position 同一个空间</span>
+}</code></pre>
+    <p class="step-note">
+      <strong>缺席即不是填充</strong>，与 <code>Wire</code> 缺席即不是导线同一条。
+      <code>seed</code> 用 Entity 局部坐标而不是父级局部：它跟着这个 Entity 走，与 <code>Ports.position</code> 的理由逐字相同。
+      它<strong>不存边界对象的 id</strong>——存了就要回答「这条边是与哪个对象的第几个交点」，
+      而一条直线穿过一个圆有两个交点，选哪一个是个启发式，那正是 AutoCAD 关联图案填充最常断的地方。
+      重算就是拿 <code>seed</code> <strong>把当初那次求解原样再跑一遍</strong>：同一个算法、同一个输入、没有第二套规则。
+    </p>
+    <p class="step-note">
+      <strong>岛（洞）不需要任何协议改动。</strong>既有的 <code>path.subpaths</code> 加
+      <code>fillRule: 'evenodd'</code> 正好表达它——AutoCAD 的 Normal 岛屿检测<strong>就是</strong>奇偶规则，
+      「一层一层交替挖空」是同一句话的两种说法。<code>isPointInsideComposeCurve</code> 已经按 <code>fillRule</code> 分派，
+      因此看得见的洞与点不中的洞自动是同一个洞。
+    </p>
+  </section>
+  <section>
+    <div class="section-head">
+      <h2>每一种情况</h2>
+      <p>三格一组：之前 · 悬停（预览）· 落地。光标是<strong>拾取框加一个油漆桶徽标</strong>——填充不取点，因此没有十字线；徽标由提示自己声明（<code>badge: 'bucket'</code>），与 <code>TRIM</code> 的剪刀走同一条通道。</p>
+    </div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">01</span><span class="step-title">圆压在矩形上：填矩形内、圆外的那块面</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="一个圆压在矩形上边，填充矩形内圆外的那块面，边界是三条直边加一段圆弧">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">今天</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g>
+            <rect x="48" y="125" width="200" height="105" fill="#c85a52"/>
+            <rect class="ink" x="48" y="125" width="200" height="105"/>
+            <circle class="ink" cx="168" cy="108" r="56"/>
+            <text class="note" x="148" y="252" text-anchor="middle">红色是矩形这个 Entity 的属性，圆只是压在它上面</text>
+          </g>
+          <g transform="translate(300 0)">
+            <path class="hatch pv" d="M114.64 125L48 125L48 230L248 230L248 125L221.36 125A56 56 0 0 1 114.64 125Z"/>
+            <rect class="ink" x="48" y="125" width="200" height="105"/>
+            <circle class="ink" cx="168" cy="108" r="56"/>
+            <rect class="pick" x="82" y="194" width="12" height="12"/>
+            <g class="bkt-cursor" transform="translate(99 209)"><path class="bkt-line" d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6"/><path class="bkt-paint" d="M3.1 6.9H10.9L9.9 11.9H4.1Z"/><path class="bkt-line" d="M2.45 4.6H11.55L9.9 11.9H4.1Z"/></g>
+            <text class="note" x="148" y="252" text-anchor="middle">松手会填成这块</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="hatch" d="M114.64 125L48 125L48 230L248 230L248 125L221.36 125A56 56 0 0 1 114.64 125Z"/>
+            <rect class="ink" x="48" y="125" width="200" height="105"/>
+            <circle class="ink" cx="168" cy="108" r="56"/>
+            <text class="note" x="148" y="252" text-anchor="middle">一个新 Entity：三条直边 + 一段弧 → path</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">在要填充的区域内指定一点:</text></g>
+        </svg></div>
+        <p class="step-note">
+          边界由<strong>两个对象各出一段</strong>：矩形出三条边加两截顶边，圆出下面那段弧——而没有任何一个 Entity 的几何是这块面。
+          落地取能表达它的<strong>最窄 kind</strong>：含弧边所以是 <code>path</code>（弧段规范化成三次贝塞尔）；
+          <em>全是直边时落成闭合 <code>polyline</code></em>，见 04。矩形与圆一个字节不动——它们是边界，不是被作用的对象，与 <code>TRIM</code> 的切割边逐字相同。
+        </p>
+        <p class="step-note">
+          弧边转成三次贝塞尔是一次<strong>近似</strong>，不是等价变换——<code>path</code> 的段只有三次一种，这是协议已经做过的取舍
+          （多一种段类型就是让归一化、平移、距离、包围盒、渲染与校验六条路径各多一支）。每 90° 切一段时最大径向误差约为半径的
+          <code>2.7e-4</code>，半径 500px 上是 0.14px，屏幕上读不出来。写在这里是因为<strong>它是全稿唯一一处几何不精确的地方</strong>，
+          而「这条弧和那个圆到底是不是一条线」是以后一定会有人问的问题。
+          <code>svg-import</code> 已经在做同一件事（<code>svgpath().unarc()</code>），但它靠一个第三方库，而 <code>core</code>
+          零运行时依赖、不能引它——这处重复是<strong>包边界造成的，不是疏忽</strong>，与 <code>property-panel</code> 自带一份数值格式化同源。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">02</span><span class="step-title">边界恰好是一个对象时，改它，不新建</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="桶点在只由一个矩形围出的区域里时改这个矩形的填充，点在由矩形和直线拼出的区域里时新建一个填充对象">
+          <line class="divider" x1="300" y1="0" x2="300" y2="280"/><line class="divider" x1="600" y1="0" x2="600" y2="280"/>
+          <text class="lbl" x="16" y="24">边界恰好是这个矩形</text><text class="lbl" x="316" y="24">边界是拼出来的</text><text class="lbl" x="616" y="24">场景树里的差别</text>
+
+          <g style="--hatch:#f59e0b">
+            <rect class="ink" x="55" y="46" width="190" height="76"/>
+            <rect class="pick" x="114" y="78" width="12" height="12"/>
+            <g class="bkt-cursor" transform="translate(131 93)"><path class="bkt-line" d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6"/><path class="bkt-paint" d="M3.1 6.9H10.9L9.9 11.9H4.1Z"/><path class="bkt-line" d="M2.45 4.6H11.55L9.9 11.9H4.1Z"/></g>
+            <path class="ink" stroke-width="1.2" d="M150 138V162M144 156L150 162L156 156"/>
+            <rect x="55" y="172" width="190" height="76" fill="#f59e0b"/>
+            <rect class="ink" x="55" y="172" width="190" height="76"/>
+            <text class="note" x="150" y="272" text-anchor="middle">矩形自己被填上了，没有新对象</text>
+          </g>
+
+          <g transform="translate(300 0)" style="--hatch:#f59e0b">
+            <rect class="ink" x="55" y="46" width="190" height="76"/>
+            <path class="ink" d="M150 26V142"/>
+            <rect class="pick" x="94" y="78" width="12" height="12"/>
+            <g class="bkt-cursor" transform="translate(111 93)"><path class="bkt-line" d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6"/><path class="bkt-paint" d="M3.1 6.9H10.9L9.9 11.9H4.1Z"/><path class="bkt-line" d="M2.45 4.6H11.55L9.9 11.9H4.1Z"/></g>
+            <path class="ink" stroke-width="1.2" d="M150 138V162M144 156L150 162L156 156"/>
+            <path d="M55 172H150V248H55Z" fill="#f59e0b"/>
+            <rect class="ink" x="55" y="172" width="190" height="76"/>
+            <path class="ink" d="M150 152V256"/>
+            <text class="note" x="150" y="272" text-anchor="middle">矩形还是空心的，多了一个填充对象</text>
+          </g>
+
+          <g transform="translate(600 0)">
+            <text class="lbl" x="30" y="52">左边那次</text>
+            <rect class="pop" x="26" y="60" width="248" height="38" rx="7"/>
+            <rect class="ink" stroke-width="1.3" x="42" y="71" width="14" height="16"/>
+            <text class="cmd-v" x="66" y="85">矩形</text>
+            <rect class="swatch-chip" x="240" y="70" width="18" height="18" rx="4" fill="#f59e0b"/>
+            <text class="lbl" x="30" y="140">右边那次</text>
+            <rect class="pop" x="26" y="148" width="248" height="76" rx="7"/>
+            <rect class="ink" stroke-width="1.3" x="42" y="159" width="14" height="16"/>
+            <text class="cmd-v" x="66" y="173">矩形</text>
+            <rect class="swatch-chip" x="240" y="158" width="18" height="18" rx="4" fill="none" stroke="rgb(128 128 128 / 45%)"/>
+            <path class="ink" stroke-width="1.3" style="fill:#f59e0b" d="M42 199H56V213H42Z"/>
+            <text class="cmd-v" x="66" y="213">填充 1</text>
+            <rect class="swatch-chip" x="240" y="196" width="18" height="18" rx="4" fill="#f59e0b"/>
+            <text class="note" x="150" y="272" text-anchor="middle">同一个手势，两种结果，由图上看得见的东西决定</text>
+          </g>
+        </svg></div>
+        <p class="step-note">
+          <strong>「用桶填色」与「给图形填色」在数据上是同一件事，在动作上不是。</strong>
+          两者最后写的都是 <code>Appearance.backgroundPaint</code>——填出来的那块面，和一个你手画的矩形，在文档里是同一类东西。
+          但<strong>给图形填色是改一个已有对象的一个字段，用桶是先求出一块面、把它变成一个对象、再给这个新对象上色</strong>：
+          前者是编辑，后者是创建。
+        </p>
+        <p class="step-note">
+          分清这一层之后，一条规则就跑不掉了：<strong>这块面的边界恰好是某一个 Entity 的完整几何时，改它的填充，不新建。</strong>
+          否则按 01 的样子新建。没有这条的话，拿桶点一个<strong>没有任何东西穿过的矩形</strong>，会得到一个与那个矩形几何
+          逐像素重合的新对象压在它下面——屏幕上看着对了，场景树里多出一个一模一样的东西，而用户想要的显然是把这个矩形填上色。
+          判据是「<strong>完整</strong>几何」而不是「都来自同一个 Entity」：自交的折线（8 字形）两个环都出自它自己，
+          而写它的 <code>backgroundPaint</code> 会把<strong>两个</strong>环一起填上，不是用户点的那一个。
+          它自己被任何交点切开过，就不算完整。
+        </p>
+        <p class="step-note">
+          <strong>这不是「同一个手势有两种含义」那类模式歧义。</strong>决定走哪一支的是<strong>图上看得见的东西</strong>——
+          这块面是一个对象围出来的，还是几段边拼出来的——而不是一份藏在别处的状态；
+          <code>TRIM</code> 早就有同样的形态（同一下点击按边界在哪儿，可能是缩短、可能是断成两条、也可能整条删掉）。
+          规矩也照抄那一条：<strong>悬停预览与落地读同一份解算</strong>，并且命令行把这一下会发生什么写出来——
+          <code>将改变「矩形」的填充:</code> 与 <code>将新建一个填充对象:</code> 是两句不同的话。
+          锁定的那个 Entity 改不了，此时<strong>拒绝并说明</strong>，而不是退回去新建一个——
+          「你锁了它」和「我给你造了个新的」是两件事，后者会让锁形同虚设。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">03</span><span class="step-title">里面还有东西：岛就是 <code>evenodd</code></span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="矩形内部有一个圆和一个小方块，填充挖空这两个岛">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g>
+            <rect class="ink" x="48" y="85" width="200" height="145"/>
+            <circle class="ink" cx="148" cy="157" r="40"/>
+            <rect class="ink" x="196" y="100" width="34" height="26"/>
+          </g>
+          <g transform="translate(300 0)">
+            <path class="hatch pv" fill-rule="evenodd" d="M48 85H248V230H48ZM108 157A40 40 0 1 0 188 157A40 40 0 1 0 108 157ZM196 100H230V126H196Z"/>
+            <rect class="ink" x="48" y="85" width="200" height="145"/>
+            <circle class="ink" cx="148" cy="157" r="40"/>
+            <rect class="ink" x="196" y="100" width="34" height="26"/>
+            <rect class="pick" x="64" y="204" width="12" height="12"/>
+            <g class="bkt-cursor" transform="translate(81 219)"><path class="bkt-line" d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6"/><path class="bkt-paint" d="M3.1 6.9H10.9L9.9 11.9H4.1Z"/><path class="bkt-line" d="M2.45 4.6H11.55L9.9 11.9H4.1Z"/></g>
+            <text class="note" x="148" y="252" text-anchor="middle">两个岛一起挖空</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="hatch" fill-rule="evenodd" d="M48 85H248V230H48ZM108 157A40 40 0 1 0 188 157A40 40 0 1 0 108 157ZM196 100H230V126H196Z"/>
+            <rect class="ink" x="48" y="85" width="200" height="145"/>
+            <circle class="ink" cx="148" cy="157" r="40"/>
+            <rect class="ink" x="196" y="100" width="34" height="26"/>
+            <text class="note" x="148" y="252" text-anchor="middle">一条 path，三条子路径，fillRule: 'evenodd'</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">在要填充的区域内指定一点:</text></g>
+        </svg></div>
+        <p class="step-note">
+          外环走完之后，落在它<strong>内部而又走不到</strong>的每一个连通分量各是一条子路径。
+          这在协议上<strong>一个字节都不用改</strong>：<code>path.subpaths</code> 与 <code>fillRule: 'evenodd'</code> 已经在那儿，
+          <code>isPointInsideComposeCurve</code> 也已经按 <code>fillRule</code> 分派——因此<strong>看得见的洞与点不中的洞自动是同一个洞</strong>。
+          再往里一层（岛中之岛）由奇偶规则自己交替填回来，不需要第二条规则。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">04</span><span class="step-title">四条各自不闭合的线，围出一块闭合的面</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="四条互相穿过的直线围出一块矩形区域，填充落成闭合多段线">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">悬停</text><text class="lbl" x="616" y="24">落地</text>
+          <g>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 72V248"/>
+            <text class="note" x="150" y="270" text-anchor="middle"></text>
+          </g>
+          <g transform="translate(300 0)">
+            <path class="hatch pv" d="M72 105H228V218H72Z"/>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 72V248"/>
+            <rect class="pick" x="144" y="155" width="12" height="12"/>
+            <g class="bkt-cursor" transform="translate(161 170)"><path class="bkt-line" d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6"/><path class="bkt-paint" d="M3.1 6.9H10.9L9.9 11.9H4.1Z"/><path class="bkt-line" d="M2.45 4.6H11.55L9.9 11.9H4.1Z"/></g>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="hatch" d="M72 105H228V218H72Z"/>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V236"/><path class="ink" d="M228 72V236"/>
+            <rect class="grip" x="68" y="101" width="8" height="8"/><rect class="grip" x="224" y="101" width="8" height="8"/>
+            <rect class="grip" x="224" y="214" width="8" height="8"/><rect class="grip" x="68" y="214" width="8" height="8"/>
+            <text class="note acc" x="150" y="252" text-anchor="middle">闭合 polyline：选中之后可以拖顶点</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">在要填充的区域内指定一点:</text></g>
+        </svg></div>
+        <p class="step-note">
+          四条线一条都不闭合，而它们围出的那块面是闭合的——这正是「填充不是某个对象的属性」最干净的形态：
+          <strong>没有任何一个 Entity 可以被赋予这个颜色</strong>。落地取最窄 kind，全直边所以是闭合 <code>polyline</code>，
+          于是它双击进得了几何编辑、拖得动顶点、也能有 <code>cornerRadius</code>。四条线各自伸出去的那一截照旧在图上——
+          填充<strong>不修剪任何东西</strong>，要去掉伸出的那一截是 <code>TRIM</code> 的事。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">05</span><span class="step-title">不封闭：拒绝，并且指出断口在哪</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="边界有缺口时填充被拒绝，断口处画出琥珀色记号">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">点了一下</text><text class="lbl" x="616" y="24">补上那一段之后</text>
+          <g>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 138V248"/>
+          </g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 138V248"/>
+            <path class="gap" d="M228 105V138"/>
+            <circle class="gapdot" cx="228" cy="105" r="4"/><circle class="gapdot" cx="228" cy="138" r="4"/>
+            <rect class="pick" x="144" y="155" width="12" height="12"/>
+            <g class="bkt-cursor" transform="translate(161 170)"><path class="bkt-line" d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6"/><path class="bkt-paint" d="M3.1 6.9H10.9L9.9 11.9H4.1Z"/><path class="bkt-line" d="M2.45 4.6H11.55L9.9 11.9H4.1Z"/></g>
+            <text class="note warn" x="240" y="128">这里没有封闭</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="hatch" d="M72 105H228V218H72Z"/>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V236"/><path class="ink" d="M228 72V236"/>
+            <text class="note" x="150" y="252" text-anchor="middle">把线接上，再点一次</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v warn" x="66" y="20">这块面没有封闭：边界从标出来的缺口处断开了。</text></g>
+        </svg></div>
+        <p class="step-note">
+          <strong>v1 没有间隙容差</strong>：走出去了就拒绝。这个仓库里每一个容差都有来源——拾取框抄 <code>PICKBOX</code>、
+          捕捉半径是「多近算在这条线上」的唯一事实——而「差多少还算封闭」没有这样的来源，它取决于图纸比例。
+          代价写在明处：一个 0.5px 的缝也会被拒。补偿是<strong>把缝画出来</strong>——走到哪个节点走不下去了，就在那儿画一对琥珀记号。
+          AutoCAD 在这一档只说「找不到有效的图案填充边界」，用户得自己在整张图上找那条缝。
+          琥珀是<strong>复用</strong>失效端点那个 token 而不是第七种颜色：缺口就是图上的一处失效，与悬空的绑定是同一族的问题。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">06</span><span class="step-title">边界动了：v1 不自动跟随，但重算只要一下</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="移动圆之后填充停在原处，按重新生成按当前边界重算">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">填好了</text><text class="lbl" x="316" y="24">把圆拖走</text><text class="lbl" x="616" y="24">重新生成</text>
+          <g>
+            <path class="hatch" d="M114.64 125L48 125L48 230L248 230L248 125L221.36 125A56 56 0 0 1 114.64 125Z"/>
+            <rect class="ink" x="48" y="125" width="200" height="105"/>
+            <circle class="ink" cx="168" cy="108" r="56"/>
+          </g>
+          <g transform="translate(300 0)">
+            <path class="hatch" d="M114.64 125L48 125L48 230L248 230L248 125L221.36 125A56 56 0 0 1 114.64 125Z"/>
+            <rect class="ink" x="48" y="125" width="200" height="105"/>
+            <circle class="ink" cx="205" cy="58" r="56"/>
+            <text class="note warn" x="148" y="252" text-anchor="middle">缺的那一口还留在原处</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="hatch" d="M48 125H248V230H48Z"/>
+            <rect class="ink" x="48" y="125" width="200" height="105"/>
+            <circle class="ink" cx="205" cy="58" r="56"/>
+            <text class="note" x="148" y="252" text-anchor="middle">拿 seed 把当初那次求解再跑一遍</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">Inspector · 填充</text><text class="cmd-v" x="146" y="20">［重新生成］　边界已改变</text></g>
+        </svg></div>
+        <p class="step-note">
+          <strong>v1 的关联是手动的</strong>，入口在 Inspector 上而不是画布上——画布上「按当前边界重算」这个手势
+          与「新建一块填充」逐字相同，做成两个手势等于给同一件事造第二个入口。这与导线的「解除绑定」按钮是同一条例外理由。
+          重算失败（seed 处已经没有封闭的面了）时<strong>保留原几何并标为失效</strong>，与悬空的导线绑定一模一样：
+          「还没配」「配错了」「配的东西没了」三者必须可区分。
+          自动关联的钩子就在旁边——<code>layout-runtime.ts:877</code> 每帧调 <code>resolveComposeWires(document, snapshot)</code>，
+          接一个 <code>resolveComposeHatches</code> 上去是一行；贵的不是接线，是求解本身，见「待定」第一条。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">07</span><span class="step-title">层序：压在最靠后的那条边界之下</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="填充插在最前会盖住区域内的符号，插在边界之下才正确">
+          <line class="divider" x1="300" y1="0" x2="300" y2="256"/><line class="divider" x1="600" y1="0" x2="600" y2="256"/>
+          <text class="lbl" x="16" y="24">之前</text><text class="lbl" x="316" y="24">插在最前</text><text class="lbl" x="616" y="24">插在边界之下</text>
+          <g>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 72V248"/>
+            <g transform="translate(112 150)"><path class="sym" d="M0 12H14"/><path class="sym" d="M40 12H54"/><path class="sym" d="M14 12L38 2"/><circle class="sym" cx="14" cy="12" r="2.4"/><circle class="sym" cx="40" cy="12" r="2.4"/></g>
+          </g>
+          <g transform="translate(300 0)">
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 72V248"/>
+            <path class="hatch" d="M72 105H228V218H72Z"/>
+            <text class="note warn" x="150" y="252" text-anchor="middle">符号被整片盖住了</text>
+          </g>
+          <g transform="translate(600 0)">
+            <path class="hatch" d="M72 105H228V218H72Z"/>
+            <path class="ink" d="M40 105H262"/><path class="ink" d="M40 218H262"/>
+            <path class="ink" d="M72 72V248"/><path class="ink" d="M228 72V248"/>
+            <g transform="translate(112 150)"><path class="sym" d="M0 12H14"/><path class="sym" d="M40 12H54"/><path class="sym" d="M14 12L38 2"/><circle class="sym" cx="14" cy="12" r="2.4"/><circle class="sym" cx="40" cy="12" r="2.4"/></g>
+            <text class="note" x="150" y="252" text-anchor="middle">entity.create 的 index，不是第二条命令</text>
+          </g>
+          <g transform="translate(0 262)"><rect class="cmd-bg" x="12" y="0" width="876" height="30" rx="4"/><text class="cmd-k" x="26" y="20">命令：</text><text class="cmd-v" x="66" y="20">在要填充的区域内指定一点:</text></g>
+        </svg></div>
+        <p class="step-note">
+          这与「矩形默认空心」是同<strong>一条</strong>理由的第二次应用：外框套在符号外面，填色会把里面的符号整片盖住。
+          区别在于那一条的答案是「默认不填」，而填充这条命令的全部意图就是填——所以答案只能落在层序上。
+          规则一句话：<strong>插在最靠后的那条边界之下</strong>（AutoCAD 的 <code>HPDRAWORDER</code> 默认档也是「送到边界之后」）。
+          落地不需要第二条命令——<code>entity.create</code> 的载荷本来就收一个可选的 <code>index</code>（<code>builtin-commands.ts:405</code>），
+          因此层序与创建在同一个事务里，撤销一步全回去。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">08</span><span class="step-title">工具栏上的那一格：一个油漆桶</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 150" role="img" aria-label="绘图工具栏上加一格油漆桶，排在修剪之后，代价是尾部一格收进更多">
+          <rect x="20" y="26" width="514" height="52" rx="9" fill="#1a1f27" stroke="#2c3542"/>
+          <g class="ink" stroke-width="1.5">
+            <g transform="translate(40 34)"><path d="M8 26L26 8"/></g>
+            <g transform="translate(80 34)"><path d="M8 24L15 13L21 20L26 9"/></g>
+            <g transform="translate(120 34)"><rect x="9" y="11" width="16" height="12"/></g>
+            <g transform="translate(160 34)"><path d="M17 8L25 12.5V21.5L17 26L9 21.5V12.5Z"/></g>
+            <g transform="translate(200 34)"><circle cx="17" cy="17" r="8"/></g>
+            <g transform="translate(240 34)"><path d="M9 23A10 10 0 0 1 25 23"/></g>
+            <g transform="translate(280 34)"><path d="M8 26L24 10"/><path d="M17 9H25V17"/></g>
+          </g>
+          <g transform="translate(320 34)"><path class="wire" stroke-width="1.8" d="M8 12H17V24H26"/></g>
+          <g class="ink" stroke-width="1.5" transform="translate(360 34)"><g transform="translate(5 6) scale(1.15) rotate(-45 6 6)"><circle cx="2.6" cy="9.6" r="2.2"/><circle cx="9.4" cy="9.6" r="2.2"/><path d="M4 8L10.5 0.5M8 8L1.5 0.5"/></g></g>
+          <rect x="396" y="32" width="54" height="38" rx="7" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+          <g class="bkt-chrome" transform="translate(400 33)" style="--hatch:#f59e0b"><path class="bkt-line" d="M6 6.5A4 4 0 0 1 14 6.5"/><path class="bkt-paint" d="M4.4 9.8H15.6L14.2 17H5.8Z"/><path class="bkt-line" d="M3.5 6.5H16.5L14.2 17H5.8Z"/></g>
+          <path class="ink" stroke-width="1.5" d="M432 48L437 53L442 48"/>
+          <line class="divider" x1="461" y1="38" x2="461" y2="66"/>
+          <g class="ink" stroke-width="1.5" transform="translate(474 34)"><circle cx="11" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/><circle cx="23" cy="17" r="1.4"/></g>
+          <text class="note acc" x="423" y="98" text-anchor="middle">HATCH ▾</text>
+          <text class="note" x="488" y="98" text-anchor="middle">更多</text>
+          <path class="gap" stroke-dasharray="none" d="M488 106V118H520"/>
+          <text class="note warn" x="528" y="122">文字那一格被挤进「更多」——加一格不是免费的</text>
+          <text class="note" x="20" y="140">绘图货架已有 16 格，1280 默认窗口下余量不到半格；溢出从尾部收</text>
+        </svg></div>
+        <p class="step-note">
+          <strong>可以，而且应该。</strong>它排在 <code>TRIM</code> 之后——两者都是「对着已经画好的图做一下」，
+          而它<strong>产出新对象</strong>这一点又让它属于绘图那一段，不该被推到别处去。
+          图标与光标徽标是<strong>同一个油漆桶</strong>：用户在工具栏上按下的那个形状，
+          下一秒就跟着光标出现在图面上，两处画成两样是这块画布最不该有的一类不一致。
+        </p>
+        <p class="step-note">
+          <strong>只上绘图货架，不上页面货架。</strong>页面那条只留 <code>RECTANGLE</code> 与 <code>ARROW</code>，
+          理由是「大屏页面真会画的几何只有分区框与指示」——而大屏的分区底色本来就是一个矩形的 <code>backgroundPaint</code>，
+          用不着求面。<strong>代价要说在明处</strong>：绘图货架已经是 16 格，加到 17 格之后尾部那一格
+          （文字）会被收进「更多」。自定义对话框可以再把它拖回来，但默认值不该假装这件事没发生。
+        </p>
+        <p class="step-note">
+          <strong>给别名 <code>H</code>，不给单键。</strong>别名是 AutoCAD 里同一条命令的同一个字母，用户只记一套词；
+          而七个绘图单键已经占满了与命令名有认读关系的裸字母，那是快捷键表里最容易被宿主重绑撞上的一类。
+          判据与 <code>TRIM</code> 逐字相同——<strong>它不是每分钟都按的那一类</strong>。
+          如果落地之后发现填充用得比想象中频繁，补一个 <code>H</code> 单键是一行改动，反过来收回一个已经给出去的键才难。
+          目录里的 <code>entrance</code> 写 <code>{ kind: 'command' }</code>，自定义对话框的来源列因此印出「填充 · H」——
+          那句「拿掉一格不会拿掉那项能力」的承诺是可核对的。
+        </p>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">09</span><span class="step-title">怎么给桶换颜色</span></div>
+        <div class="stage todo"><svg viewBox="0 0 900 300" role="img" aria-label="换填充色的三处：工具栏的色板弹出层、命令行的颜色关键字、以及属性面板改已填好的那块">
+          <line class="divider" x1="300" y1="0" x2="300" y2="280"/><line class="divider" x1="600" y1="0" x2="600" y2="280"/>
+          <text class="lbl" x="16" y="24">改「下一次」填什么色</text><text class="lbl" x="316" y="24">同一件事，用键盘</text><text class="lbl" x="616" y="24">改「已经填好」的那块</text>
+
+          <g>
+            <rect x="56" y="40" width="56" height="38" rx="7" fill="#1a1f27" stroke="var(--accent)" stroke-width="1.6"/>
+            <g class="bkt-chrome" transform="translate(60 41)" style="--hatch:#f59e0b"><path class="bkt-line" d="M6 6.5A4 4 0 0 1 14 6.5"/><path class="bkt-paint" d="M4.4 9.8H15.6L14.2 17H5.8Z"/><path class="bkt-line" d="M3.5 6.5H16.5L14.2 17H5.8Z"/></g>
+            <path class="ink" stroke-width="1.5" d="M92 55L97 60L102 55"/>
+            <rect class="pop" x="56" y="88" width="186" height="112" rx="8"/>
+            <text class="lbl" x="70" y="110">本页用过</text>
+            <rect class="swatch-chip" x="70" y="120" width="26" height="26" rx="5" fill="#ff3b30"/>
+            <rect class="swatch-chip on" x="104" y="120" width="26" height="26" rx="5" fill="#f59e0b"/>
+            <rect class="swatch-chip" x="138" y="120" width="26" height="26" rx="5" fill="#3f5068"/>
+            <line class="divider" x1="70" y1="160" x2="228" y2="160"/>
+            <text class="note" x="70" y="182">自定义…</text>
+            <text class="note" x="150" y="250" text-anchor="middle">桶里那块，就是下一次会填的颜色</text>
+          </g>
+
+          <g transform="translate(300 0)">
+            <rect class="cmd-bg" x="20" y="48" width="262" height="30" rx="4"/>
+            <text class="cmd-k" x="32" y="68">命令：</text><text class="cmd-v" x="72" y="68">指定填充区域内一点 或 [颜色(C)]:</text>
+            <text class="note acc" x="150" y="100" text-anchor="middle">敲 C</text>
+            <path class="ink" stroke-width="1.2" d="M150 106V118M146 114L150 118L154 114"/>
+            <rect class="cmd-bg" x="20" y="124" width="262" height="30" rx="4"/>
+            <text class="cmd-k" x="32" y="144">颜色：</text><text class="cmd-v" x="72" y="144">输入 #rrggbb 或选一个:</text>
+            <rect class="swatch-chip" x="214" y="132" width="16" height="16" rx="3" fill="#ff3b30"/>
+            <rect class="swatch-chip on" x="236" y="132" width="16" height="16" rx="3" fill="#f59e0b"/>
+            <rect class="swatch-chip" x="258" y="132" width="16" height="16" rx="3" fill="#3f5068"/>
+            <text class="note" x="150" y="250" text-anchor="middle">货架不得是任何能力的唯一入口</text>
+          </g>
+
+          <g transform="translate(600 0)">
+            <path class="hatch" d="M56 50H236V158H56Z"/>
+            <rect class="selbox" x="56" y="50" width="180" height="108"/>
+            <rect class="grip" x="52" y="46" width="8" height="8"/><rect class="grip" x="232" y="46" width="8" height="8"/>
+            <rect class="grip" x="232" y="154" width="8" height="8"/><rect class="grip" x="52" y="154" width="8" height="8"/>
+            <rect class="pop" x="20" y="182" width="262" height="36" rx="6"/>
+            <text class="cmd-k" x="34" y="205">外观 · 背景</text>
+            <rect class="swatch-chip" x="128" y="190" width="20" height="20" rx="4" fill="#3f5068"/>
+            <text class="cmd-v" x="158" y="205">#3f5068</text>
+            <text class="note" x="150" y="250" text-anchor="middle">既有的属性面板，一行代码都不用写</text>
+          </g>
+        </svg></div>
+        <p class="step-note">
+          <strong>图标就是色板，不另给一个色块。</strong>「按这个按钮会发生什么」与「这次会填成什么颜色」是同一个问题，
+          用两个东西回答只会让它们有机会说得不一样。
+          本格与 08 画的是<strong>选过颜色之后</strong>的样子（<span class="swatch" style="background:#f59e0b"></span>琥珀），
+          01–07 画的是<strong>还没选过</strong>时的中性默认（<span class="swatch" style="background:#3f5068"></span>石板）——
+          这两个状态在屏幕上必须一眼可分，否则「桶里那块是什么」这句话就没有兑现。
+        </p>
+        <div class="callout">
+          <strong>这枚图标画错过一版，错的地方值得记下来</strong>
+          <p>
+            第一版是 24 画幅、描边取画布的近白，还画成了<strong>倾倒的桶</strong>。三处都错：
+            工具栏图标的画幅是 <strong>20×20 且按 20px 渲染，一个单位就是一个设备像素</strong>，24 画幅每一笔都要乘 5/6、
+            一根都不落在像素格上；描边必须是 <code>currentColor</code>，取画布的近白等于假设工具栏永远是深色，
+            <strong>浅色主题下轮廓直接消失，只剩一个深色块加一滴</strong>；而倾倒的桶在 20px 上读作一个<strong>歪方块</strong>，
+            根本认不出是桶——这正是它被打回来的样子。
+          </p>
+          <p>
+            重画之后还试过第二种上色：<strong>单色桶 + 底部一条色带</strong>。它的桶在任何漆色下都清清楚楚，但被两条规则否掉——
+            色带是一个只出现在这一枚图标上的<strong>新记号</strong>，而这套图标的记号词汇表只有五个且写着「accent 只标点」；
+            而且色带落在 <code>y=16–18</code>，那一圈版式规则写明<strong>只有夹点方块可以进</strong>。
+          </p>
+          <p>
+            最终取的是<strong>正面直桶、只有漆面填当前色</strong>：桶口留一截空，剪影因此在近白漆与近黑漆下都还成立
+            （整桶填色时这两档会和轮廓糊成一块）。漆面不是新记号——它就是这个桶里装着的东西。
+            图面上的光标徽标是<strong>同一个剪影</strong>，只有描边换成十字光标那一色：它归画布词汇，图标归 chrome 词汇。
+          </p>
+        </div>
+        <p class="step-note">
+          <strong>它凭什么可以被记住。</strong>这个仓库拒绝过一次同类记忆：<code>CIRCLE</code> 的 <code>D</code>/<code>R</code>
+          不跨命令记，理由是<strong>那份状态看不见</strong>——用户过两天回来，同一条命令问的问题变了，而屏幕上没有东西解释为什么。
+          而 <code>POLYGON</code> 的边数<strong>可以</strong>记，因为它印在提示的 <code>&lt;6&gt;</code> 里。
+          桶身就是这里的 <code>&lt;6&gt;</code>。所以记忆的合法性不在「方不方便」，在<strong>值有没有被印出来</strong>。
+          只记在本次编辑会话（宿主的一个 ref，不写文档、不写偏好），与边数逐字相同。
+        </p>
+        <p class="step-note">
+          <strong>色板里是「这一页已经用过的颜色」，不是一份内置色表。</strong>内置一份等于替宿主做了一个多半要改的决定——
+          与「不内置电压等级色表」是同一条。而第二块区域十有八九和第一块同色，这份列表因此正好是最常用的那几个。
+          它<strong>不引入任何文档字段</strong>：扫一遍文档里带 <code>Hatch</code> 的 Entity 就有。
+          代价说在明处：重开编辑器之后桶回到中性色。这很便宜——色板是从这一页算出来的，你上次用的颜色就在弹出层第一行。
+        </p>
+        <p class="step-note">
+          <strong>不把它挂到光标旁的动态输入框上。</strong>那一档是给<strong>每取一个点都在变</strong>的量准备的
+          （长度、角度、边数），把眼睛正在看的那个位置让给一个每填几次才动一次的值，是拿最贵的位置放最不常变的东西。
+          而<strong>改已经填好的那块是另一件事</strong>，走既有的属性面板：填充复用 <code>Appearance.backgroundPaint</code>，
+          所以外观 Inspector、数据绑定与外观动画轨道<strong>一行都不用写</strong>——这正是当初复用那个字段换来的东西。
+        </p>
+      </div>
+
+    </div>
+  </section>
+  <section>
+    <div class="section-head">
+      <h2>边界规则的一句话</h2>
+      <p>与 <code>TRIM</code> 的「向两边走到第一个交点」是同一份数学的另一种用法：那条在一维上排序取邻居，这条在二维上绕一圈。</p>
+    </div>
+    <pre><code><span class="c">// 候选：同父级、可见、带 Curve，且不是接线点、不是别的填充</span>
+1. 每条候选投影进自己的盒（projectComposeCurveToBox），再乘世界矩阵  <span class="c">← 与命中、框选、捕捉同一条链</span>
+2. 两两求交（intersectComposeSegments / SegmentArc / Arcs），交点即<strong>节点</strong>，
+   节点之间的弧段即<strong>边</strong>
+3. 从 seed 向 +x 射出一条射线，取最近的边 → 进入这个面的第一条边
+4. 沿边走；每到一个节点，取<strong>最靠右</strong>的那条转向
+5. 回到起点即闭合 → 这就是包含 seed 的那个面
+6. 落在外环内部而走不到的每个连通分量 → 一条子路径（岛）
+7. <strong>这块面的边界恰好是某一个 Entity 的完整几何？</strong>
+   是 → 改它的 backgroundPaint，到此为止      <span class="c">← 见 02</span>
+   否 → 继续
+8. 收成最窄 kind：全直边 → 闭合 polyline；含弧边 → path，落成新 Entity</code></pre>
+    <p class="step-note">
+      第 1 步与第 2 步<strong>一行新代码都不用写</strong>：<code>curve-trim.ts</code> 里的 <code>boxCurve</code> 与 <code>worldShapes</code>
+      已经把「盒局部几何 → 世界空间的线段与弧」这一段做完了（弧的半径按 <code>sqrt(|det|)</code> 缩放、镜像矩阵翻转 <code>sweep</code>），
+      三个求交函数也已经在 <code>core/curve-geometry.ts</code> 里。真正新增的只有第 3 到第 6 步，住在 <code>core/curve-region.ts</code>——
+      与弧的数学同一个包，因为它<strong>是</strong>平面形状运算；不放进 <code>curve-geometry.ts</code> 是因为那是一个 1142 行的模块，
+      而不是因为消费者不同。<code>worldShapes</code> 要从 <code>curve-trim.ts</code> 提到一个共享模块：两条命令都要它，各写一份必然漂移。
+    </p>
+    <div class="callout">
+      <strong>一处 <code>HATCH</code> 必须与 <code>TRIM</code> 给出不同答案的地方：圆角</strong>
+      <p>
+        <code>TRIM</code> 的 <code>worldShapes</code> 走 <code>composePolylineSegments</code>——<strong>尖角顶点，不管圆角</strong>，
+        并把代价写在明处：剪口会与画出来的弧差一个圆角的距离。填充<strong>不能取同样的近似</strong>：
+        差一个圆角的<strong>面积</strong>是屏幕上看得见的一块色，四个角就是四块，而剪口差一点只是缺口的位置偏了。
+        因此填充的边界必须走 <code>composePolylineOutline</code>（缩短的直段与角弧交替的<strong>那一列</strong>），
+        与渲染、命中、内部判定读的是同一列。这不是给填充开特例——「看得见的形状与点得中的形状必须是同一个」本来就是那一列存在的理由。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>接上去要动的地方</h2>
+      <p>骨架照抄 <code>TRIM</code>。列出来是为了让「这条命令有多大」可核对，而不是把实现写进设计稿。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>层</th><th>位置</th><th>动什么</th></tr></thead>
+        <tbody>
+          <tr><td>输入种类</td><td><code>commands/command-types.ts:199</code></td><td><code>pick</code> 加一个 <code>point</code> 字段。今天它只有 <code>targets</code>，而填充点落在<strong>空处</strong>——没有 target 可言。宿主手上本来就有这个点（<code>drafting.pick</code> 效果带着它），只是没往下传</td></tr>
+          <tr><td>光标徽标</td><td><code>command-types.ts:165</code></td><td><code>badge?: 'scissors'</code> 加一个 <code>'bucket'</code></td></tr>
+          <tr><td>协议</td><td><code>core/hatch.ts</code>（新）</td><td><code>Hatch</code> Component 与校验；<code>COMPOSE_BUILTIN_COMPONENT_KEYS</code> 加一项</td></tr>
+          <tr><td>求解</td><td><code>core/curve-region.ts</code>（新）</td><td>射线进面、绕行找环、岛、收成最窄 kind</td></tr>
+          <tr><td>命令</td><td><code>stage-engine/drafting/hatch-command.ts</code>（新）</td><td>照抄 <code>trim-command.ts</code>：一个提示、一条 <code>pick</code>、不 commit 只挂 <code>commit</code> 字段</td></tr>
+          <tr><td>规划</td><td><code>stage-engine/commands/curve-hatch.ts</code>（新）</td><td><code>resolveStageHatchRegion</code>（悬停与落地<strong>共用</strong>）与 <code>planStageHatch</code>；解算结果是<strong>两支</strong>——改某个 Entity 的填充，或产出一块新几何。命令行与悬停预览都读这一支</td></tr>
+          <tr><td>效果</td><td><code>drafting-types.ts:134</code></td><td><code>hatch?: { seed }</code>，与 <code>rectangle</code> / <code>arrow</code> / <code>wire</code> 并排；意图由命令说出，不从 <code>curve.kind</code> 反推</td></tr>
+          <tr><td>落地</td><td><code>stage/drafting/drafting-entity.ts:461</code></td><td>Preset 分流加一支 <code>'hatch'</code>；写 <code>Hatch</code> 的方式与写 <code>Wire</code> 逐字相同；<code>entity.create</code> 带上 <code>index</code></td></tr>
+          <tr><td>物料</td><td><code>materials/curve/definition.tsx</code></td><td>第七个曲线 Preset：有填充、<strong>无描边</strong>、<code>paletteHidden: 'toolbar'</code></td></tr>
+          <tr><td>图标</td><td><code>editor/stage-toolbar/stage-toolbar-icons.tsx</code></td><td>加一枚 <code>hatch</code>；它是这套图标里<strong>第一枚要带参数的</strong>——<code>StageToolbarIcon</code> 今天只收 <code>name</code>，而漆色是运行期的值。走 <code>style</code> 内联而不是 presentation attribute：既压得过样式表继承的 <code>fill: none</code>，也不依赖 <code>var()</code> 在属性里被替换</td></tr>
+          <tr><td>预览</td><td><code>stage/drafting/stage-drafting-overlay.tsx</code></td><td>悬停时画候选面；断口的琥珀记号</td></tr>
+          <tr><td>货架</td><td><code>editor/stage-toolbar/toolbar-shelf.ts:142</code></td><td>绘图货架加一格，排在 <code>TRIM</code> 旁边；页面货架不加</td></tr>
+          <tr><td>不动</td><td>—</td><td>手势插件、仲裁器、十字光标、<code>Curve</code> 协议与版本号、<code>entity.curve.set</code>、导线求解</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="step-note">
+      命令 id 取 <code>HATCH</code>、别名 <code>H</code>，因为那是每个 CAD 里「点一下填满这块面」的那个词。
+      <strong>不叫 <code>FILL</code></strong>：AutoCAD 的 <code>FILL</code> 是一个系统变量，管的是实体显不显示成填充的——
+      拿一个已有确切含义的词做另一件事，比另起一个词更糟，这条在否掉 <code>PEDIT</code> 时已经用过一次。
+      <strong>不给单键</strong>：七个绘图键已经占满了与命令名有认读关系的裸字母，而裸字母是最容易被宿主重绑撞上的一类。
+      v1 只有纯色、没有图案，而命令仍然叫 <code>HATCH</code>——图案是这条命令日后的一个档位，不是另一条命令，所以这个词现在就该占住。
+    </p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>刻意不做的</h2>
+      <p>每一条都是被认真考虑过又放下的，理由写在明处。</p>
+    </div>
+    <div class="opens">
+      <div class="open">
+        <h3>不做图案填充（斜线、网格、砖纹）</h3>
+        <p>
+          <code>getComposeCurveFill</code> v1 只认 <code>solid</code>，图案要么是一个新的 Paint kind、要么是 SVG <code>&lt;pattern&gt;</code>，
+          两者都动到共享 Paint 层。而这个产品里的填充是<strong>分区底色与设备块</strong>，不是机械制图的剖面线——
+          用户要的是「这一片是 10kV 段」，不是「这是钢」。
+        </p>
+      </div>
+      <div class="open">
+        <h3>不做「把对象自己的填充按周围的线裁切」</h3>
+        <p>
+          见开头那段。它在「圆压住矩形」上看着聪明，在「导线穿过外框」上就是缺陷，而后者是这张图上每天发生的事。
+        </p>
+      </div>
+      <div class="open">
+        <h3>不做间隙容差</h3>
+        <p>
+          见 04。补偿是把断口画出来——把一次挫败变成一次诊断，这比猜一个数更有用，也更容易在将来换成别的答案。
+        </p>
+      </div>
+      <div class="open">
+        <h3>不做拖过多块，也不做一次多点落成一个 Entity</h3>
+        <p>
+          <strong>一块面，一个 Entity。</strong>AutoCAD 的一次多点落成一个图案填充对剖面线成立，对分区着色不成立：
+          这个产品里每块区域<strong>各自绑定</strong>——一条母线段带不带电是它自己的事，塞进一个 Entity 就只剩一个绑定点。
+          <code>TRIM</code> 的拖动批量在这里也没有对应物：拖过去的每一块面都要各自求解、各自配色，一次拖出六块色是用户读不懂的结果。
+        </p>
+      </div>
+      <div class="open">
+        <h3>不做布尔运算（Illustrator Shape Builder / Affinity）</h3>
+        <p>
+          那是对<strong>已有对象</strong>做交并差，产出替换掉原对象。这里的边界对象一个都不能动：矩形还是那个矩形，圆还是那个圆。
+          它们是边界，不是原料——与 <code>TRIM</code> 的切割边是同一条。
+        </p>
+      </div>
+      <div class="open">
+        <h3>不做像素漫填（Inkscape 油漆桶）</h3>
+        <p>
+          按渲染结果漫填再描摹，产出的是一圈近似顶点：与缩放有关、顶点拖不动、也不可能重算。
+          这块画布上每一条几何都是真实几何，这条是唯一会产出<strong>假几何</strong>的做法。
+        </p>
+      </div>
+      <div class="open">
+        <h3>填充与接线点不参与边界</h3>
+        <p>
+          填充自己<strong>没有描边</strong>，拿一个用户看不见边的东西当边界，是最难自己发现的一类缺陷——
+          第二块填充会莫名其妙地被第一块围住。接线点沿用 <code>TRIM</code> 已有的 <code>isJunction</code> 谓词：
+          它是一个坐在导线端点上的记号，当边界会在每条支路末端啃出一个记号大小的缺口。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>待定</h2>
+      <p>本稿没有回答、而实现之前要有答案的。</p>
+    </div>
+    <div class="opens">
+      <div class="open">
+        <h3>自动关联不能是「把手动重算改成每帧跑一遍」</h3>
+        <p>
+          调研之后这一条从「性能问题」变成了「设计问题」。性能那一半仍在：接线只要查一个端口的位置，
+          求面要把同父级下所有曲线两两求交，每帧一遍是 O(N²)。但更要紧的是第二半——
+          <strong>边界动了之后 seed 可能落进另一个面</strong>（圆挪过来把它罩住了），于是形状在用户没碰这块填充的情况下整个换掉。
+          AutoCAD 在这里踩的坑有名有姓：它存了落点，边界挪出去之后填充<strong>静默地留在原地</strong>，
+          而老手的对策是干脆不用「拾取内部点」。所以 v2 不是「打开开关」，它得先回答「seed 换了面时听谁的」。
+        </p>
+      </div>
+      <div class="open">
+        <h3>过期状态怎么被看见——这一条不能拖到 v2</h3>
+        <p>
+          所有做了关联的产品里，用户抱怨的都不是「它会断」，而是<strong>「断了我不知道」</strong>。
+          KiCad 的答案是在跑 DRC 与生成输出之前警告区域还没重填，Altium 的答案是把重填做成一个带「保持原样」的提示。
+          本稿 v1 的 Inspector 上写着「边界已改变」——<strong>但没说这句话是怎么算出来的</strong>，而不重算就不知道边界变没变。
+          一个便宜的答案是<strong>只在这块填充被选中时重算一次</strong>：那正是用户在问这个问题的时刻，一次 O(N²) 不是每帧 O(N²)。
+          要不要这么做、以及选中一块填充因此变慢多少，是实现之前要量的。
+        </p>
+      </div>
+      <div class="open">
+        <h3>共线重叠的两条边界</h3>
+        <p>
+          <code>intersectComposeSegments</code> 对平行与<strong>共线重叠</strong>返回空——「没有哪一个点能被称作交点」。
+          两条画在一起的边界线因此不产生节点，绕行会从其中一条上直接走过去。多半无害，但要有用例钉住它到底走成什么样。
+        </p>
+      </div>
+      <div class="open">
+        <h3><code>path</code>（贝塞尔）边界</h3>
+        <p>
+          <code>TRIM</code> v1 也拒绝 <code>path</code>，同一条欠账：三次贝塞尔两两求交要么细分要么解高次方程。
+          v1 一并拒绝并说明，不要把它悄悄拍扁成折线——那会让填出来的面与画出来的曲线差一圈。
+        </p>
+      </div>
+      <div class="open">
+        <h3>文字与符号算不算岛</h3>
+        <p>
+          AutoCAD 的岛屿检测会把文字挖空，好让标注压在填充上仍读得出来。这里的文字 Entity 没有 <code>Curve</code>，
+          天然不是候选——所以 v1 的答案是「不算」。这在深色底上填浅色时会出问题，但那是配色的事，先看有没有人真的撞上。
+        </p>
+      </div>
+      <div class="open">
+        <h3>首次默认色取什么</h3>
+        <p>
+          「记住上次用的」已经在 08 里定了，剩下的只有<strong>第一次</strong>那一下。
+          中间一度把理由写成「区域没有最常见的那一档，所以只能给个中性的占位」——<strong>那是一句推辞，不是一条理由</strong>。
+          真正的理由是正面的：<strong>区域填充的角色是垫在符号底下的一层底</strong>，它必须让上面的墨读得出来。
+          这与导线红取「最常见的那一档」是同一条判据的两个答案——导线问的是「它通常是什么」，底色问的是「它得让什么东西看得清」。
+          低饱和、压得住的深色因此不是将就，是这个角色要求的。待定的只是<strong>取值</strong>：
+          场景背景默认透明，填充是会被发布出去的真实像素，所以它要在深色画布与白底页面上都成立。
+          导线红当初按这条量过对比度（编辑画布 ≈5.1:1、白底页面 ≈3.6:1），这一块也得量，本稿画的 <code>#3f5068</code> 还没量过。
+        </p>
+      </div>
+      <div class="open">
+        <h3>宿主要不要能注入一份色板</h3>
+        <p>
+          08 的色板是从这一页算出来的，这对「第二块跟第一块同色」足够好，但对「这个项目的 10kV 一律用这个色」不够。
+          本稿<strong>不内置</strong>色表（那是替宿主做一个多半要改的决定），而<strong>让宿主注入一份</strong>是另一回事，
+          它与既有的 Registry / Preset 注入是同一类。没做是因为眼下没有消费者——按仓库的规矩，
+          没有消费者的东西不进协议。
+        </p>
+      </div>
+      <div class="open">
+        <h3>场景树里它叫什么</h3>
+        <p>
+          「填充 1」读不出是哪一块。可能按边界对象命名，也可能就按区域大小排序编号。暂无答案。
+        </p>
+      </div>
+    </div>
+  </section>
+  <footer>
+    <div>
+      本稿画的是提案，一行代码都还没有。命令骨架照抄已落地的 <code>TRIM</code>（同一种 <code>pick</code> 输入、同一条手势插件、
+      同一套世界坐标求交），求面的绕行算法是 <code>core/curve-region.ts</code> 里要新增的一组纯函数。
+      落地前按仓库规则先走 OpenSpec 变更提案。
+    </div>
+    <div>
+      两处调研留的尾巴：AutoCAD 的间隙容差变量是 <code>HPGAPTOL</code> 而不是 <code>HPGAPTOLERANCE</code>（本稿没有采用它，记在这里免得下一个人抄错）；
+      「用了间隙容差的填充一建出来就是非关联的」这句话被二手资料反复转述，但<strong>在 Autodesk 的文档里查不到</strong>，本稿不引用它。
+    </div>
+    <div>调研来源：</div>
+    <ul>
+      <li>AutoCAD · <a href="https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-410ECEBF-7CC2-4000-A45E-18F1F6BEE423.htm">-HATCH（射线方向与逆时针绕行）</a> · <a href="https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Core/files/GUID-6FF62998-46E5-4649-9F68-3CFC6C4BFC46.htm">To Reshape a Hatch Object（关联规则原文）</a> · <a href="https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Product-Insights/files/GUID-55F1B161-F071-4AE6-81BC-F3F381EA4713.htm">FAQ: Why Don’t Some Hatch Objects Update?</a></li>
+      <li>AutoCAD 系统变量 · <a href="https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Core/files/GUID-50DE5CC8-9857-46F1-9374-9F1DA3760DC3.htm">HPDRAWORDER</a> · <a href="https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-3B578500-B1F3-450E-8C1B-5DEE394B2A27.htm">HPISLANDDETECTION</a> · <a href="https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-E58FDE75-CDB6-4625-83A8-D0BA4CF6A96A.htm">HPGAPTOL</a> · <a href="https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-4875C3C9-77E8-49F9-8E91-C89084C76733.htm">HPASSOC</a> · <a href="https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-DXF/files/GUID-C6C71CED-CE0F-4184-82A5-07AD6241F15B.htm">DXF HATCH（组码 75「odd parity」、98 落点）</a></li>
+      <li>Illustrator · <a href="https://helpx.adobe.com/illustrator/desktop/paint-and-fill/learn-painting-basics/about-live-paint.html">About Live Paint（edge / face 的定义）</a> · <a href="https://helpx.adobe.com/illustrator/desktop/paint-and-fill/learn-painting-basics/live-paint-limitations.html">Live Paint limitations（那张账单）</a> · <a href="https://helpx.adobe.com/illustrator/using/building-new-shapes-using-shape.html">Shape Builder</a></li>
+      <li>Figma · <a href="https://www.figma.com/blog/introducing-vector-networks/">Introducing Vector Networks</a> · <a href="https://developers.figma.com/docs/plugins/api/VectorNetwork/">VectorNetwork API（region.loops 是段下标）</a> · <a href="https://www.figma.com/blog/delete-and-heal-for-vector-networks/">Delete and Heal</a> · <a href="https://help.figma.com/hc/en-us/articles/30101373312279-Flatten-layers">Flatten layers</a></li>
+      <li>Inkscape · <a href="https://wiki.inkscape.org/wiki/Release_notes/0.46">0.46 Release notes（「perceptual, not geometric」）</a> · <a href="https://wiki.inkscape.org/wiki/Paintbucket_Toolbar">Paintbucket Toolbar</a></li>
+      <li>Affinity · <a href="https://affinity.help/designer2/en-US.lproj/pages/Tools/tools_vectorFloodFill.html">Vector Flood Fill Tool</a> · <a href="https://affinity.help/designer2/en-US.lproj/pages/ObjectControl/floodingAreas.html">Flooding areas with colour</a></li>
+      <li>领域工具 · <a href="https://docs.kicad.org/9.0/en/pcbnew/pcbnew.html">KiCad PCB Editor（敷铜区与过期警告）</a> · <a href="https://www.altium.com/documentation/altium-designer/pcb/internal-power-split-planes">Altium · Internal Power &amp; Split Planes</a></li>
+    </ul>
+  </footer>
+
+</div>
+
+</body>
+</html>

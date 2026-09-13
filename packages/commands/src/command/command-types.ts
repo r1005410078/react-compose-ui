@@ -159,10 +159,11 @@ export interface ComposeCommandPrompt {
    *
    * @remarks
    * 由**提示自己声明**而不由宿主按命令 id 反推，与 `cursorInput` 同一条判断。它只是呈现，
-   * 不改变任何输入的解释。v1 只有剪刀：等待选择对象的命令画的是同一个拾取框，而 `ERASE` 与
-   * `TRIM` 都删东西——两条命令光标一模一样、差别只写在屏幕底部，用户的眼睛此刻却在光标上。
+   * 不改变任何输入的解释。理由是同一个拾取框上挂着好几条含义不同的命令：`ERASE` 与 `TRIM`
+   * 都删东西、`HATCH` 往下落一块色，三条命令光标一模一样、差别只写在屏幕底部，而用户的眼睛
+   * 此刻在光标上。
    */
-  readonly badge?: 'scissors'
+  readonly badge?: 'scissors' | 'bucket'
 }
 
 /** 世界坐标中的一个点。 @public */
@@ -190,14 +191,20 @@ export type ComposeCommandInput =
    */
   | { readonly kind: 'selection'; readonly ids: readonly string[] }
   /**
-   * 一个或多个落在对象上的点。
+   * 一次落在图面上的取用：这一下的落点，与它落在的那些对象。
    *
    * @remarks
+   * 顶层的 `point` 与 `targets` 回答**两个不同的问题**——指着哪儿，与指着的是哪些对象——因此
+   * 一条命令可以只读其中一个：`TRIM` 读 `targets`（要剪的是那截线），`HATCH` 读 `point`
+   * （它的落点在**空处**，本来就没有 target 可言）。只给 `targets` 的话，落在空白处的一次
+   * 取用在协议里根本表达不出来。一笔拖动时 `point` 是轨迹的**起点**。
+   *
    * `targets` 是数组：一笔拖过多个对象时 MUST 作为**一次**输入推进——一次输入、一个事务。
-   * 点一下是长度为 1 的退化情形。标识对本包仍是不透明字符串，点只是两个数。
+   * 点一下是长度为 1 的退化情形，一个都没有同样合法。标识对本包仍是不透明字符串，点只是两个数。
    */
   | {
       readonly kind: 'pick'
+      readonly point: ComposeCommandPoint
       readonly targets: readonly { readonly id: string; readonly point: ComposeCommandPoint }[]
     }
   /** 直接确认；有 `defaultKeyword` 时等价于键入它，否则被拒绝。 */

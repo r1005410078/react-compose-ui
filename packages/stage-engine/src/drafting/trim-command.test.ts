@@ -20,7 +20,7 @@ describe('OpenSpec: stage-engine / TRIM 命令去掉光标底下的一截', () =
   it('每次 pick 交出一个 commit 且提示不变、继续等下一截', () => {
     const session = createStageTrimSession({ messages })
     const targets = [{ id: 'h', point: { x: 1, y: 2 } }, { id: 'v', point: { x: 3, y: 4 } }]
-    const step = session.advance({ kind: 'pick', targets })
+    const step = session.advance({ kind: 'pick', point: { x: 1, y: 2 }, targets })
     expect(step.status).toBe('prompt')
     if (step.status !== 'prompt') return
     expect(step.commit).toEqual({ trim: targets })

@@ -66,6 +66,15 @@ export interface StageTrimOverlay {
  */
 const CUT_MARK_HALF = 6
 
+/**
+ * 断口记号的半径（屏幕像素）。
+ *
+ * @remarks
+ * 画成一个圈而不是一个点：缺口本身可能只有半个像素宽，点上去与图上的墨分不开；圈把那个位置
+ * **框出来**，用户放大过去才找得到它。不随缩放变——它回答「往这儿看」，不是几何。
+ */
+const GAP_MARK_RADIUS = 7
+
 /** 徽标离拾取框右下角的偏移（屏幕像素）：贴着框但不压住它。 */
 const BADGE_OFFSET = 5
 
@@ -135,7 +144,36 @@ export interface StageDraftingOverlayProps {
    * 画在拾取框的右下、刀尖指向框，按**同一个** `crosshair` 解析结果画——解析说不画时它也不画，
    * 系统光标的隐藏因此仍然只有一个来源。角度固定，不跟着被剪的那一段转。
    */
-  readonly badge: 'scissors' | null
+  readonly badge: 'scissors' | 'bucket' | null
+  /**
+   * 填充的悬停预览；不在等填充落点时为 `null`。
+   *
+   * @remarks
+   * 用**当前填充色**半透明画，而不是借 accent：用户要在松手之前看清这一块会变成什么颜色，
+   * 而 accent 回答的是另一个问题。一条子路径一个环，按 `evenodd` 填——岛在预览里就是洞。
+   */
+  readonly hatch: {
+    readonly rings: readonly (readonly StagePoint[])[]
+    readonly color: string
+    /** 改的是这个已有形状；新建一块时为 `null`。 */
+    readonly target: string | null
+  } | null
+  /**
+   * 边界没闭合时那些自由端的位置，世界坐标。
+   *
+   * @remarks
+   * 没有间隙容差，因此这些位置是用户唯一能据以修图的信息——把一次挫败变成一次诊断。琥珀是
+   * **复用**失效端点那个 token 而不是第七种颜色：缺口就是图上的一处失效。
+   */
+  readonly hatchGaps: readonly StagePoint[]
+  /**
+   * 这一次的填充色；不在等填充落点时为 `null`。
+   *
+   * @remarks
+   * 桶身印着它，这正是「这份状态可以记在会话里」的**前提**——合法性不在方不方便，在值有没有
+   * 被印出来，与 `POLYGON` 的边数印在尖括号里是同一条判据。
+   */
+  readonly hatchColor: string | null
 }
 
 /**
@@ -170,6 +208,9 @@ export function StageDraftingOverlay({
   trackingRay,
   outlines,
   trim,
+  hatch,
+  hatchGaps,
+  hatchColor,
   badge,
 }: StageDraftingOverlayProps) {
   const snapScreen = snap ? worldToScreen(snap.point, viewport) : null
@@ -218,6 +259,28 @@ export function StageDraftingOverlay({
           <path d="M4 8L10.5 0.5M8 8L1.5 0.5" />
         </g>
       ) : null}
+      {crosshair && badge === 'bucket' ? (
+        /*
+         * 桶**不整个填色**，只填漆面那一块：近白的漆在深底、近黑的漆在浅底都会与轮廓糊成一块，
+         * 桶的剪影就没了。留出桶口那一截，剪影在任何漆色下都成立。
+         *
+         * 漆色走 `style` 内联而不是呈现属性：样式表里那条 `fill: none` 是按类名给的，而类名
+         * 压得过呈现属性——这个坑仓库的图标注释里已经记过一次。
+         */
+        <g
+          className="compose-stage__drafting-badge"
+          data-testid="stage-drafting-badge"
+          transform={`translate(${crosshair.center.x + crosshair.boxRadius + BADGE_OFFSET} ${crosshair.center.y + crosshair.boxRadius + BADGE_OFFSET - 2})`}
+        >
+          <path d="M4.2 4.6A2.8 2.8 0 0 1 9.8 4.6" />
+          <path
+            className="compose-stage__drafting-badge-paint"
+            d="M3.1 6.9H10.9L9.9 11.9H4.1Z"
+            style={hatchColor ? { fill: hatchColor } : undefined}
+          />
+          <path d="M2.45 4.6H11.55L9.9 11.9H4.1Z" />
+        </g>
+      ) : null}
       {trim?.pieces.map((piece, position) => {
         const points = piece.outline
           .map((point) => worldToScreen(point, viewport))
@@ -249,6 +312,34 @@ export function StageDraftingOverlay({
               )
             })}
           </g>
+        )
+      })}
+      {hatch ? (
+        <path
+          className="compose-stage__hatch-preview"
+          d={hatch.rings
+            .filter((ring) => ring.length > 1)
+            .map((ring) => `${ring
+              .map((point) => worldToScreen(point, viewport))
+              .map(({ x, y }, at) => `${at === 0 ? 'M' : 'L'}${x} ${y}`)
+              .join(' ')}Z`)
+            .join(' ')}
+          data-testid="stage-hatch-preview"
+          data-hatch-branch={hatch.target ? 'fill' : 'create'}
+          style={{ fill: hatch.color }}
+        />
+      ) : null}
+      {hatchGaps.map((gap, position) => {
+        const center = worldToScreen(gap, viewport)
+        return (
+          <circle
+            className="compose-stage__hatch-gap"
+            cx={center.x}
+            cy={center.y}
+            data-testid="stage-hatch-gap"
+            key={`${position}:${center.x},${center.y}`}
+            r={GAP_MARK_RADIUS}
+          />
         )
       })}
       {trim?.trail ? (

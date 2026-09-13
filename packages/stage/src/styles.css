@@ -1731,3 +1731,37 @@
   stroke-width: 1.2;
   stroke-linecap: round;
 }
+
+/*
+ * 桶里的漆：只有这一块跟着当前填充色走，桶身轮廓仍是 `currentColor`。整桶填色时近白的漆在
+ * 深底、近黑的漆在浅底都会与轮廓糊成一块，剪影就没了。
+ */
+.compose-stage__drafting-badge-paint {
+  stroke: none;
+  fill: var(--compose-stage-hatch-preview, #2f3b4d);
+}
+
+/*
+ * 填充的悬停预览：用**当前填充色**半透明画，不借 accent——用户要在松手之前看清这一块会变成
+ * 什么颜色，而 accent 回答的是另一个问题（「这是你正在操作的东西」）。
+ *
+ * `evenodd` 让岛在预览里就是洞，与落地之后 `isPointInsideComposeCurve` 读出同一个答案。
+ */
+.compose-stage__hatch-preview {
+  fill-rule: evenodd;
+  fill-opacity: 0.55;
+  stroke: var(--compose-accent, #4d9cff);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  stroke-opacity: 0.8;
+}
+
+/*
+ * 断口记号：琥珀是**复用**失效端点那个 token 而不是第七种颜色——缺口就是图上的一处失效。
+ * 形状是圈而不是点：缺口本身可能只有半个像素宽，点上去与图上的墨分不开。
+ */
+.compose-stage__hatch-gap {
+  fill: none;
+  stroke: var(--compose-stage-wire-dangling, #f59e0b);
+  stroke-width: 2;
+}

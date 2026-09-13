@@ -193,6 +193,18 @@ export type {
   ComposeNavigateAction,
   ComposeNavigateBackAction,
 } from './interaction'
+export { resolveComposeCurveRegion } from './curve-region'
+export type { ComposeCurveRegionResult, ComposeCurveRegionSource } from './curve-region'
+export {
+  COMPOSE_DEFAULT_HATCH_COLOR,
+  collectComposeHatchValidationIssues,
+  getComposeHatch,
+  isValidComposeHatch,
+} from './hatch'
+export type {
+  ComposeHatch,
+  ComposeHatchValidationIssue,
+} from './hatch'
 export {
   collectComposePortsValidationIssues,
   getComposeEntityPorts,

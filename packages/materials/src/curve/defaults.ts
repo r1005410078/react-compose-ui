@@ -1,3 +1,4 @@
+import { COMPOSE_DEFAULT_HATCH_COLOR } from '@compose-ui/core'
 import type { ComposeAppearance, ComposeColor, ComposeCurve, JsonObject } from '@compose-ui/core'
 
 /** 曲线默认尺寸，同时决定默认几何的两个端点。 @internal */
@@ -149,6 +150,38 @@ export const DEFAULT_JUNCTION_APPEARANCE: ComposeAppearance = Object.freeze({
   ...DEFAULT_CURVE_APPEARANCE,
   backgroundPaint: { kind: 'solid', color: COMPOSE_WIRE_STROKE },
 } satisfies ComposeAppearance)
+
+/**
+ * 填充的默认外观：有填色、没有边框。
+ *
+ * @remarks
+ * 颜色取 core 的 {@link COMPOSE_DEFAULT_HATCH_COLOR}——`materials` 与 `stage` 之间没有依赖，
+ * 各写一份必然漂移，与 `COMPOSE_CURVE_PICK_TOLERANCE` 下沉到 core 是同一条理由。
+ *
+ * 边框宽度 0：填充是**一块面**，而围出它的那些线还在图上原样画着。再给它一圈边框等于把同一条
+ * 边界画两遍，而两遍的抗锯齿对不齐，看起来像描边毛了。
+ *
+ * @internal
+ */
+export const DEFAULT_HATCH_APPEARANCE: ComposeAppearance = Object.freeze({
+  ...DEFAULT_CURVE_APPEARANCE,
+  backgroundPaint: { kind: 'solid', color: COMPOSE_DEFAULT_HATCH_COLOR },
+} satisfies ComposeAppearance)
+
+/**
+ * 填充的默认描边 Props：不画描边。
+ *
+ * @remarks
+ * `stroke: 'transparent'` 而不是删掉这些 prop：Renderer 的 prop 契约是一份闭合清单，缺席会
+ * 回退到 `DEFAULT_CURVE_PROPS` 的浅色描边，那正好是上面那条「同一条边界画两遍」。
+ *
+ * @internal
+ */
+export const DEFAULT_HATCH_PROPS: JsonObject = Object.freeze({
+  ...DEFAULT_CURVE_PROPS,
+  stroke: 'transparent',
+  strokeWidth: 0,
+})
 
 /**
  * 节点的默认描边：与填色同色、宽度为 0。

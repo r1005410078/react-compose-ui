@@ -42,6 +42,8 @@ export interface ComposeCurveMaterialOptions {
   readonly wire?: ComposeBasicMaterialOptions
   /** 接线节点；图上那个实心圆点。 */
   readonly junction?: ComposeBasicMaterialOptions
+  /** 求面产出的填充；从物料面板退役，只由 `HATCH` 落地。 */
+  readonly hatch?: ComposeBasicMaterialOptions
 }
 
 /** `createComposeBasicMaterials` 配置。 @public */
