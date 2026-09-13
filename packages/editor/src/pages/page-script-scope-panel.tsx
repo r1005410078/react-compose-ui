@@ -9,6 +9,7 @@ import {
 import {
   ComposePropertyPanel,
   ComposePropertyPanelSection,
+  type ComposePropertyPanelFieldAdornmentContext,
   type ComposePropertyPanelRendererProps,
 } from '@compose-ui/property-panel'
 import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
@@ -67,6 +68,14 @@ function ReloadIcon() {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
       <path d="M20 11a8 8 0 1 0-2.35 5.65M20 4v7h-7" />
+    </svg>
+  )
+}
+
+function OpenIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
     </svg>
   )
 }
@@ -359,6 +368,24 @@ export function PageScriptScopePanel({
     ...(reference ? { exports: membersValue } : {}),
   }), [currentValue, membersValue, reference])
 
+  // 「打开」贴在脚本文件行上而不是只留在「更多」菜单里：打开当前脚本是这块面板上
+  // 最常做的一步，藏进菜单要两次点击且不可见。装饰槽落在标签列内，因此不与右侧
+  // 动作栏抢容量（那一栏按宽度只有两格）。
+  const renderFieldAdornment = useCallback((
+    context: ComposePropertyPanelFieldAdornmentContext,
+  ) => {
+    if (context.path.length !== 1 || context.path[0] !== 'file' || !currentEntry) return null
+    return (
+      <button
+        aria-label={messages.openSetupScript}
+        className="compose-editor__page-script-open"
+        title={messages.openSetupScript}
+        type="button"
+        onClick={() => onOpen(currentEntry)}
+      ><OpenIcon /></button>
+    )
+  }, [currentEntry, messages.openSetupScript, onOpen])
+
   return (
     <ComposePropertyPanelSection
       actions={(
@@ -406,6 +433,7 @@ export function PageScriptScopePanel({
       title={messages.setupProperty}
     >
       <ComposePropertyPanel
+        renderFieldAdornment={renderFieldAdornment}
         renderers={PAGE_SCRIPT_RENDERERS}
         schema={schema}
         value={panelValue}

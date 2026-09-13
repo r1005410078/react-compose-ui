@@ -2392,6 +2392,35 @@
   line-height: 1.4;
 }
 
+/* 脚本文件行内的「打开」装饰：与标签同高的小图标按钮，不占右侧动作栏。 */
+.compose-editor__page-script-open {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--compose-text-subtle);
+  cursor: pointer;
+}
+
+.compose-editor__page-script-open > svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentcolor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.compose-editor__page-script-open:hover,
+.compose-editor__page-script-open:focus-visible {
+  color: var(--compose-text);
+  background: var(--compose-surface-hover);
+}
+
 .compose-editor__page-script-members {
   width: 100%;
   min-width: 0;

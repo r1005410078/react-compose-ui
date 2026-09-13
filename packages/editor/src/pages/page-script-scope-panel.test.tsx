@@ -95,6 +95,8 @@ describe('PageScriptScopePanel', () => {
 
     const select = await screen.findByRole('combobox', { name: '脚本文件' })
     expect(screen.getByText('未连接')).toBeInTheDocument()
+    // 未关联时没有可打开的文件，脚本文件行上不长出打开入口。
+    expect(screen.queryByRole('button', { name: '打开页面脚本' })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Counter.setup.js' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'helper.js' })).not.toBeInTheDocument()
 
@@ -159,6 +161,13 @@ describe('PageScriptScopePanel', () => {
     })
     expect(screen.getByRole('list', { name: '页面脚本返回成员' })).toHaveTextContent('5')
     expect(screen.getByRole('alert')).toHaveTextContent('方法执行失败')
+
+    // 脚本文件行上的打开按钮与「更多」菜单里那一项是同一个动作的两个入口。
+    fireEvent.click(screen.getByRole('button', { name: '打开页面脚本' }))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({
+      assetKey: 'scripts/Counter.setup.js',
+    }))
+    onOpen.mockClear()
 
     fireEvent.click(screen.getByRole('button', { name: '更多页面脚本操作' }))
     expect(await screen.findByRole('menu', { name: '页面脚本操作' })).toBeInTheDocument()
