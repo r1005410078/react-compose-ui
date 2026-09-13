@@ -57,14 +57,22 @@ import {
   wireBindingsFor,
   wireTapsFor,
 } from './drafting-entity'
+import { planStageHatch, stageHatchPreviewRings } from './hatch-plan'
 import { isStageJunctionEntity, isStageWireEntity } from './wire-tap'
 import {
+  resolveStageHatchRegion,
   resolveStageTrailTargets,
   resolveStageTrimPiece,
   type StageTrimPiece,
+  type StageHatchRejection,
   type StageTrimRejection,
 } from '@compose-ui/stage-engine'
-import { COMPOSE_CURVE_PICK_TOLERANCE, getComposeRenderer, isComposeFrameEntity } from '@compose-ui/core'
+import {
+  COMPOSE_CURVE_PICK_TOLERANCE,
+  COMPOSE_DEFAULT_HATCH_COLOR,
+  getComposeRenderer,
+  isComposeFrameEntity,
+} from '@compose-ui/core'
 import type { StageWireTapAnchor } from './wire-tap'
 
 /** 绘图模式需要的额外文案。 @internal */
@@ -95,11 +103,29 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly trimLabel: (name: string) => string
   /** 修剪被拒绝时的说明；六种原因六句，互不相同。 */
   readonly trimRejection: (reason: StageTrimRejection) => string
+  /** 给一个已有形状填色的历史标签——这一支改的是它，因此标签要说出是谁。 */
+  readonly hatchFillLabel: (name: string) => string
+  /** 填充被拒绝时的说明；三种原因三句，互不相同。 */
+  readonly hatchRejection: (reason: StageHatchRejection) => string
+  /** 悬停在「会改某个既有对象」那一支上时命令行说的话。 */
+  readonly hatchWillFill: (name: string) => string
+  /** 悬停在「会新建一块」那一支上时命令行说的话。 */
+  readonly hatchWillCreate: string
 }
 
 /** {@link useStageDrafting} 的输入。 @internal */
 export interface StageDraftingOptions {
   readonly enabled: boolean
+  /**
+   * 填充色的起始值；缺席取 {@link COMPOSE_DEFAULT_HATCH_COLOR}。
+   *
+   * @remarks
+   * 宿主给了就由宿主持有（工具栏的色板要画出当前色，事实来源只能有一份），不给则 Stage 自己
+   * 持有——`stage` 是可独立嵌入的包，不能要求每个宿主都接一个工具栏。与角度约束同一条。
+   */
+  readonly hatchColor?: string
+  /** 命令进行中用 `C` 换了色时回调；宿主据此更新色板。 */
+  readonly onHatchColorChange?: (color: string) => void
   readonly document: ComposeDocument
   readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly viewport: StageViewport
@@ -261,6 +287,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
     index,
     onEnterGeometryEditing,
     isGeometryEditable,
+    hatchColor,
   } = options
 
   const sessionRef = useRef<ComposeCommandSession<StageDraftingEffect> | null>(null)
@@ -295,6 +322,30 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const [preview, setPreview] = useState<StageDraftingEffect | null>(null)
   /** 一笔 `pick` 拖动中的轨迹，世界坐标；不在拖动时为 `null`。由取点插件逐帧回传。 */
   const [pickTrail, setPickTrail] = useState<readonly StagePoint[] | null>(null)
+  /**
+   * 上一次填充没能闭合时那些自由端的位置，世界坐标。
+   *
+   * @remarks
+   * 它**不跟着光标走**：记号回答的是「这张图上哪里少了一段」，而用户读到它之后要把光标挪开去
+   * 找那条缝。下一次落点时整份换掉，退出命令时清空。
+   */
+  const [hatchGaps, setHatchGaps] = useState<readonly StagePoint[]>([])
+  /**
+   * 这一次的填充色。
+   *
+   * @remarks
+   * 记在**本次编辑会话**里，不写文档、不写偏好——与 `POLYGON` 的边数同一条判据：合法性不在方
+   * 不方便，在**值有没有被印出来**，而桶身就印着它。两条入口：工具栏的色板与命令进行中的 `C`。
+   *
+   * 它是**真的 React 状态而不是 ref**：桶身徽标与悬停预览都在渲染期读它，而 ref 在渲染期读
+   * 不到更新。这与「悬停态是纯 CSS、不为一个视觉反馈引入每帧要写的状态」不冲突——那条拦的是
+   * 每帧 `pointermove` 都要写的东西，而颜色每填几次才动一次。
+   *
+   * **可选受控**：宿主给了就由宿主持有（工具栏的色板要画出当前色，事实来源只能有一份），
+   * 不给则 Stage 自己持有，与角度约束同一条。
+   */
+  const [ownHatchColor, setOwnHatchColor] = useState(COMPOSE_DEFAULT_HATCH_COLOR)
+  const activeHatchColor = hatchColor ?? ownHatchColor
   const [pointer, setPointerPoint] = useState<StagePoint | null>(null)
   // 指针类型只服务触摸豁免：触摸屏上没有光标，十字光标对它毫无意义，而这个判断只有事件
   // 本身知道。
@@ -490,6 +541,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
     activeFrameId,
     selectedIds,
     onSelectedIdsChange,
+    hatchColor: activeHatchColor,
+    onHatchColorChange: options.onHatchColorChange,
   }
   const latest = useRef(snapshot)
   useLayoutEffect(() => {
@@ -597,6 +650,38 @@ export function useStageDrafting(options: StageDraftingOptions) {
       current.dispatch(created.command)
       // 跨父级的绑定被丢掉了就必须说出来：静默丢弃与「绑上了」在屏幕上无法区分。
       if (created.droppedWireEnds.length > 0) notice = current.messages.wireParentMismatch
+    }
+
+    /*
+     * 填充：解算在引擎、规划在这里——新建那一支要一个 `hatch` Preset 与一个新的 Entity id，
+     * 而引擎不建 Entity、不认识 Preset id。两支（改一个已有形状 / 新建一块）都在这里分流，
+     * 免得同一件事跨两个包。
+     */
+    if (effect.hatch) {
+      const plan = planStageHatch(
+        {
+          document: current.document,
+          layoutSnapshot: current.layoutSnapshot,
+          index: current.index,
+          registry: current.registry,
+          idFactory: current.idFactory,
+          activeFrameId: current.activeFrameId,
+        },
+        effect.hatch.point,
+        {
+          color: current.hatchColor,
+          isJunction: isStageJunctionEntity,
+          fillLabel: current.messages.hatchFillLabel,
+          rejection: current.messages.hatchRejection,
+        },
+      )
+      // 断口记号常驻到下一次落点为止：它是一处缺陷，而用户此刻要拿着它去图上找那条缝。
+      setHatchGaps(plan.gaps)
+      plan.commands.forEach((command) => {
+        if (plan.branch === 'create') recordCreated(command)
+        current.dispatch(command)
+      })
+      if (plan.notice) notice = plan.notice
     }
 
     // 平移、复制、删除与夹点几何只认识文档，因此由引擎规划成命令；宿主只负责派发。
@@ -950,11 +1035,17 @@ export function useStageDrafting(options: StageDraftingOptions) {
       onPolygonSidesChange: (sides) => { polygonSidesRef.current = sides },
       polygonFit: polygonFitRef.current,
       onPolygonFitChange: (fit) => { polygonFitRef.current = fit },
+      hatchColor: latest.current.hatchColor,
+      onHatchColorChange: (color) => {
+        setOwnHatchColor(color)
+        latest.current.onHatchColorChange?.(color)
+      },
     }
     setGripTarget(null)
     setReference(null)
     setPreview(null)
     setNotice(null)
+    setHatchGaps([])
     // 全新会话：端口来源与「我建了哪些」都只描述**这一条**，重开时必须一起清掉。
     portAnchors.current.clear()
     wireAnchors.current.clear()
@@ -1598,13 +1689,24 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [document])
 
   /**
+   * 这一次 `pick` 是在剪还是在填。
+   *
+   * @remarks
+   * 读**提示自己声明的徽标**而不是当前命令 id：宿主不认识任何一条命令的内部，这与「徽标由提示
+   * 声明而不由宿主按命令 id 反推」是同一条边界的同一次应用——光标画什么、图面上预览什么，是
+   * 同一幅画的两半，读同一份事实。
+   */
+  const cutting = awaitingPick && prompt?.badge === 'scissors'
+  const hatching = awaitingPick && prompt?.badge === 'bucket'
+
+  /**
    * 悬停预览：光标底下那一截，与落地读**同一份**解算。
    *
    * @remarks
    * 纯函数只读索引与文档，不读会话的 ref，因此可以在渲染期算；拖动中改画轨迹碰到的那些。
    */
   const trim = useMemo(() => {
-    if (!awaitingPick) return null
+    if (!cutting) return null
     if (pickTrail) {
       const seen = new Set<string>()
       const pieces = resolveStageTrailTargets(index, pickTrail, { isJunction: isStageJunctionEntity })
@@ -1624,7 +1726,55 @@ export function useStageDrafting(options: StageDraftingOptions) {
     if (!id) return { pieces: [], trail: null }
     const resolution = resolveStageTrimPiece(index, id, pointer, { isJunction: isStageJunctionEntity })
     return { pieces: resolution.status === 'ok' ? [trimOverlayPiece(resolution.piece)] : [], trail: null }
-  }, [awaitingPick, index, pickTargetAt, pickTrail, pointer, trimOverlayPiece])
+  }, [cutting, index, pickTargetAt, pickTrail, pointer, trimOverlayPiece])
+
+  /**
+   * 悬停预览：光标底下那块面，与落地读**同一份**解算。
+   *
+   * @remarks
+   * 不共用同一份解算的话，「看见的那块面」与「填上的那块面」不是同一块——这与修剪那条约束
+   * 逐字相同。
+   *
+   * 环按 `evenodd` 填，因此岛在预览里就是洞，与落地之后 `isPointInsideComposeCurve` 读出的
+   * 是同一个答案：**看得见的洞与点不中的洞是同一个洞**这句话从预览这一刻就成立。
+   *
+   * 提示分两支而不是一句：改一个已有形状与新建一块是两件事，用户必须在松手**之前**知道会
+   * 发生哪一件。
+   */
+  const hatch = useMemo(() => {
+    if (!hatching || !pointer) return null
+    const resolution = resolveStageHatchRegion(index, pointer, { isJunction: isStageJunctionEntity })
+    if (resolution.status === 'rejected') return null
+    return {
+      rings: stageHatchPreviewRings(resolution.curve),
+      color: activeHatchColor,
+      target: resolution.status === 'fill' ? resolution.entityId : null,
+    }
+  }, [activeHatchColor, hatching, index, pointer])
+
+  /**
+   * 悬停时命令行说的那句话：这一下会改某个既有对象，还是会新建一块。
+   *
+   * @remarks
+   * 两支由**图上看得见的东西**决定，因此这句话与那块半透明的色读**同一个** `hatch` memo——
+   * 各自解算一遍的话，命令行说「将新建」而预览画的却是某个矩形被填上，用户没有任何办法
+   * 判断哪个是真的。
+   *
+   * 这是宿主对提示 `message` 的一次**呈现层覆盖**，不是第二份提示：这一步是谁、收什么输入、
+   * 有哪些关键字全都还是会话说了算——只有「这一下会落在哪一支上」是引擎不知道的，因为它
+   * 既不认识 Preset id 也不建 Entity。光标没有落点（指针在图面外）时不覆盖，那时没有哪一支
+   * 可言。
+   */
+  const hatchPrompt = useMemo(() => {
+    if (!prompt || !hatching || !hatch) return prompt
+    const target = hatch.target === null ? null : document.entities[hatch.target]
+    return {
+      ...prompt,
+      message: target
+        ? messages.hatchWillFill(target.name)
+        : messages.hatchWillCreate,
+    }
+  }, [document.entities, hatch, hatching, messages, prompt])
 
   /**
    * 一次 `pick`：点一下是按下点底下那一截，拖一笔是轨迹碰到的每一截。
@@ -1632,17 +1782,24 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * @remarks
    * 点一下落在拒绝档上要**说出来**——「点了没反应」与点错在屏幕上无法区分；拖一笔里被拒绝的
    * 那些静默略过，用户没有逐条瞄准它们。落在空白处什么都不做。
+   *
+   * **填充那一档不找 target**：它的落点在**空处**，围出这块面的是谁由规划那一步解算，而
+   * 光标底下有没有一条线与这一下的含义无关。这正是 `pick` 把落点提到顶层的理由。
    */
   const handlePick = useCallback((point: StagePoint, trail: readonly StagePoint[] | null) => {
     const session = sessionRef.current
     if (!session || session.prompt?.accepts.includes('pick') !== true) return
     const current = latest.current
+    if (session.prompt.badge === 'bucket') {
+      applyStep(session.advance({ kind: 'pick', point, targets: [] }))
+      return
+    }
     const junctionOptions = { isJunction: isStageJunctionEntity }
     if (trail) {
       const targets = resolveStageTrailTargets(current.index, trail, junctionOptions)
         .filter((target) => resolveStageTrimPiece(current.index, target.id, target.point, junctionOptions).status === 'ok')
       if (targets.length === 0) return
-      applyStep(session.advance({ kind: 'pick', targets }))
+      applyStep(session.advance({ kind: 'pick', point, targets }))
       return
     }
     const id = pickTargetAt(point)
@@ -1652,7 +1809,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       setNotice(current.messages.trimRejection(resolution.reason))
       return
     }
-    applyStep(session.advance({ kind: 'pick', targets: [{ id, point }] }))
+    applyStep(session.advance({ kind: 'pick', point, targets: [{ id, point }] }))
   }, [applyStep, pickTargetAt])
 
   /**
@@ -1724,11 +1881,17 @@ export function useStageDrafting(options: StageDraftingOptions) {
     badge: enabled ? prompt?.badge ?? null : null,
     /** 修剪的悬停预览与拖动轨迹；不在等 `pick` 时为 `null`。 */
     trim,
+    /** 填充的悬停预览；不在等填充落点时为 `null`。 */
+    hatch,
+    /** 上一次填充没能闭合时那些自由端的位置，世界坐标；没有就是空。 */
+    hatchGaps: enabled ? hatchGaps : [],
+    /** 这一次的填充色；不在等填充落点时为 `null`，桶身徽标印它。 */
+    hatchColor: hatching ? activeHatchColor : null,
     pickTrail,
     setPickTrail,
     handlePick,
     pointerType,
-    prompt: enabled ? prompt : null,
+    prompt: enabled ? hatchPrompt : null,
     notice: enabled ? notice : null,
     angleConstraint,
     setAngleConstraint,

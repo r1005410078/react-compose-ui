@@ -1,3 +1,5 @@
+import { COMPOSE_DEFAULT_HATCH_COLOR } from '@compose-ui/core'
+
 /** 工具栏图标名；工具栏的格与「更多」菜单项按它画同一枚图标。 @internal */
 export type StageToolbarIconName =
   | 'arc'
@@ -27,11 +29,26 @@ export type StageToolbarIconName =
   | 'text'
   | 'wire'
   | 'trim'
+  | 'hatch'
   | 'zoom-in'
   | 'zoom-out'
 
 interface StageToolbarIconProps {
   name: StageToolbarIconName
+  /**
+   * 运行期的漆色；只有 `hatch` 这一枚读它。
+   *
+   * @remarks
+   * 这是整套图标里**第一枚带参数的**。它是正当的：桶身印着当前填充色，而「那份状态被印出来
+   * 了」正是这条记忆可以只记在会话里的**前提**——与 `POLYGON` 的边数印在提示的尖括号里是
+   * 同一条判据。
+   *
+   * 只有**漆面**跟着它，桶身轮廓仍是 `currentColor`：整桶填色时近白的漆在深底、近黑的漆在
+   * 浅底都会与轮廓糊成一块，桶的剪影就没了；留出桶口那一截，剪影在任何漆色下都成立。
+   *
+   * 缺席时漆面回落到 core 的默认填充色，因此这一枚在任何调用处都画得出来。
+   */
+  paint?: string
 }
 
 /**
@@ -103,7 +120,7 @@ function portMark(x: number, y: number) {
  *
  * @internal
  */
-export function StageToolbarIcon({ name }: StageToolbarIconProps) {
+export function StageToolbarIcon({ name, paint }: StageToolbarIconProps) {
   const content = {
     'create-frame': (
       <>
@@ -392,6 +409,29 @@ export function StageToolbarIcon({ name }: StageToolbarIconProps) {
         <circle cx="6" cy="14.5" r="2.5" />
         <circle cx="14" cy="14.5" r="2.5" />
         <path d="M7.8 12.6L15.5 3.5M12.2 12.6L4.5 3.5" />
+      </>
+    ),
+    /*
+     * 油漆桶：一个正立的桶加一道提梁。
+     *
+     * **不用倾斜的桶**——那是别处常见的画法，但在 20px 上一个歪掉的方形读作「歪方块」，桶的
+     * 语义全丢在那几度倾角里。正立之后轮廓的四条边都落在像素格上。
+     *
+     * **漆色走 `style` 内联**而不是呈现属性：样式表里那条 `fill: none` 是按选择器给的，而
+     * 选择器压得过呈现属性——同一个坑仓库的场景树图标注释里已经记过一次。
+     *
+     * **不用「单色桶 + 底部色带」**：色带会是只出现在这一枚上的第六个记号，而这套图标的记号
+     * 词汇表只有五个且写着「accent 只标点」；它还落在 `y=16–18`，那一圈版式规则写明只有夹点
+     * 方块可以进。
+     */
+    hatch: (
+      <>
+        <path d="M6 6.5A4 4 0 0 1 14 6.5" />
+        <path
+          d="M4.4 9.8H15.6L14.2 17H5.8Z"
+          style={{ fill: paint ?? COMPOSE_DEFAULT_HATCH_COLOR, stroke: 'none' }}
+        />
+        <path d="M3.5 6.5H16.5L14.2 17H5.8Z" />
       </>
     ),
     'zoom-in': (

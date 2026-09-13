@@ -13,6 +13,7 @@ import { resolveComposeRendererRuntimeProps } from '../registry/runtime-props'
 import type { ComposeEntityRegistry, ComposeRendererTextEditing } from '../registry/types'
 import type {
   ComposeNodeEditPort,
+  ComposeHatchEditPort,
   ComposePaintEditPort,
   ComposeRendererInspectorBindingPort,
   ComposeRendererPropCategory,
@@ -157,6 +158,7 @@ export function ComposeRegistryComponentInspector({
   layoutSnapshot,
   nodeEditPort,
   paintEditPort,
+  hatchEditPort,
   readOnly,
 }: {
   readonly registry: ComposeEntityRegistry
@@ -168,6 +170,7 @@ export function ComposeRegistryComponentInspector({
   readonly readOnly: boolean
   readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
+  readonly hatchEditPort?: ComposeHatchEditPort
 }) {
   const value = entity.components[componentKey]
   const definition = registry.getComponent(componentKey)
@@ -193,6 +196,7 @@ export function ComposeRegistryComponentInspector({
         readOnly={readOnly}
         nodeEditPort={nodeEditPort}
         paintEditPort={paintEditPort}
+        hatchEditPort={hatchEditPort}
         value={value}
       />
     </DefinitionErrorBoundary>

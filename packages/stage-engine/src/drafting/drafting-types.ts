@@ -165,6 +165,20 @@ export interface StageDraftingEffect {
    */
   readonly trim?: readonly { readonly id: string; readonly point: ComposeCommandPoint }[]
   /**
+   * 本步要填充的那一下：一个**世界落点**。
+   *
+   * @remarks
+   * 只说「这里」。哪一块面、是改一个已有形状还是新建一块由规划那一步按落点解算
+   * （`resolveStageHatchRegion`）——边界规则要读图上每一条曲线在哪儿，而引擎的命令层不认识文档。
+   *
+   * 与 `trim` 不同，它**不带 target**：填充的落点在**空处**，本来就没有落在谁身上可言。这正是
+   * `pick` 输入把落点提到顶层的理由。
+   *
+   * 颜色不在这里：它由宿主持有（见 {@link StageDraftingContext.hatchColor}），命令只在用户敲
+   * `C` 换色时回调过去。把颜色也放进效果等于让同一份事实有两处来源。
+   */
+  readonly hatch?: { readonly point: ComposeCommandPoint }
+  /**
    * 删掉本次会话**上一个建出来**的 Entity。
    *
    * @remarks
@@ -326,6 +340,17 @@ export interface StageDraftingMessages {
   readonly selectTrimTarget: string
   /** `TRIM` 收到不是 `pick` 的输入时的说明。 */
   readonly expectedPick: string
+  readonly hatchTitle: string
+  /** `HATCH` 的提示：点一下要填充的区域内部。 */
+  readonly pickHatchPoint: string
+  /** `HATCH` 收到不是 `pick` 的输入时的说明。 */
+  readonly expectedHatchPoint: string
+  /** `HATCH` 的 `C` 关键字标签。 */
+  readonly hatchColorKeyword: string
+  /** `HATCH` 换色那一步的提示。 */
+  readonly specifyHatchColor: string
+  /** 键入的颜色读不出来时的说明。 */
+  readonly invalidHatchColor: string
   readonly vertexTitle: string
   readonly specifyNewLocation: string
   readonly expectedSingleObject: string
@@ -363,6 +388,16 @@ export interface StageDraftingContext {
    * 存放东西的地方。宿主把它记在**本次编辑会话**里——不写文档、不持久化，因为它是「上次怎么
    * 画的」而不是「画了什么」。
    */
+  /**
+   * `HATCH` 这一次的填充色。
+   *
+   * @remarks
+   * 与 `polygonSides` 同一条边界与同一条理由：由宿主记在**本次编辑会话**里，不写文档、不
+   * 持久化。合法性不在方不方便，在**值有没有被印出来**——桶身就是这里的 `<6>`。
+   */
+  readonly hatchColor?: string
+  /** `HATCH` 的 `C` 关键字换色时回调，宿主据此更新下一次的起始值。 */
+  readonly onHatchColorChange?: (color: string) => void
   readonly polygonSides?: number
   /**
    * `POLYGON` 改变边数时回调，宿主据此更新下一次的起始值。

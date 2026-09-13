@@ -40,6 +40,37 @@ import {
 export const STAGE_RECT_PRESET_ID = 'rect'
 
 /**
+ * 填充 Preset 的 id。
+ *
+ * @remarks
+ * 与 `rect` 同一条边界：引擎只说出「这是一块填充」，挑哪个 Preset 由持有 Registry 的宿主决定。
+ * @internal
+ */
+export const STAGE_HATCH_PRESET_ID = 'hatch'
+
+/**
+ * 给定的那些 Entity 在同一个父级下最靠前的位置；没有一个同父级时返回 null。
+ *
+ * @remarks
+ * 只看**同父级**的那些：跨层级的边界在这个父级的子级列表里没有位置可言，拿它算等于按一个
+ * 不存在的下标插入。一个都没有时不插，落在最后（最上面）——那时这块填充与它的边界本来就不在
+ * 同一层，层序由容器之间的次序决定。
+ */
+function lowestSiblingIndex(
+  document: ComposeDocument,
+  parentId: string | null,
+  ids: readonly string[],
+): number | null {
+  const siblings = parentId
+    ? getComposeHierarchy(document.entities[parentId])?.childIds ?? []
+    : document.rootIds
+  const positions = ids
+    .map((id) => siblings.indexOf(id))
+    .filter((position) => position >= 0)
+  return positions.length === 0 ? null : Math.min(...positions)
+}
+
+/**
  * 取点落点到端口绑定的键。
  *
  * @remarks
@@ -292,6 +323,57 @@ export interface StageDraftingCurveOptions {
    * 每一步都写不进去。
    */
   readonly replace?: string
+  /**
+   * 这条曲线是一块**求面产出的填充**。
+   *
+   * @remarks
+   * 与 `rectangle` / `arrow` / `wiring` 一样是意图标记，但它多带两样东西：`seed`（重新生成要
+   * 用的那个落点）与层序。走 `hatch` Preset。
+   */
+  readonly hatch?: StageDraftingHatchOptions
+}
+
+/** 新建一块填充时的额外信息。 @internal */
+export interface StageDraftingHatchOptions {
+  /**
+   * 求出这块面用的**世界**落点。
+   *
+   * @remarks
+   * 写进 `Hatch.seed` 之前换算成 Entity 局部坐标——与 `Ports.position`、`Curve` 的盒局部几何
+   * 同一个空间，因此移动这块填充不改写它。
+   *
+   * **不量化到两位小数**：`roundComposeGeometry` 的作用对象是会被看见、会被再编辑的几何，
+   * 而这个数是求解器的输入。一块窄面上挪两个百分点就够让重新生成跑到隔壁那一块去。
+   */
+  readonly seed: StagePoint
+  /** 这一次的填充色。 */
+  readonly color: string
+  /** 围出这块面的那些 Entity；填充插到它们**之下**。 */
+  readonly belowIds: readonly string[]
+}
+
+/**
+ * 把一条世界坐标的曲线换算到某个既有 Entity 的**父级**局部坐标。
+ *
+ * @remarks
+ * 与 {@link createStageDraftingCurveCommand} 里那一步是**同一份换算**，抽出来是因为「判断这块
+ * 填充过不过期」只需要换算的结果、不需要那条命令：各写一遍的话，两处对同一份几何算出的局部
+ * 坐标会在某些旋转下差一点点，而症状是「明明没动过却一直显示过期」。
+ *
+ * @internal
+ */
+export function stageCurveToParent(
+  context: StageDraftingCommitContext,
+  curve: ComposeCurve,
+  entityId: string,
+): ComposeCurve {
+  const parentId = getEntityParentId(context.document, entityId)
+  const inverse = parentId
+    ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parentId))
+    : null
+  const toParent = (point: StagePoint) => (inverse ? applyMatrix(inverse, point) : point)
+  const rotationDegrees = inverse ? Math.atan2(inverse.b, inverse.a) * 180 / Math.PI : 0
+  return toParentCurve(curve, toParent, rotationDegrees)
 }
 
 /** {@link createStageDraftingCurveCommand} 的结果。 @internal */
@@ -334,7 +416,7 @@ export function createStageDraftingCurveCommand(
   curve: ComposeCurve,
   options: StageDraftingCurveOptions = {},
 ): StageDraftingCurveCommand | null {
-  const { arrow, rectangle, replace, taps, tapLabel, wire, wiring } = options
+  const { arrow, hatch, rectangle, replace, taps, tapLabel, wire, wiring } = options
   const existing = replace ? context.document.entities[replace] : undefined
   const target = existing && !getComposeLock(existing).locked ? existing : undefined
   /*
@@ -459,19 +541,43 @@ export function createStageDraftingCurveCommand(
   }
 
   const seed = context.registry.createSeed(
-    wiring || bindings.wire
-      ? 'wire'
-      : arrow ? 'arrow' : rectangle ? STAGE_RECT_PRESET_ID : 'curve',
+    hatch
+      ? STAGE_HATCH_PRESET_ID
+      : wiring || bindings.wire
+        ? 'wire'
+        : arrow ? 'arrow' : rectangle ? STAGE_RECT_PRESET_ID : 'curve',
   )
   if (!seed.ok) return null
 
   const entityId = context.idFactory()
   const layoutItem = seed.seed.components.LayoutItem as Record<string, unknown>
+  /*
+   * 填充多带两样：重新生成要用的那个落点，与这一次的颜色。落点换算成 Entity 局部坐标
+   * （几何归一化把紧包围盒的左上角挪到了原点，因此还要减去 `normalized.offset`）。
+   */
+  const hatchComponents = hatch
+    ? (() => {
+      const seedLocal = toParent(hatch.seed)
+      return {
+        Hatch: {
+          seed: {
+            x: seedLocal.x - normalized.offset.x,
+            y: seedLocal.y - normalized.offset.y,
+          },
+        },
+        Appearance: {
+          ...(seed.seed.components.Appearance as Record<string, unknown>),
+          backgroundPaint: { kind: 'solid', color: hatch.color },
+        },
+      }
+    })()
+    : {}
   const entity: ComposeEntity = {
     ...seed.seed,
     id: entityId,
     components: {
       ...seed.seed.components,
+      ...hatchComponents,
       Curve: normalized.curve,
       // 两端都没绑到端口的「导线」不带 `Wire`：一条谁也没接的线与普通线没有任何差别，
       // 留一个空 Component 只会让文档攒下读不出意图的空壳。
@@ -485,12 +591,20 @@ export function createStageDraftingCurveCommand(
     },
   }
 
+  /*
+   * 填充压在边界之下：子级顺序就是绘制顺序，先建的在底下。不插的话它落在最上面，把围出这块
+   * 面的那些线连同区域里的符号整片盖住——而那正是 AutoCAD 把 `HPDRAWORDER` 默认成「送到边界
+   * 之后」的理由。取的是同父级那些边界里**最靠前**的一个：只要压在最下面那条边界之下，就压在
+   * 全部边界之下。
+   */
+  const insertion = hatch ? lowestSiblingIndex(context.document, parentId, hatch.belowIds) : null
   const create: EditorCommand = {
     id: context.idFactory(),
     type: BUILTIN_COMMAND_TYPES.createEntity,
     payload: {
       entity: entity as unknown as JsonValue,
       parentId,
+      ...(insertion === null ? {} : { index: insertion }),
     },
     meta: { label: entity.name, source: 'stage', targetIds: [entityId] },
   }

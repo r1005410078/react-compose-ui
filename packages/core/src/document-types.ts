@@ -378,6 +378,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   curve: 'Curve',
   ports: 'Ports',
   wire: 'Wire',
+  hatch: 'Hatch',
 } as const
 
 /** ComposeDocument v7 内建 Component Key 联合。 @public */
@@ -606,6 +607,8 @@ export type DocumentValidationIssueCode =
   | 'bindings.invalid'
   | 'interaction.invalid'
   | 'ports.invalid'
+  | 'hatch.invalid'
+  | 'hatch.missing-curve'
   | 'wire.invalid'
   | 'wire.missing-curve'
   | 'wire.unsupported-geometry'

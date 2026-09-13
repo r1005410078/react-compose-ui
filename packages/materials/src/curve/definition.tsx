@@ -28,6 +28,8 @@ import {
   DEFAULT_CURVE_GEOMETRY,
   DEFAULT_CURVE_PROPS,
   DEFAULT_CURVE_SIZE,
+  DEFAULT_HATCH_APPEARANCE,
+  DEFAULT_HATCH_PROPS,
   DEFAULT_JUNCTION_APPEARANCE,
   DEFAULT_JUNCTION_PROPS,
   DEFAULT_WIRE_PROPS,
@@ -64,7 +66,7 @@ function valueContract(
  * 同时存在两种线的表示，用户看不出区别却会得到不同的编辑手感。
  */
 function curvePreset(
-  id: 'curve' | 'arrow' | 'circle' | 'rect' | 'wire' | 'junction',
+  id: 'curve' | 'arrow' | 'circle' | 'rect' | 'wire' | 'junction' | 'hatch',
   /**
    * 面板显示名与新建对象的默认名。
    *
@@ -129,6 +131,7 @@ export function createCurveMaterial(
 ): {
   renderer: ComposeRendererDefinition
   presets: readonly [
+    ComposeEntityPreset,
     ComposeEntityPreset,
     ComposeEntityPreset,
     ComposeEntityPreset,
@@ -265,6 +268,25 @@ export function createCurveMaterial(
             GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
           }),
         },
+      ),
+      /*
+       * 填充是求面产出的那块色。它**从物料面板退役**（`'always'`）而不是按工具栏货架求值：
+       * 从面板拖出来的是一块**没有 `Hatch`** 的色块——它与围出它的那些线没有任何关系，永远
+       * 重新生成不了，而屏幕上与真填充逐像素相同。这与导线那一条同形：理由出自物料自身，
+       * 与谁的货架上有没有按钮无关。
+       *
+       * 默认几何是矩形，因为拖不出来的东西也不该退化成一条线；真正的几何在落地那一刻由求面
+       * 写进去。
+       */
+      curvePreset(
+        'hatch',
+        { label: '填充', name: 'Hatch' },
+        DEFAULT_HATCH_PROPS,
+        composeRectangleGeometry,
+        <ComposeRectMaterialIcon />,
+        'always',
+        options.hatch,
+        { fallbackAppearance: DEFAULT_HATCH_APPEARANCE },
       ),
     ],
   }

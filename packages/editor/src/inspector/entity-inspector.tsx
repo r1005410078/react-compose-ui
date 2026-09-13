@@ -8,6 +8,7 @@ import {
   ComposeRegistryRendererInspector,
   type ComposeEntityRegistry,
   type ComposeNodeEditPort,
+  type ComposeHatchEditPort,
   type ComposePaintEditPort,
 } from '@compose-ui/component-registry'
 import { ComposeButton, ComposeConfirmDialog } from '@compose-ui/components'
@@ -52,6 +53,8 @@ interface EntityInspectorProps {
   readonly dispatch: (command: EditorCommand) => unknown
   readonly idFactory: () => string
   readonly paintEditPort?: ComposePaintEditPort
+  /** 填充求解的桥接；未注入时 Hatch Inspector 只显示取点。 */
+  readonly hatchEditPort?: ComposeHatchEditPort
   /** 节点引用属性的候选来源；未注入时 node 字段呈现无候选状态。 */
   readonly nodeEditPort?: ComposeNodeEditPort
   /** 当前页面实例的 setup 返回作用域。 */
@@ -205,6 +208,7 @@ export function EntityInspector({
   idFactory,
   nodeEditPort,
   paintEditPort,
+  hatchEditPort,
   hiddenComponentKeys,
   hideIdentity,
   renameDisabled,
@@ -303,6 +307,7 @@ export function EntityInspector({
               readOnly={locked}
               nodeEditPort={nodeEditPort}
               paintEditPort={paintEditPort}
+              hatchEditPort={hatchEditPort}
               registry={registry}
             />
           ))}
@@ -384,6 +389,7 @@ export function EntityInspector({
               readOnly={locked}
               nodeEditPort={nodeEditPort}
               paintEditPort={paintEditPort}
+              hatchEditPort={hatchEditPort}
               registry={registry}
             />
           </ComposePropertyPanelSection>

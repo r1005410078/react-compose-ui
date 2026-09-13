@@ -1293,6 +1293,36 @@
   box-shadow: 0 10px 28px var(--compose-shadow), inset 0 1px rgb(255 255 255 / 3%);
 }
 
+/*
+ * 色板是一行色块而不是一列带文字的菜单项：它回答的是「换成哪个颜色」，而颜色自己就是那句话
+ * ——列出色名等于把同一件事说两遍，而 `#2f3b4d` 这样的名字读不出它长什么样。
+ */
+.compose-editor__toolbar-swatches {
+  @apply ct:flex ct:min-w-0 ct:gap-1;
+}
+
+.compose-editor__toolbar-swatch {
+  @apply ct:h-6 ct:w-6 ct:shrink-0 ct:rounded-md;
+  /* 色块自带边框：近画布色的那几档不描边就与弹出层的底糊在一起，剪影没了。 */
+  border: 1px solid var(--compose-border-strong);
+  padding: 0;
+}
+
+/*
+ * 选中态走一圈外扩的描边而不是改背景——背景**就是那个颜色**，改它等于把用户要挑的东西盖掉。
+ * 这与画布上「形状先分开、颜色再分开」是同一条规矩的另一面：这里颜色已经被内容占满，因此
+ * 状态只能由形状承担。
+ */
+.compose-editor__toolbar-swatches button[aria-checked='true'] {
+  box-shadow: 0 0 0 2px var(--compose-accent);
+}
+
+.compose-editor__toolbar-swatches button:hover,
+.compose-editor__toolbar-swatches button[aria-checked='true'] {
+  /* 压掉菜单项那条通用的 hover 背景：色块的背景是内容。 */
+  background: inherit;
+}
+
 /* 「更多」菜单挂在工具栏尾端，向左展开，否则会伸出可视区。 */
 .compose-editor__toolbar-menu--end {
   left: auto;

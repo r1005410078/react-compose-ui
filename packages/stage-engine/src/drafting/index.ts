@@ -16,6 +16,7 @@ export {
 export { planStageDraftingEdits, type StageDraftingEditQuery } from './drafting-edits'
 export { createStageEraseCommand, createStageEraseSession } from './erase-command'
 export { createStageTrimCommand, createStageTrimSession } from './trim-command'
+export { createStageHatchCommand, createStageHatchSession } from './hatch-command'
 export {
   createStageCopyCommand,
   createStageCopySession,

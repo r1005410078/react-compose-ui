@@ -140,6 +140,7 @@ export const DRAWING_TOOLBAR_SHELF: ComposeToolbarShelf = [
   'ARROW',
   'WIRE',
   'TRIM',
+  'HATCH',
   COMPOSE_TOOLBAR_SEPARATOR,
   'draw-text',
 ]
@@ -405,4 +406,6 @@ export const COMPOSE_TOOLBAR_CATALOG: readonly ComposeToolbarCatalogEntry[] = [
   { id: 'WIRE', messageKey: 'drawWire', icon: 'wire', entrance: { kind: 'command' } },
   // 修剪的第二条入口是命令行的 `TRIM` / `TR`；不给单键，`T` 已归文字工具。
   { id: 'TRIM', messageKey: 'trim', icon: 'trim', entrance: { kind: 'command' } },
+  // 填充的第二条入口是命令行的 `HATCH` / `H`；换色在命令里还有第三条（`C` 关键字）。
+  { id: 'HATCH', messageKey: 'hatch', icon: 'hatch', entrance: { kind: 'command' } },
 ]

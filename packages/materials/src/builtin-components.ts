@@ -13,6 +13,7 @@ import {
   isValidComposeGeometryConstraints,
   isValidComposeInteraction,
   isValidComposePorts,
+  isValidComposeHatch,
   isValidComposeWire,
   isValidComposeWidgetSwitcher,
 } from '@compose-ui/core'
@@ -60,6 +61,7 @@ import {
   createPortsInspector,
   createPortsMissingInspectorActions,
 } from './ports'
+import { createHatchInspector } from './hatch'
 import { createWireInspector } from './wire'
 
 /**
@@ -207,6 +209,21 @@ export function createComposeBuiltinComponentDefinitions(
         isVisible: () => true,
         actions: createPortsMissingInspectorActions(idFactory),
       },
+    },
+    {
+      key: 'Hatch',
+      label: '填充',
+      /*
+       * 紧随几何：它回答「这块面当初是从哪一点找出来的」，而形状本身住在 `Curve` 上。
+       * 它**不**紧随外观——颜色确实住在 `Appearance` 里，但那一格是所有 Entity 共用的，
+       * 填充没有第二份颜色。
+       */
+      order: 59.2,
+      // 缺席即不是填充，因此没有「添加这个 Component」的入口：一块凭空加上 `Hatch` 的曲线
+      // 带着一个谁也没求过的落点，重新生成会把它变成另一块面。
+      createDefault: () => ({ seed: { x: 0, y: 0 } }),
+      validate: isValidComposeHatch,
+      inspector: createHatchInspector(),
     },
     {
       key: 'Wire',

@@ -20,6 +20,7 @@ import {
 import { isComposeColor, isValidComposePaint } from './paint'
 import { collectComposeInteractionValidationIssues } from './interaction'
 import { collectComposeGridItemValidationIssues } from './grid-item'
+import { collectComposeHatchValidationIssues } from './hatch'
 import { collectComposePortsValidationIssues } from './ports'
 import { collectComposeWireValidationIssues, getComposeWire } from './wire'
 import { collectComposeCurveValidationIssues } from './curve'
@@ -902,6 +903,19 @@ function validateEntity(
     collectComposePortsValidationIssues(ports).forEach((issue) => {
       addIssue(issues, 'ports.invalid', [...portsPath, ...issue.path], issue.message)
     })
+  }
+
+  // Hatch MUST 与 Curve 组合：几何的事实来源是 `Curve`，`Hatch` 只记这块面是从哪一点找出来
+  // 的。没有几何的填充读不出意图——它既没有形状可画，也没有东西可以重新生成。
+  const hatch = components[COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]
+  if (hatch !== undefined) {
+    const hatchPath = [...path, 'components', COMPOSE_BUILTIN_COMPONENT_KEYS.hatch] as const
+    collectComposeHatchValidationIssues(hatch).forEach((issue) => {
+      addIssue(issues, 'hatch.invalid', [...hatchPath, ...issue.path], issue.message)
+    })
+    if (components[COMPOSE_BUILTIN_COMPONENT_KEYS.curve] === undefined) {
+      addIssue(issues, 'hatch.missing-curve', hatchPath, 'Hatch MUST 与 Curve 组合')
+    }
   }
   return value as unknown as ComposeEntity
 }
