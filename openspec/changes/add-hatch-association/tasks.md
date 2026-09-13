@@ -19,15 +19,15 @@
 
 ## 4. 跟随：派生，与导线并排（core / layout-engine）
 
-- [ ] 4.1 `core` 出 `resolveComposeHatches(document, snapshot)`，文档与快照成对返回；
+- [x] 4.1 `core` 出 `resolveComposeHatches(document, snapshot)`，文档与快照成对返回；
       没有填充要解算时原样返回入参（引用不变）
-- [ ] 4.2 过滤：`boundaryIds` 里每个 Entity 的盒与几何都没变时连求都不求
-- [ ] 4.3 求解：把边界投影进各自的盒、搬到父级坐标，求包含落点的那块面
-- [ ] 4.4 两档分流：清单相同即写进去；不同即不动几何。求不出时保留作者几何
-- [ ] 4.5 跟随成功时重取锚点到最大内切圆圆心，并更新 `boundaryIds`
-- [ ] 4.6 跨父级的边界不跟随（与 `wire.parent-mismatch` 同一条）
-- [ ] 4.7 `layout-runtime` 在 `resolveComposeWires` 之后接上它；预览档跳过
-- [ ] 4.8 单测：跟上、不相干不触发、清单不同不动、求不出保留、引用不变、跨父级
+- [x] 4.2 过滤：`boundaryIds` 里每个 Entity 的盒与几何都没变时连求都不求
+- [x] 4.3 求解：把边界投影进各自的盒、搬到父级坐标，求包含落点的那块面
+- [x] 4.4 两档分流：清单相同即写进去；不同即不动几何。求不出时保留作者几何
+- [x] 4.5 跟随成功时重取锚点到最大内切圆圆心，并更新 `boundaryIds`
+- [x] 4.6 跨父级的边界不跟随（与 `wire.parent-mismatch` 同一条）
+- [x] 4.7 `layout-runtime` 在 `resolveComposeWires` 之后接上它；预览档跳过
+- [x] 4.8 单测：跟上、不相干不触发、清单不同不动、求不出保留、引用不变、跨父级
 
 ## 5. 端口与 Inspector（component-registry / materials）
 

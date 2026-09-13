@@ -194,6 +194,8 @@ export type {
   ComposeNavigateBackAction,
 } from './interaction'
 export { composeCurveInnerAnchor, resolveComposeCurveRegion } from './curve-region'
+export { resolveComposeHatches } from './hatch-solve'
+export type { ComposeResolvedHatches } from './hatch-solve'
 export type { ComposeCurveRegionResult, ComposeCurveRegionSource } from './curve-region'
 export {
   COMPOSE_DEFAULT_HATCH_COLOR,
