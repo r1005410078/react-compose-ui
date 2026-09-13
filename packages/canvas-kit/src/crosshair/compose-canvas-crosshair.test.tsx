@@ -118,6 +118,28 @@ describe('OpenSpec: canvas-kit / 十字光标样式', () => {
     expect(Number(stops[stops.length - 1]?.getAttribute('stop-opacity'))).toBeGreaterThan(0)
   })
 
+  /*
+   * 这条钉的是**可读性**，不是某一组具体的数：第一版曲线从中心就开始衰减，在 512px 的臂上
+   * 把整条线压得比均匀实线还弱，而渐变本身反倒看不出来（两端都淡，没有对比）。臂的主体因此
+   * 必须保持满不透明，只让末梢淡出。
+   */
+  it('臂的主体不衰减，只有末梢淡出', () => {
+    draw({ box: false })
+    const stops = Array.from(document.querySelectorAll('linearGradient')[0]!.querySelectorAll('stop'))
+      .map((stop) => ({
+        offset: Number(stop.getAttribute('offset')),
+        opacity: Number(stop.getAttribute('stop-opacity')),
+      }))
+    // 满不透明的那一段至少覆盖一半臂长。
+    const opaqueReach = Math.max(...stops.filter((stop) => stop.opacity === 1).map((stop) => stop.offset))
+    expect(opaqueReach).toBeGreaterThanOrEqual(0.5)
+    // 末端淡出，但不到 0。
+    const last = stops[stops.length - 1]!
+    expect(last.offset).toBe(1)
+    expect(last.opacity).toBeLessThan(0.2)
+    expect(last.opacity).toBeGreaterThan(0)
+  })
+
   it('晕圈在主线之下', () => {
     draw({ style: 'halo' })
     expect(lines()).toHaveLength(4)
