@@ -22,6 +22,12 @@ export interface StageWorldUnderlayProps {
   /** 世界原点的屏幕坐标。 */
   readonly worldOriginScreen: StagePoint
   /**
+   * 是否绘制坐标轴与原点标记；两者共用这一个开关。
+   *
+   * @defaultValue true
+   */
+  readonly worldAxes?: boolean
+  /**
    * 要画格线的网格容器。
    *
    * @remarks
@@ -53,6 +59,7 @@ export function StageWorldUnderlay({
   frameBounds,
   gridLines = [],
   worldOriginScreen,
+  worldAxes = true,
 }: StageWorldUnderlayProps) {
   return (
     <svg aria-hidden="true" className="compose-stage__world-overlay">
@@ -82,45 +89,49 @@ export function StageWorldUnderlay({
           />
         </g>
       ))}
-      <line
-        className="compose-stage__axis is-x"
-        data-testid="stage-origin-x"
-        x1="0"
-        x2="100%"
-        y1={worldOriginScreen.y}
-        y2={worldOriginScreen.y}
-      />
-      <line
-        className="compose-stage__axis is-y"
-        data-testid="stage-origin-y"
-        x1={worldOriginScreen.x}
-        x2={worldOriginScreen.x}
-        y1="0"
-        y2="100%"
-      />
-      <g
-        aria-hidden="true"
-        className="compose-stage__world-origin"
-        data-testid="stage-world-origin"
-        transform={`translate(${
-          worldOriginScreen.x - WORLD_ORIGIN_ICON_HALF_SIZE
-        } ${
-          worldOriginScreen.y - WORLD_ORIGIN_ICON_HALF_SIZE
-        })`}
-      >
-        <path
-          d="M6 0v4.42A4 4 0 0 0 4.42 6H0v4h4.42A4 4 0 0 0 6 11.58V16h4v-4.42A4 4 0 0 0 11.58 10H16V6h-4.42A4 4 0 0 0 10 4.42V0Z"
-          data-testid="stage-world-origin-silhouette"
-          fill="#20252d"
-          fillOpacity="0.9"
+      {worldAxes ? (
+        <>
+        <line
+          className="compose-stage__axis is-x"
+          data-testid="stage-origin-x"
+          x1="0"
+          x2="100%"
+          y1={worldOriginScreen.y}
+          y2={worldOriginScreen.y}
         />
-        <path
-          d="M7 1v3a4 4 0 0 1 2 0V1Zm1 4a3 3 0 0 0 0 6 3 3 0 0 0 0-6ZM1 7v2h3a4 4 0 0 1 0-2H1Zm11 0a4 4 0 0 1 0 2h3V7Zm-5 8h2v-3a4 4 0 0 1-2 0Z"
-          data-testid="stage-world-origin-position"
-          fill="#a4acb7"
-          fillOpacity="0.88"
+        <line
+          className="compose-stage__axis is-y"
+          data-testid="stage-origin-y"
+          x1={worldOriginScreen.x}
+          x2={worldOriginScreen.x}
+          y1="0"
+          y2="100%"
         />
-      </g>
+        <g
+          aria-hidden="true"
+          className="compose-stage__world-origin"
+          data-testid="stage-world-origin"
+          transform={`translate(${
+            worldOriginScreen.x - WORLD_ORIGIN_ICON_HALF_SIZE
+          } ${
+            worldOriginScreen.y - WORLD_ORIGIN_ICON_HALF_SIZE
+          })`}
+        >
+          <path
+            d="M6 0v4.42A4 4 0 0 0 4.42 6H0v4h4.42A4 4 0 0 0 6 11.58V16h4v-4.42A4 4 0 0 0 11.58 10H16V6h-4.42A4 4 0 0 0 10 4.42V0Z"
+            data-testid="stage-world-origin-silhouette"
+            fill="#20252d"
+            fillOpacity="0.9"
+          />
+          <path
+            d="M7 1v3a4 4 0 0 1 2 0V1Zm1 4a3 3 0 0 0 0 6 3 3 0 0 0 0-6ZM1 7v2h3a4 4 0 0 1 0-2H1Zm11 0a4 4 0 0 1 0 2h3V7Zm-5 8h2v-3a4 4 0 0 1-2 0Z"
+            data-testid="stage-world-origin-position"
+            fill="#a4acb7"
+            fillOpacity="0.88"
+          />
+        </g>
+        </>
+      ) : null}
     </svg>
   )
 }

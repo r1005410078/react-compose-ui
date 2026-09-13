@@ -233,6 +233,19 @@ export interface ComposeStagePolicy {
    * @defaultValue false
    */
   readonly transformGizmo?: boolean
+  /**
+   * 是否绘制世界坐标轴与原点标记。
+   *
+   * @remarks
+   * 两者由**同一个**开关管：它们回答同一个问题——世界原点在哪。只关一半会在画布上留下一个
+   * 孤零零的小十字，比两者都在更费解。
+   *
+   * 关掉它 MUST NOT 影响网格、场景边界描边或十字光标。坐标轴贯穿全图且永远在，而十字光标
+   * 只在取点时出现——两者在屏幕上难以区分，这正是本开关存在的理由。
+   *
+   * @defaultValue true
+   */
+  readonly worldAxes?: boolean
 }
 
 /**
