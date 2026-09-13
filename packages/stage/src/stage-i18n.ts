@@ -113,7 +113,9 @@ const translations = {
     draftingSpecifyHatchColor: '输入填充色（如 #2f3b4d）:',
     draftingInvalidHatchColor: '读不出这个颜色，试试 #2f3b4d',
     draftingHatchFillLabel: (name: string) => `填充 ${name}`,
+    draftingHatchRecolorLabel: (name: string) => `改变「${name}」的颜色`,
     draftingHatchWillFill: (name: string) => `将改变「${name}」的填充:`,
+    draftingHatchWillRecolor: '将改变这块填充的颜色:',
     draftingHatchWillCreate: '将新建一个填充对象:',
     hatchRejectOpen: '边界没有闭合，缺口已在图上标出',
     hatchRejectOutside: '这里没有围起来的区域',
@@ -290,7 +292,9 @@ const translations = {
     draftingSpecifyHatchColor: 'Enter a fill colour (e.g. #2f3b4d):',
     draftingInvalidHatchColor: 'Cannot read that colour; try #2f3b4d',
     draftingHatchFillLabel: (name: string) => `Fill ${name}`,
+    draftingHatchRecolorLabel: (name: string) => `Recolor “${name}”`,
     draftingHatchWillFill: (name: string) => `Will change the fill of “${name}”:`,
+    draftingHatchWillRecolor: 'Will change this hatch’s color:',
     draftingHatchWillCreate: 'Will create a new hatch object:',
     hatchRejectOpen: 'The boundary is not closed; the gaps are marked on the canvas',
     hatchRejectOutside: 'No enclosed area here',
@@ -530,9 +534,17 @@ export function getStageMessages(
       'stage.draftingHatchFillLabel',
       messages.draftingHatchFillLabel(name),
     ),
+    draftingHatchRecolorLabel: (name: string) => formatMessage(
+      'stage.draftingHatchRecolorLabel',
+      messages.draftingHatchRecolorLabel(name),
+    ),
     draftingHatchWillFill: (name: string) => formatMessage(
       'stage.draftingHatchWillFill',
       messages.draftingHatchWillFill(name),
+    ),
+    draftingHatchWillRecolor: formatMessage(
+      'stage.draftingHatchWillRecolor',
+      messages.draftingHatchWillRecolor,
     ),
     draftingHatchWillCreate: formatMessage(
       'stage.draftingHatchWillCreate',

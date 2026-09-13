@@ -284,6 +284,31 @@ describe('resolveComposeCurveRegion', () => {
     expect(result.sources.some((entry) => entry.index === 1)).toBe(false)
   })
 
+  it('同一块面，从哪儿点都写出同一个环', () => {
+    /*
+     * 环从射线**第一次穿过**的那条边起手，而射线是从落点射出去的——不把起点归一化的话，
+     * 在同一块面里点不同的地方会写出**起点不同的同一个环**。屏幕上看不出来，却让
+     * 「这一次求出来的，是不是上一次求出来的那一个」这句判断失效：换个位置再填一次会被判成
+     * 另一块面，于是叠一块上去。
+     */
+    /*
+     * 判别性要求**凹**形：射线方向是固定的，凸形上从哪个内点射出去都先穿过同一条边，
+     * 于是环的起点碰巧一致——拿矩形当夹具会得到一条永远绿的假用例。L 形的两条臂各自先穿过
+     * 不同的边。
+     */
+    const edges = [
+      segment([0, 0], [200, 0]), segment([200, 0], [200, 100]),
+      segment([200, 100], [100, 100]), segment([100, 100], [100, 200]),
+      segment([100, 200], [0, 200]), segment([0, 200], [0, 0]),
+    ]
+    const rings = [{ x: 50, y: 50 }, { x: 50, y: 150 }, { x: 150, y: 50 }].map((seed) => {
+      const result = resolveComposeCurveRegion(edges, seed)
+      if (result.status !== 'resolved') throw new Error('expected resolved')
+      return JSON.stringify(result.curve)
+    })
+    expect(new Set(rings).size).toBe(1)
+  })
+
   it('岛的出处一并报出来——洞也是边界', () => {
     /*
      * 只报外环的症状不在这一步，而在**跟随**那一侧：清单里少了挖洞的那个圆，下一次按清单

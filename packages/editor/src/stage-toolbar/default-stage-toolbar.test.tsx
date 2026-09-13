@@ -312,16 +312,58 @@ describe('OpenSpec: editor-workspace-layout / 工具栏图标可以带一个运�
     expect(paths.filter((path) => path.hasAttribute('style'))).toHaveLength(1)
   })
 
-  it('色板是换色的第二条入口，当前色带选中态', () => {
-    const { setHatchColor } = renderToolbar()
+  function openHatchPanel() {
     fireEvent.click(globalThis.document.querySelector<HTMLButtonElement>(
       '[data-toolbar-item="HATCH"] .compose-editor__toolbar-menu-trigger',
     )!)
-    const swatches = screen.getAllByRole('menuitemradio')
+  }
+
+  it('色板是换色的第二条入口，当前色带选中态', () => {
+    const { setHatchColor } = renderToolbar()
+    openHatchPanel()
+    const swatches = screen.getAllByRole('radio')
     // 空白文档上色板只有默认色那一档，而它恒在第一位：一张空页上也要有东西可点。
     expect(swatches[0]?.getAttribute('data-swatch')).toBe('#2f3b4d')
     expect(swatches[0]?.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(swatches[0]!)
     expect(setHatchColor).toHaveBeenCalledWith('#2f3b4d')
+  })
+
+  it('面板里挑得出一个图上没用过的颜色', () => {
+    /*
+     * 这是这块面板存在的全部理由：色板只列**这一页已经用过的**那几档，而「我要一个新颜色」
+     * 是另一个问题。此前它只有命令行里敲 `C` 加十六进制这一条路。
+     */
+    const { setHatchColor } = renderToolbar()
+    openHatchPanel()
+    // 取色器有两处 HEX 输入：常驻那一个与「精确输入」折叠里那一个；这里用常驻的第一个。
+    const hex = screen.getAllByLabelText('HEX')[0] as HTMLInputElement
+    fireEvent.change(hex, { target: { value: '#a34b2f' } })
+    fireEvent.blur(hex)
+    expect(setHatchColor).toHaveBeenCalledWith('#a34b2f')
+  })
+
+  it('面板不是菜单：里面有滑杆与输入框，因此它是 dialog', () => {
+    /*
+     * `role="menu"` 里只许放 menuitem，而方向键在菜单里要移焦点、在滑杆上要改值——同一个容器
+     * 里两种含义没法同时成立。色板那一行退成面板内的一个单选组。
+     */
+    renderToolbar()
+    openHatchPanel()
+    const panel = screen.getByRole('dialog', { name: '填充色' })
+    expect(panel).toBeTruthy()
+    expect(screen.queryAllByRole('menuitemradio')).toHaveLength(0)
+    expect(panel.querySelector('input[type="range"]')).toBeTruthy()
+  })
+
+  it('Escape 关掉面板并把焦点还给触发器', async () => {
+    renderToolbar()
+    const trigger = globalThis.document.querySelector<HTMLButtonElement>(
+      '[data-toolbar-item="HATCH"] .compose-editor__toolbar-menu-trigger',
+    )!
+    fireEvent.click(trigger)
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '填充色' }), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '填充色' })).toBeNull())
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(trigger))
   })
 })

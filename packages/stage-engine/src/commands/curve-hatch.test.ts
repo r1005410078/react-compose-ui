@@ -52,7 +52,7 @@ function indexOf(entities: readonly ComposeEntity[]) {
   return createStageSceneIndex(value, layoutSnapshot(value))
 }
 
-describe('OpenSpec: stage-engine / 填充解算有两支，由边界是谁决定', () => {
+describe('OpenSpec: stage-engine / 填充解算有三支，由边界与图上那块墨决定', () => {
   it('没有东西穿过的矩形：改它的填充，不新建', () => {
     const index = indexOf([curveEntity('box', rect(0, 0, 200, 120))])
     const resolution = resolveStageHatchRegion(index, { x: 100, y: 60 })
@@ -134,14 +134,89 @@ describe('OpenSpec: stage-engine / 填充解算有两支，由边界是谁决定
     // 上一次求面的产物与边界逐像素重合；当边界只会让每条边多出一份叠在一起的拷贝。
     const index = indexOf([
       curveEntity('box', rect(0, 0, 200, 120)),
+      curveEntity('cover', rect(0, 300, 200, 120), {
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 100, y: 60 } },
+      }),
+    ])
+    // 那块填充在别处，因此这一下仍然是「改矩形自己的填充」——它没有被当成第二条边界。
+    const resolution = resolveStageHatchRegion(index, { x: 100, y: 60 })
+    expect(resolution.status).toBe('fill')
+    if (resolution.status !== 'fill') return
+    expect(resolution.entityId).toBe('box')
+  })
+
+  it('这块面上压着一块填充：改它的颜色，不新建', () => {
+    /*
+     * 没有这一支，对同一块面再点一次会在原来那块上面叠一块——两块几何逐像素重合、下面那块
+     * 再也点不到，而屏幕上看起来只是换了个颜色。
+     */
+    const index = indexOf([
+      curveEntity('box', rect(0, 0, 200, 120)),
       curveEntity('fill', rect(0, 0, 200, 120), {
         [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 100, y: 60 } },
       }),
     ])
     const resolution = resolveStageHatchRegion(index, { x: 100, y: 60 })
-    expect(resolution.status).toBe('fill')
-    if (resolution.status !== 'fill') return
-    expect(resolution.entityId).toBe('box')
+    // 次序：填充压过「边界恰好是某一个 Entity 的完整几何」——用户看见的那块色就是它。
+    expect(resolution.status).toBe('recolor')
+    if (resolution.status !== 'recolor') return
+    expect(resolution.entityId).toBe('fill')
+  })
+
+  it('在同一块面里点别的地方，认出来的还是那一块', () => {
+    /*
+     * 判别性在这里：环从射线**第一次穿过**的那条边起手，而射线是从落点射出去的——不把起点
+     * 归一化的话，换个位置再点一次会写出一个起点不同的同一个环，逐位比较说「不是同一块」，
+     * 于是又叠一块上去。
+     */
+    // 夹具必须是**凹**形：凸形上从哪个内点射出去都先穿过同一条边，起点碰巧一致，用例永远绿。
+    const ell: ComposeCurve = {
+      kind: 'polyline',
+      closed: true,
+      vertices: [
+        { x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 },
+        { x: 100, y: 100 }, { x: 100, y: 200 }, { x: 0, y: 200 },
+      ],
+    }
+    const index = indexOf([
+      curveEntity('box', ell),
+      curveEntity('fill', ell, {
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 50, y: 50 } },
+      }),
+    ])
+    for (const point of [{ x: 50, y: 50 }, { x: 50, y: 150 }, { x: 150, y: 50 }]) {
+      const resolution = resolveStageHatchRegion(index, point)
+      expect(resolution.status).toBe('recolor')
+    }
+  })
+
+  it('面被劈开之后不再是同一块：两半都新建', () => {
+    /*
+     * 两半是**全等**的矩形，归一化之后 `Curve` 逐位相同——因此判据必须连归一化偏移一起比，
+     * 否则填了左半再点右半会被判成「就是那一块」，右半永远填不上。
+     */
+    const index = indexOf([
+      curveEntity('box', rect(0, 0, 200, 120)),
+      curveEntity('cut', line(100, -20, 100, 140)),
+      curveEntity('left', rect(0, 0, 100, 120), {
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 50, y: 60 } },
+      }),
+    ])
+    expect(resolveStageHatchRegion(index, { x: 50, y: 60 }).status).toBe('recolor')
+    expect(resolveStageHatchRegion(index, { x: 150, y: 60 }).status).toBe('create')
+  })
+
+  it('已有填充锁定时拒绝，MUST NOT 退回去新建', () => {
+    const index = indexOf([
+      curveEntity('box', rect(0, 0, 200, 120)),
+      curveEntity('fill', rect(0, 0, 200, 120), {
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 100, y: 60 } },
+      }, { locked: true }),
+    ])
+    const resolution = resolveStageHatchRegion(index, { x: 100, y: 60 })
+    expect(resolution.status).toBe('rejected')
+    if (resolution.status !== 'rejected') return
+    expect(resolution.reason).toBe('locked')
   })
 
   it('接线节点不当边界', () => {
@@ -173,3 +248,4 @@ describe('OpenSpec: stage-engine / 填充解算有两支，由边界是谁决定
     expect(first).toEqual(second)
   })
 })
+

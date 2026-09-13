@@ -11,7 +11,6 @@ import {
   BUILTIN_COMMAND_TYPES,
   COMPOSE_BUILTIN_COMPONENT_KEYS,
   getComposeAppearance,
-  getComposeCurve,
   composeCurveInnerAnchor,
   getComposeHatch,
   normalizeComposeCurveGeometry,
@@ -23,14 +22,15 @@ import {
 import {
   applyMatrix,
   resolveStageHatchRegion,
+  stageCurveMatchesEntity,
+  stageCurveToParent,
+  stagePointToParent,
   type StageHatchRejection,
   type StagePoint,
 } from '@compose-ui/stage-engine'
 import type { ComposeHatchState } from '@compose-ui/component-registry'
 import {
   createStageDraftingCurveCommand,
-  stageCurveToParent,
-  stagePointToParent,
   type StageDraftingCommitContext,
 } from './drafting-entity'
 import { batchStageCommands } from './wire-tap'
@@ -43,6 +43,8 @@ export interface StageHatchPlanOptions {
   readonly isJunction?: (entity: ComposeEntity) => boolean
   /** 给一个已有形状填色的历史标签。 */
   readonly fillLabel: (name: string) => string
+  /** 改一块已有填充颜色的历史标签。 */
+  readonly recolorLabel: (name: string) => string
   /** 被拒绝时的说明；三种原因三句，互不相同。 */
   readonly rejection: (reason: StageHatchRejection) => string
 }
@@ -53,7 +55,7 @@ export interface StageHatchPlan {
   /** 要显示的说明；成功时是 null。 */
   readonly notice: string | null
   /** 走了哪一支；呈现层据此决定要不要把新建的 id 记进栈。 */
-  readonly branch: 'fill' | 'create' | 'rejected'
+  readonly branch: 'recolor' | 'fill' | 'create' | 'rejected'
   /** 边界没闭合时的自由端，世界坐标；呈现层在这些位置画断口记号。 */
   readonly gaps: readonly StagePoint[]
 }
@@ -87,16 +89,22 @@ export function planStageHatch(
     }
   }
 
-  if (resolution.status === 'fill') {
+  if (resolution.status === 'recolor' || resolution.status === 'fill') {
     /*
-     * 改一个已有形状的填充：整份 `Appearance` 重写（`entity.appearance.set` 的语义就是替换），
-     * 因此要把现有的其余字段原样带上——只写 `backgroundPaint` 会把边框、圆角与透明度一起抹掉。
+     * 两支写的是同一条命令，差别只在**改的是谁**与历史上写什么：`fill` 改的是一个**边界**
+     * （你画的那个矩形），`recolor` 改的是那块**墨**。
+     *
+     * 整份 `Appearance` 重写（`entity.appearance.set` 的语义就是替换），因此要把现有的其余
+     * 字段原样带上——只写 `backgroundPaint` 会把边框、圆角与透明度一起抹掉。
      */
     const entity = context.document.entities[resolution.entityId]!
     const appearance = {
       ...getComposeAppearance(entity),
       backgroundPaint: { kind: 'solid', color: options.color },
     }
+    const label = resolution.status === 'recolor'
+      ? options.recolorLabel(entity.name)
+      : options.fillLabel(entity.name)
     return {
       commands: [{
         id: context.idFactory(),
@@ -105,14 +113,10 @@ export function planStageHatch(
           entityId: resolution.entityId,
           appearance: appearance as unknown as JsonValue,
         },
-        meta: {
-          label: options.fillLabel(entity.name),
-          source: 'stage',
-          targetIds: [resolution.entityId],
-        },
+        meta: { label, source: 'stage', targetIds: [resolution.entityId] },
       }],
       notice: null,
-      branch: 'fill',
+      branch: resolution.status,
       gaps: [],
     }
   }
@@ -208,9 +212,12 @@ export function planStageHatchRegeneration(
     options.isJunction ? { isJunction: options.isJunction } : {},
   )
   /*
-   * 只受理 `create` 那一支。`fill` 意味着这块面的边界如今恰好是某一个对象的完整几何——那时该
-   * 去改那个对象的填充，而不是把这块填充重画成与它逐像素重合的第二份墨。用户拿桶再点一下就
-   * 走到正确的那一支，而这里替他选会留下一块他没要求过的重复对象。
+   * 只受理 `create` 那一支。
+   *
+   * `recolor` 指向**它自己**时意味着求出来的面与它现在的几何逐位相同——没有什么可重新生成的，
+   * 发一条不改变任何东西的命令只会在历史里留一格空的。`fill` 意味着这块面的边界如今恰好是
+   * 某一个对象的完整几何——那时该去改那个对象的填充，而不是把这块填充重画成与它逐像素重合的
+   * 第二份墨；用户拿桶再点一下就走到正确的那一支，而这里替他选会留下一块他没要求过的重复对象。
    */
   if (resolution.status !== 'create') return null
   const geometry = createStageDraftingCurveCommand(
@@ -221,9 +228,9 @@ export function planStageHatchRegeneration(
   if (!geometry) return null
 
   const normalized = normalizeComposeCurveGeometry(
-    stageCurveToParent(context, resolution.curve, entityId),
+    stageCurveToParent(context.document, context.layoutSnapshot, resolution.curve, entityId),
   )
-  const parentSeed = stagePointToParent(context, worldSeed, entityId)
+  const parentSeed = stagePointToParent(context.document, context.layoutSnapshot, worldSeed, entityId)
   const anchor = composeCurveInnerAnchor(normalized.curve) ?? {
     x: parentSeed.x - normalized.offset.x,
     y: parentSeed.y - normalized.offset.y,
@@ -320,10 +327,20 @@ export function stageHatchState(
     options.isJunction ? { isJunction: options.isJunction } : {},
   )
   if (resolution.status === 'rejected') return 'broken'
+  /*
+   * `recolor` 指向**它自己**就是「与边界一致」：求面那一侧的判据正是「重求出来的几何与这块
+   * 填充逐位相同」，也就是这里要问的那句话，因此读它的答案而不是再比一遍。指向别的填充
+   * （两块几何逐位相同，只可能来自同一块面被填过两次）算过期——这块不是图上看得见的那一块。
+   */
+  if (resolution.status === 'recolor') {
+    return resolution.entityId === entityId ? 'current' : 'stale'
+  }
   if (resolution.status !== 'create') return 'stale'
-  const current = getComposeCurve(entity)
-  const next = normalizeComposeCurveGeometry(
-    stageCurveToParent(context, resolution.curve, entityId),
-  ).curve
-  return JSON.stringify(current) === JSON.stringify(next) ? 'current' : 'stale'
+  // 与求面那一侧读**同一个**比较：两处各写一遍的症状是「桶说这就是那一块、面板说已经过期」。
+  return stageCurveMatchesEntity(
+    context.document,
+    context.layoutSnapshot,
+    resolution.curve,
+    entityId,
+  ) ? 'current' : 'stale'
 }

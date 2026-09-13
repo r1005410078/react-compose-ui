@@ -105,10 +105,14 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly trimRejection: (reason: StageTrimRejection) => string
   /** 给一个已有形状填色的历史标签——这一支改的是它，因此标签要说出是谁。 */
   readonly hatchFillLabel: (name: string) => string
+  /** 改一块已有填充颜色的历史标签。 */
+  readonly hatchRecolorLabel: (name: string) => string
   /** 填充被拒绝时的说明；三种原因三句，互不相同。 */
   readonly hatchRejection: (reason: StageHatchRejection) => string
   /** 悬停在「会改某个既有对象」那一支上时命令行说的话。 */
   readonly hatchWillFill: (name: string) => string
+  /** 悬停在「会改一块已有填充的颜色」那一支上时命令行说的话。 */
+  readonly hatchWillRecolor: string
   /** 悬停在「会新建一块」那一支上时命令行说的话。 */
   readonly hatchWillCreate: string
 }
@@ -672,6 +676,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
           color: current.hatchColor,
           isJunction: isStageJunctionEntity,
           fillLabel: current.messages.hatchFillLabel,
+          recolorLabel: current.messages.hatchRecolorLabel,
           rejection: current.messages.hatchRejection,
         },
       )
@@ -1738,8 +1743,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 环按 `evenodd` 填，因此岛在预览里就是洞，与落地之后 `isPointInsideComposeCurve` 读出的
    * 是同一个答案：**看得见的洞与点不中的洞是同一个洞**这句话从预览这一刻就成立。
    *
-   * 提示分两支而不是一句：改一个已有形状与新建一块是两件事，用户必须在松手**之前**知道会
-   * 发生哪一件。
+   * 提示分三支而不是一句：改一块已有填充的颜色、改一个已有形状的填充、新建一块，是三件事，
+   * 用户必须在松手**之前**知道会发生哪一件。
    */
   const hatch = useMemo(() => {
     if (!hatching || !pointer) return null
@@ -1748,7 +1753,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
     return {
       rings: stageHatchPreviewRings(resolution.curve),
       color: activeHatchColor,
-      target: resolution.status === 'fill' ? resolution.entityId : null,
+      branch: resolution.status,
+      target: resolution.status === 'create' ? null : resolution.entityId,
     }
   }, [activeHatchColor, hatching, index, pointer])
 
@@ -1756,9 +1762,12 @@ export function useStageDrafting(options: StageDraftingOptions) {
    * 悬停时命令行说的那句话：这一下会改某个既有对象，还是会新建一块。
    *
    * @remarks
-   * 两支由**图上看得见的东西**决定，因此这句话与那块半透明的色读**同一个** `hatch` memo——
+   * 三支由**图上看得见的东西**决定，因此这句话与那块半透明的色读**同一个** `hatch` memo——
    * 各自解算一遍的话，命令行说「将新建」而预览画的却是某个矩形被填上，用户没有任何办法
    * 判断哪个是真的。
+   *
+   * 「改一块已有填充的颜色」自己一句，不借「将改变某个既有对象的填充」那一句：后者读出来是
+   * 「将改变『填充』的填充」，而这两支改的本来就是两种对象——一个是边界，一个是那块墨。
    *
    * 这是宿主对提示 `message` 的一次**呈现层覆盖**，不是第二份提示：这一步是谁、收什么输入、
    * 有哪些关键字全都还是会话说了算——只有「这一下会落在哪一支上」是引擎不知道的，因为它
@@ -1768,12 +1777,12 @@ export function useStageDrafting(options: StageDraftingOptions) {
   const hatchPrompt = useMemo(() => {
     if (!prompt || !hatching || !hatch) return prompt
     const target = hatch.target === null ? null : document.entities[hatch.target]
-    return {
-      ...prompt,
-      message: target
+    const message = hatch.branch === 'recolor'
+      ? messages.hatchWillRecolor
+      : target
         ? messages.hatchWillFill(target.name)
-        : messages.hatchWillCreate,
-    }
+        : messages.hatchWillCreate
+    return { ...prompt, message }
   }, [document.entities, hatch, hatching, messages, prompt])
 
   /**

@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import type { Dispatch, KeyboardEvent, ReactNode, RefObject, SetStateAction } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import {
+  ComposeColorPicker,
   ComposeContextMenu,
   ComposeContextMenuContent,
   ComposeContextMenuItem,
@@ -334,12 +335,42 @@ export function DefaultStageToolbar({
     focusFirstItem: focusFirstHatchItem,
     id: hatchMenuId,
     menuRef: hatchMenuRef,
-    onMenuKeyDown: onHatchMenuKeyDown,
     onTriggerKeyDown: onHatchTriggerKeyDown,
     open: hatchMenuOpen,
     setOpen: setHatchMenuOpen,
     triggerRef: hatchMenuTriggerRef,
   } = useToolbarMenu('compose-editor-hatch-menu')
+  /**
+   * 填充色面板的键盘：只接 `Escape`。
+   *
+   * @remarks
+   * 菜单那一份的方向键在做**焦点漫游**，而这块面板里有滑杆——同一个按键在两处的含义不同，
+   * 共用会让色相滑杆一按方向键就跳走焦点而不是改值。面板是 dialog，焦点导航本来就归 `Tab`。
+   */
+  const onHatchPanelKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    closeHatchMenu()
+  }
+  /*
+   * 点面板外面即关闭。菜单那几条靠「选了一项就关」收尾，而这块面板挑完颜色**不关**
+   * （用户多半要再调几下），没有这一条就只剩 `Escape` 一条出路。
+   */
+  useEffect(() => {
+    if (!hatchMenuOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (hatchMenuRef.current?.contains(target) || hatchMenuTriggerRef.current?.contains(target)) {
+        return
+      }
+      setHatchMenuOpen(false)
+    }
+    // 本组件的 `document` prop 是 ComposeDocument，因此 DOM 的那个要显式取。
+    const dom = globalThis.document
+    dom.addEventListener('pointerdown', onPointerDown, true)
+    return () => dom.removeEventListener('pointerdown', onPointerDown, true)
+  }, [hatchMenuOpen, hatchMenuRef, hatchMenuTriggerRef, setHatchMenuOpen])
   const {
     close: closeMoreMenu,
     focusFirstItem: focusFirstMoreItem,
@@ -753,30 +784,66 @@ export function DefaultStageToolbar({
                 <StageToolbarIcon name="chevron-down" />
               </button>
               {hatchMenuOpen ? (
+                /*
+                 * 这是一块**面板**而不是一条菜单：里面有滑杆、十六进制输入框与吸管按钮，
+                 * 那些不是 menuitem，`role="menu"` 里放它们在 ARIA 上说不通；方向键在菜单里
+                 * 要移焦点，而在滑杆上要改值，两种含义在同一个容器里没法同时成立。
+                 * 因此容器是 `role="dialog"`，焦点走 Tab，`Escape` 关闭并把焦点还给触发器。
+                 */
                 <div
                   aria-label={messages.hatchColor}
-                  className="compose-editor__toolbar-menu compose-editor__toolbar-swatches"
+                  className="compose-editor__toolbar-menu compose-editor__toolbar-hatch-panel"
                   id={hatchMenuId}
                   ref={hatchMenuRef}
-                  role="menu"
-                  onKeyDown={onHatchMenuKeyDown}
+                  role="dialog"
+                  onKeyDown={onHatchPanelKeyDown}
                 >
-                  {composeHatchSwatches(document).map((color) => (
-                    <button
-                      key={color}
-                      aria-checked={hatchColor === color}
-                      aria-label={color}
-                      className="compose-editor__toolbar-swatch"
-                      data-swatch={color}
-                      role="menuitemradio"
-                      style={{ background: color }}
-                      type="button"
-                      onClick={() => {
-                        setHatchColor(color)
-                        closeHatchMenu()
-                      }}
+                  {/*
+                    * 色板不删。它回答的是「把这块面填成跟图上那块一样」，而取色器回答
+                    * 「我要一个新颜色」——两个问题，两处答；删掉它等于把最常用的那条路换成三步。
+                    */}
+                  <section
+                    aria-label={messages.hatchColorUsed}
+                    className="compose-editor__toolbar-hatch-used"
+                    role="radiogroup"
+                  >
+                    {/* 标题写出来，与取色器里「最近」「常用」两行同形——三行都是色块，不写就分不出哪行是哪行。 */}
+                    <span>{messages.hatchColorUsed}</span>
+                    <div className="compose-editor__toolbar-swatches">
+                    {composeHatchSwatches(document).map((color) => (
+                      <button
+                        key={color}
+                        aria-checked={hatchColor === color}
+                        aria-label={color}
+                        className="compose-editor__toolbar-swatch"
+                        data-swatch={color}
+                        role="radio"
+                        style={{ background: color }}
+                        type="button"
+                        onClick={() => {
+                          setHatchColor(color)
+                          closeHatchMenu()
+                        }}
+                      />
+                    ))}
+                    </div>
+                  </section>
+                  <div className="compose-editor__toolbar-hatch-picker">
+                    {/*
+                      * 内嵌形态：面板已经打开着，再嵌一层带 Trigger 的 Picker 会得到
+                      * 「面板里再点一下才出色盘」和一层套一层的弹出层。
+                      *
+                      * 挑完**不关面板**——用户多半要在色盘上再调几下；关闭交给 `Escape`、
+                      * 点面板外面，或者直接去画布上落点。
+                      */}
+                    <ComposeColorPicker
+                      embedded
+                      allowTransparent={false}
+                      label={messages.hatchColorCustom}
+                      value={hatchColor}
+                      onValueChange={setHatchColor}
                     />
-                  ))}
+                  </div>
                 </div>
               ) : null}
             </div>

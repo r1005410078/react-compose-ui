@@ -19,6 +19,7 @@ import type { StageWireTapAnchor, StageWireTapMerge } from './wire-tap'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import {
   applyMatrix,
+  stageCurveToSpace,
   getEntityParentId,
   getEntityWorldMatrix,
   invertMatrix,
@@ -211,53 +212,6 @@ function usableParent(document: ComposeDocument, entityId: string | null): Compo
     : null
 }
 
-/**
- * 把世界坐标下的一条曲线换算到父级局部坐标。
- *
- * @remarks
- * Stage 的世界矩阵链只有平移与旋转（缩放由 `LayoutItem` 的宽高表达，不进矩阵），因此弧
- * 只需搬圆心、把起始角加上矩阵的旋转量——半径不受影响。矩阵若带非等比缩放，弧就不再是弧，
- * 那是另一件事，本条链上不会出现。
- */
-function toParentCurve(
-  curve: ComposeCurve,
-  mapPoint: (point: StagePoint) => StagePoint,
-  rotationDegrees: number,
-): ComposeCurve {
-  // `StagePoint` 没有索引签名，`ComposePosition` 有；重建一次比放宽协议类型便宜。
-  const toParent = (point: StagePoint) => {
-    const next = mapPoint(point)
-    return { x: next.x, y: next.y }
-  }
-  if (curve.kind === 'line') {
-    return { ...curve, start: toParent(curve.start), end: toParent(curve.end) }
-  }
-  if (curve.kind === 'polyline') {
-    return { ...curve, vertices: curve.vertices.map(toParent) }
-  }
-  // 绘图命令眼下不产出 `path`（最窄 kind 落成直线、弧或多段线），但这条链是「任意曲线落地」
-  // 的唯一入口，缺这一支的症状会是某天从别处落一条 `path` 时它静默地把控制点留在原坐标系里。
-  // 旋转不出现在这里：只有弧把它记成角，其余 kind 由 `mapPoint` 一并带过去。
-  if (curve.kind === 'path') {
-    return {
-      ...curve,
-      subpaths: curve.subpaths.map((subpath) => ({
-        ...subpath,
-        start: toParent(subpath.start),
-        segments: subpath.segments.map((segment) => ({
-          c1: toParent(segment.c1),
-          c2: toParent(segment.c2),
-          to: toParent(segment.to),
-        })),
-      })),
-    }
-  }
-  return {
-    ...curve,
-    center: toParent(curve.center),
-    startAngle: curve.startAngle + rotationDegrees,
-  }
-}
 
 /** 一条曲线落地时的可选内容。 @internal */
 export interface StageDraftingCurveOptions {
@@ -359,51 +313,7 @@ export interface StageDraftingHatchOptions {
   readonly belowIds: readonly string[]
 }
 
-/**
- * 把一条世界坐标的曲线换算到某个既有 Entity 的**父级**局部坐标。
- *
- * @remarks
- * 与 {@link createStageDraftingCurveCommand} 里那一步是**同一份换算**，抽出来是因为「判断这块
- * 填充过不过期」只需要换算的结果、不需要那条命令：各写一遍的话，两处对同一份几何算出的局部
- * 坐标会在某些旋转下差一点点，而症状是「明明没动过却一直显示过期」。
- *
- * @internal
- */
-export function stageCurveToParent(
-  context: StageDraftingCommitContext,
-  curve: ComposeCurve,
-  entityId: string,
-): ComposeCurve {
-  const parentId = getEntityParentId(context.document, entityId)
-  const inverse = parentId
-    ? invertMatrix(getEntityWorldMatrix(context.document, context.layoutSnapshot, parentId))
-    : null
-  const toParent = (point: StagePoint) => (inverse ? applyMatrix(inverse, point) : point)
-  const rotationDegrees = inverse ? Math.atan2(inverse.b, inverse.a) * 180 / Math.PI : 0
-  return toParentCurve(curve, toParent, rotationDegrees)
-}
 
-/**
- * 把一个世界坐标的点换算到某个既有 Entity 的**父级**局部坐标。
- *
- * @remarks
- * 与 {@link stageCurveToParent} 是同一条换算的点版本：填充的锚点住在 Entity 局部空间，而重新
- * 生成要先把它搬回世界求面、再搬回来写下去，两头必须是同一份矩阵。
- *
- * @internal
- */
-export function stagePointToParent(
-  context: StageDraftingCommitContext,
-  point: StagePoint,
-  entityId: string,
-): StagePoint {
-  const parentId = getEntityParentId(context.document, entityId)
-  if (!parentId) return point
-  const inverse = invertMatrix(
-    getEntityWorldMatrix(context.document, context.layoutSnapshot, parentId),
-  )
-  return applyMatrix(inverse, point)
-}
 
 /** {@link createStageDraftingCurveCommand} 的结果。 @internal */
 export interface StageDraftingCurveCommand {
@@ -472,7 +382,7 @@ export function createStageDraftingCurveCommand(
     : null
   const toParent = (point: StagePoint) => (inverse ? applyMatrix(inverse, point) : point)
   const rotationDegrees = inverse ? Math.atan2(inverse.b, inverse.a) * 180 / Math.PI : 0
-  const local = toParentCurve(curve, toParent, rotationDegrees)
+  const local = stageCurveToSpace(curve, toParent, rotationDegrees)
   const normalized = normalizeComposeCurveGeometry(local)
 
   /*

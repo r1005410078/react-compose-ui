@@ -1323,6 +1323,47 @@
   background: inherit;
 }
 
+/*
+ * 填充色面板：色板一行在上、取色器在下。
+ *
+ * @remarks
+ * 它比菜单宽——取色器的色盘要有面积才点得准；`min-w-36` 是给菜单项那一行文字定的。
+ */
+.compose-editor__toolbar-hatch-panel {
+  /* 宽度由取色器那一行读数定：窄一档 HEX 与 RGBA 两个框会把值截掉，读数读不全等于没有。 */
+  @apply ct:flex ct:w-72 ct:flex-col ct:gap-2 ct:p-2;
+}
+
+.compose-editor__toolbar-hatch-used {
+  @apply ct:flex ct:flex-col ct:gap-1;
+}
+
+.compose-editor__toolbar-hatch-used > span {
+  @apply ct:text-[11px];
+  color: var(--compose-text-muted);
+}
+
+.compose-editor__toolbar-hatch-panel .compose-editor__toolbar-swatches {
+  @apply ct:flex-wrap;
+}
+
+/*
+ * 菜单那条「一行一项」的按钮规则（`h-8 w-full`）压在色块上会把它们各拉成整行——面板里的
+ * 色块是一行并排的方块，因此把尺寸写回来。
+ */
+.compose-editor__toolbar-hatch-panel .compose-editor__toolbar-swatch {
+  @apply ct:h-6 ct:w-6 ct:shrink-0 ct:px-0;
+}
+
+/*
+ * 取色器自带一整套自己的按钮（吸管、最近用过、常用色）。菜单那条 `button { width: 100% }`
+ * 是给「一行一项」的菜单定的，压在这些上面会把每个色块拉成整行——因此这块面板里把它撤掉，
+ * 让取色器自己的样式说了算。
+ */
+.compose-editor__toolbar-hatch-picker button {
+  @apply ct:h-auto ct:w-auto ct:px-0;
+}
+
 /* 「更多」菜单挂在工具栏尾端，向左展开，否则会伸出可视区。 */
 .compose-editor__toolbar-menu--end {
   left: auto;

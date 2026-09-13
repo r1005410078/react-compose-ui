@@ -6,6 +6,7 @@
  * 见 `createAxisLattice` 与 `axis-lattice.test.ts`。
  */
 export * from './stage-geometry'
+export * from './parent-space'
 export * from './canvas-geometry'
 export * from './frame-space'
 export * from './transform-gizmo'
