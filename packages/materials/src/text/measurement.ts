@@ -1,3 +1,4 @@
+import type { ComposeMeasuredSize } from '@compose-ui/core'
 import type { ComposeRendererMeasurementDefinition } from '@compose-ui/component-registry'
 
 function numeric(value: unknown, fallback: number) {
@@ -33,6 +34,33 @@ function textStyle(props: Readonly<Record<string, unknown>>) {
 /** 空文字保留的光标宽度，使编辑边框可见且节点仍可命中。 @internal */
 const EMPTY_TEXT_CARET_WIDTH = 1
 
+/**
+ * 测量结果缓存。
+ *
+ * @remarks
+ * 测量是**输入的纯函数**：同样的内容、字体与约束，量多少次都是同一个答案。而布局求解在
+ * 手势期每帧跑一次，一张五千多个实体的真实图纸里有一千八百个文字——不缓存的话每一帧都要
+ * 做一千八百次「建元素 → 追加进 `document.body` → 读 `getBoundingClientRect`」，而追加与
+ * 读取交替**每次都强制整页同步回流**。实测拖动一个对象时 53% 的时间花在这一个调用上，
+ * p95 帧时间 252ms、最长 1.4 秒。
+ *
+ * 缩放不进键：测量宿主是 `position: fixed` 且没有任何 transform 祖先，画布缩放量不到它。
+ *
+ * 字体加载会改变度量，因此 `subscribe` 里在 `invalidate` 之前清空缓存——少了这一步，
+ * 回退字体量出来的尺寸会一直留着。
+ */
+const measurementCache = new Map<string, ComposeMeasuredSize | null>()
+
+/**
+ * 缓存条目上限。
+ *
+ * @remarks
+ * 键含 `at-most` 的具体宽度，而拖动缩放手柄会一路产出不同的宽度，因此条目数没有天然上界。
+ * 超限整个清空而不是逐条淘汰：这里没有「哪条更该留下」的依据，而重新量一遍只是回到没有
+ * 缓存时的成本。
+ */
+const MEASUREMENT_CACHE_LIMIT = 4096
+
 /** Text Renderer 使用的隔离 DOM 内容测量。 @internal */
 export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
   // 文字会换行：拖窄后行数增加、内容变高，因此缩放时不能把 Hug 高度钉成 Fixed。
@@ -46,6 +74,15 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
     // 光标无处落脚。用零宽空格占位即可量到真实行高，宽度再补一个光标位。
     const empty = content.length === 0
     const typography = textStyle(props)
+    const cacheKey = JSON.stringify([
+      content,
+      typography,
+      width.mode,
+      width.mode === 'undefined' ? 0 : width.value,
+      height.mode,
+      height.mode === 'undefined' ? 0 : height.value,
+    ])
+    if (measurementCache.has(cacheKey)) return measurementCache.get(cacheKey) ?? null
     const host = document.createElement('span')
     host.dataset.composeMeasurementHost = 'text'
     host.setAttribute('aria-hidden', 'true')
@@ -91,12 +128,16 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
           : rect.height
       // 空内容保留一个光标宽度：编辑边框才可见，空文字也仍能被指针命中。
       const contentWidth = empty ? Math.max(measuredWidth, EMPTY_TEXT_CARET_WIDTH) : measuredWidth
-      if (contentWidth <= 0 || measuredHeight <= 0) return null
-      return {
-        width: contentWidth,
-        height: measuredHeight,
-        baseline: Math.min(measuredHeight, typography.fontSize * 0.8),
-      }
+      const measurement = contentWidth <= 0 || measuredHeight <= 0
+        ? null
+        : {
+            width: contentWidth,
+            height: measuredHeight,
+            baseline: Math.min(measuredHeight, typography.fontSize * 0.8),
+          }
+      if (measurementCache.size >= MEASUREMENT_CACHE_LIMIT) measurementCache.clear()
+      measurementCache.set(cacheKey, measurement)
+      return measurement
     }
     finally {
       host.remove()
@@ -105,10 +146,21 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
   subscribe({ invalidate }) {
     if (typeof document === 'undefined' || !document.fonts) return () => undefined
     let active = true
-    const onChange = () => { if (active) invalidate() }
+    // 字体变了，此前用回退字体量出来的每一条都不再作数。
+    const onChange = () => {
+      measurementCache.clear()
+      if (active) invalidate()
+    }
     document.fonts.addEventListener('loadingdone', onChange)
     document.fonts.addEventListener('loadingerror', onChange)
-    void document.fonts.ready.then(onChange)
+    /*
+     * `fonts.ready` 只在**订阅那一刻字体还在加载**时才有话要说。字体早已就绪时它也会兑现，
+     * 而那次兑现不改变任何度量——却仍然会让这个文字失效一次。一份真实图纸上有一千九百个
+     * 文字，各自订阅、各自兑现，就是一千九百次没有内容的失效；它们连成一串微任务，每一次
+     * 都把布局重解一趟，打开图纸时整页冻住十秒。加载中的那一档仍由它兜底：`loadingdone`
+     * 在订阅之前就已经派发过的话，事件监听器收不到，只有这个 Promise 还知道结果。
+     */
+    if (document.fonts.status === 'loading') void document.fonts.ready.then(onChange)
     return () => {
       active = false
       document.fonts.removeEventListener('loadingdone', onChange)

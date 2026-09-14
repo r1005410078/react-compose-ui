@@ -87,11 +87,23 @@ const RulerCanvas = forwardRef<RulerCanvasHandle, RulerCanvasProps>(function Rul
     })
   }, [axis, selection, size, ticks])
 
+  /*
+   * `schedule` 必须身份稳定，因此经 ref 间接调用最新的 `draw`：下面那条「主题变了才重读
+   * 调色板」的 effect 依赖它，而 `draw` 的身份跟着 `ticks` 走、每一步缩放与平移都变——让
+   * `schedule` 跟着 `draw` 变，等于每一步缩放都把调色板重读一遍。读调色板要触发整页样式计算，
+   * 一张五千个实体的图纸上是两条标尺各付一次 70–110ms，缩放因此逐步卡顿。
+   */
+  const drawRef = useRef(draw)
+  useEffect(() => { drawRef.current = draw }, [draw])
+
   // 平移与缩放会在同一帧内多次触发绘制请求，合并到一次 rAF 才不会比原来的 SVG 更差。
   const schedule = useCallback(() => {
     if (frameRef.current !== null) return
-    frameRef.current = requestAnimationFrame(draw)
-  }, [draw])
+    frameRef.current = requestAnimationFrame(() => { drawRef.current() })
+  }, [])
+
+  // 绘制输入（刻度、选区、尺寸）变了就重画；这条只重画，不碰调色板。
+  useEffect(() => { schedule() }, [draw, schedule])
 
   useImperativeHandle(ref, () => ({
     setCursor: (position) => {
@@ -101,6 +113,7 @@ const RulerCanvas = forwardRef<RulerCanvasHandle, RulerCanvasProps>(function Rul
     },
   }), [schedule])
 
+  // 只在主题变化时重取调色板——`schedule` 身份稳定，这条因此只跟着 `themeKey` 走。
   useEffect(() => {
     paletteRef.current = null
     schedule()

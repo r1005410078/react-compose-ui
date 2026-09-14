@@ -25,7 +25,8 @@ import {
 } from '@compose-ui/animation'
 import { AnimationInspector } from '../animation-mode/animation-inspector'
 import { createPageAnimationFile } from '../animation-mode/animation-asset-store'
-import { createDxfContextMenuItems } from '../dxf'
+import { createDwgContextMenuItems, isDwgAssetName } from '../dwg'
+import { createDxfContextMenuItems, createDxfImportAction, isDxfAssetName } from '../dxf'
 import { createSvgContextMenuItems } from '../svg'
 import { PageAnimationScopePanel } from '../animation-mode/page-animation-scope-panel'
 import type { PageAnimationSceneBinding } from '../animation-mode/page-animation-scope-panel'
@@ -93,6 +94,7 @@ import type {
   ComposeAssetExternalDropConfig,
   ComposeAssetExternalDropEvent,
   ComposeAssetMutation,
+  ComposeAssetOpenContext,
 } from '@compose-ui/asset-browser'
 import type { ComposeAssetResolver } from '@compose-ui/assets'
 import {
@@ -1238,33 +1240,6 @@ export function ComposeEditor({
     }
   }, [componentCatalog, componentWorkspace.store, openComponentDocument])
 
-  const handleAssetOpen = useCallback((entry: ComposeAssetEntry) => {
-    assets?.browser?.onAssetOpen?.(entry)
-    // 组件/变体：双击打开组件画布，不是 Monaco JSON。
-    if (
-      componentWorkspace.store
-      && entry.kind === 'file'
-      && isComposeComponentMediaType(entry.mediaType)
-    ) {
-      void openComponentFromAssetEntry(entry)
-      return
-    }
-    // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
-    if (pages !== undefined && entry.kind === 'file' && isComposePageMediaType(entry.mediaType)) {
-      void openPageDocument(entry)
-      return
-    }
-    openAssetDocument(entry, {
-      setupScript: pages !== undefined && isComposePageSetupScriptName(entry.name),
-    })
-  }, [
-    assets?.browser,
-    componentWorkspace.store,
-    openAssetDocument,
-    openComponentFromAssetEntry,
-    openPageDocument,
-    pages,
-  ])
   const handleAssetCanvasDrag = useCallback((
     event: ComposeAssetCanvasDragEvent,
   ) => {
@@ -1515,21 +1490,25 @@ export function ComposeEditor({
     }]
   }, [componentWorkspace.store, editorMessages.components.viewJson, handleOpenComponentJson])
 
-  // eslint-disable-next-line react-hooks/refs -- 菜单项的 onSelect 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
-  const dxfContextMenuItems = useMemo(() => {
-    return createDxfContextMenuItems({
-      componentStore: componentWorkspace.store,
-      idFactory: animationCommandId,
-      messages: editorMessages,
-      onError: setPageNotice,
-      // 诊断与失败都走同一条提示：用户要看的是「有没有东西没导进来」，而不是它属于哪一类。
-      onNotice: setPageNotice,
-      onPageCreated: handlePageCreated,
-      pageStore,
-      provider: assets?.browser?.provider,
-      registry: controller?.registry,
-    })
-  }, [
+  /**
+   * DXF 导入的依赖。
+   *
+   * @remarks
+   * 右键菜单与双击共用这一份——两个入口、一条实现。
+   */
+  const dxfImportDeps = useMemo(() => ({
+    componentStore: componentWorkspace.store,
+    idFactory: animationCommandId,
+    messages: editorMessages,
+    onError: setPageNotice,
+    // 诊断与失败都走同一条提示：用户要看的是「有没有东西没导进来」，而不是它属于哪一类。
+    onNotice: setPageNotice,
+    // eslint-disable-next-line react-hooks/refs -- 装进对象的是回调本身，只在用户真的导入时被调用；编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进对象」。
+    onPageCreated: handlePageCreated,
+    pageStore,
+    provider: assets?.browser?.provider,
+    registry: controller?.registry,
+  }), [
     assets?.browser?.provider,
     componentWorkspace.store,
     controller?.registry,
@@ -1538,9 +1517,73 @@ export function ComposeEditor({
     pageStore,
   ])
 
+
+  const handleAssetOpen = useCallback((
+    entry: ComposeAssetEntry,
+    context: ComposeAssetOpenContext,
+  ) => {
+    assets?.browser?.onAssetOpen?.(entry, context)
+    // DWG 还解不了。双击一份图纸，用户要的是那块场景；给他一个空白预览等于什么都没说。
+    if (entry.kind === 'file' && isDwgAssetName(entry.name)) {
+      setPageNotice(editorMessages.dwg.convertFirst)
+      return
+    }
+    /*
+     * DXF 双击即导入为页面——与右键那一项是同一条实现。双击一份图纸时用户要的就是那块
+     * 场景，而这个格式没有「预览」可言：它既不是浏览器画得出来的图片，也不是脚本。
+     */
+    if (entry.kind === 'file' && isDxfAssetName(entry.name)) {
+      const action = createDxfImportAction(dxfImportDeps)
+      if (action?.canCreate) {
+        void action.run(entry, entry.parentId ?? null, () => { context.refresh() })
+        return
+      }
+    }
+    // 组件/变体：双击打开组件画布，不是 Monaco JSON。
+    if (
+      componentWorkspace.store
+      && entry.kind === 'file'
+      && isComposeComponentMediaType(entry.mediaType)
+    ) {
+      void openComponentFromAssetEntry(entry)
+      return
+    }
+    // 页面文件走页面标签；其余文件仍走既有的资源文档标签。
+    if (pages !== undefined && entry.kind === 'file' && isComposePageMediaType(entry.mediaType)) {
+      void openPageDocument(entry)
+      return
+    }
+    openAssetDocument(entry, {
+      setupScript: pages !== undefined && isComposePageSetupScriptName(entry.name),
+    })
+  }, [
+    assets?.browser,
+    componentWorkspace.store,
+    dxfImportDeps,
+    editorMessages.dwg.convertFirst,
+    openAssetDocument,
+    openComponentFromAssetEntry,
+    openPageDocument,
+    pages,
+  ])
+
+  const dxfContextMenuItems = useMemo(() => {
+    // eslint-disable-next-line react-hooks/refs -- 同上：传下去的是那些回调，不是 ref 的值。
+    return createDxfContextMenuItems(dxfImportDeps)
+  }, [dxfImportDeps])
+
+  // DWG 导不进来，而一片空白让用户读到的是「这个工具不支持我的图」。这一项不依赖任何
+  // Store 或 Provider——它在解码路径缺席时始终是正确行为。
+  const dwgContextMenuItems = useMemo(() => {
+    return createDwgContextMenuItems({
+      messages: editorMessages,
+      onNotice: setPageNotice,
+    })
+  }, [editorMessages])
+
+  // eslint-disable-next-line react-hooks/refs -- 与 DXF 那一项同理：菜单项的 `onSelect` 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
   const svgContextMenuItems = useMemo(() => {
     const store = componentWorkspace.store
-    // eslint-disable-next-line react-hooks/refs -- 与 DXF 那一项同理：菜单项的 `onSelect` 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
     return createSvgContextMenuItems({
       componentStore: store,
       idFactory: animationCommandId,
@@ -1577,15 +1620,16 @@ export function ComposeEditor({
     return [
       ...hostItems,
       ...pageContextMenuItems,
-      // eslint-disable-next-line react-hooks/refs -- 合并的是几个已经各自解释过的菜单项数组：它们的 `onSelect` 只在用户选中后触发，编译器无法区分「渲染期读 ref」与「把读 ref 的回调装进数组」。
       ...componentContextMenuItems,
       ...dxfContextMenuItems,
+      ...dwgContextMenuItems,
       ...svgContextMenuItems,
     ]
   }, [
     assets?.browser?.contextMenuItems,
     componentContextMenuItems,
     dxfContextMenuItems,
+    dwgContextMenuItems,
     pageContextMenuItems,
     svgContextMenuItems,
   ])

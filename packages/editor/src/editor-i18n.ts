@@ -267,6 +267,12 @@ const messages = {
       importPartial: '部分内容未能完整导入',
       importFailed: 'DXF 导入失败',
     },
+    dwg: {
+      howToImport: '如何导入 DWG？',
+      convertFirst: 'DWG 是 AutoCAD 的原生格式，编辑器只能导入 DXF。'
+        + '用免费的 ODA File Converter（Windows / macOS / Linux，支持批量）把 .dwg 转成 .dxf，'
+        + '再右键选择「导入为页面」。',
+    },
     svg: {
       importAsComponent: '导入为组件',
       importPartial: '部分内容未能完整导入',
@@ -597,6 +603,12 @@ const messages = {
       importAsPage: 'Import as page',
       importPartial: 'Some content could not be fully imported',
       importFailed: 'Failed to import the DXF file',
+    },
+    dwg: {
+      howToImport: 'How to import DWG',
+      convertFirst: "DWG is AutoCAD's native format; this editor imports DXF only. "
+        + 'Convert the file to .dxf with the free ODA File Converter '
+        + '(Windows / macOS / Linux, batch supported), then right-click and choose "Import as page".',
     },
     svg: {
       importAsComponent: 'Import as component',
@@ -1102,6 +1114,9 @@ export function getEditorMessages(
     dxf: Object.fromEntries(
       Object.entries(current.dxf).map(([key, fallback]) => [key, format(`dxf.${key}`, fallback)]),
     ) as Record<keyof typeof current.dxf, string>,
+    dwg: Object.fromEntries(
+      Object.entries(current.dwg).map(([key, fallback]) => [key, format(`dwg.${key}`, fallback)]),
+    ) as Record<keyof typeof current.dwg, string>,
     svg: Object.fromEntries(
       Object.entries(current.svg).map(([key, fallback]) => [key, format(`svg.${key}`, fallback)]),
     ) as Record<keyof typeof current.svg, string>,

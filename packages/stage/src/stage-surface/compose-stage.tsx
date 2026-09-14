@@ -94,6 +94,7 @@ import {
 } from './screen-model'
 import { useStageHiddenEntityIds } from './use-stage-hidden-entities'
 import { useStageInstanceDrilldown } from './instance-drilldown'
+import { useStageCulling } from './use-stage-culling'
 import { useComposeStageMeasurement, useFinalControllerDisposal } from './stage-lifecycle'
 import { StageContextMenu } from './stage-context-menu'
 import { useStageEffectDispatch } from './entity-creation'
@@ -639,6 +640,21 @@ function ComposeStageReady({
     () => createStageSceneIndex(document, layoutSnapshot),
     [document, layoutSnapshot],
   )
+  /*
+   * 视口裁剪：屏外的子树不建 DOM 节点。
+   *
+   * 读**已提交**文档的索引而不是预览文档：预览每帧换一份新文档，按它建索引等于把刚省下来
+   * 的遍历原样加回去；而预览与已提交的差别恰好就是手势作用的那几棵子树，它们整棵豁免。
+   */
+  const culling = useStageCulling({
+    index: sceneIndex,
+    previewTransforms: interaction.previewTransforms,
+    selectedIds,
+    surfaceMeasured,
+    surfaceSize,
+    textEditingEntityId: textEditing?.entityId ?? null,
+    viewport,
+  })
   // 取点效果在 effect dispatch 里被消费，而会话又依赖它——用 ref 打断这条循环，会话对象
   // 每帧重建也不会让 effect dispatch 的记忆化失效。几何编辑读落点解算走的也是这个 ref。
   const draftingRef = useRef<ReturnType<typeof useStageDrafting> | null>(null)
@@ -1500,11 +1516,14 @@ function ComposeStageReady({
         />
         <StageSceneLayer
           assetResolver={assetResolver}
+          culledEntityIds={culling.culledEntityIds}
+          cullingBatchKey={culling.batchKey}
           document={previewDocument}
           hiddenEntityIds={hiddenEntityIds}
           layoutSnapshot={sceneLayoutSnapshot}
           paintPreview={interaction.paintPreview}
           registry={registry}
+          sceneIndex={sceneIndex}
           scriptModuleLoader={scriptModuleLoader}
           scriptScope={scriptScope}
           textEditingEntityId={textEditing?.entityId ?? null}
