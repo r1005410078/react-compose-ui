@@ -1,7 +1,7 @@
 import { createComposeGroupEntitySeed, encodeComposeInstancePath } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { document, entity, ROOT_FRAME_ID } from '../test-fixtures'
-import { resolveStageGroupHit } from './group-selection'
+import { resolveStageGroupExit, resolveStageGroupHit } from './group-selection'
 import type { ComposeDocument } from '@compose-ui/core'
 
 /*
@@ -98,5 +98,33 @@ describe('OpenSpec: stage-engine / Group 命中先选组，双击穿过一层', 
 
   it('选区里已消失的 ID 不参与进入判定', () => {
     expect(resolve('leaf', ['ghost'])).toEqual({ entityId: 'outer', descended: false })
+  })
+})
+
+describe('OpenSpec: stage-engine / Escape 退出分组', () => {
+  const exit = (selectedIds: readonly string[]) =>
+    resolveStageGroupExit({ document: value, getParentId, selectedIds })
+
+  it('选区是 Group 的后代时回到最近的那一层 Group', () => {
+    expect(exit(['leaf'])).toBe('inner')
+    expect(exit(['inner'])).toBe('outer')
+    expect(exit(['sibling'])).toBe('outer')
+  })
+
+  it('没有更外层的 Group 时为 null', () => {
+    expect(exit(['outer'])).toBeNull()
+    expect(exit(['free'])).toBeNull()
+    expect(exit([])).toBeNull()
+  })
+
+  it('多选只认共同的最近 Group', () => {
+    expect(exit(['inner', 'sibling'])).toBe('outer')
+    expect(exit(['leaf', 'sibling'])).toBeNull()
+    expect(exit(['sibling', 'free'])).toBeNull()
+  })
+
+  it('复合地址按宿主实例算，幽灵 ID 不参与', () => {
+    expect(exit([encodeComposeInstancePath(['sibling', 'part'])])).toBe('outer')
+    expect(exit(['ghost', 'sibling'])).toBe('outer')
   })
 })

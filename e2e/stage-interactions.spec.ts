@@ -649,7 +649,7 @@ test('OpenSpec: stage / 组合 Container 直接操纵 / 舞台可拖动组合 Co
 })
 
 
-test('OpenSpec: stage / Group 命中先选组，双击穿过一层 / 单击选组、双击进组、进组后兄弟直选、深选无视门槛', async ({ page }) => {
+test('OpenSpec: stage / Group 命中先选组，双击穿过一层 / 单击选组、双击进组、进组后兄弟直选、Esc 退出、深选无视门槛', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto('/')
 
@@ -716,6 +716,14 @@ test('OpenSpec: stage / Group 命中先选组，双击穿过一层 / 单击选�
   await clickCurveStroke(second)
   await expect(rectangleInspector).toBeVisible()
   await expect.poll(async () => near((await bounds.boundingBox())?.x, secondBox!.x)).toBe(true)
+
+  // Escape 退出分组：回到 Group 那一层；再按一次没有更外层的 Group，选区不变。
+  await stage.press('Escape')
+  await expect(groupInspector).toBeVisible()
+  await stage.press('Escape')
+  await expect(groupInspector).toBeVisible()
+  await first.dblclick({ position: { x: 40, y: 1 } })
+  await expect(rectangleInspector).toBeVisible()
 
   // 清掉选区即退出；此后单击子级又回到 Group。
   await deselect()

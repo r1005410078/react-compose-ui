@@ -108,3 +108,38 @@ export function resolveStageGroupHit(query: StageGroupHitQuery): StageGroupHitRe
   }
   return { entityId: chain[gate - 1]!, descended: true }
 }
+
+/**
+ * `Escape` 退出分组：求当前选区共同的最近 Group 严格祖先。
+ *
+ * @remarks
+ * 进了组之后（选区是某个 Group 的后代），按 `Escape` 回到上一层——选中那个 Group 自己，与 Figma
+ * 相同；再按一次没有更外层的 Group 时返回 `null`，调用方保持既有行为。
+ *
+ * 只认**共同**的那一个：选区里的项分属两个不同 Group 时没有「上一层」可言。复合地址按宿主实例算，
+ * 已不在文档中的 ID 不参与。
+ *
+ * @returns 应当选中的 Group；选区为空或没有共同的 Group 祖先时为 `null`
+ *
+ * @public
+ */
+export function resolveStageGroupExit(query: Pick<StageGroupHitQuery, 'document' | 'getParentId' | 'selectedIds'>): string | null {
+  const { document, getParentId } = query
+  let common: string | null | undefined
+  for (const selected of query.selectedIds) {
+    const hostId = composeInstancePathHostId(selected)
+    if (!document.entities[hostId]) continue
+    let nearest: string | null = null
+    for (let ancestor = getParentId(hostId); ancestor; ancestor = getParentId(ancestor)) {
+      const candidate = document.entities[ancestor]
+      if (candidate && isComposeGroupEntity(candidate)) {
+        nearest = ancestor
+        break
+      }
+    }
+    if (nearest === null) return null
+    if (common === undefined) common = nearest
+    else if (common !== nearest) return null
+  }
+  return common ?? null
+}
