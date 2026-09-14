@@ -292,16 +292,43 @@ export function rectMappingMatrix(from: StageRect, to: StageRect): StageMatrix {
 }
 
 /**
+ * 每份文档的子 → 父索引。
+ *
+ * @remarks
+ * 按**文档对象**缓存：文档是不可变的，每次事务产出一个新对象，因此缓存跟着它自然失效，
+ * `WeakMap` 也不会拖住已经没人引用的旧文档。
+ *
+ * 没有它就是一处 O(n²)：{@link getEntityWorldMatrix} 对**每一个** Entity 调一次父级查询，
+ * 而那次查询要扫全表、再在父级的 `childIds` 里 `includes`。一张五千多个实体、根场景直接挂
+ * 着五千多个子级的真实图纸，因此是**近三千万次**比较——表现为导入之后主线程一次卡死十几秒。
+ * 实体少时两种写法都快，所以这个缺陷只有真实图纸才暴露得出来。
+ */
+const parentIndexCache = new WeakMap<ComposeDocument, ReadonlyMap<string, string>>()
+
+function getEntityParentIndex(document: ComposeDocument): ReadonlyMap<string, string> {
+  const cached = parentIndexCache.get(document)
+  if (cached) return cached
+  const index = new Map<string, string>()
+  for (const entity of Object.values(document.entities)) {
+    const childIds = getComposeHierarchy(entity)?.childIds
+    if (!childIds) continue
+    // 先写入者胜出，与此前「返回扫描中第一个把它列为子级的 Entity」逐字一致——
+    // 一个 Entity 出现在两个父级的 `childIds` 里本来就是非法文档，但行为不该因为改了
+    // 查法而变。
+    for (const childId of childIds) if (!index.has(childId)) index.set(childId, entity.id)
+  }
+  parentIndexCache.set(document, index)
+  return index
+}
+
+/**
  * 返回 Entity 的直接父 Entity ID；根 Entity 返回 null。
  *
  * @public
  */
 export function getEntityParentId(document: ComposeDocument, entityId: string): string | null {
   if (document.rootIds.includes(entityId)) return null
-  for (const entity of Object.values(document.entities)) {
-    if (getComposeHierarchy(entity)?.childIds.includes(entityId)) return entity.id
-  }
-  return null
+  return getEntityParentIndex(document).get(entityId) ?? null
 }
 
 /**

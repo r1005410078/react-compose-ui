@@ -1,5 +1,5 @@
 import { createRef } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComposeCanvasRulers, type ComposeCanvasRulersHandle } from './compose-canvas-rulers'
 
@@ -52,5 +52,65 @@ describe('OpenSpec: stage / 标尺指针游标线 / 指针离开时隐藏游标'
       ref.current?.setCursor({ x: 12, y: 34 })
       ref.current?.setCursor(null)
     }).not.toThrow()
+  })
+})
+
+describe('OpenSpec: canvas-kit / 共享标尺组件 / 调色板只在主题变化时重读', () => {
+  /*
+   * 夹具：jsdom 的 `getContext` 返回 null、容器尺寸恒为 0，两者任一都会让绘制在读调色板之前
+   * 就早退，测不到这条路径——因此都要桩掉。上下文用 Proxy 一律给 no-op，painter 只调方法与
+   * 设属性。
+   */
+  function stubCanvasEnvironment() {
+    const context = new Proxy({}, { get: () => () => undefined }) as unknown as CanvasRenderingContext2D
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockImplementation(() => context)
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400)
+    const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(20)
+    return () => { getContext.mockRestore(); width.mockRestore(); height.mockRestore() }
+  }
+  const flushFrames = () => act(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+  const ticks = (screen: number) => [{ value: 0, screen, major: true, label: '0' }]
+  const props = (themeKey: string, screen: number) => ({
+    bounds: null,
+    horizontalTicks: ticks(screen),
+    labels: { origin: '原点', horizontal: '水平标尺', vertical: '垂直标尺' },
+    screenBounds: null,
+    testIdPrefix: 'canvas-ruler',
+    themeKey,
+    verticalTicks: ticks(screen),
+    onCornerPointerDown: vi.fn(),
+    onHorizontalPointerDown: vi.fn(),
+    onVerticalPointerDown: vi.fn(),
+  })
+
+  it('刻度变了不重读，主题变了才重读', async () => {
+    const restore = stubCanvasEnvironment()
+    const computed = vi.spyOn(window, 'getComputedStyle')
+    try {
+      const view = render(<ComposeCanvasRulers {...props('dark', 10)} />)
+      await flushFrames()
+      const afterMount = computed.mock.calls.length
+      // 先证明夹具真的走到了读调色板那一步，否则下面的「没有增加」是一条永远绿的假断言。
+      expect(afterMount).toBeGreaterThan(0)
+
+      /*
+       * 缩放与平移每一步都产出一组新的刻度。读调色板要触发整页样式计算——一张五千个实体的
+       * 图纸上是每一步缩放 70–110ms 的长任务，两条标尺各付一次。
+       */
+      view.rerender(<ComposeCanvasRulers {...props('dark', 24)} />)
+      await flushFrames()
+      expect(computed.mock.calls.length).toBe(afterMount)
+
+      view.rerender(<ComposeCanvasRulers {...props('light', 24)} />)
+      await flushFrames()
+      expect(computed.mock.calls.length).toBeGreaterThan(afterMount)
+    }
+    finally {
+      computed.mockRestore()
+      restore()
+    }
   })
 })
