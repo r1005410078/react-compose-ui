@@ -30,6 +30,11 @@ export type StageToolbarIconName =
   | 'wire'
   | 'trim'
   | 'hatch'
+  | 'flatten'
+  | 'union'
+  | 'subtract'
+  | 'intersect'
+  | 'exclude'
   | 'zoom-in'
   | 'zoom-out'
 
@@ -401,6 +406,55 @@ export function StageToolbarIcon({ name, paint }: StageToolbarIconProps) {
         <path d="M3.5 6H10v8h6.5" />
         {portMark(3.5, 6)}
         {portMark(16.5, 14)}
+      </>
+    ),
+    /*
+     * 四条区域运算共用「两个错开的方框」这个剪影，靠**填哪一块**区分——与 Figma 的那一组
+     * 同构。形状一样、填色不同是这里唯一读得出四条运算差别的画法：20px 上再多几笔就糊了。
+     */
+    union: (
+      <>
+        <path d="M3 3h9.5v4.5H17v9.5H7.5V12.5H3Z" fill="currentColor" stroke="none" opacity="0.9" />
+        <rect x="3" y="3" width="9.5" height="9.5" rx="1" />
+        <rect x="7.5" y="7.5" width="9.5" height="9.5" rx="1" />
+      </>
+    ),
+    subtract: (
+      <>
+        <path d="M3 3h9.5v4.5H7.5v5H3Z" fill="currentColor" stroke="none" opacity="0.9" />
+        <rect x="3" y="3" width="9.5" height="9.5" rx="1" />
+        <rect x="7.5" y="7.5" width="9.5" height="9.5" rx="1" strokeDasharray="2.5 2" />
+      </>
+    ),
+    intersect: (
+      <>
+        <rect x="7.5" y="7.5" width="5" height="5" fill="currentColor" stroke="none" opacity="0.9" />
+        <rect x="3" y="3" width="9.5" height="9.5" rx="1" opacity="0.55" />
+        <rect x="7.5" y="7.5" width="9.5" height="9.5" rx="1" opacity="0.55" />
+      </>
+    ),
+    exclude: (
+      <>
+        <path
+          d="M3 3h9.5v4.5H17v9.5H7.5V12.5H3Z M7.5 7.5h5v5h-5Z"
+          fill="currentColor"
+          fillRule="evenodd"
+          stroke="none"
+          opacity="0.9"
+        />
+        <rect x="3" y="3" width="9.5" height="9.5" rx="1" />
+        <rect x="7.5" y="7.5" width="9.5" height="9.5" rx="1" />
+      </>
+    ),
+    /*
+     * 拍平：两个叠着的形状被一条水平线压成一条。上面那个方框是被拍的对象，箭头向下，
+     * 底下那条实线是拍平之后的那一条路径——三样都在 20px 上读得出来。
+     */
+    flatten: (
+      <>
+        <rect x="6" y="3" width="8" height="6" rx="1" />
+        <path d="M10 11v3.5M7.5 12.5L10 15l2.5-2.5" />
+        <path d="M4 17.5h12" />
       </>
     ),
     // 剪刀：两片刀刃交叉、两个指环在下，与光标旁的徽标同一个形状。

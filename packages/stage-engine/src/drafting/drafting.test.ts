@@ -23,6 +23,11 @@ const messages = {
   moveTitle: '移动',
   copyTitle: '复制',
   eraseTitle: '删除',
+  flattenTitle: '拍平',
+  unionTitle: '并集',
+  subtractTitle: '差集',
+  intersectTitle: '交集',
+  excludeTitle: '异或',
   vertexTitle: '编辑顶点',
   specifyNewLocation: '指定新位置',
   expectedSingleObject: '只能选择一个对象',
@@ -144,7 +149,9 @@ describe('LINE 命令', () => {
     const commands = createStageDraftingCommands(messages)
     expect(commands.map(({ id }) => id)).toEqual([
       'LINE', 'WIRE', 'ARROW', 'ARC', 'CIRCLE', 'RECTANGLE', 'POLYGON', 'PLINE',
-      'MOVE', 'COPY', 'ERASE', 'TRIM', 'HATCH', 'VERTEX', 'MIRROR',
+      'MOVE', 'COPY', 'ERASE', 'TRIM', 'HATCH',
+      'UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE', 'FLATTEN',
+      'VERTEX', 'MIRROR',
       'ALIGNLEFT', 'ALIGNCENTERX', 'ALIGNRIGHT',
       'ALIGNTOP', 'ALIGNCENTERY', 'ALIGNBOTTOM',
       'DISTRIBUTEX', 'DISTRIBUTEY',

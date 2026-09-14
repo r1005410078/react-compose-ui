@@ -29,7 +29,7 @@ import {
   type ComposeOutlinePiece,
   type ComposeSegmentShape,
 } from '@compose-ui/core'
-import type { ComposeDocument, ComposeLayoutSnapshot, JsonValue } from '@compose-ui/core'
+import type { ComposeDocument, ComposeLayoutSnapshot, ComposePosition, JsonValue } from '@compose-ui/core'
 import { applyMatrix, stageCurveToParent, type StageMatrix } from '../geometry'
 import type { StageSceneIndex } from '../hit-testing'
 
@@ -131,6 +131,68 @@ export function stageWorldOutline(
   return stageWorldShapes(curve, matrix).map((shape) => (shape.kind === 'arc'
     ? { kind: 'arc', arc: shape.arc }
     : { kind: 'segment', segment: shape.segment }))
+}
+
+/**
+ * 把盒局部的曲线搬进世界坐标，**保持 kind 不变**。
+ *
+ * @remarks
+ * 与 {@link stageWorldOutline} 回答的是两个问题：那边要一列**可求交的片段**（求面、修剪、
+ * 布尔的区域运算都拿它两两求交），这边要一条**还能落回文档的曲线**。拍平需要后者——它必须
+ * 保住 `path` 的曲率，而 `stageWorldOutline` 会把贝塞尔拍成线段。
+ *
+ * 变换是**精确仿射**：`Transform` 只有 `rotation`，几何空间到盒的缩放已经由
+ * `projectComposeCurveToBox` 吃掉，因此这里的矩阵只含平移、旋转与可能的镜像——弧与圆角在
+ * 这样的矩阵下形状不变，只是搬了位置。半径按 `√|det|` 缩放，镜像（行列式为负）由
+ * {@link stageWorldShapes} 用的同一套换算翻转扫掠方向。
+ *
+ * @public
+ */
+export function stageWorldCurve(curve: ComposeCurve, matrix: StageMatrix): ComposeCurve {
+  /*
+   * 经一次对象字面量落成 `ComposePosition`：`StagePoint` 少一条索引签名，而
+   * `ComposePosition` 继承自 `JsonObject`，TypeScript 只对字面量放行这种赋值。
+   */
+  const at = (point: { readonly x: number; readonly y: number }): ComposePosition => {
+    const world = applyMatrix(matrix, point)
+    return { x: world.x, y: world.y }
+  }
+  if (curve.kind === 'line') {
+    return { kind: 'line', start: at(curve.start), end: at(curve.end) }
+  }
+  if (curve.kind === 'arc') {
+    const arc = worldArc(curve, matrix)
+    return {
+      kind: 'arc',
+      center: { x: arc.center.x, y: arc.center.y },
+      radius: arc.radius,
+      startAngle: arc.startAngle,
+      sweep: arc.sweep,
+    }
+  }
+  if (curve.kind === 'polyline') {
+    const scale = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c))
+    return {
+      kind: 'polyline',
+      vertices: curve.vertices.map(at),
+      closed: curve.closed,
+      // 缺席即尖角：半径为零时 MUST NOT 写成 0，两种表示会让「有没有圆角」读出两个答案。
+      ...(curve.cornerRadius ? { cornerRadius: curve.cornerRadius * scale } : {}),
+    }
+  }
+  return {
+    kind: 'path',
+    subpaths: curve.subpaths.map((subpath) => ({
+      start: at(subpath.start),
+      segments: subpath.segments.map((segment) => ({
+        c1: at(segment.c1),
+        c2: at(segment.c2),
+        to: at(segment.to),
+      })),
+      closed: subpath.closed,
+    })),
+    ...(curve.fillRule ? { fillRule: curve.fillRule } : {}),
+  }
 }
 
 /**

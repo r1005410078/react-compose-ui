@@ -53,11 +53,16 @@ export const STAGE_HATCH_PRESET_ID = 'hatch'
  * 给定的那些 Entity 在同一个父级下最靠前的位置；没有一个同父级时返回 null。
  *
  * @remarks
- * 只看**同父级**的那些：跨层级的边界在这个父级的子级列表里没有位置可言，拿它算等于按一个
- * 不存在的下标插入。一个都没有时不插，落在最后（最上面）——那时这块填充与它的边界本来就不在
- * 同一层，层序由容器之间的次序决定。
+ * 两个消费者读同一条：填充插在**它的边界**之下，布尔运算的产物插在**它的操作数**之下——
+ * 两处问的都是「这几个里最靠下的那一个在哪」。
+ *
+ * 只看**同父级**的那些：跨层级的那些在这个父级的子级列表里没有位置可言，拿它算等于按一个
+ * 不存在的下标插入。一个都没有时不插，落在最后（最上面）——那时产物与那几个本来就不在同一层，
+ * 层序由容器之间的次序决定。
+ *
+ * @internal
  */
-function lowestSiblingIndex(
+export function lowestSiblingIndex(
   document: ComposeDocument,
   parentId: string | null,
   ids: readonly string[],

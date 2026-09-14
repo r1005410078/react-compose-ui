@@ -56,6 +56,8 @@ import {
   type StageGripTarget,
   type StagePoint,
   type StageRect,
+  type StageBooleanOperation,
+  type StageBooleanRejection,
   type StageHatchRejection,
   type StageTrimRejection,
   type StageWireEnd,
@@ -595,6 +597,11 @@ function ComposeStageReady({
     moveTitle: messages.draftingMoveTitle,
     copyTitle: messages.draftingCopyTitle,
     eraseTitle: messages.draftingEraseTitle,
+    flattenTitle: messages.draftingFlattenTitle,
+    unionTitle: messages.draftingUnionTitle,
+    subtractTitle: messages.draftingSubtractTitle,
+    intersectTitle: messages.draftingIntersectTitle,
+    excludeTitle: messages.draftingExcludeTitle,
     trimTitle: messages.draftingTrimTitle,
     selectTrimTarget: messages.draftingSelectTrimTarget,
     expectedPick: messages.draftingExpectedPick,
@@ -615,6 +622,30 @@ function ComposeStageReady({
       outside: messages.hatchRejectOutside,
       locked: messages.hatchRejectLocked,
     })[reason],
+    booleanLabel: (operation: StageBooleanOperation) => ({
+      union: messages.unionLabel,
+      subtract: messages.subtractLabel,
+      intersect: messages.intersectLabel,
+      exclude: messages.excludeLabel,
+      flatten: messages.flattenLabel,
+    })[operation],
+    /*
+     * 每种原因一句，互不相同：「敲了没反应」与敲错字在屏幕上无法区分，而「没有重叠」与
+     * 「算不出来」要给用户两句不同的话——前者按一下别的运算就好，后者要把形状错开再试。
+     */
+    booleanRejection: (reason: StageBooleanRejection, entityName?: string) => {
+      if (reason === 'too-few') return messages.booleanRejectTooFew
+      if (reason === 'empty') return messages.booleanRejectEmpty
+      if (reason === 'degenerate') return messages.booleanRejectDegenerate
+      return ({
+        'no-geometry': messages.booleanRejectNoGeometry,
+        bezier: messages.booleanRejectBezier,
+        line: messages.booleanRejectLine,
+        locked: messages.booleanRejectLocked,
+        wired: messages.booleanRejectWired,
+        unresolved: messages.booleanRejectUnresolved,
+      })[reason](entityName ?? '')
+    },
     trimRejection: (reason: StageTrimRejection) => ({
       locked: messages.trimRejectLocked,
       'fixed-size': messages.trimRejectFixedSize,

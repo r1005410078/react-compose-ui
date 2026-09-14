@@ -108,6 +108,11 @@ export type ComposeStageShortcutAction =
   | 'drafting.arc'
   | 'drafting.arrow'
   | 'drafting.wire'
+  | 'drafting.union'
+  | 'drafting.subtract'
+  | 'drafting.intersect'
+  | 'drafting.exclude'
+  | 'drafting.flatten'
 
 /**
  * 可由宿主接管的 Stage 动作。

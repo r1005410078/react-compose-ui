@@ -17,6 +17,7 @@ export { planStageDraftingEdits, type StageDraftingEditQuery } from './drafting-
 export { createStageEraseCommand, createStageEraseSession } from './erase-command'
 export { createStageTrimCommand, createStageTrimSession } from './trim-command'
 export { createStageHatchCommand, createStageHatchSession } from './hatch-command'
+export { createStageBooleanCommands, createStageBooleanSession } from './boolean-commands'
 export {
   createStageCopyCommand,
   createStageCopySession,
@@ -47,6 +48,8 @@ export {
   STAGE_DRAFTING_PICK_PLUGIN_ID,
 } from './drafting-pick-plugin'
 export type {
+  StageBooleanOperation,
+  StageDraftingBoolean,
   StageDraftingContext,
   StageDraftingEffect,
   StageDraftingGripEdit,

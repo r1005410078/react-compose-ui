@@ -81,6 +81,11 @@ export const COMPOSE_TOOLBAR_SELECT_ID = 'select'
  * 补偿，圆的物料瓦片会在这个工作区里**出现**——`paletteHidden` 的判据是「工具栏是否已提供
  * 入口」，而这里没有提供。
  */
+/*
+ * 布尔运算**不进这条货架**：16 格工具栏在 1280 默认窗口下余量不到半格，而溢出是从**尾部**
+ * 收进「更多」的——加一格就会把尾部那一格挤走。它在页面工作区仍然完整可用（命令行、
+ * `⌥⇧` 键位，以及用户自己把它加上货架），收走的是一个默认入口而不是一项能力。
+ */
 export const PAGE_TOOLBAR_SHELF: ComposeToolbarShelf = [
   'select',
   'transform-gizmo',
@@ -141,6 +146,7 @@ export const DRAWING_TOOLBAR_SHELF: ComposeToolbarShelf = [
   'WIRE',
   'TRIM',
   'HATCH',
+  'UNION',
   COMPOSE_TOOLBAR_SEPARATOR,
   'draw-text',
 ]
@@ -408,4 +414,13 @@ export const COMPOSE_TOOLBAR_CATALOG: readonly ComposeToolbarCatalogEntry[] = [
   { id: 'TRIM', messageKey: 'trim', icon: 'trim', entrance: { kind: 'command' } },
   // 填充的第二条入口是命令行的 `HATCH` / `H`；换色在命令里还有第三条（`C` 关键字）。
   { id: 'HATCH', messageKey: 'hatch', icon: 'hatch', entrance: { kind: 'command' } },
+  /*
+   * 五条布尔运算的第二条入口是命令行（`UNION`/`UNI` 等），第三条是 `⌥⇧U/S/I/E/F`——照抄
+   * Figma 的键位，而 `alt` 这个修饰符在本仓库的默认键位表里一个都没用过。
+   */
+  { id: 'UNION', messageKey: 'union', icon: 'union', entrance: { kind: 'command' } },
+  { id: 'SUBTRACT', messageKey: 'subtract', icon: 'subtract', entrance: { kind: 'command' } },
+  { id: 'INTERSECT', messageKey: 'intersect', icon: 'intersect', entrance: { kind: 'command' } },
+  { id: 'EXCLUDE', messageKey: 'exclude', icon: 'exclude', entrance: { kind: 'command' } },
+  { id: 'FLATTEN', messageKey: 'flatten', icon: 'flatten', entrance: { kind: 'command' } },
 ]

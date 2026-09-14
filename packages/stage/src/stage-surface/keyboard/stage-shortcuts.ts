@@ -44,6 +44,11 @@ export const STAGE_SHORTCUT_ACTIONS = [
   'drafting.arc',
   'drafting.arrow',
   'drafting.wire',
+  'drafting.union',
+  'drafting.subtract',
+  'drafting.intersect',
+  'drafting.exclude',
+  'drafting.flatten',
 ] as const satisfies readonly ComposeStageShortcutAction[]
 
 /**
@@ -89,6 +94,15 @@ export const DEFAULT_STAGE_SHORTCUTS: Readonly<
   // `A` 只能给一条，弧比箭头更接近「基础图形」，因此箭头用空着的 `X`。
   'drafting.arrow': [{ code: 'KeyX' }],
   'drafting.wire': [{ code: 'KeyW' }],
+  /*
+   * 布尔运算照抄 Figma 的 `⌥⇧U/S/I/E/F`：从那边过来的用户直接会用，而 `alt` 这个修饰符在
+   * 本表里一个都没用过，因此这五个与任何既有动作都不撞。
+   */
+  'drafting.union': [{ code: 'KeyU', alt: true, shift: true }],
+  'drafting.subtract': [{ code: 'KeyS', alt: true, shift: true }],
+  'drafting.intersect': [{ code: 'KeyI', alt: true, shift: true }],
+  'drafting.exclude': [{ code: 'KeyE', alt: true, shift: true }],
+  'drafting.flatten': [{ code: 'KeyF', alt: true, shift: true }],
 }
 
 /**
@@ -109,6 +123,11 @@ export const COMMAND_SHORTCUTS: readonly (readonly [ComposeStageShortcutAction, 
   ['drafting.arc', 'ARC'],
   ['drafting.arrow', 'ARROW'],
   ['drafting.wire', 'WIRE'],
+  ['drafting.union', 'UNION'],
+  ['drafting.subtract', 'SUBTRACT'],
+  ['drafting.intersect', 'INTERSECT'],
+  ['drafting.exclude', 'EXCLUDE'],
+  ['drafting.flatten', 'FLATTEN'],
 ]
 
 export const LAYER_ORDER_SHORTCUTS = [
