@@ -253,6 +253,7 @@ export {
   composeCurveBounds,
   composeCurveBoxScale,
   composeCurvePoints,
+  composePathAsOutline,
   composePathCubics,
   composePolylineOutline,
   composeCurveViewBox,

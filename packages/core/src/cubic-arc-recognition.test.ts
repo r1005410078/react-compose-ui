@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { roundComposeGeometry } from './geometry-precision'
+import { composePathAsOutline, normalizeComposeCurveGeometry, type ComposeCurve } from './curve'
+import { flattenComposeCurves } from './curve-boolean'
 import {
   composeArcPointAt,
   composeArcToCubicShapes,
@@ -135,5 +137,67 @@ describe('OpenSpec: compose-document / 三次贝塞尔能被识别回圆弧或�
       end: { x: radius * b.x, y: radius * b.y },
     }
     expect(composeCubicAsArc(cubic)).toBeNull()
+  })
+})
+
+describe('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令会话只管数量 / 由弧围成的填充块参与区域运算', () => {
+  /** 按写进文档那一趟的规矩归一化并舍入——判别性在这里，不舍入识别就是一道恒等式。 */
+  function stored(curve: ComposeCurve): ComposeCurve {
+    return normalizeComposeCurveGeometry(curve).curve
+  }
+
+  it('拍平一个整圆得到的 path 认回四段弧，圆心与半径一致', () => {
+    const circle: ComposeCurve = {
+      kind: 'arc',
+      center: { x: 120, y: 80 },
+      radius: 57.5,
+      startAngle: 0,
+      sweep: 360,
+    }
+    const path = stored(flattenComposeCurves([circle]))
+    expect(path.kind).toBe('path')
+    if (path.kind !== 'path') return
+
+    const pieces = composePathAsOutline(path)
+    expect(pieces).not.toBeNull()
+    expect(pieces!).toHaveLength(4)
+    for (const piece of pieces!) {
+      expect(piece.kind).toBe('arc')
+      if (piece.kind !== 'arc') continue
+      expect(piece.arc.radius).toBeCloseTo(57.5, 1)
+    }
+  })
+
+  it('拍平一个圆角矩形得到直边与角弧交替的片段', () => {
+    const rounded: ComposeCurve = {
+      kind: 'polyline',
+      closed: true,
+      vertices: [{ x: 0, y: 0 }, { x: 140, y: 0 }, { x: 140, y: 90 }, { x: 0, y: 90 }],
+      cornerRadius: 18,
+    }
+    const path = stored(flattenComposeCurves([rounded]))
+    if (path.kind !== 'path') throw new Error('拍平的产物必须是 path')
+
+    const pieces = composePathAsOutline(path)
+    expect(pieces).not.toBeNull()
+    // 四条缩短的直边 + 四个角弧。
+    expect(pieces!.filter((piece) => piece.kind === 'segment')).toHaveLength(4)
+    expect(pieces!.filter((piece) => piece.kind === 'arc')).toHaveLength(4)
+  })
+
+  it('含一段自由曲线时整条拒绝——它既不是直线也不是圆弧', () => {
+    const path: ComposeCurve = {
+      kind: 'path',
+      subpaths: [{
+        start: { x: 0, y: 0 },
+        segments: [
+          // 第一段是规规矩矩的直边，因此拒绝一定来自第二段而不是「path 一律不认」。
+          { c1: { x: 33.33, y: 0 }, c2: { x: 66.67, y: 0 }, to: { x: 100, y: 0 } },
+          { c1: { x: 100, y: 100 }, c2: { x: 0, y: -100 }, to: { x: 0, y: 0 } },
+        ],
+        closed: true,
+      }],
+    }
+    expect(composePathAsOutline(path)).toBeNull()
   })
 })

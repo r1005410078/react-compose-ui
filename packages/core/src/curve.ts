@@ -23,6 +23,8 @@ import {
   composeArcBoundsPoints,
   composeArcPointAt,
   composeArcTravelledDegrees,
+  composeCubicAsArc,
+  composeCubicAsSegment,
   composeCubicBoundsPoints,
   composePolylineSegments,
   composeSquaredDistance,
@@ -807,6 +809,46 @@ export function composeCurveSegments(curve: ComposeCurve): readonly ComposeSegme
     return only ? [{ start: only, end: only }] : []
   }
   return flattenComposeOutline(pieces)
+}
+
+/**
+ * 把一条 `path` 逐段识别成可求交的轮廓片段。
+ *
+ * @remarks
+ * 每条三次段**先试直线、再试圆弧**（{@link composeCubicAsSegment} / {@link composeCubicAsArc}），
+ * 有一段两样都不是就整条拒绝。次序不可颠倒：矢高只有几个量化步长的弧在存储精度下就是一条直线，
+ * 而那时三点定圆已经没有意义。
+ *
+ * 它与 {@link composeCurveSegments} 回答的是两个问题：那边把一切**拍成线段**（框选只要布尔
+ * 答案，弦高误差不呈现给用户），这边要**保住曲率**——布尔运算的产物是会被画出来、还会被继续
+ * 编辑的几何，把圆算成多边形会留下看得见的棱。
+ *
+ * 本产品自己产出的 `path`（填充求面的结果、布尔结果、拍平的矩形与圆）边上只有直线与弧，它们
+ * 的贝塞尔本来就是由 {@link composeArcToCubicShapes} 从弧转过去的，因此识别是精确的。真正的
+ * 自由曲线（SVG 导进来的那种）返回 `null`，由调用方拒绝并说明。
+ *
+ * @returns 一列轮廓片段；有一段既不是直线也不是圆弧时返回 `null`。
+ * @public
+ */
+export function composePathAsOutline(
+  curve: ComposePathCurve,
+): readonly ComposeOutlinePiece[] | null {
+  const pieces: ComposeOutlinePiece[] = []
+  for (const cubic of composePathCubics(curve)) {
+    // 四个点完全重合的段跳过而不是拒绝：它不是一条认不出的曲线，它对形状没有任何贡献。
+    if (cubic.c1.x === cubic.start.x && cubic.c1.y === cubic.start.y
+      && cubic.c2.x === cubic.start.x && cubic.c2.y === cubic.start.y
+      && cubic.end.x === cubic.start.x && cubic.end.y === cubic.start.y) continue
+    const segment = composeCubicAsSegment(cubic)
+    if (segment !== null) {
+      pieces.push({ kind: 'segment', segment })
+      continue
+    }
+    const arc = composeCubicAsArc(cubic)
+    if (arc === null) return null
+    pieces.push({ kind: 'arc', arc })
+  }
+  return pieces
 }
 
 /**

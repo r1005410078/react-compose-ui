@@ -324,3 +324,85 @@ test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 交集为�
   await expect(prompt).toContainText('留不下任何面积')
   await expect(rows).toHaveCount(2)
 })
+
+/**
+ * 由圆围出来的填充块参与区域运算。
+ *
+ * 这是用户报上来的那一档：两个圆、油漆桶填三块面、框选全部、按并集——四种区域运算一个都不做，
+ * 命令行写着「这一版还不支持带曲线段的路径」。求面产出的面边上有弧就只能落成 `path`（多段线
+ * 顶点没有 bulge），而区域运算此前把 `path` 整个拒掉。产品自己产出的东西产品自己不认。
+ */
+test('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令会话只管数量 / 由弧围成的填充块参与区域运算', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const prompt = stage.getByTestId('stage-drafting-command-prompt')
+  const surface = stage.getByTestId('stage-surface')
+  await expect.poll(() => surface.boundingBox()).not.toBeNull()
+  const box = (await surface.boundingBox())!
+  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
+
+  const commandInput = stage.getByRole('combobox', { name: '命令行' })
+  const curves = stage.locator('[data-testid="compose-material-curve-stroke"]')
+
+  // 两个重叠的圆：各自点圆心再点半径点。
+  for (const [centre, edge] of [[[300, 300], [420, 300]], [[460, 300], [580, 300]]] as const) {
+    await commandInput.fill('CIRCLE')
+    await commandInput.press('Enter')
+    await page.mouse.click(at(centre[0], centre[1]).x, at(centre[0], centre[1]).y)
+    await page.mouse.click(at(edge[0], edge[1]).x, at(edge[0], edge[1]).y)
+    await expect(prompt).toContainText('命令：')
+  }
+  await expect(curves).toHaveCount(2)
+
+  // 油漆桶把三块面各填一次：左边的月牙、中间的透镜、右边的月牙。
+  for (const [x, y] of [[220, 300], [380, 300], [540, 300]] as const) {
+    await commandInput.fill('HATCH')
+    await commandInput.press('Enter')
+    await expect(prompt).toContainText('点一下要填充的区域内部')
+    await page.mouse.click(at(x, y).x, at(x, y).y)
+    await commandInput.press('Escape')
+    await commandInput.press('Escape')
+  }
+  /*
+   * 三块面都落成了 `path`：它们的边是圆弧，而多段线的顶点没有 bulge，弧边没有别处可放。
+   * 不断这一条，下面那句「并集算出来了」在产物碰巧是多段线时也会绿。
+   */
+  await expect(curves).toHaveCount(5)
+  await expect(stage.locator('path[data-testid="compose-material-curve-stroke"]')).toHaveCount(3)
+
+  // 从右下往左上框选（窗交），把两个圆与三块填充一起选上。
+  await page.mouse.move(at(640, 470).x, at(640, 470).y)
+  await page.mouse.down()
+  await page.mouse.move(at(140, 140).x, at(140, 140).y, { steps: 10 })
+  await page.mouse.up()
+  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+
+  await commandInput.fill('UNION')
+  await commandInput.press('Enter')
+
+  /*
+   * 五个操作数合成一个：命令行回到「命令：」而不是那句拒绝，图上只剩一条曲线。
+   * 断数量而不只断文案——拒绝的文案改了之后，只断文案的用例会静默失去判别性。
+   */
+  await expect(prompt).toContainText('命令：')
+  await expect(curves).toHaveCount(1)
+  await expect(curves.first()).toHaveJSProperty('tagName', 'path')
+
+  // 产物可以再当操作数：与一个盖在它上面的矩形求交集，照样算得出来。
+  await commandInput.fill('RECTANGLE')
+  await commandInput.press('Enter')
+  await page.mouse.click(at(240, 240).x, at(240, 240).y)
+  await page.mouse.click(at(400, 360).x, at(400, 360).y)
+  await expect(curves).toHaveCount(2)
+
+  await page.mouse.move(at(640, 470).x, at(640, 470).y)
+  await page.mouse.down()
+  await page.mouse.move(at(140, 140).x, at(140, 140).y, { steps: 10 })
+  await page.mouse.up()
+  await commandInput.fill('INTERSECT')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('命令：')
+  await expect(curves).toHaveCount(1)
+})

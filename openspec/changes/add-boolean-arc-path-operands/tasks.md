@@ -35,22 +35,51 @@
 
 ## 2. 解算接受由弧围成的路径（core + stage-engine）
 
-- [ ] 2.1 `curve-boolean.ts`：`ComposeBooleanOperand.curve` 可选，内外判定优先读它
-- [ ] 2.2 单测（判别性）：一个带岛的 `evenodd` 操作数（外环加一个内环）与一个落在岛里的
+- [x] 2.1 `curve-boolean.ts`：`ComposeBooleanOperand.curve` 可选，内外判定优先读它
+- [x] 2.2 单测（判别性）：一个带岛的 `evenodd` 操作数（外环加一个内环）与一个落在岛里的
       矩形求交集——传 `curve` 时结果为空，不传时旧行为把岛算进去
-- [ ] 2.3 `core/curve.ts`：`composePathAsOutline`——`path` 逐条三次段识别成片段，有一段认不出
+- [x] 2.3 `core/curve.ts`：`composePathAsOutline`——`path` 逐条三次段识别成片段，有一段认不出
       即返回 `null`。**住 core 而不是 `curve-world.ts`**（原计划）：它一个 stage 概念都不认识，
       只是几何。**`stageWorldOutline` 一行不改**，`HATCH` 与 `TRIM` 读的仍是它
-- [ ] 2.4 `commands/curve-boolean.ts`：`collectOperands` 对 `path` 走 2.3（在**世界**曲线上做，
+- [x] 2.4 `commands/curve-boolean.ts`：`collectOperands` 对 `path` 走 2.3（在**世界**曲线上做，
       非等比盒把弧投影成椭圆弧，认不出即 `bezier`，这是对的）；认不出才 `bezier`
-- [ ] 2.5 单测（判别性）：两个圆填出来的三块面（几何由 `resolveComposeCurveRegion` 真求出来，
+- [x] 2.5 单测（判别性）：两个圆填出来的三块面（几何由 `resolveComposeCurveRegion` 真求出来，
       不手写）全选求并集得到一个圆的并集；两块相邻填充求交集为空；SVG 风格的自由贝塞尔仍以
       `bezier` 拒绝并带名称；结果再当操作数能算
 
+      > **2.1 / 2.2**
+      > Red command: `bunx vitest run src/curve-boolean.test.ts`（packages/core）
+      > Red result: 1 failed | 23 passed，`AssertionError: expected 'resolved' to be 'empty'`
+      > Red reason: `ComposeBooleanOperand.curve` 只有类型声明，解算还没有读它——带岛的操作数
+      >   把洞算成实心，落在洞里的矩形被判成相交。先加字段再跑，Red 因此由断言而不是类型错误
+      >   产生。
+      > Green command: 同上
+      > Green result: 24 passed
+      >
+      > **2.3**
+      > Red command: `bunx vitest run src/cubic-arc-recognition.test.ts`（packages/core，
+      >   把 `composePathAsOutline` 的函数体临时换成 `return null`）
+      > Red result: 2 failed | 31 passed，`AssertionError: expected null not to be null`
+      > Red reason: 这一条的实现先于用例写出，因此用**退回桩**的方式补验判别性——两条正向
+      >   用例（整圆认回四段弧、圆角矩形认回四直边加四角弧）在桩上必红。
+      > Green command: 同上（恢复实现）
+      > Green result: 33 passed
+      >
+      > **2.4 / 2.5**
+      > Red command: `bunx vitest run src/commands/curve-boolean.test.ts`（packages/stage-engine）
+      > Red result: 4 failed | 12 passed，三条 `expected 'rejected' to be 'resolved'`、一条
+      >   `expected { status: 'rejected' } to match { reason: 'empty' }`
+      > Red reason: `collectOperands` 还在 `curve.kind === 'path'` 那一行整个拒掉。
+      > Green command: 同上
+      > Green result: 16 passed
+      >
+      > 交集那条**断的是透镜形的尺寸**（宽 40、高 80）而不是「算出来了」：把弧拍成折线同样
+      > 算得出来，而尺寸对不上正是棱的直接后果。
+
 ## 3. 文案与端到端（stage）
 
-- [ ] 3.1 `stage-i18n.ts`：`booleanRejectBezier` 改成「『X』含自由曲线段，布尔运算只收直线与
+- [x] 3.1 `stage-i18n.ts`：`booleanRejectBezier` 改成「『X』含自由曲线段，布尔运算只收直线与
       圆弧」，中英各一份
-- [ ] 3.2 端到端：两个圆、油漆桶填三块面、框选全部、`UNION`——场景树只剩一行，图上是一条
+- [x] 3.2 端到端：两个圆、油漆桶填三块面、框选全部、`UNION`——场景树只剩一行，图上是一条
       `path`；再对它与一个矩形求交集，能算
 - [ ] 3.3 门禁：lint、typecheck、单测、构建、端到端

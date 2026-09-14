@@ -113,6 +113,17 @@ export type ComposeBooleanOp = 'union' | 'subtract' | 'intersect' | 'exclude'
 /** 一个参与运算的形状：它在公共坐标空间里的一列轮廓片段。 @public */
 export interface ComposeBooleanOperand {
   readonly pieces: readonly ComposeOutlinePiece[]
+  /**
+   * 判「某一点在不在这个形状里」时用的曲线；**缺席时由 {@link pieces} 收成一条单环曲线**。
+   *
+   * @remarks
+   * 一块带岛的填充是两条子路径加 `evenodd`，而片段摊平之后收成「一条环」会把岛也算进去——
+   * 内外判定就反了，症状是挖掉的洞在布尔结果里被补平。
+   *
+   * 调用方 MUST 只在片段**不足以还原内外规则**时传它（也就是多于一条环、或带 `fillRule`
+   * 的 `path`）：其余情形两种做法给出同一个答案，传与不传没有区别。
+   */
+  readonly curve?: ComposeCurve
 }
 
 /**
@@ -310,8 +321,15 @@ export function resolveComposeCurveBoolean(
   const graph = buildGraph(pieces, epsilon)
   if (graph.subEdges.length === 0) return { status: 'degenerate' }
 
-  // 操作数的内外判定读 `isPointInsideComposeCurve`——渲染与命中读的是同一个入口。
-  const operandCurves = usable.map((operand) => composeCurveFromOutline([operand.pieces]))
+  /*
+   * 操作数的内外判定读 `isPointInsideComposeCurve`——渲染与命中读的是同一个入口。
+   *
+   * 自带曲线优先：带岛的操作数是两条子路径加 `evenodd`，而片段摊平之后收成「一条环」会把岛
+   * 算成实心，内外判定就反了。缺席时退回由片段收环，那两种做法对单环形状给出同一个答案。
+   */
+  const operandCurves = usable.map(
+    (operand) => operand.curve ?? composeCurveFromOutline([operand.pieces]),
+  )
   const clearance = clearances(graph)
   const kept = new Map<HalfEdgeId, boolean>()
   const keepsCell = (half: HalfEdgeId): boolean => {
