@@ -252,6 +252,9 @@ export function composeArcBoundsPoints(arc: ComposeArcShape): readonly ComposePl
  */
 const MAX_SAGITTA = 0.25
 
+/** 弧转三次贝塞尔时每段最多走多少度；见 {@link composeArcToCubicShapes}。 */
+const MAX_CUBIC_ARC_DEGREES = 90
+
 /**
  * 把圆弧拍扁成线段。
  *
@@ -277,6 +280,58 @@ export function flattenComposeArc(arc: ComposeArcShape): readonly ComposeSegment
     previous = point
   }
   return segments
+}
+
+/**
+ * 弧的三次贝塞尔近似；每段最多走 90°。
+ *
+ * @remarks
+ * 经典闭式解：控制点沿两端切线各伸出 `(4/3)·tan(Δ/4)·r`。每 90° 一段时最大径向误差约半径的
+ * `2.7e-4`（半径 500px 上 0.14px），肉眼与命中都读不出来。
+ *
+ * 段数上限取 90° 而不是更粗：再粗一档误差按四次方涨，180° 一段就到半径的 4e-3。
+ *
+ * 它与 {@link flattenComposeArc} 回答的是两个问题——那边要**线段**（框选与非等比展开），
+ * 这边要**曲率**（落进 `path` 的几何）。共用一个会让其中一方拿到错的东西。
+ *
+ * @public
+ */
+export function composeArcToCubicShapes(arc: ComposeArcShape): readonly ComposeCubicShape[] {
+  /*
+   * 段数按 90° 上取整，但要先减掉一个相对小量：直角圆角的扫掠角经 `atan2` 会落成
+   * `90.000000000000014`，裸 `ceil` 因此把它切成两段，而多出来的那一段起终点几乎重合——
+   * 在 `path` 上就是一段零长度的贝塞尔，顶点模式里多出一个拖起来什么都不改变的控制手柄。
+   * 真正 90.0001° 的弧不受影响：它的商减掉小量之后仍然大于 1。
+   */
+  const count = Math.max(1, Math.ceil(Math.abs(arc.sweep) / MAX_CUBIC_ARC_DEGREES - 1e-9))
+  const step = arc.sweep / count
+  const shapes: ComposeCubicShape[] = []
+  for (let i = 0; i < count; i += 1) {
+    const from = (arc.startAngle + step * i) * TO_RADIANS
+    const to = (arc.startAngle + step * (i + 1)) * TO_RADIANS
+    const handle = ((4 / 3) * Math.tan((to - from) / 4)) * arc.radius
+    const a = { x: Math.cos(from), y: Math.sin(from) }
+    const b = { x: Math.cos(to), y: Math.sin(to) }
+    shapes.push({
+      start: {
+        x: arc.center.x + arc.radius * a.x,
+        y: arc.center.y + arc.radius * a.y,
+      },
+      c1: {
+        x: arc.center.x + arc.radius * a.x - handle * a.y,
+        y: arc.center.y + arc.radius * a.y + handle * a.x,
+      },
+      c2: {
+        x: arc.center.x + arc.radius * b.x + handle * b.y,
+        y: arc.center.y + arc.radius * b.y - handle * b.x,
+      },
+      end: {
+        x: arc.center.x + arc.radius * b.x,
+        y: arc.center.y + arc.radius * b.y,
+      },
+    })
+  }
+  return shapes
 }
 
 /**

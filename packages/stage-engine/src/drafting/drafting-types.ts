@@ -154,6 +154,14 @@ export interface StageDraftingEffect {
   readonly translate?: StageDraftingTranslation
   /** 本步要复制并平移的既有 Entity。 */
   readonly duplicate?: StageDraftingTranslation
+  /**
+   * 本步要做的布尔运算。
+   *
+   * @remarks
+   * 与 `mirror` / `align` / `trim` 同形：命令只说「对这些对象做这一条运算」，产物长什么样、
+   * 落在谁的位置上由规划那一步解算——引擎不建 Entity、不认识 Preset id。
+   */
+  readonly boolean?: StageDraftingBoolean
   /** 本步要删除的 Entity。 */
   readonly removed?: readonly string[]
   /**
@@ -335,6 +343,11 @@ export interface StageDraftingMessages {
   readonly moveTitle: string
   readonly copyTitle: string
   readonly eraseTitle: string
+  readonly flattenTitle: string
+  readonly unionTitle: string
+  readonly subtractTitle: string
+  readonly intersectTitle: string
+  readonly excludeTitle: string
   readonly trimTitle: string
   /** `TRIM` 的提示：选择要修剪的一截，或按住拖过多条。 */
   readonly selectTrimTarget: string
@@ -354,6 +367,29 @@ export interface StageDraftingMessages {
   readonly vertexTitle: string
   readonly specifyNewLocation: string
   readonly expectedSingleObject: string
+}
+
+/**
+ * 一次布尔运算是哪一条。
+ *
+ * @remarks
+ * 拍平与其余四条的差别是**根本的**：它不求交、不做任何区域判定，因此没有退化情形、也没有
+ * 「结果为空」这一支。放在同一个联合里是因为它们共用同一条状态机、同一条规划与同一格工具栏。
+ *
+ * @public
+ */
+export type StageBooleanOperation =
+  | 'union'
+  | 'subtract'
+  | 'intersect'
+  | 'exclude'
+  | 'flatten'
+
+/** 一次布尔运算：对哪几个对象做哪一条。 @public */
+export interface StageDraftingBoolean {
+  readonly operation: StageBooleanOperation
+  /** 选中的 Entity；层序由规划那一步按文档的绘制次序排，会话不管。 */
+  readonly ids: readonly string[]
 }
 
 /**
@@ -381,14 +417,6 @@ export interface StageDraftingContext {
    */
   readonly isGeometryEditable?: (entityId: string) => boolean
   /**
-   * `POLYGON` 这一次的起始边数；缺省取 `COMPOSE_POLYGON_DEFAULT_SIDES`。
-   *
-   * @remarks
-   * 由宿主持有而不由命令自己记：命令定义只是一份描述，`start` 每次产出独立会话，没有跨会话
-   * 存放东西的地方。宿主把它记在**本次编辑会话**里——不写文档、不持久化，因为它是「上次怎么
-   * 画的」而不是「画了什么」。
-   */
-  /**
    * `HATCH` 这一次的填充色。
    *
    * @remarks
@@ -398,6 +426,14 @@ export interface StageDraftingContext {
   readonly hatchColor?: string
   /** `HATCH` 的 `C` 关键字换色时回调，宿主据此更新下一次的起始值。 */
   readonly onHatchColorChange?: (color: string) => void
+  /**
+   * `POLYGON` 这一次的起始边数；缺省取 `COMPOSE_POLYGON_DEFAULT_SIDES`。
+   *
+   * @remarks
+   * 由宿主持有而不由命令自己记：命令定义只是一份描述，`start` 每次产出独立会话，没有跨会话
+   * 存放东西的地方。宿主把它记在**本次编辑会话**里——不写文档、不持久化，因为它是「上次怎么
+   * 画的」而不是「画了什么」。
+   */
   readonly polygonSides?: number
   /**
    * `POLYGON` 改变边数时回调，宿主据此更新下一次的起始值。

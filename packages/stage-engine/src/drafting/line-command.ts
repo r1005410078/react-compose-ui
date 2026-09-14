@@ -10,6 +10,7 @@ import type { ComposeCurve } from '@compose-ui/core'
 import { createStageCopyCommand, createStageMoveCommand } from './move-copy-command'
 import { createStageEraseCommand } from './erase-command'
 import { createStageTrimCommand } from './trim-command'
+import { createStageBooleanCommands } from './boolean-commands'
 import { createStageHatchCommand } from './hatch-command'
 import { createStageVertexCommand } from './vertex-command'
 import { createStageAlignmentCommand, createStageMirrorCommand } from './mirror-command'
@@ -475,6 +476,7 @@ export function createStageDraftingCommands(
     createStageEraseCommand(messages),
     createStageTrimCommand(messages),
     createStageHatchCommand(messages),
+    ...createStageBooleanCommands(messages),
     createStageVertexCommand(messages),
     createStageMirrorCommand(messages),
     /*

@@ -1406,6 +1406,13 @@
   stroke-width: 1.7;
 }
 
+/* 菜单里的一条分组线；不是按钮，因此方向键导航跨得过去。 */
+.compose-editor__toolbar-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--compose-border);
+}
+
 .compose-editor__toolbar-menu kbd {
   margin-left: auto;
   min-width: 16px;

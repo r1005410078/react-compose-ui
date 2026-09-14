@@ -367,3 +367,101 @@ describe('OpenSpec: editor-workspace-layout / 工具栏图标可以带一个运�
     await waitFor(() => expect(globalThis.document.activeElement).toBe(trigger))
   })
 })
+
+/*
+ * 布尔运算的 split button：按钮面固定是并集，其余四条在 `▾` 里。
+ *
+ * 它只在**绘图**那条货架上（页面那条在 1280 默认窗口下余量不到半格），但这些用例渲染的是
+ * 完整目录，因此够得着——货架裁剪是另一条用例的事。
+ */
+describe('OpenSpec: editor-workspace-layout / 布尔运算的 split button', () => {
+  afterEach(cleanup)
+
+  function openBooleanMenu() {
+    const trigger = globalThis.document.querySelector<HTMLButtonElement>(
+      '[data-toolbar-item="UNION"] .compose-editor__toolbar-menu-trigger',
+    )!
+    fireEvent.click(trigger)
+    return trigger
+  }
+
+  it('按钮面直接启动并集，不用先开菜单', () => {
+    // 「记住上次用的那个」被否掉了：一个只有认得图标的人才读得出来的按钮面不算把值印出来。
+    const { startCommand } = renderToolbar()
+    fireEvent.click(screen.getByRole('button', { name: '并集' }))
+    expect(startCommand).toHaveBeenCalledWith('UNION')
+  })
+
+  it('`▾` 里是五条，点哪条就启动哪条', () => {
+    const { startCommand } = renderToolbar()
+    openBooleanMenu()
+    const items = screen.getByRole('menu', { name: '布尔运算' }).querySelectorAll('[role="menuitem"]')
+    expect([...items].map((item) => item.getAttribute('data-command-id')))
+      .toEqual(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE', 'FLATTEN'])
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /差集/ }))
+    expect(startCommand).toHaveBeenCalledWith('SUBTRACT')
+  })
+
+  it('拍平之前有一条分隔线：前四条改轮廓，它不改', () => {
+    renderToolbar()
+    openBooleanMenu()
+    const menu = screen.getByRole('menu', { name: '布尔运算' })
+    const separators = menu.querySelectorAll('[role="separator"]')
+    expect(separators).toHaveLength(1)
+    // 断「它在拍平之前」而不只是「有一条」——放错位置的分隔线说的是另一种分组。
+    const next = separators[0]!.nextElementSibling
+    expect(next?.getAttribute('data-command-id')).toBe('FLATTEN')
+  })
+
+  it('每一项印着命令 id，敲进命令行就是这个词', () => {
+    /*
+     * 印的是 id 而不是别名或键位：那两样住在 stage-engine 与 stage 里，这里够不着，抄一份
+     * 就会漂——与绘图命令按钮把提示写成命令名是同一条。
+     */
+    renderToolbar()
+    openBooleanMenu()
+    const item = screen.getByRole('menuitem', { name: /拍平/ })
+    expect(item.querySelector('kbd')?.textContent).toBe('FLATTEN')
+  })
+
+  it('方向键跨得过分隔线，Escape 关菜单并把焦点还给触发器', async () => {
+    /*
+     * 分隔线不是 `button`，而菜单导航按 `button:not(:disabled)` 取项，因此它天然跨得过去。
+     * 这一条钉的正是这件事：把分隔线做成一个按钮会让方向键停在一个按下去什么都不发生的地方。
+     */
+    renderToolbar()
+    const trigger = globalThis.document.querySelector<HTMLButtonElement>(
+      '[data-toolbar-item="UNION"] .compose-editor__toolbar-menu-trigger',
+    )!
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowUp' })
+    const menu = await screen.findByRole('menu', { name: '布尔运算' })
+    // `ArrowUp` 从末项起手，也就是分隔线之后那一条。
+    await waitFor(() => expect(globalThis.document.activeElement)
+      .toBe(screen.getByRole('menuitem', { name: /拍平/ })))
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    await waitFor(() => expect(globalThis.document.activeElement)
+      .toBe(screen.getByRole('menuitem', { name: /并集/ })))
+
+    fireEvent.keyDown(menu, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu', { name: '布尔运算' })).toBeNull())
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(trigger))
+  })
+
+  it('按下态读上报的当前命令 id，而这一格就是并集——别的运算在跑时它不亮', () => {
+    /*
+     * 按下态读 Stage 上报的当前命令 id 而不是工具栏自己记「刚点了哪个」：命令会被 `Escape`、
+     * 被并发文档变化、被另一条命令取代而结束。
+     *
+     * 亮的判据是**并集自己在不在跑**，不是「五条里任一条在跑」——这一格（以及它收进「更多」
+     * 之后那一行）的 `activate` 就是并集，写成后者会让同一格在栏上与在菜单里给出两个答案。
+     */
+    renderToolbar('select', 'UNION')
+    expect(screen.getByRole('button', { name: '并集' })).toHaveAttribute('aria-pressed', 'true')
+    cleanup()
+    renderToolbar('select', 'SUBTRACT')
+    expect(screen.getByRole('button', { name: '并集' })).toHaveAttribute('aria-pressed', 'false')
+  })
+})

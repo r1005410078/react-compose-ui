@@ -59,12 +59,15 @@ import {
   wireTapsFor,
 } from './drafting-entity'
 import { planStageHatch, stageHatchPreviewRings } from './hatch-plan'
+import { planStageBoolean, planStageFlatten } from './boolean-plan'
 import { isStageJunctionEntity, isStageWireEntity } from './wire-tap'
 import {
   resolveStageHatchRegion,
   resolveStageTrailTargets,
   resolveStageTrimPiece,
   type StageTrimPiece,
+  type StageBooleanOperation,
+  type StageBooleanRejection,
   type StageHatchRejection,
   type StageTrimRejection,
 } from '@compose-ui/stage-engine'
@@ -110,6 +113,10 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly hatchRecolorLabel: (name: string) => string
   /** 填充被拒绝时的说明；三种原因三句，互不相同。 */
   readonly hatchRejection: (reason: StageHatchRejection) => string
+  /** 布尔运算的历史标签；每条运算一个词。 */
+  readonly booleanLabel: (operation: StageBooleanOperation) => (name: string) => string
+  /** 布尔运算被拒绝时的说明；每种原因一句，互不相同。 */
+  readonly booleanRejection: (reason: StageBooleanRejection, entityName?: string) => string
   /** 悬停在「会改某个既有对象」那一支上时命令行说的话。 */
   readonly hatchWillFill: (name: string) => string
   /** 悬停在「会改一块已有填充的颜色」那一支上时命令行说的话。 */
@@ -687,6 +694,45 @@ export function useStageDrafting(options: StageDraftingOptions) {
         if (plan.branch === 'create') recordCreated(command)
         current.dispatch(command)
       })
+      if (plan.notice) notice = plan.notice
+    }
+
+    /*
+     * 布尔运算：解算在引擎、规划在宿主，与填充同一条边界。两支由**操作数有几个**决定——
+     * 一个就原地改它的几何（id、动画轨道与导线绑定全部保留），多个才合并成一个新对象。
+     */
+    if (effect.boolean) {
+      const planContext = {
+        document: current.document,
+        layoutSnapshot: current.layoutSnapshot,
+        index: current.index,
+        registry: current.registry,
+        idFactory: current.idFactory,
+        activeFrameId: current.activeFrameId,
+      }
+      const planOptions = {
+        label: current.messages.booleanLabel(effect.boolean.operation),
+        rejection: current.messages.booleanRejection,
+      }
+      const plan = effect.boolean.operation === 'flatten'
+        ? planStageFlatten(planContext, effect.boolean.ids, planOptions)
+        : planStageBoolean(planContext, effect.boolean.ids, effect.boolean.operation, planOptions)
+      let committed = plan.commands.length > 0
+      plan.commands.forEach((command) => {
+        if (plan.branch === 'create') recordCreated(command)
+        if (current.dispatch(command).status !== 'committed') committed = false
+      })
+      /*
+       * 选区挪到**产物**上，与编组把选区挪到新建的那个 Group 上是同一条：一次**消费选区**、
+       * 产出一个对象的操作，做完之后用户手上握着的应当是结果。不挪的话操作数被删掉、用户自己
+       * 建立的那份选区跟着被静默清空，他读到的是「我按了一下，东西没了」。
+       *
+       * 这与「画完一条线不自动选中」不冲突：那一档用户本来就没有选区，而这一档有。
+       *
+       * 与编组一样**先看事务提没提交**：被拒绝的命令不改变文档，此时把选区挪到一个根本没建
+       * 出来的 id 上，画布上会一个东西都不选中。
+       */
+      if (committed && plan.resultId) current.onSelectedIdsChange([plan.resultId])
       if (plan.notice) notice = plan.notice
     }
 

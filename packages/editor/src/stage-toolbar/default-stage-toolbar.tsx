@@ -98,6 +98,25 @@ type DefaultStageToolbarProps = {
 const POLAR_INCREMENTS = [90, 45, 30, 22.5, 18, 15, 10, 5] as const
 
 /**
+ * 五条布尔运算，按菜单里的顺序。
+ *
+ * @remarks
+ * 前四条改变轮廓、拍平不改变轮廓，菜单里靠一条 `role="separator"` 分开——那是这组里唯一需要
+ * 表达的分组。每一项右侧印**命令 id**（别名与键位在别的包里，抄过来就会漂）。
+ *
+ * 货架上只占**一格**：按钮面固定是并集，其余四条在 `▾` 里。不做「记住上次用的那个」——
+ * 仓库对看不见的状态的既有判据是「那个值有没有被印出来」，而一个只有认得图标的人才读得出来
+ * 的按钮面不算印出来。代价写在明处：第二常用的差集要多点一下 `▾`。
+ */
+const BOOLEAN_COMMANDS = [
+  ['UNION', 'union', 'union'],
+  ['SUBTRACT', 'subtract', 'subtract'],
+  ['INTERSECT', 'intersect', 'intersect'],
+  ['EXCLUDE', 'exclude', 'exclude'],
+  ['FLATTEN', 'flatten', 'flatten'],
+] as const
+
+/**
  * 工具栏上的绘图命令：命令 id、文案键与图标名。
  *
  * @remarks
@@ -330,6 +349,17 @@ export function DefaultStageToolbar({
     setOpen: setPolarMenuOpen,
     triggerRef: polarMenuTriggerRef,
   } = useToolbarMenu('compose-editor-polar-menu')
+  const {
+    close: closeBooleanMenu,
+    focusFirstItem: focusFirstBooleanItem,
+    id: booleanMenuId,
+    menuRef: booleanMenuRef,
+    onMenuKeyDown: onBooleanMenuKeyDown,
+    onTriggerKeyDown: onBooleanTriggerKeyDown,
+    open: booleanMenuOpen,
+    setOpen: setBooleanMenuOpen,
+    triggerRef: booleanMenuTriggerRef,
+  } = useToolbarMenu('compose-editor-boolean-menu')
   const {
     close: closeHatchMenu,
     focusFirstItem: focusFirstHatchItem,
@@ -741,6 +771,95 @@ export function DefaultStageToolbar({
           </button>
         ),
       })),
+    },
+    {
+      key: 'boolean',
+      items: [
+        {
+          key: 'UNION',
+          label: messages.union,
+          icon: <StageToolbarIcon name="union" />,
+          /*
+           * 这一格**就是并集**（收进「更多」之后那一行的 `activate` 也是并集），因此按下态读的
+           * 是并集自己在不在跑。写成「五条里任一条在跑」会让同一格在栏上与在「更多」里给出两个
+           * 不同的答案，而那两处画的本来是同一颗按钮。
+           */
+          pressed: activeCommandId === 'UNION',
+          activate: () => startCommand('UNION'),
+          render: () => (
+            <div className="compose-editor__toolbar-menu-anchor" data-toolbar-item="UNION">
+              <button
+                {...titled('UNION', messages.union, 'UNION')}
+                aria-pressed={activeCommandId === 'UNION'}
+                data-command-id="UNION"
+                type="button"
+                onClick={() => startCommand('UNION')}
+              >
+                <StageToolbarIcon name="union" />
+              </button>
+              <button
+                {...titled('boolean-operations', messages.booleanOperations)}
+                aria-controls={booleanMenuId}
+                aria-expanded={booleanMenuOpen}
+                aria-haspopup="menu"
+                className="compose-editor__toolbar-menu-trigger"
+                ref={booleanMenuTriggerRef}
+                type="button"
+                onClick={() => {
+                  setBooleanMenuOpen((open) => !open)
+                  focusFirstBooleanItem()
+                }}
+                onKeyDown={onBooleanTriggerKeyDown}
+              >
+                <StageToolbarIcon name="chevron-down" />
+              </button>
+              {booleanMenuOpen ? (
+                <div
+                  aria-label={messages.booleanOperations}
+                  className="compose-editor__toolbar-menu"
+                  id={booleanMenuId}
+                  ref={booleanMenuRef}
+                  role="menu"
+                  onKeyDown={onBooleanMenuKeyDown}
+                >
+                  {BOOLEAN_COMMANDS.map(([commandId, label, icon]) => (
+                    <Fragment key={commandId}>
+                      {/*
+                        * 分隔线只有一条，落在拍平之前：前四条改变轮廓、拍平不改变轮廓，
+                        * 那是这一组里唯一需要表达的分组。它是 `role="separator"` 而不是按钮，
+                        * 因此菜单的方向键导航（按 `button:not(:disabled)` 取项）跨得过去。
+                        */}
+                      {commandId === 'FLATTEN'
+                        ? <div className="compose-editor__toolbar-menu-separator" role="separator" />
+                        : null}
+                      <button
+                        data-command-id={commandId}
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          startCommand(commandId)
+                          closeBooleanMenu()
+                        }}
+                      >
+                        <StageToolbarIcon name={icon} />
+                        {messages[label]}
+                        {/*
+                          * 右侧印的是**命令 id**，不是别名、也不是键位：别名住在 stage-engine
+                          * 的命令定义上、键位住在 stage 的键位表上，这里两处都够不着，抄一份
+                          * 就会漂——与绘图命令按钮把提示写成命令名是同一条。而 id 就在
+                          * `BOOLEAN_COMMANDS` 里、也正是 `startCommand` 派发的那一个，因此
+                          * 印出来的词与按下去跑的那条命令读的是同一份事实，敲进命令行也真能用。
+                          */}
+                        <kbd>{commandId}</kbd>
+                      </button>
+                    </Fragment>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ),
+        },
+      ],
     },
     {
       key: 'hatch',

@@ -67,6 +67,12 @@ async function dragTo(
   to: Locator,
   edge: 'center' | 'before' | 'end' = 'center',
 ) {
+  /*
+   * 先滚进视区再量：来源那一列会随目录变长而出现滚动条，量到的盒子被裁掉时按下的位置落在
+   * 别的行上，拖出来的结果与用例写的完全无关——症状是「拖了，货架上什么都没多」。
+   */
+  await from.scrollIntoViewIfNeeded()
+  await to.scrollIntoViewIfNeeded()
   const source = (await from.boundingBox())!
   const target = (await to.boundingBox())!
   await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)

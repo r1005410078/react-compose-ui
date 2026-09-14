@@ -193,6 +193,13 @@ export type {
   ComposeNavigateAction,
   ComposeNavigateBackAction,
 } from './interaction'
+export { flattenComposeCurves, resolveComposeCurveBoolean } from './curve-boolean'
+export type {
+  ComposeBooleanOp,
+  ComposeBooleanOperand,
+  ComposeCurveBooleanResult,
+} from './curve-boolean'
+export { composeCurveFromOutline } from './curve-arrangement'
 export { composeCurveInnerAnchor, resolveComposeCurveRegion } from './curve-region'
 export { resolveComposeHatches } from './hatch-solve'
 export type { ComposeResolvedHatches } from './hatch-solve'
@@ -278,6 +285,7 @@ export {
   composeArcPointAt,
   composeArcQuadrants,
   composeArcThroughPoints,
+  composeArcToCubicShapes,
   composeArcTravelledDegrees,
   intersectComposeArcs,
   intersectComposeSegmentArc,
