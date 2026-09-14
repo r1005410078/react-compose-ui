@@ -100,6 +100,15 @@ export {
   type StageSceneIndex,
 } from './hit-testing'
 
+/** 视口裁剪：量化窗口与可见集；只供渲染使用，不参与任何命中或几何查询。 */
+export {
+  resolveStageCullingExemptIds,
+  resolveStageCullingWindow,
+  resolveStageVisibleEntityIds,
+  type StageCullingExemptions,
+  type StageCullingWindow,
+} from './culling'
+
 /** 手势的预览几何与提交规划。 */
 export {
   planStageAlignment,

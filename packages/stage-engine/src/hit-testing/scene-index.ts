@@ -18,6 +18,7 @@ import {
   getEntityWorldBounds,
   getEntityWorldMatrix,
   invertMatrix,
+  unionRects,
   type StageGuide,
   type StageMatrix,
   type StagePoint,
@@ -43,6 +44,19 @@ export interface StageSceneIndex {
   getWorldMatrix(entityId: string): StageMatrix | null
   /** 查询 Entity 世界轴对齐边界；缺失 Entity 返回 null。 */
   getWorldBounds(entityId: string): StageRect | null
+  /**
+   * 查询 Entity **子树**的世界轴对齐边界：自身盒与全部后代盒的并集；缺失 Entity 返回 null。
+   *
+   * @remarks
+   * 与 {@link StageSceneIndex.getWorldBounds} 的差别是这一个回答「这棵子树可能画在哪一片
+   * 区域里」。子级是绝对定位的，容器不裁剪时子级完全可以画在父盒之外，因此凡是要按「这棵
+   * 子树还用不用得着」做判断的调用方，读的必须是这一个——按自身盒判断会让「父在屏外、子在
+   * 屏内」的整棵子树被一起判掉。
+   *
+   * 带 `Clip` 的容器是例外，而且是对调用方有利的例外：它的后代画不到自己盒外，因此它的子树
+   * 包围盒**就是**自身盒。这不是近似，是 `Clip` 的定义。
+   */
+  getSubtreeWorldBounds(entityId: string): StageRect | null
   /** 查询 Entity 及全部祖先共同决定的有效可见性。 */
   isVisible(entityId: string): boolean
   /** 移除其祖先也在输入集合中的后代选择。 */
@@ -155,6 +169,26 @@ export function createStageSceneIndex(
   }
   document.rootIds.forEach((entityId) => visit(entityId, null, true))
 
+  /*
+   * 子树包围盒：`order` 是前序遍历，因此**逆序走一遍**即可保证每个 Entity 在轮到它的父级
+   * 之前已经累加完毕，整体 O(n)，与 `bounds` / `parents` 共用同一次构建。
+   *
+   * 带 `Clip` 的父级不接受子级的累加——它的后代画不到它的盒外，子树包围盒就是它自己的盒。
+   */
+  const subtreeBounds = new Map<string, StageRect>(bounds)
+  for (let i = order.length - 1; i >= 0; i -= 1) {
+    const entityId = order[i]
+    const parentId = entityId === undefined ? null : parents.get(entityId) ?? null
+    if (entityId === undefined || parentId === null) continue
+    const parent = document.entities[parentId]
+    if (parent && getComposeClip(parent)?.enabled) continue
+    const own = subtreeBounds.get(entityId)
+    const parentRect = subtreeBounds.get(parentId)
+    if (!own || !parentRect) continue
+    const merged = unionRects([parentRect, own])
+    if (merged) subtreeBounds.set(parentId, merged)
+  }
+
   const index: StageSceneIndex = {
     document,
     layoutSnapshot,
@@ -162,6 +196,7 @@ export function createStageSceneIndex(
     getParentId: (entityId) => parents.get(entityId) ?? null,
     getWorldMatrix: (entityId) => matrices.get(entityId) ?? null,
     getWorldBounds: (entityId) => bounds.get(entityId) ?? null,
+    getSubtreeWorldBounds: (entityId) => subtreeBounds.get(entityId) ?? null,
     isVisible: (entityId) => visibility.get(entityId) ?? false,
     topLevelSelection(entityIds) {
       const selected = new Set(entityIds)
