@@ -8,6 +8,8 @@ import {
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
 import {
+  resolveStageGroupExit,
+  getEntityParentId,
   createStageDeleteEntitiesCommand,
   createDuplicateCommand,
   createGroupCommand,
@@ -244,6 +246,23 @@ export function useStageKeyboardCommands(
       return
     }
     if (event.key === 'Escape') {
+      /*
+       * 空闲时的 Escape 退出分组：选区是某个 Group 的后代就回到那一层（选中那个 Group），与
+       * Figma 相同；再按一次没有更外层的 Group 就什么都不做。手势进行中仍然只中止手势——
+       * 拖到一半按 Esc 说的是「别动了」，不是「出去」。
+       */
+      if (controller.getSnapshot().phase === 'idle') {
+        const parentGroup = resolveStageGroupExit({
+          document,
+          getParentId: (entityId) => getEntityParentId(document, entityId),
+          selectedIds: normalizedSelection,
+        })
+        if (parentGroup !== null) {
+          onSelectedIdsChange([parentGroup])
+          event.preventDefault()
+          return
+        }
+      }
       cancelGesture()
       return
     }

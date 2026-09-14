@@ -283,6 +283,7 @@ export {
   collectStageWireEnds,
   findStageFeaturePoint,
   resolveStageClickSelection,
+  resolveStageGroupExit,
   resolveStageGroupHit,
   resolveStageMarqueeCombine,
 } from './hit-testing'
