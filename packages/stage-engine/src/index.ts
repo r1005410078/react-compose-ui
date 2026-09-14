@@ -104,9 +104,11 @@ export {
 export {
   resolveStageCullingExemptIds,
   resolveStageCullingWindow,
+  resolveStageDetailCulledIds,
   resolveStageVisibleEntityIds,
   type StageCullingExemptions,
   type StageCullingWindow,
+  type StageLegibleSize,
 } from './culling'
 
 /** 手势的预览几何与提交规划。 */

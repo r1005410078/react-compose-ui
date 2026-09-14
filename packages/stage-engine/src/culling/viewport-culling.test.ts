@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { rectContains, type StageRect, type StageViewport } from '../geometry'
 import { createStageSceneIndex } from '../hit-testing'
 import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
-import { resolveStageCullingWindow, resolveStageVisibleEntityIds } from './viewport-culling'
+import {
+  resolveStageCullingWindow,
+  resolveStageDetailCulledIds,
+  resolveStageVisibleEntityIds,
+} from './viewport-culling'
 
 const SURFACE = { width: 800, height: 600 }
 
@@ -162,5 +166,70 @@ describe('Stage 视口裁剪', () => {
       { width: 0, height: 0 },
     )
     expect(resolveStageVisibleEntityIds(index, cullingWindow).has('a')).toBe(true)
+  })
+})
+
+describe('Stage 细节裁剪', () => {
+  const stepAt = (zoom: number) => resolveStageCullingWindow({ x: 0, y: 0, zoom }, SURFACE).zoomStep
+  const textLike = { height: 5 }
+  const curveLike = { width: 1, height: 1 }
+
+  it('OpenSpec: 场景只渲染与裁剪窗口相交的子树 / 读不出来的文字不建节点', () => {
+    // 一行字的盒 100×15：整张图可见的那一档（缩放 0.1）盒高 1.5 像素，工作档（缩放 1）15 像素。
+    const index = indexFor(document([entity('label', { width: 100, height: 15 })], ['label']))
+    const legible = () => textLike
+    expect(resolveStageDetailCulledIds(index, stepAt(0.1), legible).has('label')).toBe(true)
+    expect(resolveStageDetailCulledIds(index, stepAt(1), legible).has('label')).toBe(false)
+  })
+
+  it('OpenSpec: 场景只渲染与裁剪窗口相交的子树 / 只声明高度时宽度不参与', () => {
+    // 又宽又矮：只看高度的声明把它裁掉；两轴都声明的（曲线那种）因为宽度轴不低于阈值而照画。
+    const index = indexFor(document([entity('wide', { width: 400, height: 2 })], ['wide']))
+    expect(resolveStageDetailCulledIds(index, stepAt(1), () => textLike).has('wide')).toBe(true)
+    expect(resolveStageDetailCulledIds(index, stepAt(1), () => curveLike).has('wide')).toBe(false)
+  })
+
+  it('OpenSpec: 场景只渲染与裁剪窗口相交的子树 / 长细线不因细节被裁、整个落进一像素的才裁', () => {
+    const line = entity('line', { width: 300, height: 0.5 })
+    const dot = entity('dot', { width: 0.6, height: 0.6 })
+    const index = indexFor(document([line, dot], ['line', 'dot']))
+    const culled = resolveStageDetailCulledIds(index, stepAt(1), () => curveLike)
+    expect(culled.has('line')).toBe(false)
+    expect(culled.has('dot')).toBe(true)
+  })
+
+  it('OpenSpec: 场景只渲染与裁剪窗口相交的子树 / 没有声明的 Renderer 永不因细节被裁', () => {
+    const index = indexFor(document([entity('tiny', { width: 1, height: 1 })], ['tiny']))
+    expect(resolveStageDetailCulledIds(index, stepAt(0.001), () => null).size).toBe(0)
+    expect(resolveStageDetailCulledIds(index, stepAt(0.001), () => ({})).size).toBe(0)
+  })
+
+  it('OpenSpec: 场景只渲染与裁剪窗口相交的子树 / 容器不因细节被裁', () => {
+    // 容器的盒是后代的容器，它自己不画字也不画线；判定只看叶子。
+    const child = entity('child', { width: 100, height: 15 })
+    const box = entity('box', { width: 1, height: 1, childIds: ['child'], clip: false })
+    const index = indexFor(document([box, child], ['box']))
+    const culled = resolveStageDetailCulledIds(index, stepAt(0.1), () => textLike)
+    expect(culled.has('box')).toBe(false)
+    expect(culled.has('child')).toBe(true)
+  })
+
+  it('OpenSpec: 裁剪窗口是量化的 / 档内任意缩放下判定与档位一致', () => {
+    /*
+     * 判定按档位下界：一个 Entity 在这一档被判可读，档内任何缩放下都可读。断的是「同一档位
+     * 给出同一个答案」——判定若读真实缩放，档内缩放会在阈值附近来回翻，与窗口那条量化约束
+     * 相悖。盒高 40：缩放 0.125 附近正好横跨阈值。
+     */
+    const index = indexFor(document([entity('label', { width: 100, height: 40 })], ['label']))
+    const byStep = new Map<number, boolean>()
+    for (let zoom = 0.08; zoom <= 0.2; zoom += 0.001) {
+      const step = stepAt(zoom)
+      const culled = resolveStageDetailCulledIds(index, step, () => textLike).has('label')
+      const known = byStep.get(step)
+      if (known !== undefined) expect(culled).toBe(known)
+      byStep.set(step, culled)
+    }
+    // 夹具的判别性：这段缩放里确实既有裁的档位也有不裁的档位。
+    expect(new Set(byStep.values()).size).toBe(2)
   })
 })

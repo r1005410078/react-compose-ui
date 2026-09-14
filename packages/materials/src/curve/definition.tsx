@@ -165,6 +165,12 @@ export function createCurveMaterial(
         'markerEnd',
       ],
       inspector: createCurveRendererInspector(idFactory),
+      /*
+       * 整个形状落进一个像素之内的曲线在编辑画布上不建节点：描边不随缩放变细，它画出来只是
+       * 一个位置被量化过的点。两轴都要低于阈值才裁——一条 0.5×300 的导线高度轴不到一像素，
+       * 宽度轴远不止，照画。一份真实接线图缩到整张图可见时有近两千条这样的小圆与短线。
+       */
+      minimumLegibleSize: { width: 1, height: 1 },
     },
     presets: [
       curvePreset(

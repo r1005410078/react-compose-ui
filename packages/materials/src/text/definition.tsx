@@ -108,6 +108,13 @@ export function createTextMaterial(
       ],
       inspector: createTextRendererInspector(idFactory),
       measurement: TEXT_RENDERER_MEASUREMENT,
+      /*
+       * 盒高不到 5 像素的文字在编辑画布上不建节点：一行 12px 字的盒高是 15，5px 盒高约合
+       * 4px 字号，那已经是一片灰色的绒而不是字。只声明高度——宽度随字数变，说明不了可读性；
+       * 多行文字的盒更高，因此更晚被裁，宁可多画。一份真实接线图缩到整张图可见时，一千八百
+       * 个文字的字号不到两个像素，而每个节点每帧都在向 Blink 的合成层划分付账。
+       */
+      minimumLegibleSize: { height: 5 },
     },
     preset: {
       id: 'text',
