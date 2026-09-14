@@ -153,7 +153,14 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
     }
     document.fonts.addEventListener('loadingdone', onChange)
     document.fonts.addEventListener('loadingerror', onChange)
-    void document.fonts.ready.then(onChange)
+    /*
+     * `fonts.ready` 只在**订阅那一刻字体还在加载**时才有话要说。字体早已就绪时它也会兑现，
+     * 而那次兑现不改变任何度量——却仍然会让这个文字失效一次。一份真实图纸上有一千九百个
+     * 文字，各自订阅、各自兑现，就是一千九百次没有内容的失效；它们连成一串微任务，每一次
+     * 都把布局重解一趟，打开图纸时整页冻住十秒。加载中的那一档仍由它兜底：`loadingdone`
+     * 在订阅之前就已经派发过的话，事件监听器收不到，只有这个 Promise 还知道结果。
+     */
+    if (document.fonts.status === 'loading') void document.fonts.ready.then(onChange)
     return () => {
       active = false
       document.fonts.removeEventListener('loadingdone', onChange)

@@ -254,6 +254,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   }>()
 
   private readonly measuredEntityIds = new Set<string>()
+  /** 挂起的合并重解；`solve()` 与 `dispose()` 用换掉它的方式作废那一次，见 `invalidateMeasurements`。 */
+  private pendingRecalculation: object | undefined
   private readonly measurementDiagnostics = new Map<
     string,
     ComposeLayoutMeasurementDiagnostic
@@ -621,6 +623,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
 
   private solve() {
     if (!this.yoga || !this.root || !this.config || this.disposed) return
+    // 整趟求解本来就会重解，挂起的那一次合并重解不必再跑。
+    this.pendingRecalculation = undefined
     try {
       const yoga = this.yoga
       const extent = this.rootExtent()
@@ -681,6 +685,20 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     return { width, height }
   }
 
+  /**
+   * 测量失效是**逐条**到达、**合并**重解。
+   *
+   * @remarks
+   * 失效的来源天生成批：字体加载完成时每一个文字的测量器各自报一次失效，一份真实图纸上
+   * 就是一千九百次；页面脚本一次导出变化也会让绑定它的每个 Entity 各报一次。每一次都当场
+   * 重解的话，重解次数等于文字数——实测打开一份 5381 实体的 DXF 时，一千九百趟重解连成一个
+   * 11 秒的长任务，整页冻住，而场景在 1.4 秒时就已经进了 DOM。
+   *
+   * 因此这里只做**同步**的记账（作废缓存、标脏节点），重解推迟到微任务里做一次。推迟到
+   * 微任务而不是下一帧：同一次事件分发或同一批 Promise 回调里的失效都落在同一个微任务
+   * 检查点之前，而微任务仍然赶在这一帧绘制之前，用户看不到中间态。`solve()` 自己会重解，
+   * 因此它会作废挂起的那一次。
+   */
   private invalidateMeasurements(entityIds?: readonly string[]) {
     if (!this.yoga || this.disposed) return
     const targets = entityIds ?? [...this.measuredEntityIds]
@@ -694,7 +712,14 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       node.markDirty()
       dirty = true
     })
-    if (dirty) this.calculateAndPublish()
+    if (!dirty || this.pendingRecalculation) return
+    const token = {}
+    this.pendingRecalculation = token
+    queueMicrotask(() => {
+      if (this.pendingRecalculation !== token) return
+      this.pendingRecalculation = undefined
+      this.calculateAndPublish()
+    })
   }
 
   /**

@@ -19,6 +19,7 @@ import {
   assembleDxfDocument,
   planDxfImport,
   type DxfDiagnostic,
+  type DxfEntitySeed,
   type DxfInstancePlan,
 } from '@compose-ui/dxf'
 
@@ -81,10 +82,20 @@ function placeInstance(entity: ComposeEntity, plan: DxfInstancePlan): ComposeEnt
 export async function importDxfAsPage(
   input: ImportDxfAsPageInput,
 ): Promise<ImportDxfAsPageResult> {
+  /*
+   * seed 按 Preset 记住：计划层只读它、只展开它（`{ ...seed.components }`），从不就地改写，
+   * 因此同一个 Preset 的每个 Entity 共用一份是安全的。不记的话一份 5381 实体的图纸要过
+   * 5381 次 Preset 校验，实测占打开时间的四分之一强。
+   */
+  const seeds = new Map<string, DxfEntitySeed | null>()
   const plan = planDxfImport(input.text, {
     createSeed: (presetId: string) => {
+      const cached = seeds.get(presetId)
+      if (cached !== undefined) return cached
       const created = input.registry.createSeed(presetId)
-      return created.ok ? created.seed : null
+      const seed = created.ok ? created.seed : null
+      seeds.set(presetId, seed)
+      return seed
     },
     idFactory: input.idFactory,
     sceneName: input.name,

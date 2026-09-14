@@ -419,6 +419,107 @@ describe('Yoga Compose layout runtime', () => {
     runtime.dispose()
   })
 
+  it('OpenSpec: layout-engine / 增量重解性能 / 同一批到达的测量失效只重解一次', async () => {
+    const container = entity('container', {
+      ...fixedItem(0, 0, 300, 200),
+      width: { mode: 'hug', value: 300, min: null, max: null },
+      height: { mode: 'hug', value: 200, min: null, max: null },
+    }, ['first', 'second', 'third'])
+    const hugItem = {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      width: { mode: 'hug' as const, value: 50, min: null, max: null },
+      height: { mode: 'hug' as const, value: 20, min: null, max: null },
+    }
+    const calls = new Map<string, number>()
+    let width = 40
+    let invalidate: ((entityIds?: readonly string[]) => void) | undefined
+    const port: ComposeLayoutMeasurementPort = {
+      revision: 0,
+      measure: ({ entity }) => {
+        calls.set(entity.id, (calls.get(entity.id) ?? 0) + 1)
+        return { width, height: 20 }
+      },
+      subscribe: (listener) => {
+        invalidate = listener
+        return () => undefined
+      },
+    }
+    const runtime = createComposeLayoutRuntime({
+      document: documentFixture({
+        container,
+        first: entity('first', hugItem),
+        second: entity('second', hugItem),
+        third: entity('third', hugItem),
+      }),
+      measurementPort: port,
+    })
+    const initial = await waitForReady(runtime)
+    let publishes = 0
+    runtime.subscribe(() => { publishes += 1 })
+
+    /*
+     * 判别性的那一半是**三次失效各自到达**：字体加载完成时每个文字的测量器各报一次，一份
+     * 真实图纸上就是一千九百次；逐次重解的实现在这里会发布三次，而合并的只发布一次。
+     */
+    width = 80
+    invalidate?.(['first'])
+    invalidate?.(['second'])
+    invalidate?.(['third'])
+    // 失效那一刻还没有重解：合并发生在微任务里。
+    expect(publishes).toBe(0)
+    const next = await waitForReady(runtime, initial.snapshot.revision)
+    expect(publishes).toBe(1)
+    expect(next.snapshot.revision).toBe(initial.snapshot.revision + 1)
+    // 三个都重新量过、都拿到新宽度——合并的是重解，不是失效。
+    expect(next.snapshot.boxes.first?.width).toBe(84)
+    expect(next.snapshot.boxes.second?.width).toBe(84)
+    expect(next.snapshot.boxes.third?.width).toBe(84)
+    expect(calls.get('first')).toBe(2)
+    runtime.dispose()
+  })
+
+  it('OpenSpec: layout-engine / 增量重解性能 / 整趟求解作废挂起的合并重解', async () => {
+    const container = entity('container', {
+      ...fixedItem(0, 0, 300, 200),
+      width: { mode: 'hug', value: 300, min: null, max: null },
+      height: { mode: 'hug', value: 200, min: null, max: null },
+    }, ['first'])
+    const hugItem = {
+      ...fixedItem(0, 0, 50, 20, 'flow'),
+      width: { mode: 'hug' as const, value: 50, min: null, max: null },
+      height: { mode: 'hug' as const, value: 20, min: null, max: null },
+    }
+    let invalidate: ((entityIds?: readonly string[]) => void) | undefined
+    const port: ComposeLayoutMeasurementPort = {
+      revision: 0,
+      measure: () => ({ width: 40, height: 20 }),
+      subscribe: (listener) => {
+        invalidate = listener
+        return () => undefined
+      },
+    }
+    const first = entity('first', hugItem)
+    const runtime = createComposeLayoutRuntime({
+      document: documentFixture({ container, first }),
+      measurementPort: port,
+    })
+    const initial = await waitForReady(runtime)
+    let publishes = 0
+    runtime.subscribe(() => { publishes += 1 })
+    invalidate?.(['first'])
+    // 同步跟上一次文档更新：它自己会整趟求解并发布，挂起的那一次不该再发布第二遍。
+    runtime.updateDocument(documentFixture({
+      container,
+      first: entity('first', { ...hugItem, offset: { x: 20, y: 0 } }),
+    }))
+    const next = await waitForReady(runtime, initial.snapshot.revision)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(publishes).toBe(1)
+    expect(next.snapshot.revision).toBe(initial.snapshot.revision + 1)
+    runtime.dispose()
+  })
+
   it('OpenSpec: layout-engine / 增量重解性能 / 单节点变更不重写全树样式', async () => {
     const hugItem = {
       ...fixedItem(0, 0, 50, 20, 'flow'),
