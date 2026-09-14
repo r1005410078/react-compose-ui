@@ -843,7 +843,11 @@ export function ComposeAssetBrowser({
                   void source.loadFolder(entry.id)
                   if (!expandedIds.includes(entry.id)) setExpandedIds([...expandedIds, entry.id])
                 } else {
-                  onAssetOpen?.(entry)
+                  onAssetOpen?.(entry, {
+                    refresh: (target) => {
+                      refreshFolders([target ?? entry.parentId ?? provider?.root.id ?? ''])
+                    },
+                  })
                 }
               }}
               onExpandedChange={(ids) => {
@@ -976,7 +980,11 @@ export function ComposeAssetBrowser({
                         requestSelection([entry.id])
                         if (!expandedIds.includes(entry.id)) setExpandedIds([...expandedIds, entry.id])
                       } else {
-                        onAssetOpen?.(entry)
+                        onAssetOpen?.(entry, {
+                    refresh: (target) => {
+                      refreshFolders([target ?? entry.parentId ?? provider?.root.id ?? ''])
+                    },
+                  })
                       }
                     }}
                     onDragStart={(event) => startNativeDrag(event, entry)}

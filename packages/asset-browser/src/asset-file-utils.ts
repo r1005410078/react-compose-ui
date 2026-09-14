@@ -19,8 +19,20 @@ export function extensionOf(name: string) {
   return position < 0 ? '' : name.slice(position + 1).toLowerCase()
 }
 
+/**
+ * 这个条目能不能**被浏览器当作图片画出来**。
+ *
+ * @remarks
+ * 判据是白名单而不是 `image/` 前缀：CAD 的注册媒体类型正好落在这个前缀下
+ * （`image/vnd.dwg`、`image/vnd.dxf`），而浏览器一个都解不了。按前缀判断会让预览走进
+ * `<img>` 分支并给出一个**空白框**，比下面那条「暂不支持预览」的兜底糟得多——空白框没有
+ * 任何东西解释发生了什么，用户读到的是「这个文件坏了」。
+ *
+ * 缺少媒体类型时按扩展名，那份清单本来就是白名单。
+ */
 export function isImageAsset(entry: ComposeAssetEntry) {
-  return entry.mediaType?.startsWith('image/') === true || imageExtensions.has(extensionOf(entry.name))
+  if (entry.mediaType) return canvasImageMediaTypes.has(entry.mediaType.toLowerCase())
+  return imageExtensions.has(extensionOf(entry.name))
 }
 
 export function canvasImageMediaType(entry: ComposeAssetEntry) {

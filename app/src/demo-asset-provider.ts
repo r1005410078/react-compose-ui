@@ -25,6 +25,14 @@ import type {
 interface MemoryAsset {
   entry: ComposeAssetEntry
   content?: Blob
+  /**
+   * 首次读取时才取内容。
+   *
+   * @remarks
+   * 真实图纸有一两兆，内联进模块会让每一次构建与每一条端到端用例都背着它。取回来之后写进
+   * `content` 缓存，因此只付一次。
+   */
+  load?: () => Promise<Blob>
 }
 
 interface DemoPageSeed {
@@ -322,6 +330,16 @@ const demoSvgText = [
   '</svg>',
 ].join('')
 
+/**
+ * 一份**永不被读取**的 DWG 占位内容。
+ *
+ * @remarks
+ * `.dwg` 上的菜单项只按文件名判断，从不打开文件——DWG 导不进来，那一项给的是「先转成 DXF」
+ * 的说明。真造一份合法的 DWG 只会让人以为它已经能解析了。`AC1032` 是 AutoCAD 2018 的版本
+ * 标识，留着是为了让人一眼看出这是什么格式的占位。
+ */
+const demoDwgPlaceholder = 'AC1032'
+
 const demoDxfText = [
   '0', 'SECTION', '2', 'TABLES',
   '0', 'TABLE', '2', 'LAYER',
@@ -458,6 +476,35 @@ export function createDemoAssetProvider(options: {
         assetKey: 'demo-topology-dxf',
       },
       content: new Blob([demoDxfText], { type: 'image/vnd.dxf' }),
+    }],
+    ['demo-ems-dxf', {
+      entry: {
+        id: 'demo-ems-dxf',
+        parentId: root.id,
+        name: 'EMS.dxf',
+        kind: 'file',
+        mediaType: 'image/vnd.dxf',
+        size: 1371730,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-ems-dxf',
+      },
+      // 一份真实的现场图纸（AC1024、五千多个实体、四个块）。它是导入器唯一的真实世界夹具：
+      // 手写的小夹具覆盖不到的东西——`$` 开头的匿名块名、`TRACE`/`HATCH`/`MTEXT` 的密度、
+      // 几千个实体的量级——全都只在这种文件上才出现。
+      load: async () => (await fetch('ems.dxf')).blob(),
+    }],
+    ['demo-feeder-dwg', {
+      entry: {
+        id: 'demo-feeder-dwg',
+        parentId: root.id,
+        name: 'Feeder.dwg',
+        kind: 'file',
+        mediaType: 'image/vnd.dwg',
+        size: demoDwgPlaceholder.length,
+        revision: revision(revisionNumber),
+        assetKey: 'demo-feeder-dwg',
+      },
+      content: new Blob([demoDwgPlaceholder], { type: 'image/vnd.dwg' }),
     }],
     ['demo-disconnector-svg', {
       entry: {
@@ -665,6 +712,7 @@ export function createDemoAssetProvider(options: {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
       assertOnline()
       const asset = requireEntry(fileId)
+      if (!asset.content && asset.load) asset.content = await asset.load()
       if (!asset.content) throw new ComposeAssetError('unsupported', 'Cannot read a folder')
       return {
         blob: asset.content,

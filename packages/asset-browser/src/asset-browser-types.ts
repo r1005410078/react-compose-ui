@@ -89,6 +89,20 @@ export interface ComposeAssetContextMenuContext {
 }
 
 /**
+ * 双击或键盘激活一个文件时交给宿主的上下文。
+ *
+ * @public
+ */
+export interface ComposeAssetOpenContext {
+  /**
+   * 请求重新列举目录，使宿主写入后的条目立即可见。
+   *
+   * @param parentId - 省略时刷新被打开条目所在的目录。
+   */
+  readonly refresh: (parentId?: string | null) => void
+}
+
+/**
  * 宿主追加的上下文菜单项。
  *
  * @remarks
@@ -209,8 +223,14 @@ export interface ComposeAssetBrowserProps
   readonly onProviderChange?: (provider: ComposeAssetProvider) => void
   /** 完成资源写操作后供宿主审计。 */
   readonly onOperation?: (event: ComposeAssetOperationEvent) => void
-  /** 文件双击或键盘激活时发出；选择文件本身不会读取其内容。 */
-  readonly onAssetOpen?: (entry: ComposeAssetEntry) => void
+  /**
+   * 文件双击或键盘激活时发出；选择文件本身不会读取其内容。
+   *
+   * @remarks
+   * 带上 `refresh` 是因为「打开」对某些格式就是一次**导入**（DXF 双击即产出页面与组件
+   * 文件），而写完之后目录必须重新列举才看得见。与 {@link onDrop} 拿到的是同一件东西。
+   */
+  readonly onAssetOpen?: (entry: ComposeAssetEntry, context: ComposeAssetOpenContext) => void
   /** rename、move 或 delete 前由宿主接受或拒绝整个资源批次。 */
   readonly onBeforeAssetMutation?: (
     mutation: ComposeAssetMutation,

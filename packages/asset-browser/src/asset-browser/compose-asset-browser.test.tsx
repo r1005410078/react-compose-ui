@@ -281,7 +281,10 @@ describe('ComposeAssetBrowser', () => {
     const readsBeforeOpen = readMock.mock.calls.length
     fireEvent.doubleClick(card)
     expect(onAssetOpen).toHaveBeenCalledTimes(1)
-    expect(onAssetOpen).toHaveBeenCalledWith(logo)
+    // 「打开」对某些格式就是一次导入（DXF 双击即产出页面），因此宿主拿得到刷新入口。
+    expect(onAssetOpen).toHaveBeenCalledWith(logo, expect.objectContaining({
+      refresh: expect.any(Function),
+    }))
     expect(readMock).toHaveBeenCalledTimes(readsBeforeOpen)
   })
 
@@ -292,7 +295,10 @@ describe('ComposeAssetBrowser', () => {
     const treeLogo = await findAssetTreeRow(/logo.svg/)
     fireEvent.keyDown(treeLogo, { key: 'Enter' })
     expect(onAssetOpen).toHaveBeenCalledTimes(1)
-    expect(onAssetOpen).toHaveBeenCalledWith(logo)
+    // 「打开」对某些格式就是一次导入（DXF 双击即产出页面），因此宿主拿得到刷新入口。
+    expect(onAssetOpen).toHaveBeenCalledWith(logo, expect.objectContaining({
+      refresh: expect.any(Function),
+    }))
 
     const grid = await screen.findByRole('grid', { name: 'Assets' })
     fireEvent.doubleClick(within(grid).getByRole('gridcell', { name: /Images/ }))

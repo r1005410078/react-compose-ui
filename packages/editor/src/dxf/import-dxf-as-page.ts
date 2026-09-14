@@ -9,10 +9,12 @@ import {
   type ComposePosition,
   type JsonObject,
 } from '@compose-ui/core'
+import type { ComposeAssetProvider } from '@compose-ui/assets'
 import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposeComponentStore } from '@compose-ui/component-library'
 import { createComposeComponentInstanceEntity } from '@compose-ui/component-library'
 import type { ComposePageDescriptor, ComposePageStore } from '@compose-ui/pages'
+import { uniqueComposeAssetFileName } from '../asset-naming'
 import {
   assembleDxfDocument,
   planDxfImport,
@@ -33,6 +35,8 @@ export interface ImportDxfAsPageInput {
   /** 页面与场景的名称，通常取 `.dxf` 的文件名。 */
   readonly name: string
   readonly parentId: string | null
+  /** 用于列举目标目录，给落盘的文件名去重。 */
+  readonly provider: ComposeAssetProvider
   readonly registry: ComposeEntityRegistry
   readonly componentStore: ComposeComponentStore
   readonly pageStore: ComposePageStore
@@ -88,6 +92,17 @@ export async function importDxfAsPage(
 
   const instances: Record<string, ComposeEntity> = {}
   const assets = new Map<string, { asset: ComposeBaseComponentAsset; assetKey: string; revision: string }>()
+  /*
+   * 落盘的文件名必须在目标目录里去重。**块名天生会撞**：`CCSYM00200102` 这类名字来自标准
+   * 符号库，同一家设计院出的两张图带着同名的块；再导一次同一张图更是必撞。不去重的症状是
+   * 抛 `Asset "…" already exists`，而用户没做错任何事。
+   *
+   * 目录只列举一次，本次导入自己写下的名字随写随记——`createComponent` 之后再列一遍会把
+   * 一次导入变成 N 次往返，而那份清单在下一次写入之前就已经过期。
+   */
+  const taken = new Set((await input.provider.list({
+    folderId: input.parentId ?? input.provider.root.id,
+  })).map((entry) => entry.name))
   for (const component of plan.components) {
     const asset: ComposeBaseComponentAsset = {
       schemaVersion: COMPOSE_COMPONENT_SCHEMA_VERSION,
@@ -96,9 +111,14 @@ export async function importDxfAsPage(
       name: component.blockName,
       document: component.document,
     }
+    const fileName = uniqueComposeAssetFileName(
+      composeComponentFileName,
+      component.blockName,
+      taken,
+    )
     const snapshot = await input.componentStore.createComponent({
       parentId: input.parentId,
-      fileName: composeComponentFileName(component.blockName),
+      fileName,
       asset,
     })
     assets.set(component.blockName, {
@@ -136,7 +156,7 @@ export async function importDxfAsPage(
 
   const page = await input.pageStore.createPage({
     parentId: input.parentId,
-    fileName: composePageFileName(input.name),
+    fileName: uniqueComposeAssetFileName(composePageFileName, input.name, taken),
     page: {
       ...createEmptyComposePageFile(),
       document,

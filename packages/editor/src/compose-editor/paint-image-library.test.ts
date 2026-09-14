@@ -1,7 +1,7 @@
+import { uniqueProviderAssetName } from '../asset-naming'
 import { describe, expect, it } from 'vitest'
 import {
   isProviderImageEntry,
-  uniqueProviderAssetName,
 } from './paint-image-library'
 
 describe('OpenSpec: redesign-color-image-picker / Editor 图片资源自动适配', () => {

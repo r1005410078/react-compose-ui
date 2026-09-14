@@ -6,6 +6,7 @@ import type {
   ComposeAssetEntry,
   ComposeAssetProvider,
 } from '@compose-ui/assets'
+import { uniqueProviderAssetName } from '../asset-naming'
 import {
   useCallback,
   useEffect,
@@ -15,6 +16,26 @@ import {
 } from 'react'
 
 const IMAGE_EXTENSION = /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)$/i
+/**
+ * 浏览器真能画出来的图片媒体类型。
+ *
+ * @remarks
+ * 判据是白名单而不是 `image/` 前缀：CAD 的注册媒体类型正好落在这个前缀下
+ * （`image/vnd.dwg`、`image/vnd.dxf`），按前缀判断会把一张接线图列进背景图片库——那是一个
+ * 点了必然失败的选项。`asset-browser` 的 `isImageAsset` 是同一条判断的另一份；两处都按
+ * 前缀判断过，因此这一条改动必须两处一起。
+ */
+const RENDERABLE_IMAGE_MEDIA_TYPES = new Set([
+  'image/svg+xml',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'image/bmp',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+])
 const PREVIEW_CONCURRENCY = 4
 
 type ImageLibraryState = {
@@ -33,25 +54,8 @@ function isAbortError(error: unknown) {
 /** 只把可识别且带稳定引用键的文件纳入图片扫描。 @internal */
 export function isProviderImageEntry(entry: ComposeAssetEntry) {
   if (entry.kind !== 'file' || !entry.assetKey) return false
-  if (entry.mediaType) return entry.mediaType.startsWith('image/')
+  if (entry.mediaType) return RENDERABLE_IMAGE_MEDIA_TYPES.has(entry.mediaType.toLowerCase())
   return IMAGE_EXTENSION.test(entry.name)
-}
-
-/** 为同目录重复上传生成最小可用数字后缀。 @internal */
-export function uniqueProviderAssetName(
-  requestedName: string,
-  existingNames: readonly string[],
-) {
-  const normalized = requestedName.trim() || 'image'
-  const occupied = new Set(existingNames)
-  if (!occupied.has(normalized)) return normalized
-  const extensionIndex = normalized.lastIndexOf('.')
-  const hasExtension = extensionIndex > 0
-  const base = hasExtension ? normalized.slice(0, extensionIndex) : normalized
-  const extension = hasExtension ? normalized.slice(extensionIndex) : ''
-  let suffix = 2
-  while (occupied.has(`${base}-${suffix}${extension}`)) suffix += 1
-  return `${base}-${suffix}${extension}`
 }
 
 async function listProviderImages(
@@ -101,7 +105,7 @@ async function resolveProviderImages(
         })
         throwIfAborted(signal)
         const mediaType = resolved.mediaType || resolved.blob.type
-        if (!mediaType.startsWith('image/')) continue
+        if (!RENDERABLE_IMAGE_MEDIA_TYPES.has(mediaType.toLowerCase())) continue
         const previewUrl = URL.createObjectURL(resolved.blob)
         objectUrls.push(previewUrl)
         options[index] = {
