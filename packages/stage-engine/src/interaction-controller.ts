@@ -831,6 +831,37 @@ function paintHandlesFor(
   ]
 }
 
+
+/**
+ * 文档内容的世界包围盒，按场景索引记忆。
+ *
+ * @remarks
+ * 它只随索引变（索引由文档与布局快照建出来），而 `publish` 每帧都要它来算滚动范围——平移的
+ * 每一帧都是一次 `publish`。逐帧对全部可见实体做 `unionRects`，一份五千实体的图纸上每帧近
+ * 1ms，还每帧分配几千个矩形喂给 GC；工作档平移里偶发的 15ms major GC 就是这类账攒出来的。
+ */
+const documentContentBoundsCache = new WeakMap<StageSceneIndex, StageRect | null>()
+
+function documentContentBounds(
+  index: StageSceneIndex,
+  rootIds: readonly string[],
+): StageRect | null {
+  const cached = documentContentBoundsCache.get(index)
+  if (cached !== undefined) return cached
+  const content = unionRects([
+    // v7 没有文档级输出：滚动范围以全部根 Frame 的世界边界为内容基线。
+    ...rootIds
+      .map((frameId) => index.getWorldBounds(frameId))
+      .filter((rect): rect is StageRect => rect !== null),
+    ...index.order
+      .filter((id) => index.isVisible(id))
+      .map((id) => index.getWorldBounds(id))
+      .filter((rect): rect is StageRect => rect !== null),
+  ])
+  documentContentBoundsCache.set(index, content)
+  return content
+}
+
 function previewSelectionBounds(
   index: StageSceneIndex,
   ids: readonly string[],
@@ -934,15 +965,9 @@ export function createStageInteractionController(): StageInteractionController {
         width: context.surfaceSize.width / context.viewport.zoom,
         height: context.surfaceSize.height / context.viewport.zoom,
       }
+      const documentContent = documentContentBounds(index, context.document.rootIds)
       const content = unionRects([
-        // v7 没有文档级输出：滚动范围以全部根 Frame 的世界边界为内容基线。
-        ...context.document.rootIds
-          .map((frameId) => index!.getWorldBounds(frameId))
-          .filter((rect): rect is StageRect => rect !== null),
-        ...index.order
-          .filter((id) => index!.isVisible(id))
-          .map((id) => index!.getWorldBounds(id))
-          .filter((rect): rect is StageRect => rect !== null),
+        ...(documentContent ? [documentContent] : []),
         ...(selected ? [selected] : []),
       ])
       scrollRange = expandScrollRange(scrollRange, content, visible)
