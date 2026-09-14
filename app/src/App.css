@@ -61,8 +61,17 @@
   opacity: 0.45;
 }
 
-button,
-input {
+/*
+ * 只作用于示例应用自己的控件，理由与下面那条颜色规则逐字相同：它此前是一条**没有分层**的裸
+ * `button, input` 规则，而无层的规则压过任何有层的规则——编辑器包在 `@layer components` 里给
+ * 菜单项定的 12px 因此从来没生效过，工具栏布尔菜单的标签一直是 16px。放进 `@layer base` 也
+ * 不行：编辑器包不带 `base` 层块，层序按首次出现定，`base` 反而排到 `components` 之后。
+ * 编辑器的控件由它自己那条零权重的继承规则接管。
+ */
+.stage-demo__preview-button,
+.stage-demo__action-button,
+.stage-demo__failure-controls button,
+.stage-demo__failure-controls input {
   font: inherit;
 }
 

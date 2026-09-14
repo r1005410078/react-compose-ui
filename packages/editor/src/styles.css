@@ -35,6 +35,18 @@
   --compose-workspace-card-radius: 8px;
 }
 
+/*
+ * 编辑器自己的控件字体继承，不依赖宿主的 `button { font: inherit }` 重置。
+ *
+ * 用 `:where()` 把权重压到只剩元素选择器那一级（0,0,1）：它必须输给本文件里任何一条按类名给
+ * 控件定字号的规则（`.compose-editor__shelf-search { font-size: 12px }` 是 0,1,0），否则那些
+ * 规则会被这条继承整个盖掉。它只补「没人给字号」的那一档。宿主若带无层的同名重置，压过的也
+ * 只是这一条——两者写的都是继承，结果相同。
+ */
+:where(.compose-editor) :is(button, input, select, textarea) {
+  font: inherit;
+}
+
 .compose-editor[data-compose-theme='light'] {
   /* 浅色底上反过来：比静息灰更**深**的一档蓝，明度差的方向随主题翻转。 */
   --compose-toolbar-switch-on: #1257b0;
@@ -1376,11 +1388,18 @@
 }
 
 .compose-editor__toolbar-menu button {
-  @apply ct:flex ct:h-8 ct:w-full ct:items-center ct:gap-2 ct:rounded-md ct:px-2 ct:text-left ct:text-xs;
+  @apply ct:flex ct:h-8 ct:w-full ct:items-center ct:gap-2 ct:rounded-md ct:px-2 ct:text-left;
   border: 0;
   background: transparent;
   color: var(--compose-text-subtle);
+  font-size: 12px;
   font-weight: 500;
+  /*
+   * 菜单是绝对定位、挂在只有一格宽的锚点里，浏览器按「最小内容宽度」收缩它，而中文标签的
+   * 最小内容宽度是一个字——「差集」会被折成两行、右侧的命令 id 挤到标签上。整行不折，宽度
+   * 才由最长的那一项撑开。
+   */
+  white-space: nowrap;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
