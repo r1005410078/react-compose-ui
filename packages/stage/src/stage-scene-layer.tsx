@@ -182,7 +182,22 @@ function bucketChildren(
  * 队列住在场景层而不是宿主：住宿主时每一批都让整个 Stage（覆盖层、标尺、命令行……）重渲染
  * 一遍，与这一批改没改 DOM 无关。
  */
-const CULLING_BATCH_SIZE = 40
+const CULLING_BATCH_SIZE = 16
+/**
+ * 一条带子最多摊几帧；队列长过 `帧数 × 批`，每帧就按队列的这一份摊。
+ *
+ * @remarks
+ * 批小是为了让每一帧都便宜——挂 16 个的样式重算与布局约 2ms，挂 40 个 4–9ms，而平移时用户
+ * 感到的「卡一下」正是这几帧与稳态之间的落差。但批小了带子就长：外扩带只有四分之一屏，快速
+ * 平移十几帧就穿过它，一条五百个的带子按 16 一批要三十帧，节点会在建好之前进入可视区。
+ * 两头都要，因此批按队列长度自适应：短队列按最小批，长队列保证在这几帧内摊完。
+ */
+const CULLING_BATCH_FRAMES = 8
+
+/** 这一帧该消化多少：短队列按最小批，长队列按「几帧内摊完」摊。 */
+function cullingBatchSize(queued: number) {
+  return Math.max(CULLING_BATCH_SIZE, Math.ceil(queued / CULLING_BATCH_FRAMES))
+}
 
 /** 没有裁剪、没有排队时都返回同一个引用；identity 稳定才不会让记忆化与 effect 每帧空转。 */
 const NO_CULLED_IDS: ReadonlySet<string> = new Set<string>()
@@ -367,15 +382,18 @@ export function StageSceneLayer({
   useEffect(() => {
     if (!draining) return
     const frame = requestAnimationFrame(() => {
-      setReveal((current) => ({
-        ...current,
-        pendingCull: current.pendingCull.length <= CULLING_BATCH_SIZE
-          ? NO_PENDING
-          : current.pendingCull.slice(CULLING_BATCH_SIZE),
-        pendingReveal: current.pendingReveal.length <= CULLING_BATCH_SIZE
-          ? NO_PENDING
-          : current.pendingReveal.slice(CULLING_BATCH_SIZE),
-      }))
+      setReveal((current) => {
+        const batch = cullingBatchSize(current.pendingCull.length + current.pendingReveal.length)
+        return {
+          ...current,
+          pendingCull: current.pendingCull.length <= batch
+            ? NO_PENDING
+            : current.pendingCull.slice(batch),
+          pendingReveal: current.pendingReveal.length <= batch
+            ? NO_PENDING
+            : current.pendingReveal.slice(batch),
+        }
+      })
     })
     return () => cancelAnimationFrame(frame)
   }, [draining, queues])

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { ComposeDocument, ComposeLayoutSnapshot } from '@compose-ui/core'
 import {
   createEntityClipboard,
@@ -84,11 +84,11 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
   }
 
   /** 右键命中了选区之外的对象时只操作它，否则操作整个选区。 */
-  const sourceIds = (explicitId?: string | null) => (
+  const sourceIds = useCallback((explicitId?: string | null) => (
     explicitId && !normalizedSelection.includes(explicitId)
       ? [explicitId]
       : normalizedSelection
-  )
+  ), [normalizedSelection])
 
   const executeClipboard = (action: StageClipboardAction, targetId?: string | null) => {
     if (onShortcutAction?.(action)) return
@@ -121,7 +121,12 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
     }
   }
 
-  const availabilityFor = (targetId: string | null): StageClipboardAvailability => {
+  /*
+   * 可用性只随文档、选区与剪贴板变，而它被 Stage 每次渲染都问一遍——平移的每一帧都是一次
+   * 渲染。判「能不能复制」要真的把剪贴板载荷装一遍（走整份文档），两项就是两遍；一份五千
+   * 实体的图纸上每帧近 1ms，还留下一堆等着回收的垃圾。因此引用稳定，调用方按输入记忆化。
+   */
+  const availabilityFor = useCallback((targetId: string | null): StageClipboardAvailability => {
     const ids = sourceIds(targetId)
     const insertion = resolveSuggestedEntityInsertion(document, targetId, activeFrameId)
     return {
@@ -139,7 +144,7 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
             )
       )),
     }
-  }
+  }, [activeFrameId, clipboard, document, layoutSnapshot, sourceIds])
 
   return { clipboard, executeClipboard, availabilityFor }
 }

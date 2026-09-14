@@ -1253,7 +1253,11 @@ function ComposeStageReady({
     onSelectedIdsChange,
     onShortcutAction,
   })
-  const clipboardAvailability = availabilityFor(contextNodeId)
+  // 只在文档、选区、剪贴板或右键目标变了才重算；平移的每一帧都不该为右键菜单付账。
+  const clipboardAvailability = useMemo(
+    () => availabilityFor(contextNodeId),
+    [availabilityFor, contextNodeId],
+  )
 
   // 必须排在 executeClipboard 与 cancelGesture 之后：键盘级联把它们当依赖接收，而不是
   // 靠闭包在渲染函数里就近取用。
