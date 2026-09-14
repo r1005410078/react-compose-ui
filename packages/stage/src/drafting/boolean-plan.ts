@@ -33,6 +33,7 @@ import {
 } from '@compose-ui/stage-engine'
 import type { ComposeBooleanOp } from '@compose-ui/core'
 import { lowestSiblingIndex, type StageDraftingCommitContext } from './drafting-entity'
+import { planStageHatchDetach } from './hatch-plan'
 import { batchStageCommands } from './wire-tap'
 
 /** 产物走通用曲线 Preset。 */
@@ -97,20 +98,35 @@ function planInPlace(
     resolution.curve,
     operand.entityId,
   )
+  const geometry: EditorCommand = {
+    id: context.idFactory(),
+    type: BUILTIN_COMMAND_TYPES.setCurve,
+    payload: {
+      entityId: operand.entityId,
+      curve: local as unknown as JsonValue,
+    },
+    meta: {
+      label: options.label(operand.name),
+      source: 'stage',
+      targetIds: [operand.entityId],
+    },
+  }
+  /*
+   * 操作数是一块填充时**顺带断开关联**：填充的几何是派生的——布局求解每一趟都按边界清单重求，
+   * 几何与重求结果不同、清单又一致，就把多段线写回去。只写 path 不删 `Hatch`，拍平在屏幕上
+   * 什么都没发生：那条 path 活不过下一帧。拍平的全部意图是「顶点换成控制手柄、由作者接管
+   * 形状」，与「跟着边界走」不可能同时成立，因此它就是 Inspector 上那颗「断开关联」——几何与
+   * 填充色一个字节不动，只删 `Hatch`。两条命令进同一个事务：撤销一步两样一起回去。
+   */
+  const detach = planStageHatchDetach(context, operand.entityId, options.label, 'stage')
+  const batched = detach && batchStageCommands(
+    context.idFactory,
+    [geometry, detach],
+    options.label(operand.name),
+    { label: options.label(operand.name), source: 'stage', targetIds: [operand.entityId] },
+  )
   return {
-    commands: [{
-      id: context.idFactory(),
-      type: BUILTIN_COMMAND_TYPES.setCurve,
-      payload: {
-        entityId: operand.entityId,
-        curve: local as unknown as JsonValue,
-      },
-      meta: {
-        label: options.label(operand.name),
-        source: 'stage',
-        targetIds: [operand.entityId],
-      },
-    }],
+    commands: detach ? (batched ? [batched] : [geometry, detach]) : [geometry],
     notice: null,
     branch: 'in-place',
     resultId: operand.entityId,

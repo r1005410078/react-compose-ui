@@ -273,6 +273,7 @@ export function planStageHatchRegeneration(
  * MUST NOT 做成「跟不跟随」的布尔开关——那会造出一块看不见的状态，两块长得一样的填充一块跟
  * 一块不跟，而屏幕上没有任何东西解释为什么。
  *
+ * @param source - 这一步由谁发起；Inspector 上那颗按钮是 `inspector`，拍平顺带断开的是 `stage`。
  * @returns 这个 Entity 上本来就没有 `Hatch` 时返回 `null`。
  * @internal
  */
@@ -280,6 +281,7 @@ export function planStageHatchDetach(
   context: StageDraftingCommitContext,
   entityId: string,
   label: (name: string) => string,
+  source: 'inspector' | 'stage' = 'inspector',
 ): EditorCommand | null {
   const entity = context.document.entities[entityId]
   if (!entity || !getComposeHatch(entity)) return null
@@ -287,7 +289,7 @@ export function planStageHatchDetach(
     id: context.idFactory(),
     type: BUILTIN_COMMAND_TYPES.removeComponent,
     payload: { entityId, key: COMPOSE_BUILTIN_COMPONENT_KEYS.hatch },
-    meta: { label: label(entity.name), source: 'inspector', targetIds: [entityId] },
+    meta: { label: label(entity.name), source, targetIds: [entityId] },
   }
 }
 

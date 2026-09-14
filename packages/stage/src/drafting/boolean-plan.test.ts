@@ -5,6 +5,7 @@ import {
   applyDocumentPatches,
   createBuiltinCommandHandlers,
   getComposeCurve,
+  getComposeHatch,
   normalizeComposeCurveGeometry,
   type ComposeDocument,
   type ComposeEntity,
@@ -219,6 +220,40 @@ describe('OpenSpec: stage / 布尔运算的落地规划', () => {
     // 两个操作数都没了。
     expect(after.entities.bottom).toBeUndefined()
     expect(after.entities.top).toBeUndefined()
+  })
+
+  it('拍平一块填充时在同一事务里删掉 Hatch，否则跟随求解下一趟就把 path 写回多段线', () => {
+    /*
+     * 判别性夹具：一块带 `Hatch`（有锚点、有边界清单）的填充。少了 `Hatch` 这条用例在旧代码上
+     * 也绿——旧代码只写几何，而几何本来就会变成 path；它挡的是**下一趟布局求解**：跟随求解
+     * 发现几何与按边界重求出来的不同、清单却一致，于是把多段线写回去，拍平在屏幕上什么都
+     * 没发生。
+     */
+    const boundary = curveEntity('b', '外框', rect(0, 0, 100, 60))
+    const filled = curveEntity('h', '填充', rect(0, 0, 100, 60))
+    const before = scene([
+      {
+        ...filled,
+        components: {
+          ...filled.components,
+          [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 50, y: 30 }, boundaryIds: ['b'] },
+        },
+      } as ComposeEntity,
+      boundary,
+    ])
+    const plan = planStageFlatten(context(before), ['h'], OPTIONS)
+    expect(plan.branch).toBe('in-place')
+    // 一个事务：几何与「不再跟随」是同一次编辑，撤销一步两样一起回去。
+    expect(plan.commands).toHaveLength(1)
+    expect(plan.commands[0]!.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+
+    const after = run(before, plan.commands)
+    expect(getComposeCurve(after.entities.h!)?.kind).toBe('path')
+    expect(getComposeHatch(after.entities.h!)).toBeUndefined()
+    // 填充色留着：断开的是「跟着边界走」，不是这块墨。
+    expect(after.entities.h!.components.Appearance).toEqual({
+      backgroundPaint: { kind: 'solid', color: '#2f3b4d' },
+    })
   })
 
   it('被拒绝时一条命令都不发，并带上原因与对象名', () => {
