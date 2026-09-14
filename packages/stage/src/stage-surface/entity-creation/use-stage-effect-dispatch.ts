@@ -34,6 +34,7 @@ import {
   type StagePoint,
   type StageRect,
   type StageViewport,
+  type StageInteractionHit,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageDispatch,
@@ -112,7 +113,7 @@ export interface StageEffectDispatchParams {
   /** 绘制完成后回灌给内核的「本次创建了谁」。 */
   readonly onDrawn: (drawn: StageDrawnEntity) => void
   /** 绘图命令取到一个世界坐标；只在绘图模式下由取点插件产生。 */
-  readonly onDraftingPoint?: (point: StagePoint) => void
+  readonly onDraftingPoint?: (point: StagePoint, hit: StageInteractionHit) => void
   /** 绘图命令收到一次 `pick`：按下点与整笔轨迹（没动过为 `null`）。 */
   readonly onDraftingPick?: (point: StagePoint, trail: readonly StagePoint[] | null) => void
   /** `pick` 拖动中的轨迹逐帧回传；松手或取消时为 `null`。 */
@@ -456,7 +457,7 @@ export function useStageEffectDispatch(
           return
         }
         if (effect.type === 'drafting.point') {
-          latestRef.current.onDraftingPoint?.(effect.point)
+          latestRef.current.onDraftingPoint?.(effect.point, effect.hit)
           return
         }
         if (effect.type === 'drafting.pick') {

@@ -43,6 +43,7 @@ import {
   type StageDraftingMessages,
   type StageFeaturePoint,
   type StageGripTarget,
+  type StageInteractionHit,
   type StagePoint,
   type StageRect,
   type StageSceneIndex,
@@ -937,6 +938,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
     readonly tap?: StageWireTapAnchor
     /** 角度约束命中的那条射线；追踪射线画不画读它，不另判一次。 */
     readonly ray: number | null
+    /** 这次落点吸上了一个特征点，且没被字段锁定挪走——与捕捉标记亮不亮同一个判据。 */
+    readonly snapped: boolean
   } => {
     const hit = snapEnabled
       ? findStageFeaturePoint(
@@ -964,8 +967,9 @@ export function useStageDrafting(options: StageDraftingOptions) {
      * 同源；反过来（先覆盖再吸附）会让网格把刚锁死的 300 挪成 296。
      */
     const point = applyFieldLocks(resolved.point)
+    const snapped = hit !== null && point.x === hit.point.x && point.y === hit.point.y
     if (hit?.mode === 'port' && hit.portId) {
-      return { point, ray: resolved.ray, port: { entityId: hit.entityId, portId: hit.portId } }
+      return { point, ray: resolved.ray, snapped, port: { entityId: hit.entityId, portId: hit.portId } }
     }
     /*
      * 落在另一条导线上：`endpoint`、`midpoint` 与 `nearest` 三种模式一视同仁——它们都是导线
@@ -981,8 +985,8 @@ export function useStageDrafting(options: StageDraftingOptions) {
       && point.y === hit.point.y
       && isStageWireEntity(document.entities[hit.entityId])
     return onWire && hit
-      ? { point, ray: resolved.ray, tap: { entityId: hit.entityId, point: hit.point } }
-      : { point, ray: resolved.ray }
+      ? { point, ray: resolved.ray, snapped, tap: { entityId: hit.entityId, point: hit.point } }
+      : { point, ray: resolved.ray, snapped }
   }, [
     angleConstraint, applyFieldLocks, document, excluded, featureTolerance, gridSettings, index,
     polarIncrement, prompt?.constrain, reference, snapEnabled, snapExcludedPoint, snapRadius,
@@ -994,12 +998,34 @@ export function useStageDrafting(options: StageDraftingOptions) {
     [resolvePointerHit],
   )
 
-  const handlePoint = useCallback((world: StagePoint) => {
+  const handlePoint = useCallback((world: StagePoint, hit?: StageInteractionHit) => {
     const session = sessionRef.current
     if (!session) return
     // 按这次按下自己的坐标重算捕捉，不沿用上一帧 hover 的结果：pointerdown 可能赶在 React
     // 为上一次 pointermove 重渲染之前到达，落点会被吸回用户已经离开的特征点上。
-    const { point, port, tap } = resolvePointerHit(world)
+    const { point, port, tap, snapped } = resolvePointerHit(world)
+    /*
+     * 热夹点下按在**别的 Entity** 身上、又没吸上任何特征点：这一下是换对象，不是取点。
+     *
+     * 取点仍然是热夹点的默认含义（AutoCAD：点亮之后点哪儿顶点就到哪儿），「把这个角对到那个
+     * 角上」正靠它——那时捕捉标记亮着，落点吸在对方的特征点上，照旧提交。而落在对方线身上一个
+     * 没吸上任何东西的位置，在这个产品里几乎从来不是想把顶点放到那儿：用户多半是想去编辑那个
+     * 对象，而热夹点常常是不经意点亮的。不判这一档的症状很具体——双击 B 想进它的顶点模式，
+     * 第一下把 A 的顶点放到光标底下，第二下正好落在刚放下的那个夹点上，B 永远进不去。
+     *
+     * 判据读**捕捉标记同一份事实**（吸上了没有），不另设距离；命中读引擎交回来的 `hit`，
+     * 它就是浏览器命中的那个节点。落在自己身上或空白处照旧取点。
+     */
+    if (
+      gripTarget !== null
+      && hit?.kind === 'entity'
+      && hit.entityId !== gripTarget.entityId
+      && !snapped
+    ) {
+      endSession(null)
+      latest.current.onSelectedIdsChange([hit.entityId])
+      return
+    }
     // 锁定与活动字段描述的是**这一步**；点落下之后它们说的是一件已经过去的事。
     resetFields()
     // 导线的绑定来自**取点时记下的来源**，不是事后按坐标反查已有端口：反查会让一条恰好路过
@@ -1014,7 +1040,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       setWiring(true)
     }
     advanceWithPoint(session, point)
-  }, [advanceWithPoint, resetFields, resolvePointerHit])
+  }, [advanceWithPoint, endSession, gripTarget, resetFields, resolvePointerHit])
 
   /**
    * 启动一条已经解析好、且此刻可用的命令。
