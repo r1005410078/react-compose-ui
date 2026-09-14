@@ -287,6 +287,8 @@ export {
   composeArcThroughPoints,
   composeArcToCubicShapes,
   composeArcTravelledDegrees,
+  composeCubicAsArc,
+  composeCubicAsSegment,
   intersectComposeArcs,
   intersectComposeSegmentArc,
   intersectComposeSegments,

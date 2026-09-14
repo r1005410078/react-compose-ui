@@ -2,17 +2,36 @@
 
 ## 1. 圆弧贝塞尔的识别（core）
 
-- [ ] 1.1 `curve-geometry.ts`：`composeCubicAsSegment`——控制点落在弦上（到弦的距离在容差内
+- [x] 1.1 `curve-geometry.ts`：`composeCubicAsSegment`——控制点落在弦上（到弦的距离在容差内
       且投影落在 `[0, 1]` 内）即直线段
-- [ ] 1.2 `curve-geometry.ts`：`composeCubicAsArc`——过 `P0`、`B(0.5)`、`P3` 定圆，扫掠取经过
+- [x] 1.2 `curve-geometry.ts`：`composeCubicAsArc`——过 `P0`、`B(0.5)`、`P3` 定圆，扫掠取经过
       中点的那一侧且不超过 90°（放宽量由 `容差/半径` 推出），再在曲线上取样验证每点到圆心的
-      距离与方位角。**验证落在轨迹上而不是拟合参数上**——浅弧的半径由矢高反解，舍入能让它差
+      距离。**验证落在轨迹上而不是拟合参数上**——浅弧的半径由矢高反解，舍入能让它差
       出几成，而形状误差仍只有舍入那么大
-- [ ] 1.3 单测（判别性）：`composeArcToCubicShapes` 生成、再经 `roundComposeGeometry` 舍入
-      之后的每一段都认回同一段弧（半径 2 到 500、扫掠 15° 到 90°、两个方向，按**轨迹**断言
+- [x] 1.3 单测（判别性）：`composeArcToCubicShapes` 生成、再经 `roundComposeGeometry` 舍入
+      之后的每一段都认回同一段弧（半径 2 到 500、扫掠 30° 到 90°、两个方向，按**轨迹**断言
       而不是按圆心半径）；半径 2、扫掠 5° 的弧认成直线（矢高不到量化步长的五分之一）；控制点
-      落在弦上的段认成直线；一条自由贝塞尔不认；一段 120° 的弧凑成一条三次段不认；冲过终点
-      再折返的段不认
+      落在弦上的段认成直线；S 形的自由贝塞尔不认；一段 120° 的弧凑成一条三次段不认
+
+      > Red command: `bunx vitest run src/cubic-arc-recognition.test.ts`（packages/core）
+      > Red result: 26 failed | 4 passed (30)，失败全是 `AssertionError: expected null not to be null`
+      > Red reason: 两个识别函数只有签名与契约、函数体是 `return null`，目标行为尚未实现。
+      >   先落桩再跑，是为了让 Red 由**断言**产生——直接引用未定义的函数得到的是 `TypeError`，
+      >   那属于「依赖缺失」，按 project.md 不算有效 Red。
+      > Green command: 同上
+      > Green result: 30 passed (30)
+      > Regression command: `bunx tsc --noEmit -p packages/core`
+      > Regression result: exit 0
+      >
+      > 落地时推翻了提案里的一条判据，并在实现前改了规范（提交 `aabad0dd`）：原方案「按闭式解
+      > 预测两个控制点再比对」在浅弧上不成立——半径由矢高反解，而矢高只有几个量化步长，舍入能
+      > 让半径差出几成，预测出来的控制点跟着差出容差之外，于是**真实的产品几何会被拒**。改成
+      > 在曲线上取样验证轨迹：三点定出的圆与真弧在三处吻合、中间也就处处吻合，这是拟合在函数
+      > 意义上稳定而在参数意义上不稳定的标准情形。
+      >
+      > 另一处：`composeCubicAsArc` **单独不是分类器**，极浅的弧它也会认（整段只跨 0.17 个
+      > 单位时，几乎共线的三点定出的圆半径没有意义、轨迹却仍在容差内）。挡住那一档的是
+      > 「先问直线」的次序，因此那条用例刻意不断言它返回 null，并把理由写在用例注释里。
 
 ## 2. 解算接受由弧围成的路径（core + stage-engine）
 
