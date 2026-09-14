@@ -649,6 +649,7 @@ function ComposeStageReady({
   const culling = useStageCulling({
     index: sceneIndex,
     previewTransforms: interaction.previewTransforms,
+    registry,
     selectedIds,
     surfaceMeasured,
     surfaceSize,
@@ -1521,6 +1522,7 @@ function ComposeStageReady({
         <StageSceneLayer
           assetResolver={assetResolver}
           culledEntityIds={culling.culledEntityIds}
+        detailCulledEntityIds={culling.detailCulledEntityIds}
           cullingBatchKey={culling.batchKey}
           document={previewDocument}
           hiddenEntityIds={hiddenEntityIds}

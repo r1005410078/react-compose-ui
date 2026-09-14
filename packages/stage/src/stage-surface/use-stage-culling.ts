@@ -1,7 +1,14 @@
 import { useMemo } from 'react'
-import { decodeComposeInstancePath, isComposeInstancePath } from '@compose-ui/core'
 import {
+  decodeComposeInstancePath,
+  getComposeRenderer,
+  isComposeInstancePath,
+} from '@compose-ui/core'
+import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
+import {
+  resolveStageCullingExemptIds,
   resolveStageCullingWindow,
+  resolveStageDetailCulledIds,
   resolveStageVisibleEntityIds,
   type StageSceneIndex,
   type StageViewport,
@@ -45,6 +52,13 @@ export interface StageCullingResult {
    */
   readonly culledEntityIds: ReadonlySet<string>
   /**
+   * `culledEntityIds` 里**只因读不出来**被裁的那一部分（细节裁剪）。
+   *
+   * @remarks
+   * 场景层在批次键变化时据此分辨谁是可读性带进来的：那一半排队，窗口带进来的那一半当帧到齐。
+   */
+  readonly detailCulledEntityIds: ReadonlySet<string>
+  /**
    * 「目标变了能不能分批逼近」的判据：键没变就能。
    *
    * @remarks
@@ -65,6 +79,8 @@ export interface StageCullingInput {
   readonly index: StageSceneIndex
   /** 手势预览变换作用的 Entity；它们的几何此刻不由索引决定。 */
   readonly previewTransforms: Readonly<Record<string, unknown>>
+  /** 只用来查 Renderer 声明的可读尺寸下限。 */
+  readonly registry: Pick<ComposeEntityRegistry, 'getRenderer'>
   /** 当前选择集；可能含组件实例的复合地址。 */
   readonly selectedIds: readonly string[]
   /** 图面是否已量到真实尺寸。 */
@@ -95,6 +111,7 @@ export interface StageCullingInput {
 export function useStageCulling({
   index,
   previewTransforms,
+  registry,
   selectedIds,
   surfaceMeasured,
   surfaceSize,
@@ -143,15 +160,36 @@ export function useStageCulling({
   ]))
   const subtreeExemptKey = joinIds(Object.keys(previewTransforms))
 
-  const culledEntityIds = useMemo(() => {
+  /*
+   * 细节裁剪：这一档下小到读不出来的叶子。只随索引、档位与 Registry 变——与窗口一样，
+   * 档内缩放不重建；阈值由物料声明，这里只负责把声明查出来交给判定。
+   */
+  const zoomStep = cullingWindow.zoomStep
+  const detailCulled = useMemo(() => {
     if (!surfaceMeasured) return NO_CULLED_IDS
-    const visible = resolveStageVisibleEntityIds(index, cullingWindow, {
-      nodes: splitIds(nodeExemptKey),
-      subtrees: splitIds(subtreeExemptKey),
+    return resolveStageDetailCulledIds(index, zoomStep, (entityId) => {
+      const entity = index.document.entities[entityId]
+      const renderer = entity && getComposeRenderer(entity)
+      return (renderer && registry.getRenderer(renderer.type)?.minimumLegibleSize) ?? null
     })
-    if (visible.size >= index.order.length * (1 - MIN_CULLED_FRACTION)) return NO_CULLED_IDS
-    return new Set(index.order.filter((entityId) => !visible.has(entityId)))
-  }, [cullingWindow, index, nodeExemptKey, subtreeExemptKey, surfaceMeasured])
-  const batchKey = `${cullingWindow.zoomStep}${ID_SEPARATOR}${nodeExemptKey}${ID_SEPARATOR}${subtreeExemptKey}`
-  return useMemo(() => ({ culledEntityIds, batchKey }), [batchKey, culledEntityIds])
+  }, [index, registry, surfaceMeasured, zoomStep])
+
+  const result = useMemo(() => {
+    if (!surfaceMeasured) return { culledEntityIds: NO_CULLED_IDS, detailCulledEntityIds: NO_CULLED_IDS }
+    const exemptions = { nodes: splitIds(nodeExemptKey), subtrees: splitIds(subtreeExemptKey) }
+    const visible = new Set(resolveStageVisibleEntityIds(index, cullingWindow, exemptions))
+    // 豁免压过可读性：选中一个小字它就得在，属性面板与选区盒都要它的节点。
+    const exempt = resolveStageCullingExemptIds(index, exemptions)
+    for (const entityId of detailCulled) if (!exempt.has(entityId)) visible.delete(entityId)
+    if (visible.size >= index.order.length * (1 - MIN_CULLED_FRACTION)) {
+      return { culledEntityIds: NO_CULLED_IDS, detailCulledEntityIds: NO_CULLED_IDS }
+    }
+    const culled = index.order.filter((entityId) => !visible.has(entityId))
+    return {
+      culledEntityIds: new Set(culled),
+      detailCulledEntityIds: new Set(culled.filter((entityId) => detailCulled.has(entityId))),
+    }
+  }, [cullingWindow, detailCulled, index, nodeExemptKey, subtreeExemptKey, surfaceMeasured])
+  const batchKey = `${zoomStep}${ID_SEPARATOR}${nodeExemptKey}${ID_SEPARATOR}${subtreeExemptKey}`
+  return useMemo(() => ({ ...result, batchKey }), [batchKey, result])
 }

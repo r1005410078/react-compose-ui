@@ -64,6 +64,7 @@ export {
   type ComposeRendererPropCategory,
   type ComposeRendererPropContract,
   type ComposeRendererRuntimePropsResult,
+  type ComposeRendererLegibleSize,
   type ComposeRendererMeasurementDefinition,
   type ComposeRendererMeasurementSubscriptionInput,
   type ComposeRendererMeasureInput,

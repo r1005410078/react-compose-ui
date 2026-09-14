@@ -266,3 +266,66 @@ export function resolveStageCullingExemptIds(
   }
   return exempt
 }
+
+/**
+ * Renderer 声明的可读尺寸下限，屏幕像素，两轴各自可选。
+ *
+ * @remarks
+ * 与 `component-registry` 的 `ComposeRendererLegibleSize` 同形；本包不依赖 registry，因此
+ * 自带一份。判定语义见 {@link resolveStageDetailCulledIds}。
+ *
+ * @public
+ */
+export interface StageLegibleSize {
+  readonly width?: number
+  readonly height?: number
+}
+
+/**
+ * 求在这个缩放档位下**小到读不出来**的叶子 Entity（细节裁剪）。
+ *
+ * @remarks
+ * 判据：Entity 的世界包围盒乘缩放，在 `legibleSizeOf` 声明的**每一轴**上都低于阈值。只声明
+ * 一轴就只看那一轴；没有声明（返回 `null`）永不裁。只看叶子——容器的盒是后代的容器，它自己
+ * 不画字也不画线。
+ *
+ * 缩放取**档位的下界**（档内最不利的那一端）而不是真实缩放：与窗口一样，可见集只随档位变，
+ * 档内缩放不重建内容；而一个 Entity 在档位下界可读，档内任何缩放下都可读，因此不会出现
+ * 「在档内某个缩放下读得出来却被裁掉」。
+ *
+ * 理由是量出来的：整张图都在可视区的那几档，窗口裁剪按定义裁不掉任何东西，而每帧 34ms 里
+ * 27ms 是 Blink 对每个节点固定要付的合成层划分——只能靠少建节点；这几档的文字字号不到两个
+ * 像素、近两千条曲线整个落在一个像素之内，画出来只是一片绒。
+ *
+ * 返回值与 {@link resolveStageVisibleEntityIds} 一样**只供渲染使用**，MUST NOT 参与命中、框选、
+ * 吸附或任何回答「这个 Entity 在不在」的查询。
+ *
+ * @param index - 已提交文档的场景索引。
+ * @param zoomStep - {@link StageCullingWindow.zoomStep}。
+ * @param legibleSizeOf - 该 Entity 的 Renderer 声明的下限；`null` 即永远可读。
+ * @public
+ */
+export function resolveStageDetailCulledIds(
+  index: StageSceneIndex,
+  zoomStep: number,
+  legibleSizeOf: (entityId: string) => StageLegibleSize | null,
+): ReadonlySet<string> {
+  const zoom = zoomStep / ZOOM_STEP_COVER
+  const parents = new Set<string>()
+  for (const entityId of index.order) {
+    const parentId = index.getParentId(entityId)
+    if (parentId !== null) parents.add(parentId)
+  }
+  const culled = new Set<string>()
+  for (const entityId of index.order) {
+    if (parents.has(entityId)) continue
+    const legible = legibleSizeOf(entityId)
+    if (!legible || (legible.width === undefined && legible.height === undefined)) continue
+    const bounds = index.getWorldBounds(entityId)
+    if (!bounds) continue
+    const belowWidth = legible.width === undefined || bounds.width * zoom < legible.width
+    const belowHeight = legible.height === undefined || bounds.height * zoom < legible.height
+    if (belowWidth && belowHeight) culled.add(entityId)
+  }
+  return culled
+}

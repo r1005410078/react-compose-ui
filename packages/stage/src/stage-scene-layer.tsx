@@ -22,6 +22,12 @@ import type { ComposeEntityRegistry } from '@compose-ui/component-registry'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 import type { StageSceneIndex, StageViewport } from '@compose-ui/stage-engine'
 import {
+  drainStageCullingReveal,
+  initialStageCullingReveal,
+  planStageCullingReveal,
+  type StageCullingReveal,
+} from './stage-culling-reveal'
+import {
   memo,
   useEffect,
   useLayoutEffect,
@@ -167,56 +173,9 @@ function bucketChildren(
   return buckets
 }
 
-/**
- * 平移换窗时每帧处理的 Entity 数——两条队列各取这么多。
- *
- * @remarks
- * 换窗那一帧真正贵的是**把新进窗口的那条带子挂上去、把离开的那条卸下来**：挂一个 Entity 要跑
- * 一遍物料渲染器、建四五个 DOM 节点再算样式；一条四分之一屏的带子五六百个，一帧 50ms。把它
- * 们摊到几帧里，每帧的账是「场景层按缓存走一遍 + 这一批」。
- *
- * 取值按 Chrome trace 定：一批 60 挂 60 卸时 React 那一趟 JS 约 23ms，按批次线性；40 落在
- * 一帧之内，同时一条五六百个的带子十几帧摊完，仍远快过用户平移过四分之一屏。这一帧里另外
- * 两项——Blink 的 Layerize（5–9ms）与分配抖动引来的 major GC——不随批次走，是另一层的账。
- *
- * 队列住在场景层而不是宿主：住宿主时每一批都让整个 Stage（覆盖层、标尺、命令行……）重渲染
- * 一遍，与这一批改没改 DOM 无关。
- */
-const CULLING_BATCH_SIZE = 16
-/**
- * 一条带子最多摊几帧；队列长过 `帧数 × 批`，每帧就按队列的这一份摊。
- *
- * @remarks
- * 批小是为了让每一帧都便宜——挂 16 个的样式重算与布局约 2ms，挂 40 个 4–9ms，而平移时用户
- * 感到的「卡一下」正是这几帧与稳态之间的落差。但批小了带子就长：外扩带只有四分之一屏，快速
- * 平移十几帧就穿过它，一条五百个的带子按 16 一批要三十帧，节点会在建好之前进入可视区。
- * 两头都要，因此批按队列长度自适应：短队列按最小批，长队列保证在这几帧内摊完。
- */
-const CULLING_BATCH_FRAMES = 8
-
-/** 这一帧该消化多少：短队列按最小批，长队列按「几帧内摊完」摊。 */
-function cullingBatchSize(queued: number) {
-  return Math.max(CULLING_BATCH_SIZE, Math.ceil(queued / CULLING_BATCH_FRAMES))
-}
-
 /** 没有裁剪、没有排队时都返回同一个引用；identity 稳定才不会让记忆化与 effect 每帧空转。 */
 const NO_CULLED_IDS: ReadonlySet<string> = new Set<string>()
 const NO_PENDING: readonly string[] = []
-
-/**
- * 分批逼近目标裁剪集的进度。
- *
- * @remarks
- * 实际生效的裁剪集是 `(target − pendingCull) ∪ pendingReveal`：`pendingCull` 是该裁而还没
- * 裁的，`pendingReveal` 是该露而还没露的。两条队列每帧各消化一批。
- */
-interface StageCullingReveal {
-  readonly batchKey: string | undefined
-  readonly index: StageSceneIndex | undefined
-  readonly pendingCull: readonly string[]
-  readonly pendingReveal: readonly string[]
-  readonly target: ReadonlySet<string>
-}
 
 interface StageTextEditing {
   readonly entityId: string
@@ -257,6 +216,14 @@ interface StageSceneLayerProps {
    * 缺席即每次都当帧到齐。
    */
   readonly cullingBatchKey?: string
+  /**
+   * `culledEntityIds` 里**只因读不出来**被裁的那一部分。
+   *
+   * @remarks
+   * 批次键变了（缩放跨档）时，由它带进来或带走的一律排队，其余当帧到齐——见
+   * `planStageCullingReveal`。缺席即没有细节裁剪。
+   */
+  readonly detailCulledEntityIds?: ReadonlySet<string>
   /** 已提交文档的场景索引；分批时队列按它的文档顺序排，索引换了就不分批。 */
   readonly sceneIndex?: StageSceneIndex
   /** 正在画布内原地编辑文字的 Entity；只有它的 Renderer 收到编辑态。 */
@@ -289,6 +256,7 @@ export function StageSceneLayer({
   hiddenEntityIds,
   culledEntityIds = NO_CULLED_IDS,
   cullingBatchKey,
+  detailCulledEntityIds = NO_CULLED_IDS,
   sceneIndex,
   textEditingEntityId = null,
   textEditingValue = null,
@@ -327,48 +295,23 @@ export function StageSceneLayer({
    *
    * 两条队列都按**文档顺序**排，见 `SCENE_CHILD_BUCKET_SIZE`。
    */
-  const [reveal, setReveal] = useState<StageCullingReveal>({
+  const [reveal, setReveal] = useState<StageCullingReveal>(() => initialStageCullingReveal({
     batchKey: cullingBatchKey,
+    detail: detailCulledEntityIds,
     index: sceneIndex,
-    pendingCull: NO_PENDING,
-    pendingReveal: NO_PENDING,
     target: culledEntityIds,
-  })
+  }))
   const documentPosition = useMemo(
     () => new Map(sceneIndex?.order.map((entityId, i) => [entityId, i] as const) ?? []),
     [sceneIndex],
   )
   if (reveal.target !== culledEntityIds) {
-    const batched = cullingBatchKey !== undefined
-      && reveal.batchKey === cullingBatchKey
-      && reveal.index === sceneIndex
-    let pendingCull: readonly string[] = NO_PENDING
-    let pendingReveal: readonly string[] = NO_PENDING
-    if (batched) {
-      const applied = new Set(reveal.pendingReveal)
-      for (const entityId of reveal.target) applied.add(entityId)
-      for (const entityId of reveal.pendingCull) applied.delete(entityId)
-      const byDocumentOrder = (a: string, b: string) =>
-        (documentPosition.get(a) ?? Number.MAX_SAFE_INTEGER)
-        - (documentPosition.get(b) ?? Number.MAX_SAFE_INTEGER)
-      pendingReveal = [...applied].filter((entityId) => !culledEntityIds.has(entityId))
-        .sort(byDocumentOrder)
-      pendingCull = [...culledEntityIds].filter((entityId) => !applied.has(entityId))
-        .sort(byDocumentOrder)
-      // 一批装得下就当帧到齐：排队只为把装不下的摊开。小图上换窗因此仍是同步的、可断言的，
-      // 不会平白多出一帧「DOM 还在路上」的中间态。
-      if (pendingCull.length + pendingReveal.length <= CULLING_BATCH_SIZE) {
-        pendingCull = NO_PENDING
-        pendingReveal = NO_PENDING
-      }
-    }
-    setReveal({
+    setReveal(planStageCullingReveal(reveal, {
       batchKey: cullingBatchKey,
+      detail: detailCulledEntityIds,
       index: sceneIndex,
-      pendingCull,
-      pendingReveal,
       target: culledEntityIds,
-    })
+    }, documentPosition))
   }
   // 推导那一趟渲染里 `reveal` 还是旧的，此时两条队列就是刚算出来的那份；只有稳定引用才能
   // 让下面的 effect 与记忆化不在每一帧空转。
@@ -382,18 +325,7 @@ export function StageSceneLayer({
   useEffect(() => {
     if (!draining) return
     const frame = requestAnimationFrame(() => {
-      setReveal((current) => {
-        const batch = cullingBatchSize(current.pendingCull.length + current.pendingReveal.length)
-        return {
-          ...current,
-          pendingCull: current.pendingCull.length <= batch
-            ? NO_PENDING
-            : current.pendingCull.slice(batch),
-          pendingReveal: current.pendingReveal.length <= batch
-            ? NO_PENDING
-            : current.pendingReveal.slice(batch),
-        }
-      })
+      setReveal(drainStageCullingReveal)
     })
     return () => cancelAnimationFrame(frame)
   }, [draining, queues])

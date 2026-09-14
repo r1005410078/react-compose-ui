@@ -31,6 +31,7 @@ export {
   type ComposeRendererBindingDiagnostic,
   type ComposeRendererPropCategory,
   type ComposeRendererPropContract,
+  type ComposeRendererLegibleSize,
   type ComposeRendererMeasurementDefinition,
   type ComposeRendererMeasurementSubscriptionInput,
   type ComposeRendererMeasureInput,

@@ -298,6 +298,27 @@ export interface ComposeMissingComponentInspectorDefinition {
   readonly content?: ComponentType<ComposeMissingComponentInspectorProps>
 }
 
+/**
+ * Renderer 声明的「多小就读不出来」：屏幕像素，两轴各自可选。
+ *
+ * @remarks
+ * Stage 据此在 Entity 的世界包围盒乘缩放于**声明的每一轴**都低于阈值时不建节点（细节裁剪）。
+ * 只声明一轴就只看那一轴：文字只声明高度（字号由行高决定，宽度随字数变），曲线两轴都声明
+ * （只有整个形状落进一个像素之内才裁，一条又细又长的线宽度轴不低于阈值，照画）。
+ *
+ * 阈值住在 Renderer 定义而不住 Stage：Stage 只知道盒与缩放，不知道盒里是字还是线，而
+ * 「多小算读不出来」对字是字号、对线是整个形状是否落进一个像素——只有物料自己说得出。
+ * 这与 `measurement`（物料告诉布局引擎怎么量自己）是同一条边界的同一次应用。
+ *
+ * @public
+ */
+export interface ComposeRendererLegibleSize {
+  /** 屏幕像素；缺席即宽度不参与判定。 */
+  readonly width?: number
+  /** 屏幕像素；缺席即高度不参与判定。 */
+  readonly height?: number
+}
+
 /** 一个可由 Stage 与 Preview 共同解析的 Renderer 定义。 @public */
 export interface ComposeRendererDefinition {
   /** `Renderer.type` 使用的唯一非空标识。 */
@@ -333,6 +354,13 @@ export interface ComposeRendererDefinition {
   readonly inspectorDefaultExpanded?: boolean
   /** 可选的内容固有尺寸定义；不得读取 Stage 或 Preview 的 Scene Entity DOM。 */
   readonly measurement?: ComposeRendererMeasurementDefinition
+  /**
+   * 屏幕上小到读不出来的尺寸下限；缺席即「永远可读」，该 Renderer 永不因细节被裁。
+   *
+   * @remarks
+   * 只作用于编辑画布的渲染，Preview、导出、命中与任何查询都不读它。
+   */
+  readonly minimumLegibleSize?: ComposeRendererLegibleSize
 }
 
 /** Renderer 同步测量获得的稳定输入。 @public */
