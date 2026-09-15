@@ -24,6 +24,7 @@ import {
   type JsonObject,
 } from './document-types'
 import {
+  composeCurveViewBox,
   composePolylineOutline,
   getComposeCurve,
   normalizeComposeCurveGeometry,
@@ -31,6 +32,7 @@ import {
   type ComposeCurve,
 } from './curve'
 import { composeCurveInnerAnchor, resolveComposeCurveRegion } from './curve-region'
+import { COMPOSE_GEOMETRY_QUANTUM } from './geometry-precision'
 import { jsonEqual } from './patches'
 import { getComposeHatch } from './hatch'
 import { getComposeTransform } from './entity'
@@ -157,6 +159,11 @@ export function resolveComposeHatches(
      * 说的是另一个形状，而一个**错的**面比不跟随糟得多。
      */
     const owned: OwnedPiece[] = []
+    /*
+     * 一个坐标量化步长在**盒**空间里有多大：几何按文档精度舍入发生在几何空间，而这里比的是
+     * 盒坐标。旋转过的边界上面已经排除掉，因此只剩盒 / 取景框这一段缩放。
+     */
+    let quantum = COMPOSE_GEOMETRY_QUANTUM
     let usable = true
     for (const boundaryId of hatch.boundaryIds) {
       const source = document.entities[boundaryId]
@@ -168,13 +175,18 @@ export function resolveComposeHatches(
         usable = false
         break
       }
+      const view = composeCurveViewBox(curve)
+      quantum = Math.max(
+        quantum,
+        COMPOSE_GEOMETRY_QUANTUM * Math.max(sourceBox.width / view.width, sourceBox.height / view.height),
+      )
       owned.push(...ownedPieces(boundaryId, projectComposeCurveToBox(curve, sourceBox), sourceBox))
     }
     if (!usable || owned.length === 0) continue
 
     // 锚点存的是 Entity 局部；加回盒的偏移就回到父级局部，与导线读 `box.x + point.x` 同一条。
     const seed: ComposePlanarPoint = { x: box.x + hatch.seed.x, y: box.y + hatch.seed.y }
-    const region = resolveComposeCurveRegion(owned.map(({ piece }) => piece), seed)
+    const region = resolveComposeCurveRegion(owned.map(({ piece }) => piece), seed, quantum)
     if (region.status !== 'resolved') continue
 
     // 清单比对：把用到的那些子边映射回它们各自的 Entity。

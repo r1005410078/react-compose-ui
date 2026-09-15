@@ -47,6 +47,7 @@ import {
   isPointInsideComposeCurve,
   type ComposeCurve,
 } from './curve'
+import { COMPOSE_GEOMETRY_QUANTUM } from './geometry-precision'
 import type { ComposePosition } from './document-types'
 
 /**
@@ -221,6 +222,7 @@ function canonicalRing(pieces: readonly ComposeOutlinePiece[]): readonly Compose
 export function resolveComposeCurveRegion(
   pieces: readonly ComposeOutlinePiece[],
   seed: ComposePlanarPoint,
+  quantum: number = COMPOSE_GEOMETRY_QUANTUM,
 ): ComposeCurveRegionResult {
   if (pieces.length === 0) return { status: 'outside' }
 
@@ -243,10 +245,11 @@ export function resolveComposeCurveRegion(
     })
   })
   const scale = Math.max(1, maxX - minX, maxY - minY)
-  const epsilon = NODE_EPSILON_RATIO * scale
+  // 与布尔同一条：相对量是浮点卫生，量化步长是「同一个点存了两份」的下限，取较大者。
+  const epsilon = Math.max(NODE_EPSILON_RATIO * scale, quantum)
   const reach = Math.hypot(maxX - minX, maxY - minY) * 2 + scale
 
-  const graph = buildGraph(pieces, epsilon)
+  const graph = buildGraph(pieces, epsilon, quantum)
   if (graph.subEdges.length === 0) return { status: 'outside' }
 
   let crossings: readonly RayCrossing[] | null = null

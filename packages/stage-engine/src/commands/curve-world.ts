@@ -16,7 +16,9 @@
  */
 
 import {
+  COMPOSE_GEOMETRY_QUANTUM,
   composeCurveSegments,
+  composeCurveViewBox,
   getComposeLayoutItem,
   jsonEqual,
   normalizeComposeCurveGeometry,
@@ -70,6 +72,34 @@ function worldSegment(segment: ComposeSegmentShape, matrix: StageMatrix): Compos
  *
  * @public
  */
+/**
+ * 一个坐标量化步长在**世界**空间里有多大。
+ *
+ * @remarks
+ * 几何按 `COMPOSE_GEOMETRY_PRECISION` 舍入发生在**几何空间**，而交给求解的是世界片段，中间
+ * 隔着两段缩放：`projectComposeCurveToBox` 的盒 / 取景框比例，以及世界矩阵。求解拿这个数当
+ * 「这两条边是不是同一条」的容差，只有这里知道那两段是多少——让 `core` 自己猜等于把一条算得
+ * 出来的量换成一个魔法数。
+ *
+ * 两轴取**大**的那一个：取小了归一够不着，而够不着只是退回「求解退化」这个看得见的失败。
+ *
+ * 缺几何或缺盒时退回文档精度的步长本身——那一档调用方本来就会以 `unresolved` 拒绝。
+ */
+export function stageWorldQuantum(
+  index: StageSceneIndex,
+  entityId: string,
+  matrix: StageMatrix,
+): number {
+  const entity = index.document.entities[entityId]
+  const curve = entity ? getComposeCurve(entity) : undefined
+  const box = index.layoutSnapshot.boxes[entityId]
+  if (!curve || !box) return COMPOSE_GEOMETRY_QUANTUM
+  const view = composeCurveViewBox(curve)
+  const boxScale = Math.max(box.width / view.width, box.height / view.height)
+  const worldScale = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c))
+  return COMPOSE_GEOMETRY_QUANTUM * boxScale * worldScale
+}
+
 export function stageBoxCurve(index: StageSceneIndex, entityId: string): ComposeCurve | null {
   const entity = index.document.entities[entityId]
   const curve = entity ? getComposeCurve(entity) : undefined

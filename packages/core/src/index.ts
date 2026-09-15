@@ -77,6 +77,7 @@ export {
 } from './canvas-viewport'
 export {
   COMPOSE_GEOMETRY_PRECISION,
+  COMPOSE_GEOMETRY_QUANTUM,
   formatComposeNumber,
   roundComposeGeometry,
 } from './geometry-precision'

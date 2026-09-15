@@ -16,6 +16,21 @@ export const COMPOSE_GEOMETRY_PRECISION = 2
 const FACTOR = 10 ** COMPOSE_GEOMETRY_PRECISION
 
 /**
+ * 一个坐标量化步长。
+ *
+ * @remarks
+ * 同一个点被两个对象各自写进文档、各自舍到 {@link COMPOSE_GEOMETRY_PRECISION} 位，两份最多
+ * 差这么多。求解那一侧拿它当「这两条边是不是同一条」的容差——它是**绝对量**，因为误差来自
+ * 舍入而不是量级；相对量在一张四百单位的图上比它小两个数量级，够不着。
+ *
+ * 它是**几何空间**里的步长。交给求解的片段住在世界空间，因此调用方要乘上「几何 → 盒」与
+ * 「盒 → 世界」两段缩放，只有调用方知道这两段。
+ *
+ * @public
+ */
+export const COMPOSE_GEOMETRY_QUANTUM = 10 ** -COMPOSE_GEOMETRY_PRECISION
+
+/**
  * 把几何数值量化到 {@link COMPOSE_GEOMETRY_PRECISION}。
  *
  * @remarks

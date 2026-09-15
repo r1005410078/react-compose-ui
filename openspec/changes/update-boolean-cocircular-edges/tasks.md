@@ -17,6 +17,19 @@
       - **只补容差不做归一**时那条并集仍然求不出来（钉住「这一条单独不成立」）；
       - 零长的弧子边不进图
 
+      > Red command: `bunx vitest run src/curve-support-weld.test.ts`（packages/core）
+      > Red result: 5 failed | 3 passed (8)，失败全是断言（支撑不相等 / 重复没收掉 / 零长边还在）
+      > Red reason: `weldComposeOutlineSupports` 与 `composeOutlineSupport` 先落了桩（原样返回、
+      >   线段支撑恒为零），因此 Red 由**断言**产生而不是 `TypeError`——后者属于「依赖缺失」，
+      >   按 project.md 不算有效 Red。
+      > Green command: 同上
+      > Green result: 8 passed
+      >
+      > 桩上有一条**假绿**：线段支撑恒返回同一个常量时「方向相反的两条共线线段归到同一条支撑」
+      > 自动成立。补了一条反向用例（差半个量级的两条平行线不归一）之后它才真的判别。
+      > 另一处：法向定向要把 `-0` 归正——`-0` 与 `0` 在比较里相等，却让同一条支撑在逐位比较下
+      > 读成两条。
+
 ## 2. 量化步长由调用方给出（core 入口 + stage-engine）
 
 - [ ] 2.1 `resolveComposeCurveRegion` 与 `resolveComposeCurveBoolean` 接受量化步长，缺省取

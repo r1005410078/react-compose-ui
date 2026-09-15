@@ -49,6 +49,7 @@ import {
   type ComposePathCurve,
   type ComposeSubpath,
 } from './curve'
+import { COMPOSE_GEOMETRY_QUANTUM } from './geometry-precision'
 
 /**
  * 一条曲线拍平成若干子路径。
@@ -287,12 +288,17 @@ function traceBoundaryRings(
  * `evenodd`，因此洞与互不相交的几块面用同一条规则表达——奇偶数一遍就同时答对了两者。
  *
  * @param operands - 已经在同一个坐标空间里的形状；少于两个时直接返回 `empty`。
+ * @param quantum - 这批片段所在空间里的坐标量化步长；调用方要把文档精度的步长乘上
+ *   「几何 → 盒」与「盒 → 世界」两段缩放，只有它知道这两段。默认取文档精度的步长本身，
+ *   也就是盒与取景框 1:1 时的那个值；取小了只会让归一够不着、退回「求解退化」这个**看得见**
+ *   的失败，取大了才会把两条真的不同的边收成一条。
  * @returns 求出了几何、结果没有面积、或求解退化。
  * @public
  */
 export function resolveComposeCurveBoolean(
   operands: readonly ComposeBooleanOperand[],
   op: ComposeBooleanOp,
+  quantum: number = COMPOSE_GEOMETRY_QUANTUM,
 ): ComposeCurveBooleanResult {
   const usable = operands.filter((operand) => operand.pieces.length > 0)
   if (usable.length < 2) return { status: 'empty' }
@@ -317,18 +323,18 @@ export function resolveComposeCurveBoolean(
     })
   })
   /*
-   * 节点合并容差按包围盒尺度取相对量，与求面同源：世界坐标的量级由图纸比例决定。
+   * 节点合并容差取两者的较大者：包围盒尺度的相对量（浮点卫生，与求面同源）与**一个坐标量化
+   * 步长**。后者的理由是同一个角点被两个对象各自写进文档、各自舍到两位，两份就能差这么多，
+   * 而相对量在一张 400 单位的图上只有 4e-5。
    *
-   * **刻意不给它补一个「坐标量化步长」的下限**，哪怕那条推导本身成立（两份分别存进文档的同一
-   * 个点各自舍到两位、盒尺寸也各自量化，能差 0.014，而相对量在 400 单位的图上只有 4e-5）。
-   * 量过：补上下限之后，「一个形状与由它围出来的那块面一起求并集」不再报「求解退化」，而是
-   * **静默产出一个几像素大的点**——近似共圆的边还没有被归一成同一个圆，容差只是让求解跨过了
-   * 报错那一关，答案仍然是错的。把一个看得见的失败换成一个看不见的错误，方向反了。
-   * 要解决那一档得先把共圆的边归一，那是另一次变更。
+   * 这条下限**单独不成立**，它与 `buildGraph` 里的支撑归一是一对：量过——只抬容差而不归一，
+   * 两块共用弧边界的填充求并集仍然报「求解退化」；另一个夹具上它会跨过报错那一关而**静默产出
+   * 一个几像素大的形状**，把一个看得见的失败换成一个看不见的错误。因此**不要**在归一被去掉或
+   * 绕开的情况下单独留着它。
    */
-  const epsilon = NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY)
+  const epsilon = Math.max(NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY), quantum)
 
-  const graph = buildGraph(pieces, epsilon)
+  const graph = buildGraph(pieces, epsilon, quantum)
   if (graph.subEdges.length === 0) return { status: 'degenerate' }
 
   /*

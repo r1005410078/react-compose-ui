@@ -4,7 +4,15 @@ import {
   resolveComposeCurveBoolean,
   type ComposeBooleanOperand,
 } from './curve-boolean'
-import { composeCurveSegments, isPointInsideComposeCurve } from './curve'
+import {
+  composeCurveBounds,
+  composeCurveSegments,
+  composePathAsOutline,
+  isPointInsideComposeCurve,
+  normalizeComposeCurveGeometry,
+  projectComposeCurveToBox,
+  translateComposeCurve,
+} from './curve'
 import { composeCurveFromOutline } from './curve-arrangement'
 import { resolveComposeCurveRegion } from './curve-region'
 import type { ComposeCurve } from './curve'
@@ -378,5 +386,57 @@ describe('OpenSpec: compose-document / 节点合并容差不低于坐标量化�
       seg([0, 100], [0, 0.5]),
     ]
     expect(resolveComposeCurveRegion(gapped, { x: 50, y: 50 }).status).not.toBe('resolved')
+  })
+})
+
+describe('OpenSpec: compose-document / 重合的边界在建图之前归一到同一条支撑', () => {
+  /** 走一遍真实的落地往返：求面 → 归一化进盒（几何与盒尺寸各自量化）→ 投影回世界。 */
+  const roundTrip = (curve: ComposeCurve) => {
+    const normalized = normalizeComposeCurveGeometry(curve)
+    const boxed = projectComposeCurveToBox(normalized.curve, normalized.size)
+    return translateComposeCurve(boxed, normalized.offset.x, normalized.offset.y)
+  }
+
+  const fullCircle = (cx: number, cy: number, r: number): ComposeOutlinePiece => ({
+    kind: 'arc',
+    arc: { center: { x: cx, y: cy }, radius: r, startAngle: 0, sweep: 360 },
+  })
+
+  it('两块共用一段弧边界的填充求得出并集', () => {
+    /*
+     * 用户报的那张图的最小形式：两个相交的圆，油漆桶填出左月牙与透镜。两块面**共用**圆 b 的
+     * 左边那段弧，而它在图里存了两份——各自舍到两位、各自由三点定圆反解，两份的圆心差到三个
+     * 量化步长。
+     *
+     * 断的是**几何尺寸**而不是「算出来了」：左月牙 ∪ 透镜恰好是整个圆 a，包围盒 120 × 120。
+     * 上一个变更就是在这里被一个几像素大的退化产物骗过——那时断的是「产物数量 1、kind 是
+     * path」，退化产物同样满足。
+     */
+    const boundaries = [fullCircle(100, 100, 60), fullCircle(160, 100, 60)]
+    const left = resolveComposeCurveRegion(boundaries, { x: 60, y: 100 })
+    const lens = resolveComposeCurveRegion(boundaries, { x: 130, y: 100 })
+    expect(left.status).toBe('resolved')
+    expect(lens.status).toBe('resolved')
+    if (left.status !== 'resolved' || lens.status !== 'resolved') return
+
+    const leftCurve = roundTrip(left.curve)
+    const lensCurve = roundTrip(lens.curve)
+    const operands: ComposeBooleanOperand[] = [
+      { pieces: composePathAsOutline(leftCurve as never)!, curve: leftCurve },
+      { pieces: composePathAsOutline(lensCurve as never)!, curve: lensCurve },
+    ]
+
+    const union = resolveComposeCurveBoolean(operands, 'union')
+    expect(union.status).toBe('resolved')
+    if (union.status !== 'resolved') return
+    const bounds = composeCurveBounds(union.curve)
+    // 容差取两个量化步长：两块面各自舍过一次，边界上的点最多差这么多。
+    expect(bounds.x).toBeCloseTo(40, 1)
+    expect(bounds.y).toBeCloseTo(40, 1)
+    expect(bounds.width).toBeCloseTo(120, 1)
+    expect(bounds.height).toBeCloseTo(120, 1)
+
+    // 判别性的另一半：不做归一（步长为零）时，同一批操作数求解退化——这正是修复之前的行为。
+    expect(resolveComposeCurveBoolean(operands, 'union', 0).status).toBe('degenerate')
   })
 })
