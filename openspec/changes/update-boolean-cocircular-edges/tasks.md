@@ -45,4 +45,11 @@
       的退化产物骗过）
 - [ ] 3.2 端到端：画两个圆、油漆桶填三块面、框选五个对象求并集，产物几何拿圆当尺子断比例；
       既有那条「共用弧边界给出可见拒绝」的用例随之改写成**算得出来**
-- [ ] 3.3 门禁：lint、typecheck、单测、构建、端到端
+- [x] 3.3 门禁：lint、typecheck、单测、构建、端到端
+
+      > `bun run lint` EXIT 0；`bun run typecheck` EXIT 0；`bun run build` EXIT 0；
+      > `bun run test:e2e` EXIT 0（367 passed）。
+      > `bun run test` 在并行满载下报 `@compose-ui/editor#test` 一条失败
+      > （`page-workspace.test.tsx` 的「镜像清单未变化时保存不回写动画文件」，`act` 里等一个
+      > 异步保存超时），单独跑 42 files / 419 tests 全过。它与本变更没有交集——那条用例一个
+      > 曲线都不碰。本仓库这一轮已多次观测到同类只在并行负载下出现的超时。
