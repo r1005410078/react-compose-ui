@@ -29,6 +29,7 @@ import {
   type ComposeSegmentShape,
   type ComposeShapeIntersection,
 } from './curve-geometry'
+import { COMPOSE_GEOMETRY_PRECISION } from './geometry-precision'
 import type {
   ComposeCubicSegment,
   ComposeCurve,
@@ -47,6 +48,25 @@ import type { ComposePosition } from './document-types'
  * 真正的间隙（用户画的两条线差 0.5px）比这大七个数量级，因此这条容差碰不到它。
  */
 export const NODE_EPSILON_RATIO = 1e-7
+
+/**
+ * 节点合并容差的**下限**：坐标量化步长的两倍。
+ *
+ * @remarks
+ * 上面那条推导漏了一种情形。它只认两种距离——浮点噪声（1e-12 相对量）与用户画出来的缝
+ * （0.5 个单位），而**两份独立存进文档的同一个点**落在两者之间：几何经 `roundComposeGeometry`
+ * 舍到两位小数，两份各自最多差半个量子，两维叠起来可达 0.014。相对容差在一张 400 单位的图上
+ * 只有 4e-5，小了三百倍，于是同一个点变成两个节点、两条重合的边变成一条没有面积的缝。
+ *
+ * 症状是**一个形状与由它围出来的面一起运算时报「求解退化」**：一块填充的边界就是它那几个
+ * 边界对象的几何，而两者分别存下来，中间还各自经过盒尺寸量化与投影。用户在图上看见的是两条
+ * 画在一起的线。
+ *
+ * 取两个量子而不是一个：一个量子只够单轴，两维叠起来要 1.41 个，两个留一点余量。
+ *
+ * MUST NOT 把它读成间隙容差——用户画的 0.5 个单位的缝是它的二十五倍，照旧不闭合。
+ */
+export const NODE_EPSILON_FLOOR = 2 * 10 ** -COMPOSE_GEOMETRY_PRECISION
 
 /** 参数空间上「同一个切点」的容差；与 `curve-geometry` 的 `TOUCH_TOLERANCE` 同源。 */
 export const PARAMETER_EPSILON = 1e-6

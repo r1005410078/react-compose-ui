@@ -549,7 +549,19 @@ function cubicAxisExtrema(p0: number, p1: number, p2: number, p3: number): reado
   const discriminant = b * b - 4 * a * c
   if (discriminant < 0) return []
   const root = Math.sqrt(discriminant)
-  return [...inRange((-b + root) / (2 * a)), ...inRange((-b - root) / (2 * a))]
+  /*
+   * 稳定求根，不用 `(−b ± √D) / 2a`。二次项被舍入成极小量时（端点与控制点在这一轴上两两相等，
+   * 精确算术下 `a` 恰好为零而浮点算出来是 1e-15 量级），朴素公式里 `−b + √D` 的两项相差
+   * 1e-14，**灾难性抵消**把两个根一个推成 1e16、一个推出 (0, 1)，真正的 `t = 0.5` 整个丢掉。
+   *
+   * 症状离这里很远：`HATCH` 求面产出的上下对称弧边经归一化写进文档后正好长这样，于是它的紧
+   * 包围盒少算一截，而盒与 `viewBox` 都读这个包围盒——几何被按两者的比例横向拉开，圆弧被拉成
+   * 椭圆弧。
+   *
+   * `q = −(b + sign(b)·√D) / 2` 让两项同号相加，`c / q` 因此是数值稳定的那一个根。
+   */
+  const q = -(b + (b < 0 ? -root : root)) / 2
+  return [...inRange(q / a), ...inRange(q === 0 ? 0 : c / q)]
 }
 
 /**

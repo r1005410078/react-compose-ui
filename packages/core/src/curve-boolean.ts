@@ -27,6 +27,8 @@ import {
   type ComposePlanarPoint,
 } from './curve-geometry'
 import {
+  NODE_EPSILON_FLOOR,
+  NODE_EPSILON_RATIO,
   buildGraph,
   composeCurveFromOutline,
   edgeOf,
@@ -315,8 +317,22 @@ export function resolveComposeCurveBoolean(
       maxY = Math.max(maxY, point.y)
     })
   })
-  // 节点合并容差按包围盒尺度取相对量，与求面同源：世界坐标的量级由图纸比例决定。
-  const epsilon = 1e-7 * Math.max(1, maxX - minX, maxY - minY)
+  /*
+   * 节点合并容差按包围盒尺度取相对量（与求面同源：世界坐标的量级由图纸比例决定），但**不低于
+   * 坐标的量化步长**。
+   *
+   * 下限是必需的：布尔的操作数是**分别存进文档**的整个对象，而一块填充的边界就是它那几个边界
+   * 对象的几何——两份各自舍到两位小数、盒尺寸也各自量化，同一个点因此能差 0.014，而相对量在
+   * 一张 400 单位的图上只有 4e-5。少了这一条，「一个圆与由它围出来的那块面求并集」报的是
+   * 「求解退化」。
+   *
+   * `resolveComposeCurveRegion` **不跟这条**：那边「没有间隙容差」是明写的产品决定，改它是
+   * 另一次取舍。
+   */
+  const epsilon = Math.max(
+    NODE_EPSILON_FLOOR,
+    NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY),
+  )
 
   const graph = buildGraph(pieces, epsilon)
   if (graph.subEdges.length === 0) return { status: 'degenerate' }

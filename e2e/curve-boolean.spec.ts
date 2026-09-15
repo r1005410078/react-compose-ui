@@ -393,8 +393,8 @@ test('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令�
   // 产物可以再当操作数：与一个盖在它上面的矩形求交集，照样算得出来。
   await commandInput.fill('RECTANGLE')
   await commandInput.press('Enter')
-  await page.mouse.click(at(240, 240).x, at(240, 240).y)
-  await page.mouse.click(at(400, 360).x, at(400, 360).y)
+  await page.mouse.click(at(250, 250).x, at(250, 250).y)
+  await page.mouse.click(at(380, 350).x, at(380, 350).y)
   await expect(curves).toHaveCount(2)
 
   await page.mouse.move(at(640, 470).x, at(640, 470).y)

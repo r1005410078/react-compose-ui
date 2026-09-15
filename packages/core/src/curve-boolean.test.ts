@@ -6,6 +6,7 @@ import {
 } from './curve-boolean'
 import { composeCurveSegments, isPointInsideComposeCurve } from './curve'
 import { composeCurveFromOutline } from './curve-arrangement'
+import { resolveComposeCurveRegion } from './curve-region'
 import type { ComposeCurve } from './curve'
 import type { ComposeOutlinePiece } from './curve-geometry'
 
@@ -356,5 +357,26 @@ describe('OpenSpec: compose-document / 布尔操作数可以自带内外判定�
     const implicit = resolveComposeCurveBoolean([{ pieces }, other], 'intersect')
     expect(implicit.status).toBe('resolved')
     expect(implicit).toEqual(explicit)
+  })
+})
+
+describe('OpenSpec: compose-document / 节点合并容差不低于坐标量化步长', () => {
+  it('真正的缝仍然不闭合——量化步长不是间隙容差', () => {
+    /*
+     * 两条边围出一个矩形，但缺口 0.5 个单位（量化步长的五十倍）。容差补了下限之后它仍然求不出
+     * 面：这一条钉住「不是把间隙容差偷偷装回来」。另一半——一个形状与由它围出来的面能算——
+     * 要走完整条落地管线（归一化、盒尺寸量化、投影回世界），因此住在 `stage-engine` 那一侧。
+     */
+    const seg = (from: [number, number], to: [number, number]): ComposeOutlinePiece => ({
+      kind: 'segment',
+      segment: { start: { x: from[0], y: from[1] }, end: { x: to[0], y: to[1] } },
+    })
+    const gapped = [
+      seg([0, 0], [100, 0]),
+      seg([100, 0], [100, 100]),
+      seg([100, 100], [0, 100]),
+      seg([0, 100], [0, 0.5]),
+    ]
+    expect(resolveComposeCurveRegion(gapped, { x: 50, y: 50 }).status).not.toBe('resolved')
   })
 })
