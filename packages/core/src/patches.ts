@@ -12,7 +12,8 @@ function hasOwn(value: object, key: PropertyKey) {
   return Object.prototype.hasOwnProperty.call(value, key)
 }
 
-function cloneDocument<TDocument>(document: TDocument): TDocument {
+/** 深拷贝一份文档；Patch 从不改写传入的文档，改的是这份副本。 @internal */
+export function cloneDocument<TDocument>(document: TDocument): TDocument {
   return JSON.parse(JSON.stringify(document)) as TDocument
 }
 
@@ -173,10 +174,37 @@ export function applyDocumentPatches<TDocument extends object>(
   patches: readonly DocumentPatch[],
 ): ApplyDocumentPatchesResult<TDocument> {
   const candidate = cloneDocument(document)
+  const applied = applyDocumentPatchesInPlace(candidate, patches)
+  if (!applied.ok) return applied
+  return { ok: true, document: candidate, inverse: applied.inverse }
+}
+
+/**
+ * 把 forward Patch 依序**就地**写进 `candidate`。
+ *
+ * @remarks
+ * 这是 {@link applyDocumentPatches} 去掉克隆的那一半，给 batch 循环用：batch 的子命令数与文档
+ * 规模同阶（框选五百条线粘贴就是五百条 `entity.duplicate`），每条都克隆一遍整份文档是
+ * O(文档 × 子命令)。调用方 MUST 自己保证 `candidate` 是一份不与已提交文档共享的副本；失败时
+ * `candidate` 已被部分改写，只能丢弃。
+ *
+ * @returns 成功时带 inverse（与 forward 反序），否则第一个失败问题。
+ * @internal
+ */
+export function applyDocumentPatchesInPlace(
+  candidate: object,
+  patches: readonly DocumentPatch[],
+): { readonly ok: true; readonly inverse: readonly DocumentPatch[] } | PatchFailure {
   const inverse: DocumentPatch[] = []
   for (const patch of patches) {
+    /*
+     * `set` 写进去的是值的**副本**：Patch 本身会被留在事务历史里、还会被 dispatch 按合并结果
+     * 整体重放，而就地应用意味着后续 Patch 可能改写刚写进候选文档的那个对象——batch 里先
+     * `createEntity` 一个容器、再往它的 `childIds` 里 `insert` 一个子级，不拷贝的话重放时
+     * 那次 insert 会做两遍，子级出现两次。
+     */
     const result = patch.op === 'set'
-      ? setPatch(candidate, patch)
+      ? setPatch(candidate, { ...patch, value: cloneDocument(patch.value) })
       : patch.op === 'insert'
         ? insertPatch(candidate, patch)
         : patch.op === 'remove'
@@ -185,7 +213,7 @@ export function applyDocumentPatches<TDocument extends object>(
     if ('ok' in result) return result
     inverse.unshift(result.inverse)
   }
-  return { ok: true, document: candidate, inverse }
+  return { ok: true, inverse }
 }
 
 export function jsonEqual(left: unknown, right: unknown): boolean {

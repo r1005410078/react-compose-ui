@@ -2,9 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   BUILTIN_COMMAND_TYPES,
   createTransactionRuntime,
+  getComposeHierarchy,
+  validateComposeDocument,
   type EditorCommand,
 } from './index'
-import { documentFixture } from './test-fixtures'
+import {
+  containerEntity,
+  documentFixture,
+  rendererEntity,
+  ROOT_FRAME_ID,
+} from './test-fixtures'
 
 function rename(id: string, name: string): EditorCommand {
   return {
@@ -48,6 +55,60 @@ describe('TransactionRuntime v5', () => {
       schemaVersion: 3,
     } as never).status).toBe('rejected')
     expect(runtime.reset(documentFixture(), 'Reload').status).toBe('reset')
+  })
+
+  it('batch 只在整体应用后校验一次，子命令逐条推进但不逐条校验', () => {
+    // 逐条校验是 O(文档 × 子命令)：一份五千 Entity 的图纸上粘贴五百个实测 47 秒。
+    const validate = vi.fn(validateComposeDocument)
+    const runtime = createTransactionRuntime({ document: documentFixture(), validate })
+    validate.mockClear()
+    const batch = (commands: readonly EditorCommand[]): EditorCommand => ({
+      id: 'batch',
+      type: BUILTIN_COMMAND_TYPES.batch,
+      payload: { commands: commands as unknown as never },
+    })
+    expect(runtime.dispatch(batch([
+      rename('one', 'One'),
+      rename('two', 'Two'),
+      rename('three', 'Three'),
+    ])).status).toBe('committed')
+    expect(validate).toHaveBeenCalledTimes(1)
+    expect(runtime.document.entities.rectangle?.name).toBe('Three')
+    expect(runtime.entries).toHaveLength(2)
+
+    // 原子性不靠逐条校验：第三条被拒时前两条也不落地。
+    expect(runtime.dispatch(batch([
+      rename('four', 'Four'),
+      rename('five', 'Five'),
+      rename('invalid', ''),
+    ])).status).toBe('rejected')
+    expect(runtime.document.entities.rectangle?.name).toBe('Three')
+    expect(runtime.entries).toHaveLength(2)
+  })
+
+  it('batch 里先 set 再对同一对象 insert，整体重放后不重复插入', () => {
+    // 子命令就地推进时 set 的值对象会与候选文档共享引用；后一条 insert 若改写了它，
+    // 外层按合并 patches 重放会把那次 insert 做两遍。
+    const runtime = createTransactionRuntime({ document: documentFixture() })
+    expect(runtime.dispatch({
+      id: 'batch',
+      type: BUILTIN_COMMAND_TYPES.batch,
+      payload: {
+        commands: [
+          {
+            id: 'holder',
+            type: BUILTIN_COMMAND_TYPES.createEntity,
+            payload: { entity: containerEntity('holder'), parentId: ROOT_FRAME_ID, index: 0 },
+          },
+          {
+            id: 'leaf',
+            type: BUILTIN_COMMAND_TYPES.createEntity,
+            payload: { entity: rendererEntity('leaf'), parentId: 'holder', index: 0 },
+          },
+        ] as unknown as never,
+      },
+    }).status).toBe('committed')
+    expect(getComposeHierarchy(runtime.document.entities.holder!)?.childIds).toEqual(['leaf'])
   })
 
   it('noop 与 rejected 不进入 History', () => {

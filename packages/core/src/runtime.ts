@@ -1,5 +1,10 @@
 import { validateComposeDocument } from './document'
-import { applyDocumentPatches, jsonEqual } from './patches'
+import {
+  applyDocumentPatches,
+  applyDocumentPatchesInPlace,
+  cloneDocument,
+  jsonEqual,
+} from './patches'
 import {
   asBatchCommands,
   BUILTIN_COMMAND_TYPES,
@@ -210,13 +215,23 @@ export function createDocumentTransactionRuntime<
     if (command.type === BUILTIN_COMMAND_TYPES.batch) {
       const batch = asBatchCommands(command)
       if ('code' in batch) return { status: 'rejected', issues: [batch] }
-      let candidate = currentDocument
-      const combined = []
+      /*
+       * 子命令在**同一份**候选副本上依序就地应用，既不逐条克隆也不逐条校验：两者都是
+       * O(文档) 的，而 batch 的子命令数与文档规模同阶（框选五百条线粘贴就是五百条
+       * `entity.duplicate`），逐条做等于 O(文档 × 子命令)——一份五千 Entity 的图纸上粘贴
+       * 五百个实测 47 秒，界面整个冻住。
+       *
+       * 原子性不靠逐条校验：合并后的 forward patches 由 `dispatch` 整体应用并校验**一次**，
+       * 任一子命令被拒、任一 Patch 应用失败或最终文档非法，整个 batch 都不落地。候选副本
+       * 只在本函数内可见，就地改写不会泄漏到已提交的文档；失败即丢弃。
+       */
+      const candidate = cloneDocument(currentDocument)
+      const combined: DocumentPatch[] = []
       for (const childCommand of batch) {
         const childResult = executeHandler(candidate, childCommand)
         if (childResult.status === 'rejected') return childResult
         if (childResult.status === 'noop') continue
-        const applied = applyDocumentPatches(candidate, childResult.patches)
+        const applied = applyDocumentPatchesInPlace(candidate, childResult.patches)
         if (!applied.ok) {
           return {
             status: 'rejected',
@@ -227,18 +242,6 @@ export function createDocumentTransactionRuntime<
             }],
           }
         }
-        const validation = validate(applied.document)
-        if (!validation.valid) {
-          return {
-            status: 'rejected',
-            issues: validation.issues.map((item) => ({
-              code: item.code,
-              message: item.message,
-              path: item.path,
-            })),
-          }
-        }
-        candidate = validation.document
         combined.push(...childResult.patches)
       }
       return combined.length > 0
