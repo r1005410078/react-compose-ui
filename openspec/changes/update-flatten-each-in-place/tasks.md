@@ -50,4 +50,15 @@
       > Green command: `bun run test:e2e -- e2e/curve-boolean.spec.ts`
       > Green result: 10 passed
 
-- [ ] 3.2 门禁：lint、typecheck、单测、构建、端到端
+- [x] 3.2 门禁：lint、typecheck、单测、构建、端到端
+
+      > 跑了两轮。第一轮 `@compose-ui/stage#typecheck` 真红了一处——新加的弧形夹具撞上
+      > `curveEntity` 那个辅助函数被钉死成矩形那一种的参数类型，放宽成 `ComposeCurve` 即可；
+      > 这一处**单测发现不了**，因为 vitest 不做类型检查。
+      >
+      > 第二轮：`bun run lint` EXIT 0、`bun run typecheck` EXIT 0、`bun run build` EXIT 0。
+      > `bun run test` 与 `bun run test:e2e` 在并行满载下各红一条，而且**两轮红的不是同一条**
+      > （第一轮 `preview-fullscreen`、第二轮 `curve-selection-outline`；单测两轮都落在
+      > `packages/editor` 的 `page-workspace.test.tsx` 上，但具体哪一条也不同）。逐个单独重跑
+      > 全过：`@compose-ui/editor` 42 files / 419 tests，两条端到端各自 6 passed / 2 passed。
+      > 与本变更没有交集——那几条用例一次布尔运算都不跑。本仓库这一轮已多次观测到同类超时。
