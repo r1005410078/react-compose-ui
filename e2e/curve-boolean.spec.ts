@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 /**
  * `FLATTEN` 把选中的形状换成一条可编辑的 `path`。
@@ -326,83 +326,167 @@ test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 交集为�
 })
 
 /**
- * 由圆围出来的填充块参与区域运算。
+ * 打开画布并备好键入坐标的工具。
  *
- * 这是用户报上来的那一档：两个圆、油漆桶填三块面、框选全部、按并集——四种区域运算一个都不做，
- * 命令行写着「这一版还不支持带曲线段的路径」。求面产出的面边上有弧就只能落成 `path`（多段线
- * 顶点没有 bulge），而区域运算此前把 `path` 整个拒掉。产品自己产出的东西产品自己不认。
+ * @remarks
+ * 圆与矩形一律**键入坐标**而不是点击：几何因此精确已知，尺寸断言才有意义。只有油漆桶的落点
+ * 与选择集必须用指针——前者是 `pick`（不过点输入管线），后者本来就是点选。
  */
-test('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令会话只管数量 / 由弧围成的填充块参与区域运算', async ({ page }) => {
+async function openBooleanStage(page: Page) {
   await page.goto('/?no-auto-fit')
-
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
-  const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
-  await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
-  const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
-
+  await expect(surface).toBeVisible()
+  const view = await page.evaluate(() => {
+    const scene = document.querySelector('.compose-stage__scene') as HTMLElement
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(scene).transform)
+    const rect = (document.querySelector('[data-testid="stage-surface"]') as HTMLElement)
+      .getBoundingClientRect()
+    return { zoom: matrix.a, x: matrix.e, y: matrix.f, left: rect.left, top: rect.top }
+  })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
-  const curves = stage.locator('[data-testid="compose-material-curve-stroke"]')
-
-  // 两个重叠的圆：各自点圆心再点半径点。
-  for (const [centre, edge] of [[[300, 300], [420, 300]], [[460, 300], [580, 300]]] as const) {
-    await commandInput.fill('CIRCLE')
-    await commandInput.press('Enter')
-    await page.mouse.click(at(centre[0], centre[1]).x, at(centre[0], centre[1]).y)
-    await page.mouse.click(at(edge[0], edge[1]).x, at(edge[0], edge[1]).y)
-    await expect(prompt).toContainText('命令：')
+  return {
+    at: (x: number, y: number) => ({
+      x: view.left + view.x + x * view.zoom,
+      y: view.top + view.y + y * view.zoom,
+    }),
+    commandInput,
+    curves: stage.locator('[data-testid="compose-material-curve-stroke"]'),
+    key: async (command: string, points: readonly string[]) => {
+      await commandInput.fill(command)
+      await commandInput.press('Enter')
+      for (const point of points) {
+        await commandInput.fill(point)
+        await commandInput.press('Enter')
+      }
+      await commandInput.press('Escape')
+    },
+    prompt: stage.getByTestId('stage-drafting-command-prompt'),
+    stage,
+    zoom: view.zoom,
   }
-  await expect(curves).toHaveCount(2)
+}
 
-  // 油漆桶把三块面各填一次：左边的月牙、中间的透镜、右边的月牙。
-  for (const [x, y] of [[220, 300], [380, 300], [540, 300]] as const) {
-    await commandInput.fill('HATCH')
-    await commandInput.press('Enter')
-    await expect(prompt).toContainText('点一下要填充的区域内部')
-    await page.mouse.click(at(x, y).x, at(x, y).y)
-    await commandInput.press('Escape')
-    await commandInput.press('Escape')
-  }
+/**
+ * 在页面内量每条曲线渲染出来的尺寸。
+ *
+ * @remarks
+ * **不用 Playwright 的 `boundingBox()`**：它量的是绘制边界，尖角上的斜接（miter）会把描边
+ * 甩出形状之外——这个并集的产物因此读成 335 × 269 而不是 320 × 240，而那 15 与 29 个像素
+ * 与几何无关。页面内的 `getBoundingClientRect` 给的是几何边界。
+ */
+async function measureCurves(page: Page) {
+  return page.evaluate(() => [...document.querySelectorAll('[data-entity-id]')]
+    .filter((node) => !node.getAttribute('data-entity-id')!.startsWith('frame'))
+    .flatMap((node) => {
+      const element = node.querySelector('[data-testid="compose-material-curve-stroke"]')
+      if (!element) return []
+      const rect = element.getBoundingClientRect()
+      return [{
+        fill: element.getAttribute('fill') ?? '',
+        height: rect.height,
+        tag: element.tagName,
+        width: rect.width,
+      }]
+    }))
+}
+
+/**
+ * 由圆弧围成的填充块参与区域运算。
+ *
+ * 这是用户报上来的那一档：求面产出的面边上有弧就只能落成 `path`（多段线顶点没有 bulge），
+ * 而区域运算此前把 `path` 整个拒掉，命令行写着「这一版还不支持带曲线段的路径」。产品自己
+ * 产出的东西产品自己不认。
+ *
+ * 断的是**几何尺寸**而不只是「算出来了」：把弧拍成折线同样算得出来，而尺寸对不上正是棱的
+ * 直接后果；只数个数的话，一个几像素大的退化产物也能让用例变绿。
+ */
+test('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令会话只管数量 / 由弧围成的填充块参与区域运算', async ({ page }) => {
+  const { at, commandInput, curves, key, prompt, stage } = await openBooleanStage(page)
+
+  // 两个相交的圆：圆心 (100,100) 与 (260,100)，半径各 120。
+  await key('CIRCLE', ['100,100', '220,100'])
+  await key('CIRCLE', ['260,100', '380,100'])
+
+  // 油漆桶填左边那块月牙：它的两条边都是圆弧，因此只能落成 `path`。
+  await commandInput.fill('HATCH')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('点一下要填充的区域内部')
+  await page.mouse.click(at(20, 100).x, at(20, 100).y)
+  await commandInput.press('Escape')
+  await commandInput.press('Escape')
+  const fills = stage.locator('[data-testid="compose-material-curve-stroke"][fill^="#"]')
+  await expect(fills).toHaveCount(1)
+  await expect(fills.first()).toHaveJSProperty('tagName', 'path')
+
+  // 一个压在月牙右半边上的矩形；两者没有共用的边界。
+  await key('RECTANGLE', ['150,60', '300,140'])
+  await page.keyboard.press('Escape')
+  await expect(curves).toHaveCount(4)
+
   /*
-   * 三块面都落成了 `path`：它们的边是圆弧，而多段线的顶点没有 bulge，弧边没有别处可放。
-   * 不断这一条，下面那句「并集算出来了」在产物碰巧是多段线时也会绿。
+   * 选月牙的内部，再 Shift 点矩形的右边线。**不点 (180, 100)**——那正好压在月牙选区盒的右
+   * 边缘，Shift 点击会被缩放命中带吃掉，选区不增加。
    */
-  await expect(curves).toHaveCount(5)
-  await expect(stage.locator('path[data-testid="compose-material-curve-stroke"]')).toHaveCount(3)
-
-  // 从右下往左上框选（窗交），把两个圆与三块填充一起选上。
-  await page.mouse.move(at(640, 470).x, at(640, 470).y)
-  await page.mouse.down()
-  await page.mouse.move(at(140, 140).x, at(140, 140).y, { steps: 10 })
-  await page.mouse.up()
-  await expect(stage.getByTestId('stage-selection-bounds')).toHaveCount(1)
+  await page.mouse.click(at(20, 100).x, at(20, 100).y)
+  await page.keyboard.down('Shift')
+  await page.mouse.click(at(300, 100).x, at(300, 100).y)
+  await page.keyboard.up('Shift')
 
   await commandInput.fill('UNION')
   await commandInput.press('Enter')
+  await expect(prompt).toContainText('命令：')
 
+  // 两个操作数合成一个，两个圆原样留着。
+  await expect(curves).toHaveCount(3)
+  await expect(fills).toHaveCount(1)
   /*
-   * 五个操作数合成一个：命令行回到「命令：」而不是那句拒绝，图上只剩一条曲线。
-   * 断数量而不只断文案——拒绝的文案改了之后，只断文案的用例会静默失去判别性。
+   * 月牙 x ∈ [−20, 180]、矩形 x ∈ [150, 300]，并集因此是 320 × 240 世界单位。拿**圆自己**当
+   * 尺子（它恒是 240 × 240）而不是换算屏幕缩放：两者在同一次测量里，比例因此与缩放无关。
+   * 弧被拍成折线时这个比例会小掉——多边形的顶点落在弧的内侧。
    */
-  await expect(prompt).toContainText('命令：')
-  await expect(curves).toHaveCount(1)
-  await expect(curves.first()).toHaveJSProperty('tagName', 'path')
+  const measured = await measureCurves(page)
+  expect(measured).toHaveLength(3)
+  // 圆自己是尺子（恒 240 × 240），比例因此与画布缩放无关。
+  const ruler = measured.find((item) => item.tag === 'circle')!
+  const merged = measured.find((item) => item.fill.startsWith('#'))!
+  expect(merged.width / ruler.width).toBeCloseTo(320 / 240, 2)
+  expect(merged.height / ruler.height).toBeCloseTo(1, 2)
+})
 
-  // 产物可以再当操作数：与一个盖在它上面的矩形求交集，照样算得出来。
-  await commandInput.fill('RECTANGLE')
-  await commandInput.press('Enter')
-  await page.mouse.click(at(250, 250).x, at(250, 250).y)
-  await page.mouse.click(at(380, 350).x, at(380, 350).y)
-  await expect(curves).toHaveCount(2)
+/**
+ * 两块共用一段弧形边界的填充求并集，给出**可见的拒绝**。
+ *
+ * 这一条钉住的是一处已知边界，不是一项能力：两块相邻的面共用的那段弧在两个对象里各存了一份、
+ * 各自量化，而平面图只在**交点**处切边——两段近似共圆的弧求交给出的是没有意义的点。把共圆的
+ * 边归一成同一个圆是另一次变更。
+ *
+ * 用例存在的理由是**挡住一种错误的修法**：把节点合并容差调大确实能让它不再报错，但产出的是
+ * 一个几像素大的退化形状——那是把一个看得见的失败换成一个看不见的错误，方向反了。
+ */
+test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 共用弧形边界的两块填充给出可见的拒绝', async ({ page }) => {
+  const { at, commandInput, curves, key, prompt } = await openBooleanStage(page)
+  await key('CIRCLE', ['100,100', '220,100'])
+  await key('CIRCLE', ['260,100', '380,100'])
+  for (const seed of [[20, 100], [200, 100]] as const) {
+    await commandInput.fill('HATCH')
+    await commandInput.press('Enter')
+    await page.mouse.click(at(seed[0], seed[1]).x, at(seed[0], seed[1]).y)
+    await commandInput.press('Escape')
+    await commandInput.press('Escape')
+  }
+  await page.keyboard.press('Escape')
+  await expect(curves).toHaveCount(4)
 
-  await page.mouse.move(at(640, 470).x, at(640, 470).y)
-  await page.mouse.down()
-  await page.mouse.move(at(140, 140).x, at(140, 140).y, { steps: 10 })
-  await page.mouse.up()
-  await commandInput.fill('INTERSECT')
+  await page.mouse.click(at(20, 100).x, at(20, 100).y)
+  await page.keyboard.down('Shift')
+  await page.mouse.click(at(200, 100).x, at(200, 100).y)
+  await page.keyboard.up('Shift')
+
+  await commandInput.fill('UNION')
   await commandInput.press('Enter')
-  await expect(prompt).toContainText('命令：')
-  await expect(curves).toHaveCount(1)
+  await expect(prompt).toContainText('算不出来')
+  // 文档一个字节不变：拒绝不产出任何东西。
+  await expect(curves).toHaveCount(4)
 })

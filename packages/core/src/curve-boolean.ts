@@ -27,7 +27,6 @@ import {
   type ComposePlanarPoint,
 } from './curve-geometry'
 import {
-  NODE_EPSILON_FLOOR,
   NODE_EPSILON_RATIO,
   buildGraph,
   composeCurveFromOutline,
@@ -318,21 +317,16 @@ export function resolveComposeCurveBoolean(
     })
   })
   /*
-   * 节点合并容差按包围盒尺度取相对量（与求面同源：世界坐标的量级由图纸比例决定），但**不低于
-   * 坐标的量化步长**。
+   * 节点合并容差按包围盒尺度取相对量，与求面同源：世界坐标的量级由图纸比例决定。
    *
-   * 下限是必需的：布尔的操作数是**分别存进文档**的整个对象，而一块填充的边界就是它那几个边界
-   * 对象的几何——两份各自舍到两位小数、盒尺寸也各自量化，同一个点因此能差 0.014，而相对量在
-   * 一张 400 单位的图上只有 4e-5。少了这一条，「一个圆与由它围出来的那块面求并集」报的是
-   * 「求解退化」。
-   *
-   * `resolveComposeCurveRegion` **不跟这条**：那边「没有间隙容差」是明写的产品决定，改它是
-   * 另一次取舍。
+   * **刻意不给它补一个「坐标量化步长」的下限**，哪怕那条推导本身成立（两份分别存进文档的同一
+   * 个点各自舍到两位、盒尺寸也各自量化，能差 0.014，而相对量在 400 单位的图上只有 4e-5）。
+   * 量过：补上下限之后，「一个形状与由它围出来的那块面一起求并集」不再报「求解退化」，而是
+   * **静默产出一个几像素大的点**——近似共圆的边还没有被归一成同一个圆，容差只是让求解跨过了
+   * 报错那一关，答案仍然是错的。把一个看得见的失败换成一个看不见的错误，方向反了。
+   * 要解决那一档得先把共圆的边归一，那是另一次变更。
    */
-  const epsilon = Math.max(
-    NODE_EPSILON_FLOOR,
-    NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY),
-  )
+  const epsilon = NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY)
 
   const graph = buildGraph(pieces, epsilon)
   if (graph.subEdges.length === 0) return { status: 'degenerate' }

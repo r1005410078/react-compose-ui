@@ -37,12 +37,14 @@
   「『X』含自由曲线段，布尔运算只收直线与圆弧」。SVG 导进来的自由曲线仍然拒绝并说明。
 - **不走「把贝塞尔拍成折线」**：那会把圆算成多边形，产物看得见棱；与 SVG 导入「非等比下的圆
   MUST NOT 拍扁成多段线」同一条判断。
-- **节点合并容差补一个下限：坐标的量化步长**（`max(两个量化步长, 1e-7 × 尺度)`）。落地时量出来
-  的第二半根因：光接受 `path` 还不够——**一个圆与由它围出来的那块面一起求并集仍然报「求解
-  退化」**。既有容差是相对量（400 单位的图上 4e-5），而两份独立存进文档的同一个点各自舍到两位
-  小数、可以差 0.014，于是同一个点变成两个节点、两条重合的边变成一条没有面积的缝。它**不是**
-  间隙容差：用户画的 0.5px 缝是量化步长的几十倍，照旧求不出面。只作用于布尔，`HATCH` 的求面
-  仍用原值——那一条「没有间隙容差」是明写的产品决定，动它是另一次取舍。
+- **顺手修掉一处更底层的数值缺陷**：`cubicAxisExtrema` 用朴素求根式，二次项被舍入成 1e-15 时
+  灾难性抵消把两个根全丢掉。症状离求根很远——**路径的紧包围盒少算一截**，而盒与 `viewBox` 都读
+  这个包围盒，几何于是被按两者的比例拉开，圆弧被拉成椭圆弧、识别不认。`HATCH` 求面产出的上下
+  对称弧边经归一化之后正好落在这一档。这是 bug 修复（恢复既有意图），因此只补用例。
+- **两个操作数共用一段弧形边界时仍然求解退化，写在明处**：那段弧在两个对象里各存一份、各自
+  量化，而平面图只在交点处切边，两段近似共圆的弧求交给出的是没有意义的点。**试过调大节点合并
+  容差，那条路是错的**——求解确实不再报错，产出的却是一个几像素大的退化形状，等于把一个看得见
+  的失败换成一个看不见的错误。把共圆的边归一成同一个圆是下一次变更。
 - **不动 `FLATTEN`**：它不求交，本来就放行 `path`。
 - 结果一侧不改：产物仍由 `composeCurveFromOutline` 落最窄 kind，弧边再次落成同一个闭式解的
   贝塞尔，因此**结果可以再当操作数**——往返稳定。
@@ -53,12 +55,11 @@
   `stage-engine`（修改：`bezier` 拒绝的含义收窄到自由曲线段）、`stage`（修改：那一句拒绝文案）
 - 受影响的代码：
   - `packages/core/src/curve-geometry.ts`（新增 `composeCubicAsArc` / `composeCubicAsSegment`）
-  - `packages/core/src/curve-boolean.ts`（操作数可选 `curve`、节点容差下限）
-  - `packages/core/src/curve-arrangement.ts`（`NODE_EPSILON_FLOOR`）
+  - `packages/core/src/curve-boolean.ts`（操作数可选 `curve`）
   - `packages/stage-engine/src/commands/curve-world.ts`（`path` 的世界轮廓按段识别）
   - `packages/stage-engine/src/commands/curve-boolean.ts`（收集操作数时对 `path` 分流）
   - `packages/stage/src/stage-i18n.ts`（`booleanRejectBezier` 文案）
-  - `e2e/curve-boolean.spec.ts`（两个圆加三块填充框选求并集）
+  - `e2e/curve-boolean.spec.ts`（弧形填充与矩形求并集、共用弧边界给出可见的拒绝）
 - 不受影响：`Curve` / `Hatch` 协议与 `schemaVersion`、填充求面与跟随、`FLATTEN`、命中与捕捉、
   `HATCH` 与 `TRIM` 读的世界轮廓（它们走的 `stageWorldOutline` 一行不改）。
 - 与在途变更不冲突：`openspec list` 为空。
