@@ -27,7 +27,7 @@ import {
   type ComposePlanarPoint,
 } from './curve-geometry'
 import {
-  NODE_EPSILON_RATIO,
+  composeNodeEpsilon,
   buildGraph,
   composeCurveFromOutline,
   edgeOf,
@@ -322,17 +322,8 @@ export function resolveComposeCurveBoolean(
       maxY = Math.max(maxY, point.y)
     })
   })
-  /*
-   * 节点合并容差取两者的较大者：包围盒尺度的相对量（浮点卫生，与求面同源）与**一个坐标量化
-   * 步长**。后者的理由是同一个角点被两个对象各自写进文档、各自舍到两位，两份就能差这么多，
-   * 而相对量在一张 400 单位的图上只有 4e-5。
-   *
-   * 这条下限**单独不成立**，它与 `buildGraph` 里的支撑归一是一对：量过——只抬容差而不归一，
-   * 两块共用弧边界的填充求并集仍然报「求解退化」；另一个夹具上它会跨过报错那一关而**静默产出
-   * 一个几像素大的形状**，把一个看得见的失败换成一个看不见的错误。因此**不要**在归一被去掉或
-   * 绕开的情况下单独留着它。
-   */
-  const epsilon = Math.max(NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY), quantum)
+  // 容差的推导与「它单独不成立」都写在 `composeNodeEpsilon` 那里，两个调用方读同一份。
+  const epsilon = composeNodeEpsilon(Math.max(1, maxX - minX, maxY - minY), quantum)
 
   const graph = buildGraph(pieces, epsilon, quantum)
   if (graph.subEdges.length === 0) return { status: 'degenerate' }

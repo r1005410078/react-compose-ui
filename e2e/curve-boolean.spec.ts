@@ -456,19 +456,20 @@ test('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令�
 })
 
 /**
- * 两块共用一段弧形边界的填充求并集，给出**可见的拒绝**。
+ * 两块共用一段弧形边界的填充求并集。
  *
- * 这一条钉住的是一处已知边界，不是一项能力：两块相邻的面共用的那段弧在两个对象里各存了一份、
- * 各自量化，而平面图只在**交点**处切边——两段近似共圆的弧求交给出的是没有意义的点。把共圆的
- * 边归一成同一个圆是另一次变更。
+ * 这一条是用户报的那张图：两个相交的圆，油漆桶填出的几块面，全选求运算。共用的那段弧在两个
+ * 对象里各存了一份、各自量化，两份的圆心因此差到三个量化步长——归一之前平面图把它们当成两条
+ * 几乎共圆的边，每一个射线方向都退化。
  *
- * 用例存在的理由是**挡住一种错误的修法**：把节点合并容差调大确实能让它不再报错，但产出的是
- * 一个几像素大的退化形状——那是把一个看得见的失败换成一个看不见的错误，方向反了。
+ * 断的是**几何尺寸**而不是「算出来了」：左月牙 ∪ 透镜恰好是整个左边那个圆，与右边那个圆一样
+ * 大。只数个数的话，一个几像素大的退化产物同样能让用例变绿——上一个变更就栽在这里。
  */
-test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 共用弧形边界的两块填充给出可见的拒绝', async ({ page }) => {
+test('OpenSpec: compose-document / 重合的边界在建图之前归一到同一条支撑 / 两块共用弧边界的填充求得出并集', async ({ page }) => {
   const { at, commandInput, curves, key, prompt } = await openBooleanStage(page)
   await key('CIRCLE', ['100,100', '220,100'])
   await key('CIRCLE', ['260,100', '380,100'])
+  // 左月牙与透镜：两者共用圆 b 左边那段弧。
   for (const seed of [[20, 100], [200, 100]] as const) {
     await commandInput.fill('HATCH')
     await commandInput.press('Enter')
@@ -486,7 +487,62 @@ test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 共用弧�
 
   await commandInput.fill('UNION')
   await commandInput.press('Enter')
-  await expect(prompt).toContainText('算不出来')
-  // 文档一个字节不变：拒绝不产出任何东西。
-  await expect(curves).toHaveCount(4)
+  await expect(prompt).toContainText('命令：')
+
+  // 两块填充合成一块，两个圆原样留着。
+  await expect(curves).toHaveCount(3)
+  const measured = await measureCurves(page)
+  expect(measured).toHaveLength(3)
+  /*
+   * 拿**圆自己**当尺子（它恒是 240 × 240）而不是换算屏幕缩放：两者在同一次测量里，比例因此
+   * 与缩放无关。左月牙 ∪ 透镜 = 整个圆 a，两轴都是 1:1。
+   */
+  const ruler = measured.find((item) => item.tag === 'circle')!
+  const merged = measured.find((item) => item.fill.startsWith('#'))!
+  expect(merged.width / ruler.width).toBeCloseTo(1, 2)
+  expect(merged.height / ruler.height).toBeCloseTo(1, 2)
+})
+
+/**
+ * 用户报上来的那一下：两个相交的圆、三块填出来的面，框选全部再求并集。
+ *
+ * 三块面两两都贴着同一条弧，而每一条共用的弧在图里各存了一份——这是「共用曲线边界」这一档
+ * 最密的形式：五个对象一次进同一张平面图。
+ *
+ * 断的是**尺寸差**而不是绝对尺寸：量到的是渲染出来的墨，含描边宽度；拿并集与单个圆的宽度
+ * **相减**，那个常数就抵掉了，剩下的正好是 (200 − 120) 个世界单位。
+ */
+test('OpenSpec: compose-document / 重合的边界在建图之前归一到同一条支撑 / 框选全部五个对象求并集', async ({ page }) => {
+  const { at, commandInput, curves, key, prompt, zoom } = await openBooleanStage(page)
+  // 半径 60、圆心相距 80 的两个圆：整份图连同框选的余量都落在图面可视区里。
+  await key('CIRCLE', ['100,100', '160,100'])
+  await key('CIRCLE', ['180,100', '240,100'])
+  for (const seed of [[50, 100], [140, 100], [230, 100]] as const) {
+    await commandInput.fill('HATCH')
+    await commandInput.press('Enter')
+    await page.mouse.click(at(seed[0], seed[1]).x, at(seed[0], seed[1]).y)
+    await commandInput.press('Escape')
+    await commandInput.press('Escape')
+  }
+  await page.keyboard.press('Escape')
+  await expect(curves).toHaveCount(5)
+
+  // 先量一个圆当尺子：它恒是 120 个世界单位宽。
+  const ruler = (await measureCurves(page)).find((item) => item.tag === 'circle')!
+
+  // 从空白处拖一个从左往右的框：窗口判定，五个对象全部被完全框住。
+  await page.mouse.move(at(20, 20).x, at(20, 20).y)
+  await page.mouse.down()
+  await page.mouse.move(at(270, 185).x, at(270, 185).y, { steps: 8 })
+  await page.mouse.up()
+
+  await commandInput.fill('UNION')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('命令：')
+  await expect(curves).toHaveCount(1)
+
+  const merged = (await measureCurves(page))[0]!
+  // 两个圆的并集：宽 200、高 120 个世界单位。描边那个常数在相减里抵掉。
+  expect((merged.width - ruler.width) / zoom).toBeCloseTo(200 - 120, 0)
+  expect((merged.height - ruler.height) / zoom).toBeCloseTo(0, 0)
 })

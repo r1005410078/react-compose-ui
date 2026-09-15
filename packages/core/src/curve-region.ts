@@ -20,7 +20,7 @@ import {
   type ComposePlanarPoint,
 } from './curve-geometry'
 import {
-  NODE_EPSILON_RATIO,
+  composeNodeEpsilon,
   RAY_ANGLES,
   buildGraph,
   composeCurveFromOutline,
@@ -246,7 +246,7 @@ export function resolveComposeCurveRegion(
   })
   const scale = Math.max(1, maxX - minX, maxY - minY)
   // 与布尔同一条：相对量是浮点卫生，量化步长是「同一个点存了两份」的下限，取较大者。
-  const epsilon = Math.max(NODE_EPSILON_RATIO * scale, quantum)
+  const epsilon = composeNodeEpsilon(scale, quantum)
   const reach = Math.hypot(maxX - minX, maxY - minY) * 2 + scale
 
   const graph = buildGraph(pieces, epsilon, quantum)
