@@ -16,4 +16,8 @@
       >
       > Green command: `bun run test:e2e -- e2e/curve-boolean.spec.ts`
       > Green result: 10 passed
-- [ ] 1.6 门禁：lint、typecheck、单测、构建、端到端
+- [x] 1.6 门禁：lint、typecheck、单测、构建、端到端
+
+      > 五项全绿，一次过：`bun run lint` 0、`bun run typecheck` 0、`bun run build` 0、
+      > `bun run test` 0、`bun run test:e2e` 0（368 passed）。这一轮没有出现前几次那种
+      > 并行满载下的超时。
