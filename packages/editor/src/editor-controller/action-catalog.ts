@@ -22,6 +22,7 @@ import { createComposeImmediateCommand } from '@compose-ui/commands'
 import type { ComposeCommandAction } from '@compose-ui/command-panel'
 import type { ComposeCommandDefinition, ComposeCommandDescriptor } from '@compose-ui/commands'
 import type { StageDraftingContext, StageDraftingEffect } from '@compose-ui/stage-engine'
+import type { ComposeStagePasteTarget } from '@compose-ui/stage'
 import type {
   CommandDispatchResult,
   ComposeDocument,
@@ -174,8 +175,22 @@ export interface ComposeEditorActionContext {
   readonly copySelection?: () => void
   /** 把当前未锁定选区写入剪切剪贴板。 */
   readonly cutSelection?: () => void
-  /** 按建议落点粘贴会话剪贴板。 */
-  readonly pasteSelection?: () => void
+  /**
+   * 粘贴会话剪贴板。
+   *
+   * @param target - Stage 解算好的落点（指针在图面上时随 `edit.paste` 一起到达）；缺席时按
+   *   建议落点粘贴。
+   */
+  readonly pasteSelection?: (target?: ComposeStagePasteTarget) => void
+  /**
+   * 本次 `edit.paste` 的落点。
+   *
+   * @remarks
+   * 它是**一次调用**的事实而不是编辑器状态：由 Stage 随动作一起交来，宿主在接管那一刻把它
+   * 并进上下文再构建执行层。放在这里而不是给 `run()` 加参数，是因为目录里只有粘贴一条动作
+   * 认识落点，而 `run()` 的签名被工具栏、命令面板与快捷键三处共用。
+   */
+  readonly pasteTarget?: ComposeStagePasteTarget | null
 }
 
 /**
@@ -313,7 +328,7 @@ export function createComposeEditorActionHandlers(
     ),
     'edit.paste': handler(
       context.canPaste ? undefined : 'emptyClipboard',
-      () => { context.pasteSelection?.() },
+      () => { context.pasteSelection?.(context.pasteTarget ?? undefined) },
     ),
     'edit.duplicate': handler(selectionMissing ?? geometryPending, () => {
       const sourceId = editable[0]

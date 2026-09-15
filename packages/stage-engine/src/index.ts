@@ -196,6 +196,7 @@ export {
   type ComposeDuplicateInsertion,
   type ComposeEntityClipboard,
   type ComposeEntityInsertion,
+  type ComposeEntityPasteAnchor,
   type ComposeLayerOrderOperation,
   type ComposeStructureCommandAvailability,
   type StageDeleteEntitiesOptions,

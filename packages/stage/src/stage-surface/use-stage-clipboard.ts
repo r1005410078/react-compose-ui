@@ -6,11 +6,15 @@ import {
   getEntityParentId,
   isInvalidCutInsertion,
   resolveSuggestedEntityInsertion,
+  type StagePoint,
+  type StageSceneIndex,
 } from '@compose-ui/stage-engine'
 import type {
   ComposeStageClipboard,
   ComposeStageDelegatableAction,
   ComposeStageDispatch,
+  ComposeStagePasteTarget,
+  ComposeStageShortcutActionDetail,
 } from '../types'
 
 /** 剪贴板动作；与快捷键动作同名，因此可以直接转交宿主委派。 */
@@ -20,6 +24,8 @@ export type StageClipboardAction = 'edit.copy' | 'edit.cut' | 'edit.paste'
 export interface StageClipboardParams {
   readonly document: ComposeDocument
   readonly layoutSnapshot: ComposeLayoutSnapshot
+  /** 场景索引；粘贴落点用它找指针下的容器，与拖放落点同一条判据。 */
+  readonly index: StageSceneIndex
   /** 已归一化的选区；无显式目标时的默认来源与粘贴锚点都取自它。 */
   readonly normalizedSelection: readonly string[]
   /** 激活场景 ID；无命中目标时粘贴落进它。 */
@@ -30,7 +36,10 @@ export interface StageClipboardParams {
   readonly dispatch: ComposeStageDispatch
   readonly idFactory: () => string
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
-  readonly onShortcutAction?: (action: ComposeStageDelegatableAction) => boolean
+  readonly onShortcutAction?: (
+    action: ComposeStageDelegatableAction,
+    detail?: ComposeStageShortcutActionDetail,
+  ) => boolean
 }
 
 /** 剪贴板能力的出口。 */
@@ -42,8 +51,14 @@ export interface StageClipboard {
    *
    * @param targetId - 右键命中的对象；`undefined` 表示来自快捷键，没有显式目标。
    *   注意 `null` 与 `undefined` 不同：`null` 是「明确右键在空白处」。
+   * @param worldPoint - 粘贴时指针的世界坐标；给了就把整组副本落到那里、父级取指针下的
+   *   容器。指针不在图面上时传 `null`/省略，粘贴退回建议落点。复制与剪切不读它。
    */
-  readonly executeClipboard: (action: StageClipboardAction, targetId?: string | null) => void
+  readonly executeClipboard: (
+    action: StageClipboardAction,
+    targetId?: string | null,
+    worldPoint?: StagePoint | null,
+  ) => void
   /** 针对某个右键目标的三项可用性。 */
   readonly availabilityFor: (targetId: string | null) => StageClipboardAvailability
 }
@@ -69,6 +84,7 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
     dispatch,
     document,
     idFactory,
+    index,
     layoutSnapshot,
     normalizedSelection,
     onClipboardChange,
@@ -90,8 +106,29 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
       : normalizedSelection
   ), [normalizedSelection])
 
-  const executeClipboard = (action: StageClipboardAction, targetId?: string | null) => {
-    if (onShortcutAction?.(action)) return
+  /**
+   * 指针指着的粘贴落点。
+   *
+   * @remarks
+   * 父级取指针下的容器（与拖放落点同一条判据），剪切时排除来源自己——把一个容器剪下来
+   * 再粘到它自己里面不是落点；指针不在任何容器里时落进激活场景。
+   */
+  const resolvePasteTarget = (worldPoint: StagePoint): ComposeStagePasteTarget | null => {
+    const containerId = index.containerAtPoint(
+      worldPoint,
+      clipboard?.kind === 'cut' ? clipboard.entityIds : [],
+    )
+    const insertion = resolveSuggestedEntityInsertion(document, containerId, activeFrameId)
+    return insertion ? { worldPoint, insertion } : null
+  }
+
+  const executeClipboard = (
+    action: StageClipboardAction,
+    targetId?: string | null,
+    worldPoint?: StagePoint | null,
+  ) => {
+    const pasteTarget = action === 'edit.paste' && worldPoint ? resolvePasteTarget(worldPoint) : null
+    if (onShortcutAction?.(action, action === 'edit.paste' ? { pasteTarget } : undefined)) return
     if (action === 'edit.copy' || action === 'edit.cut') {
       const next = createEntityClipboard(
         document,
@@ -105,7 +142,8 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
       ? (normalizedSelection[normalizedSelection.length - 1] ?? null)
       : targetId
     // 无命中目标时落进激活场景，而不是 rootIds 里恰好排第一的那块。
-    const insertion = resolveSuggestedEntityInsertion(document, insertionTarget, activeFrameId)
+    const insertion = pasteTarget?.insertion
+      ?? resolveSuggestedEntityInsertion(document, insertionTarget, activeFrameId)
     if (!clipboard || !insertion) return
     const plan = createPasteFromClipboard(
       document,
@@ -113,6 +151,7 @@ export function useStageClipboard(params: StageClipboardParams): StageClipboard 
       insertion,
       idFactory,
       layoutSnapshot,
+      pasteTarget ? { worldPoint: pasteTarget.worldPoint } : null,
     )
     if (!plan) return
     if (dispatch(plan.command).status === 'committed') {

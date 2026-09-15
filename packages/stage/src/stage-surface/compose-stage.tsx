@@ -1279,12 +1279,51 @@ function ComposeStageReady({
     dispatch,
     document,
     idFactory,
+    index: sceneIndex,
     layoutSnapshot,
     normalizedSelection,
     onClipboardChange,
     onSelectedIdsChange,
     onShortcutAction,
   })
+  /*
+   * 粘贴落点读的是**图面局部的屏幕坐标**而不是世界坐标：滚轮缩放时指针没动、它底下的世界点
+   * 却变了，记世界坐标会让紧接着的粘贴落到缩放之前指着的地方。换算放在按下 `Cmd/Ctrl+V`
+   * 的那一刻，用当时的视口。它是 ref 而不是状态——每一次 pointermove 都写，没有任何渲染
+   * 期读它。
+   */
+  const pointerScreenRef = useRef<StagePoint | null>(null)
+  const rememberPointer = useCallback((event: ReactPointerEvent<HTMLDivElement> | null) => {
+    const surface = surfaceRef.current
+    if (!event || !surface) {
+      pointerScreenRef.current = null
+      return
+    }
+    const rect = surface.getBoundingClientRect()
+    const local = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    const inside = local.x >= 0 && local.y >= 0 && local.x <= rect.width && local.y <= rect.height
+    pointerScreenRef.current = inside ? local : null
+  }, [])
+  const pointerWorldAnchor = useCallback((): StagePoint | null => (
+    pointerScreenRef.current ? screenToWorld(pointerScreenRef.current, viewport) : null
+  ), [viewport])
+  const executeClipboardFromKeyboard = useCallback((action: 'edit.copy' | 'edit.cut' | 'edit.paste') => {
+    executeClipboard(action, undefined, action === 'edit.paste' ? pointerWorldAnchor() : undefined)
+  }, [executeClipboard, pointerWorldAnchor])
+  // 右键菜单的粘贴落在**打开菜单的那一下**指着的地方，而不是点菜单项时指针所在的位置。
+  const contextMenuWorldAnchor = useCallback((): StagePoint | null => {
+    const surface = surfaceRef.current
+    const point = contextMenu.anchorPoint
+    if (!surface || !point) return null
+    const rect = surface.getBoundingClientRect()
+    return screenToWorld({ x: point.x - rect.left, y: point.y - rect.top }, viewport)
+  }, [contextMenu.anchorPoint, viewport])
+  const executeClipboardFromContextMenu = useCallback((
+    action: 'edit.copy' | 'edit.cut' | 'edit.paste',
+    targetId: string | null,
+  ) => {
+    executeClipboard(action, targetId, action === 'edit.paste' ? contextMenuWorldAnchor() : undefined)
+  }, [contextMenuWorldAnchor, executeClipboard])
   // 只在文档、选区、剪贴板或右键目标变了才重算；平移的每一帧都不该为右键菜单付账。
   const clipboardAvailability = useMemo(
     () => availabilityFor(contextNodeId),
@@ -1302,7 +1341,7 @@ function ComposeStageReady({
     controller,
     dispatch,
     document,
-    executeClipboard,
+    executeClipboard: executeClipboardFromKeyboard,
     hiddenEntityIds,
     idFactory,
     // 命令取点时把图面上的坐标字符与 `Tab` 转交命令行——它是坐标与动态输入唯一的输入端，
@@ -1398,6 +1437,7 @@ function ComposeStageReady({
   const rootHandlers = useStageRootHandlers({
     acceptCommand: acceptDraftingCommand,
     clearPointer,
+    rememberPointer,
     trackPointer: pointerTracked ? trackPointer : null,
     beginInteraction,
     handleLostPointerCapture,
@@ -1737,7 +1777,7 @@ function ComposeStageReady({
         shortcuts={resolvedShortcuts}
         surfaceSize={surfaceSize}
         viewport={viewport}
-        onClipboardAction={executeClipboard}
+        onClipboardAction={executeClipboardFromContextMenu}
         addComponentMenu={addComponentMenu}
         anchorPoint={contextMenu.anchorPoint}
         onAddComponent={onAddComponent}

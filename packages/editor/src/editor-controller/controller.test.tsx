@@ -1160,6 +1160,37 @@ describe('useComposeEditorController', () => {
     expect(result.current.sceneTreeProps.commands?.clipboard?.kind).toBe('copy')
   })
 
+  it('OpenSpec: editor-workspace-layout / 画布与场景树共享会话剪贴板 / 画布粘贴落在指针处', () => {
+    const editorRuntime = runtime()
+    const { result } = renderHook(() => useComposeEditorController({
+      idFactory: ids(),
+      initialSelection: ['title'],
+      runtime: editorRuntime,
+      registry,
+    }))
+    expect(result.current.stageProps.layoutSnapshot).toBeDefined()
+
+    act(() => result.current.sceneTreeProps.commands?.execute('copy'))
+    act(() => {
+      // title 是 180×40；中心落到 (498, 404) 即左上 (408, 384)，正好在 8 步网格上。
+      result.current.stageProps.onShortcutAction?.('edit.paste', {
+        pasteTarget: {
+          worldPoint: { x: 498, y: 404 },
+          insertion: { parentId: ROOT_FRAME_ID, index: 1 },
+        },
+      })
+    })
+    const pastedId = rootChildIds(editorRuntime.document)[1]
+    expect(pastedId).toBeDefined()
+    expect(pastedId).not.toBe('dashboard')
+    expect(getComposeSpatialTransform(editorRuntime.document.entities[pastedId!]!).position)
+      .toEqual({ x: 408, y: 384 })
+    // 来源不动，剪贴板还在。
+    expect(getComposeSpatialTransform(editorRuntime.document.entities.title!).position)
+      .toEqual({ x: 10, y: 10 })
+    expect(result.current.sceneTreeProps.commands?.clipboard?.kind).toBe('copy')
+  })
+
   it('OpenSpec: editor-workspace-layout / 画布与场景树共享会话剪贴板 / 画布剪切后在场景树粘贴', () => {
     const editorRuntime = runtime()
     const { result } = renderHook(() => useComposeEditorController({

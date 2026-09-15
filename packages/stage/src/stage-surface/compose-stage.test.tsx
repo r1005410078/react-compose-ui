@@ -1267,6 +1267,77 @@ describe('ComposeStage ECS', () => {
     expect(rootChildIds(runtime.document)[0]).toBe('a')
   })
 
+  it('OpenSpec: stage / Stage 复制剪切粘贴 / 键盘粘贴落在指针处', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 800,
+      height: 600,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 800,
+      bottom: 600,
+      toJSON: () => ({}),
+    } as DOMRect)
+    try {
+      const { runtime } = renderStage(document(), {
+        selectedIds: ['a'],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      })
+      const stage = screen.getByRole('application')
+      fireEvent.keyDown(stage, { code: 'KeyC', key: 'c', ctrlKey: true })
+      fireEvent.pointerMove(stage, { pointerId: 1, clientX: 300, clientY: 200 })
+      fireEvent.keyDown(stage, { code: 'KeyV', key: 'v', ctrlKey: true })
+      const copyId = rootChildIds(runtime.document).find((id) => id !== 'a')
+      expect(copyId).toBeDefined()
+      // a 在 (20, 30)、100×50，中心 (70, 55)：中心落到 (300, 200) 即左上 (250, 175)，再吸到 8 步网格。
+      expect(getComposeLayoutItem(runtime.document.entities[copyId!]!).offset)
+        .toEqual({ x: 248, y: 176 })
+      expect(getComposeLayoutItem(runtime.document.entities.a!).offset).toEqual({ x: 20, y: 30 })
+    }
+    finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('OpenSpec: stage / Stage 复制剪切粘贴 / 宿主接管粘贴时随动作收到同一份落点', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 800,
+      height: 600,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 800,
+      bottom: 600,
+      toJSON: () => ({}),
+    } as DOMRect)
+    try {
+      const onShortcutAction = vi.fn(() => true)
+      renderStage(document(), {
+        onShortcutAction,
+        selectedIds: ['a'],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      })
+      const stage = screen.getByRole('application')
+      fireEvent.pointerMove(stage, { pointerId: 1, clientX: 300, clientY: 200 })
+      fireEvent.keyDown(stage, { code: 'KeyV', key: 'v', ctrlKey: true })
+      expect(onShortcutAction).toHaveBeenLastCalledWith('edit.paste', {
+        pasteTarget: {
+          worldPoint: { x: 300, y: 200 },
+          insertion: { parentId: ROOT_FRAME_ID, index: 1 },
+        },
+      })
+      // 指针离开 Stage 之后没有落点：宿主收到 null，按建议落点粘贴。
+      fireEvent.pointerLeave(stage)
+      fireEvent.keyDown(stage, { code: 'KeyV', key: 'v', ctrlKey: true })
+      expect(onShortcutAction).toHaveBeenLastCalledWith('edit.paste', { pasteTarget: null })
+    }
+    finally {
+      vi.restoreAllMocks()
+    }
+  })
+
   it('OpenSpec: stage / Stage 复制剪切粘贴 / 从画布菜单复制并粘贴', () => {
     const { runtime, selection } = renderStage(document(), { selectedIds: ['a'] })
     const stage = screen.getByRole('application')

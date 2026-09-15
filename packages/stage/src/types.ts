@@ -23,6 +23,7 @@ import type {
   StagePathHandleKind,
   StagePoint,
   StageViewport,
+  ComposeEntityInsertion,
 } from '@compose-ui/stage-engine'
 
 /**
@@ -127,6 +128,36 @@ export type ComposeStageDelegatableAction = Exclude<
   ComposeStageShortcutAction,
   'stage.temporaryPan'
 >
+
+/**
+ * 由 Stage 解算好的粘贴落点。
+ *
+ * @remarks
+ * 指针在图面上时 `Cmd/Ctrl+V` 与右键菜单的粘贴都带它：整组副本的世界包围盒中心落到
+ * `worldPoint`（再过网格吸附），父级是指针下的容器——与拖放落点同一条判据；指针不在任何
+ * 容器里时落进激活场景。宿主接管粘贴时拿到的是同一份落点，因此两条路径粘出来的位置一致。
+ *
+ * @public
+ */
+export interface ComposeStagePasteTarget {
+  /** 指针的世界坐标。 */
+  readonly worldPoint: StagePoint
+  /** 指针下的容器与插入位置。 */
+  readonly insertion: ComposeEntityInsertion
+}
+
+/**
+ * 随可接管动作一起交给宿主的附加信息。
+ *
+ * @public
+ */
+export interface ComposeStageShortcutActionDetail {
+  /**
+   * `edit.paste` 的落点；指针不在图面上、或右键菜单没有锚点时为 `null`——那时粘贴退回
+   * 建议落点（同父级错开、跨父级保留来源坐标）。其他动作不带这个字段。
+   */
+  readonly pasteTarget?: ComposeStagePasteTarget | null
+}
 
 /**
  * Stage 动作到一个或多个单次键位的覆盖配置。
@@ -331,8 +362,14 @@ export interface ComposeStageProps extends Omit<HTMLAttributes<HTMLDivElement>, 
    * 命令面板共用同一份动作实现，避免同一动作出现多套行为。
    *
    * 临时平移、Escape 取消与方向键微调不参与接管。
+   *
+   * `detail` 只在 `edit.paste` 时携带落点（见 {@link ComposeStageShortcutActionDetail}）；
+   * 宿主接管粘贴而不读它，粘出来的位置就与内建实现不一致。
    */
-  readonly onShortcutAction?: (action: ComposeStageDelegatableAction) => boolean
+  readonly onShortcutAction?: (
+    action: ComposeStageDelegatableAction,
+    detail?: ComposeStageShortcutActionDetail,
+  ) => boolean
   readonly selectedIds: readonly string[]
   readonly onSelectedIdsChange: (ids: readonly string[]) => void
   /**

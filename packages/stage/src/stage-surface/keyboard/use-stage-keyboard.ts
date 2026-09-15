@@ -291,15 +291,12 @@ export function useStageKeyboardCommands(
         return
       }
     }
-    // 宿主可以用统一的动作实现接管可配置动作，避免键盘、工具栏与命令面板各有一套行为。
-    // 必须排在内建分支之前，且只在宿主确认接管时才短路，未接管时行为与不传该属性一致。
-    if (onShortcutAction) {
-      const delegated = DELEGATABLE_STAGE_ACTIONS.find(actionMatches)
-      if (delegated !== undefined && onShortcutAction(delegated)) {
-        event.preventDefault()
-        return
-      }
-    }
+    /*
+     * 剪贴板三个动作**必须排在通用委派之前**：`executeClipboard` 自己先问宿主、再走内建，
+     * 而它问宿主时带着粘贴落点（指针指着的世界坐标）。走下面那条通用委派会把 `edit.paste`
+     * 不带落点地交出去，宿主接管的粘贴就落回建议落点——症状是右键粘贴在指针处、按键粘贴在
+     * 来源旁边，两条入口不一致。
+     */
     if (actionMatches('edit.copy') || actionMatches('edit.cut') || actionMatches('edit.paste')) {
       executeClipboard(
         actionMatches('edit.copy')
@@ -308,6 +305,15 @@ export function useStageKeyboardCommands(
       )
       event.preventDefault()
       return
+    }
+    // 宿主可以用统一的动作实现接管可配置动作，避免键盘、工具栏与命令面板各有一套行为。
+    // 必须排在内建分支之前，且只在宿主确认接管时才短路，未接管时行为与不传该属性一致。
+    if (onShortcutAction) {
+      const delegated = DELEGATABLE_STAGE_ACTIONS.find(actionMatches)
+      if (delegated !== undefined && onShortcutAction(delegated)) {
+        event.preventDefault()
+        return
+      }
     }
     const toolAction = TOOL_SHORTCUTS.find(([action]) => actionMatches(action))
     if (toolAction) {

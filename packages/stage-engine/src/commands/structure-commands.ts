@@ -278,7 +278,15 @@ export function getUngroupCommandAvailability(
     : { available: true }
 }
 
-function transformUnderParent(
+/**
+ * 把一个世界矩阵换算成某个父级下的局部空间变换。
+ *
+ * @remarks
+ * reparent、成组与带落点的粘贴共用这一处换算——各算一遍的话，下一个改父级坐标语义（例如
+ * 边框是否计入）的人只会改到其中一处。
+ * @internal
+ */
+export function transformUnderParent(
   document: ComposeDocument,
   layoutSnapshot: ComposeLayoutSnapshot,
   worldMatrix: ReturnType<typeof getEntityWorldMatrix>,
@@ -577,6 +585,16 @@ function subtreeIds(document: ComposeDocument, rootId: string) {
 export interface ComposeDuplicateInsertion {
   readonly parentId: string | null
   readonly index: number
+  /**
+   * 副本根节点在目标父级下的显式落点（父级**内容盒**局部坐标，与 `LayoutItem.offset` 同一个
+   * 空间）。
+   *
+   * @remarks
+   * 给了它就**既不沿用来源的位置、也不加同父级错开量**：落点是调用方算好的事实，再叠任何
+   * 偏移都会让副本停在用户没有指的地方。副本随之定为 `absolute`——一个显式坐标只对绝对定位
+   * 有意义。
+   */
+  readonly position?: ComposePosition
 }
 
 /**
@@ -620,17 +638,20 @@ export function createDuplicateCommand(
     const item = getComposeLayoutItem(clone)
     const transform = getComposeSpatialTransform(clone)
     const hierarchy = getComposeHierarchy(clone)
-    const nextTransform: ComposeSpatialTransform = id === sourceId
-      && item.positioning === 'absolute'
-      && sameParent
-      ? {
-          ...transform,
-          position: {
-            x: transform.position.x + offset.x,
-            y: transform.position.y + offset.y,
-          },
-        }
-      : transform
+    const placed = id === sourceId ? insertion?.position : undefined
+    const nextTransform: ComposeSpatialTransform = placed
+      ? { ...transform, position: placed }
+      : id === sourceId
+        && item.positioning === 'absolute'
+        && sameParent
+        ? {
+            ...transform,
+            position: {
+              x: transform.position.x + offset.x,
+              y: transform.position.y + offset.y,
+            },
+          }
+        : transform
     const next: ComposeEntity = {
       ...clone,
       id: cloneId,
@@ -640,6 +661,7 @@ export function createDuplicateCommand(
         Transform: { rotation: nextTransform.rotation },
         LayoutItem: {
           ...clone.components.LayoutItem,
+          ...(placed ? { positioning: 'absolute' } : {}),
           offset: nextTransform.position,
           width: {
             ...(clone.components.LayoutItem?.width as JsonObject),

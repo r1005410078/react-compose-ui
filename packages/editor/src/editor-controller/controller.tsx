@@ -27,6 +27,7 @@ import {
   getEntityWorldBounds,
   unionRects,
   zoomViewportAt,
+  createPasteFromClipboard,
 } from '@compose-ui/stage-engine'
 import {
   COMPOSE_COMPONENT_SCHEMA_VERSION,
@@ -90,6 +91,7 @@ import type {
   ComposeStageProps,
   ComposeStageServices,
   ComposeStageTool,
+  ComposeStageShortcutActionDetail,
 } from '@compose-ui/stage'
 import type {
   StageInteractionController,
@@ -1667,11 +1669,18 @@ export function useComposeEditorController({
   // 动作上下文依赖后面才定义的 fit/zoom 回调，而 stageProps 必须先构建。用 ref 转发可以避免
   // 为了顺序重排整段控制器；回调只在 commit 之后的键盘事件里被读取，因此在 layout effect 中更新。
   const actionContextRef = useRef<ComposeEditorActionHandlerContext | null>(null)
-  const runShortcutAction = useCallback((action: ComposeStageDelegatableAction) => {
+  const runShortcutAction = useCallback((
+    action: ComposeStageDelegatableAction,
+    detail?: ComposeStageShortcutActionDetail,
+  ) => {
     const context = actionContextRef.current
     if (!context) return false
     // 执行层在按键时才构建：既避开渲染期读取 ref，也保证拿到的是最新选区与文档。
-    const handlers = createComposeEditorActionHandlers(context)
+    // 粘贴落点是这一次动作自带的事实，随上下文一起进执行层。
+    const handlers = createComposeEditorActionHandlers({
+      ...context,
+      pasteTarget: detail?.pasteTarget ?? null,
+    })
     /*
      * Stage 的动作集是编辑器目录的**超集**：绘图命令（`drafting.*`）只在 Stage 的命令注册表
      * 里，编辑器**刻意**不给它们建目录项——那会为已经能敲 `LINE` 的动作造第二个词，正是
@@ -2010,7 +2019,33 @@ export function useComposeEditorController({
     canPaste: sceneTreeCommands.isEnabled('paste-suggested'),
     copySelection: () => { sceneTreeCommands.execute('copy') },
     cutSelection: () => { sceneTreeCommands.execute('cut') },
-    pasteSelection: () => { sceneTreeCommands.execute('paste-suggested') },
+    pasteSelection: (target) => {
+      /*
+       * 带落点的粘贴直接走 stage-engine 的规划：场景树命令只认「建议落点」，而落点是画布上
+       * 指针指着的那个世界坐标。规划不出来（剪贴板里有实例内部地址、来源已不在文档里）就退回
+       * 建议粘贴——那条路本来就处理这些情形。几何读**已解算**的那份文档与快照，与 Stage
+       * 内建粘贴同一对，否则导线的盒差一帧。
+       */
+      const clipboard = sceneTreeCommands.clipboard
+      if (target && clipboard && layoutState.status === 'ready') {
+        const plan = createPasteFromClipboard(
+          layoutState.document,
+          { kind: clipboard.kind, entityIds: clipboard.nodeIds },
+          target.insertion,
+          nextId,
+          layoutState.snapshot,
+          { worldPoint: target.worldPoint },
+        )
+        if (plan) {
+          if (runtime.dispatch(plan.command).status === 'committed') {
+            setSelectedIds(plan.nextSelection)
+            if (plan.clearClipboard) sceneTreeCommands.clearClipboard()
+          }
+          return
+        }
+      }
+      sceneTreeCommands.execute('paste-suggested')
+    },
     undo: runtime.undo,
     zoomBy: zoomByFactor,
     zoomReset,

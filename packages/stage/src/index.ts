@@ -40,6 +40,8 @@ export type {
   ComposeStageDelegatableAction,
   ComposeStageShortcuts,
   ComposeStageTool,
+  ComposeStagePasteTarget,
+  ComposeStageShortcutActionDetail,
 } from './types'
 /**
  * 十字光标样式；宿主经 `ComposeStageProps.crosshairStyle` 传入，编辑器把它作为偏好持有。

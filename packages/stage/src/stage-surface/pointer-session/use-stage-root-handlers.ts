@@ -42,6 +42,15 @@ export interface StageRootHandlersParams {
   /** 指针离开整块 Stage 时清空跟踪。 */
   readonly clearPointer: () => void
   /**
+   * 一直都在的指针记忆：粘贴落点读它。
+   *
+   * @remarks
+   * 与 `trackPointer` 分开：那条只在需要画十字线时挂上，且它的清与播种是一对；而粘贴要在
+   * 用户按下 `Cmd/Ctrl+V` 的那一刻知道指针在哪，那时没有任何会话在跑。它只写一个 ref，
+   * 每帧不进 React 状态。传 `null` 表示指针已离开 Stage。
+   */
+  readonly rememberPointer: (event: ReactPointerEvent<HTMLDivElement> | null) => void
+  /**
    * 命令进行中右键即结束。
    *
    * @remarks
@@ -104,6 +113,7 @@ export function useStageRootHandlers({
   keyboardRelease,
   clearPointer,
   normalizedSelection,
+  rememberPointer,
   onSelectedIdsChange,
   openContextMenu,
   resolveHitEntity,
@@ -181,11 +191,13 @@ export function useStageRootHandlers({
       // 指针位置是瞬时视图状态：走命令式接口直接重绘标尺，不进 React state，也不入文档。
       const surface = surfaceRef.current
       if (surface) rulersRef.current?.setCursor(screenPoint(event, surface))
+      rememberPointer(event)
       trackPointer?.(event)
       host.onPointerMove?.(event)
     },
     onPointerLeave: () => {
       rulersRef.current?.setCursor(null)
+      rememberPointer(null)
       clearPointer()
     },
     onPointerUp: (event) => {

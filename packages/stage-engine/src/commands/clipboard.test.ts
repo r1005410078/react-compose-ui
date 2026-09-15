@@ -11,7 +11,7 @@ import {
   isInvalidCutInsertion,
   resolveSuggestedEntityInsertion,
 } from './clipboard'
-import { ROOT_FRAME_ID, document, entity } from '../test-fixtures'
+import { ROOT_FRAME_ID, document, entity, layoutSnapshot } from '../test-fixtures'
 
 describe('entity clipboard planner', () => {
   it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 规范化多选复制来源', () => {
@@ -81,6 +81,77 @@ describe('entity clipboard planner', () => {
     expect(getComposeLayoutItem(runtime.document.entities.copy!)).toMatchObject({
       offset: { x: 40, y: 50 },
     })
+  })
+
+  it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 带锚点复制落到指针处', () => {
+    // 两个来源相距 (200, 0)，整组包围盒 300×50、中心 (150, 25)；锚点 (400, 300) 且开着 8 步网格。
+    const a = entity('a', { x: 0, y: 0, width: 100, height: 50 })
+    const b = entity('b', { x: 200, y: 0, width: 100, height: 50 })
+    const value = document([a, b], ['a', 'b'])
+    const ids = ['command-a', 'copy-a', 'command-b', 'copy-b', 'batch'][Symbol.iterator]()
+    const plan = createPasteFromClipboard(
+      value,
+      { kind: 'copy', entityIds: ['a', 'b'] },
+      { parentId: ROOT_FRAME_ID, index: 2 },
+      () => ids.next().value!,
+      layoutSnapshot(value),
+      { worldPoint: { x: 401, y: 303 } },
+    )
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(plan!.command).status).toBe('committed')
+    // 中心落到锚点：左上 (251, 278)，再吸到网格 → (248, 280)；相对位置保持 (200, 0)。
+    expect(getComposeLayoutItem(runtime.document.entities['copy-a']!)).toMatchObject({
+      positioning: 'absolute',
+      offset: { x: 248, y: 280 },
+    })
+    expect(getComposeLayoutItem(runtime.document.entities['copy-b']!)).toMatchObject({
+      offset: { x: 448, y: 280 },
+    })
+    // 来源一个字节不动。
+    expect(getComposeLayoutItem(runtime.document.entities.a!).offset).toEqual({ x: 0, y: 0 })
+  })
+
+  it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 带锚点复制到别的父级换算成局部坐标', () => {
+    const source = entity('source', { x: 0, y: 0, width: 100, height: 50 })
+    const target = entity('target', { x: 300, y: 100, width: 400, height: 400, childIds: [] })
+    const base = document([source, target], ['source', 'target'])
+    const value = { ...base, canvas: { ...base.canvas, grid: { ...base.canvas.grid, snapEnabled: false } } }
+    const ids = ['command', 'copy'][Symbol.iterator]()
+    const plan = createPasteFromClipboard(
+      value,
+      { kind: 'copy', entityIds: ['source'] },
+      { parentId: 'target', index: 0 },
+      () => ids.next().value!,
+      layoutSnapshot(value),
+      { worldPoint: { x: 500, y: 300 } },
+    )
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(plan!.command).status).toBe('committed')
+    expect(getComposeHierarchy(runtime.document.entities.target!)?.childIds).toEqual(['copy'])
+    // 世界左上 (450, 275) 减去 target 的世界原点 (300, 100)。
+    expect(getComposeLayoutItem(runtime.document.entities.copy!).offset).toEqual({ x: 150, y: 175 })
+  })
+
+  it('OpenSpec: stage-engine / Entity 会话剪贴板规划 / 带锚点剪切搬到指针处', () => {
+    const a = entity('a', { x: 0, y: 0, width: 100, height: 50 })
+    const b = entity('b')
+    const base = document([a, b], ['a', 'b'])
+    const value = { ...base, canvas: { ...base.canvas, grid: { ...base.canvas.grid, snapEnabled: false } } }
+    // 同父级、顺序也没变：不带锚点会被判成无效落点，带锚点则是「搬到那里」。
+    const plan = createPasteFromClipboard(
+      value,
+      { kind: 'cut', entityIds: ['a'] },
+      { parentId: ROOT_FRAME_ID, index: 2 },
+      () => 'move-a',
+      layoutSnapshot(value),
+      { worldPoint: { x: 250, y: 125 } },
+    )
+    expect(plan).toMatchObject({ clearClipboard: true, nextSelection: ['a'] })
+    const runtime = createTransactionRuntime({ document: value })
+    expect(runtime.dispatch(plan!.command).status).toBe('committed')
+    expect(getComposeLayoutItem(runtime.document.entities.a!).offset).toEqual({ x: 200, y: 100 })
+    expect(getComposeHierarchy(runtime.document.entities[ROOT_FRAME_ID]!)?.childIds)
+      .toEqual(['b', 'a'])
   })
 
   it('rejects cutting onto self or an unchanged sibling slot', () => {
