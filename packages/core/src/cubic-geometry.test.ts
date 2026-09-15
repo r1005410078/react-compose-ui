@@ -64,6 +64,45 @@ describe('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 贝塞�
   })
 })
 
+describe('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 贝塞尔紧包围盒，二次项退化', () => {
+  /**
+   * 一段对称的弧形三次段，坐标已按文档精度舍到两位。
+   *
+   * @remarks
+   * 判别性全在**舍入**上：两端 x 相等、两个控制点 x 也相等，于是三次项系数
+   * `−p0 + 3p1 − 3p2 + p3` 在精确算术下恰好是 0，而浮点算出来是 3.6e-15。朴素求根公式在
+   * 这一档发生灾难性抵消——`−b ± √(b²−4ac)` 的两项相差 1e-14，两个根一个溢出成 2e16、
+   * 一个落在 (0,1) 之外，真正的 `t = 0.5` 整个丢掉。
+   *
+   * 它不是一段人造的病态曲线：`HATCH` 求面产出的每一条上下对称的弧边，经归一化写进文档之后
+   * 就长这样。
+   */
+  const symmetric: ComposeCubicShape = {
+    start: { x: 28.57, y: 169.98 },
+    c1: { x: -9.52, y: 131.1 },
+    c2: { x: -9.52, y: 68.9 },
+    end: { x: 28.57, y: 30.02 },
+  }
+
+  it('二次项被舍入成极小量时仍然找得到极值', () => {
+    const minX = Math.min(...composeCubicBoundsPoints(symmetric).map((point) => point.x))
+    // 曲线在 t = 0.5 处鼓到 0.25·28.57 + 0.75·(−9.52) = 0.0025；只取端点会得到 28.57。
+    expect(minX).toBeCloseTo(0.0025, 6)
+  })
+
+  it('丢掉极值会让盒比几何小一截，而盒与 viewBox 对不上就是一次可见的拉伸', () => {
+    /*
+     * 这一条说的是后果而不是数学：`normalizeComposeCurveGeometry` 按包围盒定盒，
+     * `composeCurveViewBox` 也按包围盒定取景框——两者都少了那 28.57，几何就被按 168.5/139.93
+     * 的比例横向拉开，圆弧因此被拉成椭圆弧。
+     */
+    const points = composeCubicBoundsPoints(symmetric)
+    // 真实宽度 28.5675；丢掉极值只剩 0，盒会比几何窄一整截。
+    expect(Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x)))
+      .toBeCloseTo(28.5675, 6)
+  })
+})
+
 describe('OpenSpec: compose-document / 曲线是带盒的普通 Entity / 贝塞尔拍平', () => {
   const curve: ComposeCubicShape = {
     start: { x: 0, y: 0 },

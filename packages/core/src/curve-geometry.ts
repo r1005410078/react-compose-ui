@@ -12,6 +12,8 @@
  * @packageDocumentation
  */
 
+import { COMPOSE_GEOMETRY_PRECISION } from './geometry-precision'
+
 /** 二维点；不要求 `JsonObject`，本模块只做算术。 @public */
 export interface ComposePlanarPoint {
   readonly x: number
@@ -412,6 +414,123 @@ export function composeCubicPointAt(cubic: ComposeCubicShape, t: number): Compos
 }
 
 /**
+ * 一条三次段能不能按直线或圆弧表达时，容许的形状偏差。
+ *
+ * @remarks
+ * 取 `max(五个量化步长, 弦长的千分之二)`。
+ *
+ * 前一项来自坐标量化：几何经 `roundComposeGeometry` 存到两位小数，参与判定的四个点各自最多
+ * 差半个量子的 √2 倍（0.0071），叠起来最坏不到三个量子，取五个留一倍余量。
+ *
+ * 后一项覆盖**盒被放大过**的情形——投影是等比仿射时几何与量化误差同步放大，而本模块读不到
+ * 那个倍数，弦长是这条段自己携带的唯一线索。千分之二在一条 200 单位的弦上是 0.4，常用缩放下
+ * 不到一个像素：一条自由曲线要与某段弧差不到这个数才会被误认，而那时把它当弧算在屏幕上没有
+ * 可见后果。
+ *
+ * MUST NOT 只取相对量：半径 2 的小弧与半径 500 的大弧舍入误差是同一个绝对量，按比例取会让
+ * 小弧永远认不出来。
+ */
+function cubicShapeTolerance(chordLength: number): number {
+  return Math.max(5 * 10 ** -COMPOSE_GEOMETRY_PRECISION, 0.002 * chordLength)
+}
+
+/**
+ * 一条三次段是不是一条直线段；是就给出那条弦。
+ *
+ * @remarks
+ * 判据是**两个控制点都落在弦上**：到弦的距离在容差内，且沿弦的投影落在 `[0, 1]` 内。后半句
+ * 挡的是轨迹冲出两个端点之外的情形——控制点在弦的延长线上时曲线仍然是直的，但它走过的那一
+ * 段比这条弦长，按弦参与运算会少掉冲出去的那一截。
+ *
+ * 调用方 MUST 先问它、再问 {@link composeCubicAsArc}：矢高只有几个量化步长的弧在存储精度下
+ * 就是一条直线（控制点到弦的距离约等于矢高的 4/3，同一个容差就把这一档收走了），而那时三个
+ * 拟合点几乎共线，定圆本身可能无解。
+ *
+ * @returns 这条段表示的直线段；不是直线时返回 `null`。
+ * @public
+ */
+export function composeCubicAsSegment(cubic: ComposeCubicShape): ComposeSegmentShape | null {
+  const dx = cubic.end.x - cubic.start.x
+  const dy = cubic.end.y - cubic.start.y
+  const chord = Math.hypot(dx, dy)
+  // 首尾重合：这条段是个环，既不是直线也不是这里说的弧，交给调用方按「认不出」处理。
+  if (!(chord > 0)) return null
+  const tolerance = cubicShapeTolerance(chord)
+  // 投影上让开一个容差：端点自身的舍入也会把 0 与 1 各推出去一点点。
+  const slack = tolerance / chord
+  for (const control of [cubic.c1, cubic.c2]) {
+    const ux = control.x - cubic.start.x
+    const uy = control.y - cubic.start.y
+    if (Math.abs(ux * dy - uy * dx) / chord > tolerance) return null
+    const t = (ux * dx + uy * dy) / (chord * chord)
+    if (t < -slack || t > 1 + slack) return null
+  }
+  return { start: cubic.start, end: cubic.end }
+}
+
+/**
+ * 验证拟合圆时在曲线上取样的参数。
+ *
+ * @remarks
+ * 跳过 0、0.5、1：定圆就是过这三点求的，它们按构造必然吻合，拿它们验证等于什么都没验。
+ * 六个点足够——三次曲线与圆的偏差沿参数是光滑的单峰形状，采样不必密。
+ */
+const CUBIC_ARC_SAMPLE_PARAMETERS = [1 / 8, 1 / 4, 3 / 8, 5 / 8, 3 / 4, 7 / 8] as const
+
+/**
+ * 一条三次段是不是一段圆弧；是就给出那段弧。
+ *
+ * @remarks
+ * 过起点、曲线中点 `B(0.5)` 与终点三点定圆，再**在曲线上取样**验证每个样点到圆心的距离。
+ *
+ * 中点在圆上是 {@link composeArcToCubicShapes} 那个闭式解的**推导前提**而不是近似——
+ * `(4/3)·tan(Δ/4)` 正是让 `B(0.5)` 落在弧中点上解出来的系数，因此对本产品自己产出的贝塞尔
+ * （填充块、布尔结果、拍平的矩形与圆）定圆是精确的。
+ *
+ * 验证 MUST 落在**轨迹**上而不是拟合出来的参数上。按圆心与半径判等是错的：浅弧的半径由矢高
+ * 反解（`r ≈ 弦²/8矢高`），而矢高本身只有几个量化步长，坐标舍入因此能让半径差出几成——可它
+ * 带来的**形状**误差仍然只有舍入那么大。三点定出的圆与真弧在三处吻合，中间也就处处吻合，
+ * 这是拟合在**函数**意义上稳定而在**参数**意义上不稳定的标准情形。取样还顺带答对了另一个
+ * 问题：参数化不影响轨迹，因此沿同一个圆非匀速走过的三次段本来就该认成这段弧。
+ *
+ * MUST NOT 从切线反推圆心：小扫掠角的弧手柄很短，两位小数的舍入在它上面放大成可观的角度
+ * 误差，圆心跟着漂。
+ *
+ * **它单独不是一个分类器**，调用方 MUST 先问 {@link composeCubicAsSegment}：整段只跨零点几
+ * 个单位时，过三个几乎共线的点定出来的圆半径已经没有意义，轨迹却仍然落在容差内，于是这里
+ * 会认。挡住那一档的是次序——矢高越小控制点离弦越近，同一个容差下直线那一问必然先命中。
+ *
+ * 扫掠超过 90° 不认——生成侧每段至多 90°，更长的单段没有来源；这一条同时收走了「从反方向
+ * 绕远路连起两个端点」的情形。
+ *
+ * @returns 这条段表示的圆弧；不是圆弧时返回 `null`。
+ * @public
+ */
+export function composeCubicAsArc(cubic: ComposeCubicShape): ComposeArcShape | null {
+  const chord = Math.hypot(cubic.end.x - cubic.start.x, cubic.end.y - cubic.start.y)
+  if (!(chord > 0)) return null
+  const tolerance = cubicShapeTolerance(chord)
+
+  const arc = composeArcThroughPoints(cubic.start, composeCubicPointAt(cubic, 0.5), cubic.end)
+  // 三点共线：定圆无解。矢高小到这一步的段本来就该由 `composeCubicAsSegment` 先收走。
+  if (arc === null) return null
+
+  /*
+   * 90° 上限的放宽量由容差推出而不是取一个小数：端点舍入会让拟合出来的扫掠偏离，偏离量约是
+   * `容差 / 半径` 弧度——半径 2 的 90° 弧因此能拟合到 90.14°，而半径 500 的偏离可以忽略。
+   */
+  const slack = tolerance / arc.radius / TO_RADIANS
+  if (Math.abs(arc.sweep) > MAX_CUBIC_ARC_DEGREES + slack) return null
+
+  for (const t of CUBIC_ARC_SAMPLE_PARAMETERS) {
+    const point = composeCubicPointAt(cubic, t)
+    const radial = Math.hypot(point.x - arc.center.x, point.y - arc.center.y)
+    if (Math.abs(radial - arc.radius) > tolerance) return null
+  }
+  return arc
+}
+
+/**
  * 一个轴上导数为零的参数值，只取落在 `(0, 1)` 开区间内的。
  *
  * @remarks
@@ -430,7 +549,19 @@ function cubicAxisExtrema(p0: number, p1: number, p2: number, p3: number): reado
   const discriminant = b * b - 4 * a * c
   if (discriminant < 0) return []
   const root = Math.sqrt(discriminant)
-  return [...inRange((-b + root) / (2 * a)), ...inRange((-b - root) / (2 * a))]
+  /*
+   * 稳定求根，不用 `(−b ± √D) / 2a`。二次项被舍入成极小量时（端点与控制点在这一轴上两两相等，
+   * 精确算术下 `a` 恰好为零而浮点算出来是 1e-15 量级），朴素公式里 `−b + √D` 的两项相差
+   * 1e-14，**灾难性抵消**把两个根一个推成 1e16、一个推出 (0, 1)，真正的 `t = 0.5` 整个丢掉。
+   *
+   * 症状离这里很远：`HATCH` 求面产出的上下对称弧边经归一化写进文档后正好长这样，于是它的紧
+   * 包围盒少算一截，而盒与 `viewBox` 都读这个包围盒——几何被按两者的比例横向拉开，圆弧被拉成
+   * 椭圆弧。
+   *
+   * `q = −(b + sign(b)·√D) / 2` 让两项同号相加，`c / q` 因此是数值稳定的那一个根。
+   */
+  const q = -(b + (b < 0 ? -root : root)) / 2
+  return [...inRange(q / a), ...inRange(q === 0 ? 0 : c / q)]
 }
 
 /**

@@ -48,6 +48,7 @@ import type { ComposePosition } from './document-types'
  */
 export const NODE_EPSILON_RATIO = 1e-7
 
+
 /** 参数空间上「同一个切点」的容差；与 `curve-geometry` 的 `TOUCH_TOLERANCE` 同源。 */
 export const PARAMETER_EPSILON = 1e-6
 

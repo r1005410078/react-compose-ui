@@ -27,6 +27,7 @@ import {
   type ComposePlanarPoint,
 } from './curve-geometry'
 import {
+  NODE_EPSILON_RATIO,
   buildGraph,
   composeCurveFromOutline,
   edgeOf,
@@ -113,6 +114,17 @@ export type ComposeBooleanOp = 'union' | 'subtract' | 'intersect' | 'exclude'
 /** 一个参与运算的形状：它在公共坐标空间里的一列轮廓片段。 @public */
 export interface ComposeBooleanOperand {
   readonly pieces: readonly ComposeOutlinePiece[]
+  /**
+   * 判「某一点在不在这个形状里」时用的曲线；**缺席时由 {@link pieces} 收成一条单环曲线**。
+   *
+   * @remarks
+   * 一块带岛的填充是两条子路径加 `evenodd`，而片段摊平之后收成「一条环」会把岛也算进去——
+   * 内外判定就反了，症状是挖掉的洞在布尔结果里被补平。
+   *
+   * 调用方 MUST 只在片段**不足以还原内外规则**时传它（也就是多于一条环、或带 `fillRule`
+   * 的 `path`）：其余情形两种做法给出同一个答案，传与不传没有区别。
+   */
+  readonly curve?: ComposeCurve
 }
 
 /**
@@ -304,14 +316,30 @@ export function resolveComposeCurveBoolean(
       maxY = Math.max(maxY, point.y)
     })
   })
-  // 节点合并容差按包围盒尺度取相对量，与求面同源：世界坐标的量级由图纸比例决定。
-  const epsilon = 1e-7 * Math.max(1, maxX - minX, maxY - minY)
+  /*
+   * 节点合并容差按包围盒尺度取相对量，与求面同源：世界坐标的量级由图纸比例决定。
+   *
+   * **刻意不给它补一个「坐标量化步长」的下限**，哪怕那条推导本身成立（两份分别存进文档的同一
+   * 个点各自舍到两位、盒尺寸也各自量化，能差 0.014，而相对量在 400 单位的图上只有 4e-5）。
+   * 量过：补上下限之后，「一个形状与由它围出来的那块面一起求并集」不再报「求解退化」，而是
+   * **静默产出一个几像素大的点**——近似共圆的边还没有被归一成同一个圆，容差只是让求解跨过了
+   * 报错那一关，答案仍然是错的。把一个看得见的失败换成一个看不见的错误，方向反了。
+   * 要解决那一档得先把共圆的边归一，那是另一次变更。
+   */
+  const epsilon = NODE_EPSILON_RATIO * Math.max(1, maxX - minX, maxY - minY)
 
   const graph = buildGraph(pieces, epsilon)
   if (graph.subEdges.length === 0) return { status: 'degenerate' }
 
-  // 操作数的内外判定读 `isPointInsideComposeCurve`——渲染与命中读的是同一个入口。
-  const operandCurves = usable.map((operand) => composeCurveFromOutline([operand.pieces]))
+  /*
+   * 操作数的内外判定读 `isPointInsideComposeCurve`——渲染与命中读的是同一个入口。
+   *
+   * 自带曲线优先：带岛的操作数是两条子路径加 `evenodd`，而片段摊平之后收成「一条环」会把岛
+   * 算成实心，内外判定就反了。缺席时退回由片段收环，那两种做法对单环形状给出同一个答案。
+   */
+  const operandCurves = usable.map(
+    (operand) => operand.curve ?? composeCurveFromOutline([operand.pieces]),
+  )
   const clearance = clearances(graph)
   const kept = new Map<HalfEdgeId, boolean>()
   const keepsCell = (half: HalfEdgeId): boolean => {

@@ -5,6 +5,8 @@ import {
   type ComposeBooleanOperand,
 } from './curve-boolean'
 import { composeCurveSegments, isPointInsideComposeCurve } from './curve'
+import { composeCurveFromOutline } from './curve-arrangement'
+import { resolveComposeCurveRegion } from './curve-region'
 import type { ComposeCurve } from './curve'
 import type { ComposeOutlinePiece } from './curve-geometry'
 
@@ -309,5 +311,72 @@ describe('OpenSpec: compose-document / 曲线布尔运算按面分类求解', ()
   it('少于两个操作数时不求解', () => {
     expect(resolveComposeCurveBoolean([box(0, 0, 10, 10)], 'union').status).toBe('empty')
     expect(resolveComposeCurveBoolean([], 'union').status).toBe('empty')
+  })
+})
+
+describe('OpenSpec: compose-document / 布尔操作数可以自带内外判定用的曲线', () => {
+  const seg = (from: [number, number], to: [number, number]): ComposeOutlinePiece => ({
+    kind: 'segment',
+    segment: { start: { x: from[0], y: from[1] }, end: { x: to[0], y: to[1] } },
+  })
+  const ring = (x: number, y: number, w: number, h: number): ComposeOutlinePiece[] => [
+    seg([x, y], [x + w, y]),
+    seg([x + w, y], [x + w, y + h]),
+    seg([x + w, y + h], [x, y + h]),
+    seg([x, y + h], [x, y]),
+  ]
+
+  it('带岛的操作数以自己的规则判内外', () => {
+    /*
+     * 判别性夹具：一块**甜甜圈**——外环 100×100、中间挖掉 20×20，再拿一个整个落在洞里的
+     * 小矩形与它求交集。片段摊平之后是八条边，收成「一条环」会把洞算成实心，于是交集得到
+     * 那个小矩形；带上自己那条 `evenodd` 的曲线才读出「洞里不算在里面」。
+     *
+     * 洞是填充求面天天产出的东西（一个符号压在一块面里），因此这不是边角情形。
+     */
+    const outer = ring(0, 0, 100, 100)
+    const island = ring(40, 40, 20, 20)
+    const donutCurve = composeCurveFromOutline([outer, island])
+    expect(donutCurve).toMatchObject({ kind: 'path', fillRule: 'evenodd' })
+
+    const donut: ComposeBooleanOperand = {
+      pieces: [...outer, ...island],
+      curve: donutCurve!,
+    }
+    const insideHole: ComposeBooleanOperand = { pieces: ring(45, 45, 10, 10) }
+    expect(resolveComposeCurveBoolean([donut, insideHole], 'intersect').status).toBe('empty')
+  })
+
+  it('缺席时由片段收成单环判内外，与显式传入同一条曲线结果相同', () => {
+    const pieces = ring(0, 0, 100, 100)
+    const other: ComposeBooleanOperand = { pieces: ring(50, 50, 100, 100) }
+    const explicit = resolveComposeCurveBoolean(
+      [{ pieces, curve: composeCurveFromOutline([pieces])! }, other],
+      'intersect',
+    )
+    const implicit = resolveComposeCurveBoolean([{ pieces }, other], 'intersect')
+    expect(implicit.status).toBe('resolved')
+    expect(implicit).toEqual(explicit)
+  })
+})
+
+describe('OpenSpec: compose-document / 节点合并容差不低于坐标量化步长', () => {
+  it('真正的缝仍然不闭合——量化步长不是间隙容差', () => {
+    /*
+     * 两条边围出一个矩形，但缺口 0.5 个单位（量化步长的五十倍）。容差补了下限之后它仍然求不出
+     * 面：这一条钉住「不是把间隙容差偷偷装回来」。另一半——一个形状与由它围出来的面能算——
+     * 要走完整条落地管线（归一化、盒尺寸量化、投影回世界），因此住在 `stage-engine` 那一侧。
+     */
+    const seg = (from: [number, number], to: [number, number]): ComposeOutlinePiece => ({
+      kind: 'segment',
+      segment: { start: { x: from[0], y: from[1] }, end: { x: to[0], y: to[1] } },
+    })
+    const gapped = [
+      seg([0, 0], [100, 0]),
+      seg([100, 0], [100, 100]),
+      seg([100, 100], [0, 100]),
+      seg([0, 100], [0, 0.5]),
+    ]
+    expect(resolveComposeCurveRegion(gapped, { x: 50, y: 50 }).status).not.toBe('resolved')
   })
 })

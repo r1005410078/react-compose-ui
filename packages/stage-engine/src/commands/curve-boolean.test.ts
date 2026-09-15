@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
+  composeCurveBounds,
+  flattenComposeCurves,
   normalizeComposeCurveGeometry,
   type ComposeCurve,
   type ComposeEntity,
@@ -160,7 +162,7 @@ describe('OpenSpec: stage-engine / 布尔解算与操作数次序', () => {
     })
   })
 
-  it('区域运算拒绝贝塞尔与直线——拍平放行的那两条在这里挡得住', () => {
+  it('区域运算拒绝自由曲线段与直线——拍平放行的那两条在这里挡得住', () => {
     const path: ComposeCurve = {
       kind: 'path',
       subpaths: [{
@@ -192,5 +194,86 @@ describe('OpenSpec: stage-engine / 布尔解算与操作数次序', () => {
       status: 'rejected',
       reason: 'too-few',
     })
+  })
+})
+
+describe('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命令会话只管数量 / 由弧围成的路径参与区域运算', () => {
+  /** 一个整圆；填充求面与拍平产出的 `path` 的弧边都是从这样的弧转成贝塞尔的。 */
+  const circle = (cx: number, cy: number, r: number): ComposeCurve => ({
+    kind: 'arc',
+    center: { x: cx, y: cy },
+    radius: r,
+    startAngle: 0,
+    sweep: 360,
+  })
+
+  it('一块由圆围出来的 path 与矩形求并集能算出来', () => {
+    /*
+     * 判别性夹具：操作数是一条**真的 `path`**（拍平一个整圆得到的四段弧形贝塞尔），而不是
+     * 一条 `arc`。旧实现在 `curve.kind === 'path'` 那一行就整个拒掉，这一条因此在它上面红。
+     */
+    const round = flattenComposeCurves([circle(50, 50, 40)])
+    expect(round.kind).toBe('path')
+    const index = indexOf([
+      curveEntity('ring', round),
+      curveEntity('box', rect(40, 40, 80, 80)),
+    ])
+    const resolution = resolveStageBoolean(index, ['ring', 'box'], 'union')
+    expect(resolution.status).toBe('resolved')
+  })
+
+  it('两条弧形 path 的交集是它们真的重叠的那一块，不是包围盒', () => {
+    const left = flattenComposeCurves([circle(0, 0, 50)])
+    const right = flattenComposeCurves([circle(60, 0, 50)])
+    const index = indexOf([curveEntity('left', left), curveEntity('right', right)])
+    const resolution = resolveStageBoolean(index, ['left', 'right'], 'intersect')
+    expect(resolution.status).toBe('resolved')
+    if (resolution.status !== 'resolved') return
+
+    /*
+     * 两圆心距 60、半径各 50，透镜形交集的宽度是 2×50 − 60 = 40、高度 2×√(50² − 30²) = 80。
+     * 断这个尺寸而不是断「算出来了」：把弧拍成折线同样能算出来，但那样的产物边上有棱，
+     * 而尺寸对不上正是棱的直接后果。
+     */
+    const bounds = composeCurveBounds(resolution.curve)
+    expect(bounds.width).toBeCloseTo(40, 0)
+    expect(bounds.height).toBeCloseTo(80, 0)
+  })
+
+  it('不相交的两条弧形 path 求交集仍然报「没有面积」', () => {
+    const a = flattenComposeCurves([circle(0, 0, 20)])
+    const b = flattenComposeCurves([circle(200, 0, 20)])
+    const index = indexOf([curveEntity('a', a), curveEntity('b', b)])
+    expect(resolveStageBoolean(index, ['a', 'b'], 'intersect')).toMatchObject({
+      status: 'rejected',
+      reason: 'empty',
+    })
+  })
+
+  it('区域运算的产物可以再当操作数——往返稳定', () => {
+    /*
+     * 结果落地时 `composeCurveFromOutline` 把弧边再转回同一个闭式解的贝塞尔，因此「算一次
+     * 就再也算不了」这条不该成立。它是这次变更的收口：产品自己产出的东西产品自己要认。
+     */
+    const first = resolveStageBoolean(
+      indexOf([
+        curveEntity('a', flattenComposeCurves([circle(0, 0, 50)])),
+        curveEntity('b', flattenComposeCurves([circle(60, 0, 50)])),
+      ]),
+      ['a', 'b'],
+      'union',
+    )
+    expect(first.status).toBe('resolved')
+    if (first.status !== 'resolved') return
+
+    const second = resolveStageBoolean(
+      indexOf([
+        curveEntity('merged', first.curve),
+        curveEntity('box', rect(-10, -10, 40, 40)),
+      ]),
+      ['merged', 'box'],
+      'intersect',
+    )
+    expect(second.status).toBe('resolved')
   })
 })

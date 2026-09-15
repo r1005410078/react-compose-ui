@@ -10,6 +10,7 @@
  */
 
 import {
+  composePathAsOutline,
   flattenComposeCurves,
   getComposeCurve,
   resolveComposeCurveBoolean,
@@ -33,14 +34,16 @@ import { stageBoxCurve, stageWorldCurve, stageWorldOutline } from './curve-world
  * - `locked`：其中有锁定的对象——「你锁了它」和「我把它删了」是两件事。
  * - `wired`：其中有对象被导线绑着；删掉它会让那些绑定悬空，而悬空引用不让文档非法，
  *   这个错屏幕上只在 Inspector 里现形，因此必须在事前拦住。
- * - `bezier`：其中有带曲线段的路径；平面图的边还没有三次贝塞尔这一种。
+ * - `bezier`：其中有**认不出**的曲线段——既不是直线也不是圆弧。平面图的边只有这两种，而本
+ *   产品自己产出的 `path`（填充块、布尔结果、拍平的矩形与圆）边上恰好只有这两种，它们的
+ *   贝塞尔本来就是从弧转过去的。真正的自由曲线（SVG 导进来的那种）落在这一档。
  * - `line`：其中有直线；直线没有可运算的面积。
  * - `unresolved`：布局里还没有它的盒（新建的那一帧）。
  * - `empty`：按这条运算保留下来的面积为零。
  * - `degenerate`：平面图退化，绕不出边界。
  *
  * **哪几种挡得住这一次运算由运算自己决定**，MUST NOT 收成一份全局清单：拍平不求交，因此
- * `bezier` 与 `line` 在它那里都放行——那两条限制的理由是平面图的边还没有三次贝塞尔这一种，
+ * `bezier` 与 `line` 在它那里都放行——那两条限制的理由是求交只有线×线、线×弧、弧×弧三支，
  * 而拍平一张平面图都不用建。
  *
  * @public
@@ -150,9 +153,6 @@ function collectOperands(
     if (!curve) {
       return { status: 'rejected', reason: 'no-geometry', entityName: entity.name }
     }
-    if (requiresArea && curve.kind === 'path') {
-      return { status: 'rejected', reason: 'bezier', entityName: entity.name }
-    }
     if (requiresArea && curve.kind === 'line') {
       return { status: 'rejected', reason: 'line', entityName: entity.name }
     }
@@ -167,12 +167,23 @@ function collectOperands(
     if (!matrix || !boxCurve) {
       return { status: 'rejected', reason: 'unresolved', entityName: entity.name }
     }
-    operands.push({
-      entityId,
-      name: entity.name,
-      curve: stageWorldCurve(boxCurve, matrix),
-      outline: stageWorldOutline(boxCurve, matrix),
-    })
+    /*
+     * `path` 逐段识别成直线与圆弧，认不出才拒绝——整个拒掉会把本产品自己产出的每一块弧形
+     * 填充都挡在门外，而那些贝塞尔本来就是从弧转过去的。
+     *
+     * 识别在**世界**坐标上做：非等比盒把弧投影成椭圆弧，认不出因而被拒，这是对的——椭圆弧
+     * 确实不是弧，而求交只有线×线、线×弧、弧×弧三支。
+     *
+     * 拍平那一支（`requiresArea` 为假）不走这条：它不求交，`outline` 它连读都不读。
+     */
+    const worldCurve = stageWorldCurve(boxCurve, matrix)
+    const outline = requiresArea && worldCurve.kind === 'path'
+      ? composePathAsOutline(worldCurve)
+      : stageWorldOutline(boxCurve, matrix)
+    if (outline === null) {
+      return { status: 'rejected', reason: 'bezier', entityName: entity.name }
+    }
+    operands.push({ entityId, name: entity.name, curve: worldCurve, outline })
   }
   return { status: 'ok', operands }
 }
@@ -233,8 +244,15 @@ export function resolveStageBoolean(
   const { operands } = collected
   if (operands.length < 2) return { status: 'rejected', reason: 'too-few' }
 
+  /*
+   * `path` 操作数把自己的曲线一并交给内外判定：一块带岛的填充是两条子路径加 `evenodd`，
+   * 而片段摊平之后收成「一条环」会把岛算成实心，洞在结果里被悄悄补平。其余三种 kind 各只有
+   * 一条环，两种做法给出同一个答案，因此不传——让它们的行为逐字节不变。
+   */
   const result = resolveComposeCurveBoolean(
-    operands.map((operand) => ({ pieces: operand.outline })),
+    operands.map((operand) => (operand.curve.kind === 'path'
+      ? { pieces: operand.outline, curve: operand.curve }
+      : { pieces: operand.outline })),
     op,
   )
   if (result.status === 'empty') return { status: 'rejected', reason: 'empty' }
