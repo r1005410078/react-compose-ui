@@ -7,6 +7,7 @@ import {
   getComposeCurve,
   getComposeHatch,
   normalizeComposeCurveGeometry,
+  type ComposeCurve,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
@@ -23,7 +24,7 @@ const rect = (x: number, y: number, w: number, h: number) => ({
 })
 
 /** 一条曲线 Entity；盒等于紧包围盒，与绘制路径落地时的初值一致。 */
-function curveEntity(id: string, name: string, geometry: ReturnType<typeof rect>): ComposeEntity {
+function curveEntity(id: string, name: string, geometry: ComposeCurve): ComposeEntity {
   const normalized = normalizeComposeCurveGeometry(geometry)
   return {
     id,
