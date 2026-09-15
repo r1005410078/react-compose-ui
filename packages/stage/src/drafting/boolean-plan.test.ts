@@ -7,6 +7,7 @@ import {
   getComposeCurve,
   getComposeHatch,
   normalizeComposeCurveGeometry,
+  type ComposeCurve,
   type ComposeDocument,
   type ComposeEntity,
   type ComposeLayoutSnapshot,
@@ -23,7 +24,7 @@ const rect = (x: number, y: number, w: number, h: number) => ({
 })
 
 /** 一条曲线 Entity；盒等于紧包围盒，与绘制路径落地时的初值一致。 */
-function curveEntity(id: string, name: string, geometry: ReturnType<typeof rect>): ComposeEntity {
+function curveEntity(id: string, name: string, geometry: ComposeCurve): ComposeEntity {
   const normalized = normalizeComposeCurveGeometry(geometry)
   return {
     id,
@@ -178,25 +179,107 @@ describe('OpenSpec: stage / 布尔运算的落地规划', () => {
     expect(after.entities.a!.name).toBe('外框')
   })
 
-  it('原地那一支的 `resultId` 就是它自己——这个字段的含义只有一句话', () => {
-    // 它本来就在选区里，写出来是为了让呈现层不必分支「有时候是产物、有时候是 null」。
+  it('拍平的 `resultIds` 就是那几个操作数——这个字段的含义只有一句话', () => {
+    // 它们本来就在选区里，写出来是为了让呈现层不必分支「有时候是产物、有时候什么都不做」。
     const before = scene([curveEntity('only', '矩形', rect(0, 0, 40, 30))])
-    expect(planStageFlatten(context(before), ['only'], OPTIONS).resultId).toBe('only')
+    expect(planStageFlatten(context(before), ['only'], OPTIONS).resultIds).toEqual(['only'])
   })
 
-  it('多个操作数合并成一个新对象，操作数在同一个事务里删掉', () => {
+  it('拍平的事务只批一层——`transaction.batch` 不许嵌套', () => {
+    /*
+     * 判别性所在，而且只有这条拦得住：嵌套的 batch 在规划层看起来完全正常（命令有了、分支
+     * 对了、撤销也是一步），拒绝发生在**派发**那一层，症状是整条事务被静默丢掉——屏幕上什么
+     * 都没发生，命令行也不说话。夹具因此必须含一块带 `Hatch` 的填充：只有它那一支会多出
+     * 第二条命令，也只有它会诱使规划去自己先批一层。
+     */
+    const boundary = curveEntity('b', '外框', rect(0, 0, 100, 60))
+    const filled = curveEntity('h', '填充', rect(0, 0, 100, 60))
+    const before = scene([
+      {
+        ...filled,
+        components: {
+          ...filled.components,
+          [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: { seed: { x: 50, y: 30 }, boundaryIds: ['b'] },
+        },
+      } as ComposeEntity,
+      boundary,
+    ])
+    const plan = planStageFlatten(context(before), ['h', 'b'], OPTIONS)
+    expect(plan.commands).toHaveLength(1)
+    const batch = plan.commands[0]!
+    expect(batch.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+    const children = (batch.payload as { commands: readonly { type: string }[] }).commands
+    expect(children.map((child) => child.type))
+      .toEqual([
+        BUILTIN_COMMAND_TYPES.setCurve,
+        BUILTIN_COMMAND_TYPES.removeComponent,
+        BUILTIN_COMMAND_TYPES.setCurve,
+      ])
+  })
+
+  it('拍平一个圆与一个矩形：两条几何都变成 path', () => {
+    const before = scene([
+      curveEntity('box', '矩形', rect(0, 0, 40, 40)),
+      curveEntity('ring', '圆', {
+        kind: 'arc',
+        center: { x: 80, y: 20 },
+        radius: 20,
+        startAngle: 0,
+        sweep: 360,
+      }),
+    ])
+    const plan = planStageFlatten(context(before), ['box', 'ring'], OPTIONS)
+    const after = run(before, plan.commands)
+    expect(getComposeCurve(after.entities.box!)?.kind).toBe('path')
+    expect(getComposeCurve(after.entities.ring!)?.kind).toBe('path')
+  })
+
+  it('拍平多个对象逐个原地：Entity 一个都不增减，两种颜色各自留着', () => {
+    /*
+     * 判别性夹具：两个**颜色不同**的操作数。合并那一支在这里会把 Entity 收成一个、只留下层序
+     * 最下面那个的颜色——而一个对象只有一个填充，因此那不是可以调好的实现，是语义选错了。
+     */
+    const paint = (entity: ComposeEntity, color: string): ComposeEntity => ({
+      ...entity,
+      components: {
+        ...entity.components,
+        Appearance: { backgroundPaint: { kind: 'solid', color } },
+      },
+    } as ComposeEntity)
+    const before = scene([
+      paint(curveEntity('bottom', '蓝面', rect(0, 0, 40, 40)), '#4a7cf0'),
+      paint(curveEntity('top', '红面', rect(20, 20, 40, 40)), '#e04b45'),
+    ])
+    const plan = planStageFlatten(context(before), ['top', 'bottom'], OPTIONS)
+    expect(plan.branch).toBe('in-place')
+    // 一个事务：撤销一步 MUST 回到拍平之前，而不是回到「拍平了一半」。
+    expect(plan.commands).toHaveLength(1)
+    expect(plan.commands[0]!.type).toBe(BUILTIN_COMMAND_TYPES.batch)
+
+    const after = run(before, plan.commands)
+    expect(Object.keys(after.entities).sort()).toEqual(Object.keys(before.entities).sort())
+    expect(getComposeCurve(after.entities.bottom!)?.kind).toBe('path')
+    expect(getComposeCurve(after.entities.top!)?.kind).toBe('path')
+    expect(after.entities.bottom!.components.Appearance)
+      .toEqual({ backgroundPaint: { kind: 'solid', color: '#4a7cf0' } })
+    expect(after.entities.top!.components.Appearance)
+      .toEqual({ backgroundPaint: { kind: 'solid', color: '#e04b45' } })
+  })
+
+  it('区域运算把多个操作数合并成一个新对象，操作数在同一个事务里删掉', () => {
     const before = scene([
       curveEntity('bottom', '底板', rect(0, 0, 40, 40)),
       curveEntity('top', '盖板', rect(20, 20, 40, 40)),
     ])
-    const plan = planStageFlatten(context(before), ['top', 'bottom'], OPTIONS)
+    // 合并是**区域运算**的语义，不是拍平的：拍平改的是表示，同一份图拍完逐像素相同。
+    const plan = planStageBoolean(context(before), ['top', 'bottom'], 'union', OPTIONS)
     expect(plan.branch).toBe('create')
     // 一个事务：撤销一步 MUST 回到运算之前，而不是回到「删了一半」。
     expect(plan.commands).toHaveLength(1)
     expect(plan.commands[0]!.type).toBe(BUILTIN_COMMAND_TYPES.batch)
   })
 
-  it('合并产物的外观与名称取层序最靠后那个操作数', () => {
+  it('区域运算产物的外观与名称取层序最靠后那个操作数', () => {
     const bottom = curveEntity('bottom', '底板', rect(0, 0, 40, 40))
     const top = curveEntity('top', '盖板', rect(20, 20, 40, 40))
     const before = scene([
@@ -209,7 +292,7 @@ describe('OpenSpec: stage / 布尔运算的落地规划', () => {
         },
       } as ComposeEntity,
     ])
-    const plan = planStageFlatten(context(before), ['top', 'bottom'], OPTIONS)
+    const plan = planStageBoolean(context(before), ['top', 'bottom'], 'union', OPTIONS)
     const after = run(before, plan.commands)
     const created = Object.values(after.entities)
       .find((item) => item.id !== 'frame') as ComposeEntity
@@ -220,6 +303,41 @@ describe('OpenSpec: stage / 布尔运算的落地规划', () => {
     // 两个操作数都没了。
     expect(after.entities.bottom).toBeUndefined()
     expect(after.entities.top).toBeUndefined()
+  })
+
+  it('两块填充与两个边界一起拍平：四条几何都变成 path', () => {
+    // 端到端那个夹具的原样：两块带 `Hatch` 的填充加两个当边界的圆，一次拍平四个。
+    const ring = (id: string, cx: number): ComposeEntity => curveEntity(id, id, {
+      kind: 'arc',
+      center: { x: cx, y: 60 },
+      radius: 40,
+      startAngle: 0,
+      sweep: 360,
+    })
+    const fill = (id: string, x: number, boundaryIds: readonly string[]): ComposeEntity => {
+      const base = curveEntity(id, id, rect(x, 20, 40, 40))
+      return {
+        ...base,
+        components: {
+          ...base.components,
+          [COMPOSE_BUILTIN_COMPONENT_KEYS.hatch]: {
+            seed: { x: 20, y: 20 },
+            boundaryIds: [...boundaryIds],
+          },
+        },
+      } as ComposeEntity
+    }
+    const before = scene([
+      fill('blue', 10, ['ringA']),
+      fill('red', 70, ['ringB']),
+      ring('ringA', 40),
+      ring('ringB', 100),
+    ])
+    const plan = planStageFlatten(context(before), ['blue', 'red', 'ringA', 'ringB'], OPTIONS)
+    expect(plan.branch).toBe('in-place')
+    const after = run(before, plan.commands)
+    expect(['blue', 'red', 'ringA', 'ringB'].map((id) => getComposeCurve(after.entities[id]!)?.kind))
+      .toEqual(['path', 'path', 'path', 'path'])
   })
 
   it('拍平一块填充时在同一事务里删掉 Hatch，否则跟随求解下一趟就把 path 写回多段线', () => {
@@ -310,21 +428,21 @@ describe('OpenSpec: stage / 区域运算恒走合并那一支', () => {
       curveEntity('top', '盖板', rect(20, 0, 40, 40)),
     ])
     const plan = planStageBoolean(context(before), ['bottom', 'top'], 'union', OPTIONS)
-    expect(plan.resultId).not.toBeNull()
+    expect(plan.resultIds).toHaveLength(1)
 
     const after = run(before, plan.commands)
-    expect(after.entities[plan.resultId!]).toBeDefined()
+    expect(after.entities[plan.resultIds[0]!]).toBeDefined()
     // 被删掉的那两个都不是它——挪过去的必须是产物。
-    expect(plan.resultId).not.toBe('bottom')
-    expect(plan.resultId).not.toBe('top')
+    expect(plan.resultIds[0]).not.toBe('bottom')
+    expect(plan.resultIds[0]).not.toBe('top')
   })
 
-  it('被拒绝时 `resultId` 是 null——没有产物可以挪过去', () => {
+  it('被拒绝时 `resultIds` 是空的——没有结果可以挪过去', () => {
     const before = scene([
       curveEntity('a', '左', rect(0, 0, 20, 20)),
       curveEntity('b', '右', rect(100, 100, 20, 20)),
     ])
-    expect(planStageBoolean(context(before), ['a', 'b'], 'intersect', OPTIONS).resultId).toBeNull()
+    expect(planStageBoolean(context(before), ['a', 'b'], 'intersect', OPTIONS).resultIds).toEqual([])
   })
 
   it('区域运算不走原地那一支——产物不再是原来任何一个', () => {

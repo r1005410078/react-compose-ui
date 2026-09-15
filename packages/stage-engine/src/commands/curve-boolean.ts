@@ -104,6 +104,29 @@ export type StageBooleanResolution =
     readonly entityName?: string
   }
 
+/** 拍平交回的一条产物。 @public */
+export interface StageFlattenPiece {
+  readonly operand: StageBooleanOperand
+  /** 世界坐标的产物；恒是 `path`。 */
+  readonly curve: ComposeCurve
+}
+
+/**
+ * {@link resolveStageFlatten} 的结果。
+ *
+ * @remarks
+ * 逐个交回而**不是**交回一条合并的几何：交回一条合并的，宿主除了新建一个对象之外无事可做，
+ * 而那正是被推翻的那种语义——一个对象只有一个填充，合并必然挤掉其余操作数的颜色。
+ */
+export type StageFlattenResolution =
+  | { readonly status: 'resolved'; readonly pieces: readonly StageFlattenPiece[] }
+  | {
+    readonly status: 'rejected'
+    readonly reason: StageBooleanRejection
+    /** 挡住运算的那个对象；`too-few` 时缺席。 */
+    readonly entityName?: string
+  }
+
 /**
  * 文档的绘制次序：`rootIds` 深度优先，先画的排在前面。
  *
@@ -207,8 +230,11 @@ function collectOperands(
  *
  * @remarks
  * 拍平**不求交**，因此它没有退化情形、也没有「结果为空」这一支——轮廓一个像素都不变，变的
- * 只是「这是几个对象」和「顶点还是控制手柄」。它也因此**不拒绝贝塞尔操作数**：那条限制的
- * 理由是平面图的边还没有三次贝塞尔这一种，而拍平一张平面图都不用建。
+ * 只是「顶点还是控制手柄」。它也因此**不拒绝贝塞尔操作数**：那条限制的理由是平面图的边还没有
+ * 三次贝塞尔这一种，而拍平一张平面图都不用建。
+ *
+ * 每个操作数各交回一条产物：拍平改的是**表示**不是**呈现**，同一份图拍平前后逐像素相同。
+ * 要把若干形状合成一个对象，那是 `UNION`。
  *
  * 至少要一个操作数。父级不必相同、旋转过也可以：几何投影走世界空间，产物落成一条
  * `rotation` 为 0 的新曲线，与 SVG 导入「变换在导入期烘进几何」同一条。
@@ -218,7 +244,7 @@ function collectOperands(
 export function resolveStageFlatten(
   index: StageSceneIndex,
   ids: readonly string[],
-): StageBooleanResolution {
+): StageFlattenResolution {
   if (ids.length === 0) return { status: 'rejected', reason: 'too-few' }
   const collected = collectOperands(index, ids, false)
   if (collected.status === 'rejected') return collected
@@ -226,8 +252,11 @@ export function resolveStageFlatten(
   if (operands.length === 0) return { status: 'rejected', reason: 'too-few' }
   return {
     status: 'resolved',
-    curve: flattenComposeCurves(operands.map((operand) => operand.curve)),
-    operands,
+    // 逐个各成一条：拍平改的是表示不是呈现，N 个对象拍完还是 N 个。
+    pieces: operands.map((operand) => ({
+      operand,
+      curve: flattenComposeCurves([operand.curve]),
+    })),
   }
 }
 
