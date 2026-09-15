@@ -21,7 +21,12 @@ import {
 } from '@compose-ui/core'
 import type { StagePoint } from '../geometry'
 import type { StageSceneIndex } from '../hit-testing'
-import { stageBoxCurve, stageCurveMatchesEntity, stageWorldOutline } from './curve-world'
+import {
+  stageBoxCurve,
+  stageCurveMatchesEntity,
+  stageWorldOutline,
+  stageWorldQuantum,
+} from './curve-world'
 import type { StageJunctionPredicate } from './junction-cleanup'
 
 /** {@link resolveStageHatchRegion} 的入参。 @public */
@@ -100,6 +105,8 @@ interface HatchCandidate {
   readonly pieces: readonly ComposeOutlinePiece[]
   /** 它自己是不是一条闭合曲线。 */
   readonly closed: boolean
+  /** 一个坐标量化步长在世界空间里有多大；见 {@link stageWorldQuantum}。 */
+  readonly quantum: number
 }
 
 /**
@@ -125,7 +132,12 @@ function hatchCandidates(
     if (!matrix || !curve) continue
     const pieces = stageWorldOutline(curve, matrix)
     if (pieces.length === 0) continue
-    candidates.push({ entityId: entity.id, pieces, closed: isComposeClosedCurve(curve) })
+    candidates.push({
+      entityId: entity.id,
+      pieces,
+      closed: isComposeClosedCurve(curve),
+      quantum: stageWorldQuantum(index, entity.id, matrix),
+    })
   }
   return candidates
 }
@@ -185,7 +197,12 @@ export function resolveStageHatchRegion(
     })
   })
 
-  const region = resolveComposeCurveRegion(pieces, worldPoint)
+  const region = resolveComposeCurveRegion(
+    pieces,
+    worldPoint,
+    // 取最大：取小了归一够不着，退回今天的行为；取大了才会把两条真的不同的边收成一条。
+    Math.max(...candidates.map((candidate) => candidate.quantum)),
+  )
   if (region.status === 'open') return { status: 'rejected', reason: 'open', gaps: region.gaps }
   if (region.status !== 'resolved') return { status: 'rejected', reason: 'outside' }
 

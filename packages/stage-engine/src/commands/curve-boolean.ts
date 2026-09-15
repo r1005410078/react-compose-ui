@@ -24,7 +24,7 @@ import {
   type ComposeEntity,
 } from '@compose-ui/core'
 import type { StageSceneIndex } from '../hit-testing'
-import { stageBoxCurve, stageWorldCurve, stageWorldOutline } from './curve-world'
+import { stageBoxCurve, stageWorldCurve, stageWorldOutline, stageWorldQuantum } from './curve-world'
 
 /**
  * 一次布尔运算被拒绝的原因；是原因码而不是文案。
@@ -78,6 +78,14 @@ export interface StageBooleanOperand {
    * （`stageWorldOutline`），因此填出来的形状不会盖过角弧。
    */
   readonly outline: readonly ComposeOutlinePiece[]
+  /**
+   * 一个坐标量化步长在世界空间里有多大。
+   *
+   * @remarks
+   * 区域运算拿它当「这两条边是不是同一条」的容差。它逐操作数各算一份，因为盒与取景框的比例
+   * 逐对象不同；交给求解时取**最大**的那一个。
+   */
+  readonly quantum: number
 }
 
 /** {@link resolveStageFlatten} 的结果。 @public */
@@ -183,7 +191,13 @@ function collectOperands(
     if (outline === null) {
       return { status: 'rejected', reason: 'bezier', entityName: entity.name }
     }
-    operands.push({ entityId, name: entity.name, curve: worldCurve, outline })
+    operands.push({
+      entityId,
+      name: entity.name,
+      curve: worldCurve,
+      outline,
+      quantum: stageWorldQuantum(index, entityId, matrix),
+    })
   }
   return { status: 'ok', operands }
 }
@@ -254,6 +268,8 @@ export function resolveStageBoolean(
       ? { pieces: operand.outline, curve: operand.curve }
       : { pieces: operand.outline })),
     op,
+    // 取最大：取小了归一够不着，而够不着只是退回一个看得见的失败。
+    Math.max(...operands.map((operand) => operand.quantum)),
   )
   if (result.status === 'empty') return { status: 'rejected', reason: 'empty' }
   if (result.status !== 'resolved') return { status: 'rejected', reason: 'degenerate' }

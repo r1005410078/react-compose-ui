@@ -10,8 +10,10 @@
  * 输入是**已经在同一个坐标空间里**的片段（调用方把每条候选曲线投影进自己的盒、再乘世界矩阵，
  * 与命中、框选、特征点同一条链）。本模块不认识任何文档协议。
  *
- * 退化由两处承担，而不是靠逐交点的特判：**叠在一起的两条边收成一条**（两条画在一起的边界线
- * 在图上就是一条边界），以及**射线换方向重来**（擦过节点或与某条边相切时朝向读不出来）。
+ * 退化由三处承担，而不是靠逐交点的特判：**重合的边界先归一到同一条支撑**（同一段边界在图里
+ * 存了两份时，两份差到一个量化步长的量级，近似共圆的两条弧求交给不出有意义的答案）、
+ * **叠在一起的两条边收成一条**（两条画在一起的边界线在图上就是一条边界），以及**射线换方向
+ * 重来**（擦过节点或与某条边相切时朝向读不出来）。
  *
  * @packageDocumentation
  */
@@ -48,6 +50,27 @@ import type { ComposePosition } from './document-types'
  */
 export const NODE_EPSILON_RATIO = 1e-7
 
+
+/**
+ * 节点合并容差：相对量与量化步长推出的下限，取较大者。
+ *
+ * @remarks
+ * 相对量是**浮点卫生**（弧 × 弧的闭式解在同一个交点上算两遍能差 1e-12 相对量级）。下限说的
+ * 是另一件事：同一个角点被两个对象各自写进文档时，每一轴上差一个步长来自几何自身的舍入、
+ * 再差一个步长来自归一化偏移的舍入，因此两轴合起来的距离上界是 `2√2` 个步长。
+ *
+ * 这条下限**单独不成立**，它与 {@link weldComposeOutlineSupports} 是一对：量过——只抬容差
+ * 而不归一，两块共用弧边界的填充求并集仍然报「求解退化」；另一个夹具上它会跨过报错那一关而
+ * 静默产出一个几像素大的形状，把一个看得见的失败换成一个看不见的错误。
+ *
+ * 代价写在明处：图上真的相距不到三个步长的两个角会被并成一个——它们在存储精度上本来就分不开。
+ *
+ * @param scale - 这批片段包围盒的尺度
+ * @param quantum - 这批片段所在空间里的坐标量化步长
+ */
+export function composeNodeEpsilon(scale: number, quantum: number) {
+  return Math.max(NODE_EPSILON_RATIO * scale, 2 * Math.SQRT2 * quantum)
+}
 
 /** 参数空间上「同一个切点」的容差；与 `curve-geometry` 的 `TOUCH_TOLERANCE` 同源。 */
 export const PARAMETER_EPSILON = 1e-6
@@ -239,12 +262,335 @@ export const edgeOf = (half: HalfEdgeId) => half >> 1
 export const isReversed = (half: HalfEdgeId) => (half & 1) === 1
 export const opposite = (half: HalfEdgeId) => half ^ 1
 
-/** 把一组片段按彼此的交点切开，并建成平面图。 */
-export function buildGraph(pieces: readonly ComposeOutlinePiece[], epsilon: number) {
-  const cuts: number[][] = pieces.map(() => [])
+/**
+ * 片段的**支撑**：它落在哪条直线、哪个圆上。
+ *
+ * @remarks
+ * 直线取规范式 `n·p = c` 且单位法向定向到 `nx > 0`（`nx` 为零时取 `ny > 0`）——同一条直线上
+ * 方向相反的两条线段因此得到同一组数，这是「重合的两条按数值比较」能成立的前提。
+ */
+export type ComposeOutlineSupport =
+  | { readonly kind: 'line'; readonly nx: number; readonly ny: number; readonly c: number }
+  | { readonly kind: 'circle'; readonly cx: number; readonly cy: number; readonly r: number }
+
+/** 轨迹取样的段数；两端算进去，中间够密即可。 */
+const SUPPORT_SAMPLES = 8
+
+/**
+ * 法向定向用的浮点卫生量。
+ *
+ * @remarks
+ * 这**不是**一条几何容差：轴对齐的线段算出来的法向分量是 0 还是 1e-17 由浮点决定，而定向
+ * 规则若直接读它的符号，同一条竖线上的两条线段会得到方向相反的法向、于是被判成两条支撑。
+ */
+const ORIENTATION_EPSILON = 1e-12
+
+function lineSupportOf(segment: ComposeSegmentShape): ComposeOutlineSupport {
+  const direction = normalize(subtract(segment.end, segment.start))
+  let nx = -direction.y
+  let ny = direction.x
+  if (nx < -ORIENTATION_EPSILON || (Math.abs(nx) <= ORIENTATION_EPSILON && ny < 0)) {
+    nx = -nx
+    ny = -ny
+  }
+  const c = nx * segment.start.x + ny * segment.start.y
+  // 负零归正：`-0` 与 `0` 在比较里相等，却让同一条支撑在逐位比较下读成两条。
+  return { kind: 'line', nx: nx + 0, ny: ny + 0, c: c + 0 }
+}
+
+/** 片段落在哪条支撑上。 */
+export function composeOutlineSupport(piece: ComposeOutlinePiece): ComposeOutlineSupport {
+  return piece.kind === 'arc'
+    ? { kind: 'circle', cx: piece.arc.center.x, cy: piece.arc.center.y, r: piece.arc.radius }
+    : lineSupportOf(piece.segment)
+}
+
+/** 片段上等间距的取样点。 */
+function supportSamples(piece: ComposeOutlinePiece): readonly ComposePlanarPoint[] {
+  const span = pieceSpan(piece)
+  return Array.from({ length: SUPPORT_SAMPLES + 1 }, (_, index) =>
+    piecePointAt(piece, (span * index) / SUPPORT_SAMPLES))
+}
+
+/**
+ * 一组点的代数圆拟合（Kåsa）。
+ *
+ * @remarks
+ * 最小化 `Σ(|p − c|² − r²)²`，法方程是二阶线性组，闭式解。点近似共线时行列式趋零——那一档
+ * 没有圆可言，交回 `null` 由调用方当作「拟合不出来」。
+ */
+function fitCircleSupport(points: readonly ComposePlanarPoint[]): ComposeOutlineSupport | null {
+  const count = points.length
+  if (count < 3) return null
+  let sx = 0
+  let sy = 0
+  let sxx = 0
+  let syy = 0
+  let sxy = 0
+  let sxz = 0
+  let syz = 0
+  let sz = 0
+  points.forEach(({ x, y }) => {
+    const z = x * x + y * y
+    sx += x
+    sy += y
+    sxx += x * x
+    syy += y * y
+    sxy += x * y
+    sxz += x * z
+    syz += y * z
+    sz += z
+  })
+  const a11 = 2 * (sxx - (sx * sx) / count)
+  const a12 = 2 * (sxy - (sx * sy) / count)
+  const a22 = 2 * (syy - (sy * sy) / count)
+  const b1 = sxz - (sx * sz) / count
+  const b2 = syz - (sy * sz) / count
+  const determinant = a11 * a22 - a12 * a12
+  if (!Number.isFinite(determinant) || determinant === 0) return null
+  const cx = (b1 * a22 - b2 * a12) / determinant
+  const cy = (a11 * b2 - a12 * b1) / determinant
+  let sumSquared = 0
+  points.forEach((point) => {
+    sumSquared += (point.x - cx) ** 2 + (point.y - cy) ** 2
+  })
+  const r = Math.sqrt(sumSquared / count)
+  return Number.isFinite(cx) && Number.isFinite(cy) && Number.isFinite(r)
+    ? { kind: 'circle', cx, cy, r }
+    : null
+}
+
+/** 一组点的总体最小二乘直线拟合：过质心、方向取协方差矩阵的主轴。 */
+function fitLineSupport(points: readonly ComposePlanarPoint[]): ComposeOutlineSupport | null {
+  const count = points.length
+  if (count < 2) return null
+  let mx = 0
+  let my = 0
+  points.forEach(({ x, y }) => {
+    mx += x / count
+    my += y / count
+  })
+  let sxx = 0
+  let syy = 0
+  let sxy = 0
+  points.forEach(({ x, y }) => {
+    sxx += (x - mx) ** 2
+    syy += (y - my) ** 2
+    sxy += (x - mx) * (y - my)
+  })
+  // 主轴方向：对称二阶矩阵的最大特征向量。
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy)
+  const direction = { x: Math.cos(angle), y: Math.sin(angle) }
+  return lineSupportOf({ start: { x: mx, y: my }, end: { x: mx + direction.x, y: my + direction.y } })
+}
+
+/** 某个点到支撑的距离。 */
+function supportDistance(point: ComposePlanarPoint, support: ComposeOutlineSupport) {
+  return support.kind === 'line'
+    ? Math.abs(support.nx * point.x + support.ny * point.y - support.c)
+    : Math.abs(Math.hypot(point.x - support.cx, point.y - support.cy) - support.r)
+}
+
+/**
+ * 一组点共同拟合出来的支撑，以及最大残差。
+ *
+ * @remarks
+ * 判据落在**共同拟合**上而不是「一条片段到另一条拟合出来的支撑的偏差」：后者是一次**外推**
+ * ——一条 48° 的短弧由量化过的控制点反解出来的圆，圆心误差被放大 `1/(1 − cos(θ/2))` 倍，评估
+ * 到半圈之外时误差跟着放大（量到 0.054，是点本身存储误差的五倍还多），而放大倍数由弧的跨度
+ * 决定，于是容差没有可推导的来源。共同拟合问的是「有没有一条支撑同时容得下这些点」，那是
+ * **内插**，误差上界就是点自身的存储误差。
+ */
+function commonSupport(
+  points: readonly ComposePlanarPoint[],
+  kind: ComposeOutlineSupport['kind'],
+): { readonly support: ComposeOutlineSupport; readonly residual: number } | null {
+  const support = kind === 'line' ? fitLineSupport(points) : fitCircleSupport(points)
+  if (!support) return null
+  let residual = 0
+  points.forEach((point) => {
+    residual = Math.max(residual, supportDistance(point, support))
+  })
+  return { support, residual }
+}
+
+/** 片段重算到给定支撑上。 */
+function reprojectPiece(
+  piece: ComposeOutlinePiece,
+  support: ComposeOutlineSupport,
+): ComposeOutlinePiece {
+  if (piece.kind === 'segment' && support.kind === 'line') {
+    const onto = (point: ComposePlanarPoint): ComposePlanarPoint => {
+      const offset = support.nx * point.x + support.ny * point.y - support.c
+      return { x: point.x - support.nx * offset, y: point.y - support.ny * offset }
+    }
+    return { kind: 'segment', segment: { start: onto(piece.segment.start), end: onto(piece.segment.end) } }
+  }
+  if (piece.kind === 'arc' && support.kind === 'circle') {
+    const center = { x: support.cx, y: support.cy }
+    // 整圆没有端点可投影，换个圆心半径即可；起始角与扫掠原样保留。
+    if (isComposeFullCircle(piece.arc)) {
+      return { kind: 'arc', arc: { ...piece.arc, center, radius: support.r } }
+    }
+    const bearing = (point: ComposePlanarPoint) =>
+      Math.atan2(point.y - center.y, point.x - center.x) / TO_RADIANS
+    // `atan2` 的主值与原值可能差整圈：各取最接近原值的那个代表，否则一段 350° 的弧会翻成 −10°。
+    const nearest = (value: number, reference: number) =>
+      value + 360 * Math.round((reference - value) / 360)
+    const startAngle = nearest(bearing(pieceStart(piece)), piece.arc.startAngle)
+    const sweep = nearest(bearing(pieceEnd(piece)) - startAngle, piece.arc.sweep)
+    return { kind: 'arc', arc: { ...piece.arc, center, radius: support.r, startAngle, sweep } }
+  }
+  return piece
+}
+
+/**
+ * 把重合的片段归到同一条支撑上。
+ *
+ * @remarks
+ * 同一段边界会在图里存下**两份**——两块填充各自把它写进文档，几何与盒尺寸都按文档精度舍入，
+ * 读回来再由三点定圆反解。两份因此差到一个量化步长的量级：比浮点误差大五个数量级，比真正
+ * 不同的两条边小三个数量级。不归一的话近似共圆的两条弧会求出**无意义的交点**，射线又在几乎
+ * 同一个距离上穿过它们，于是每个候选方向都退化——用户看到的是「明明贴在一起的两块面算不出
+ * 并集」。
+ *
+ * 分组取**连通分量**：两两成立的关系不传递（同一个圆被切成好几段时，隔得最远的两段各自只和
+ * 中间那几段成立），而连通分量与扫描顺序无关。规范支撑是整组取样点的共同拟合，累加次序由
+ * 成员自身的数值定死。
+ *
+ * 只有一个成员的组原样保留自己的支撑：没有东西要和它对齐，而重算会让一条没有邻居的边界在
+ * 归一前后差出一点点。
+ *
+ * 只在**同种**支撑之间归一：一条浅弧与一条线段可能在容差内重合，而把弧压平会改掉作者画下的
+ * 曲率；那一档退回今天的行为，是一个看得见的失败。
+ *
+ * @param quantum - 这批片段所在空间里的坐标量化步长；`0` 表示不做归一
+ */
+export function weldComposeOutlineSupports(
+  pieces: readonly ComposeOutlinePiece[],
+  quantum: number,
+): readonly ComposeOutlinePiece[] {
+  if (quantum <= 0 || pieces.length < 2) return pieces
+  const supports = pieces.map(composeOutlineSupport)
+  const samples = pieces.map(supportSamples)
+  const parent = pieces.map((_, index) => index)
+  const find = (index: number): number => {
+    let root = index
+    while (parent[root] !== root) root = parent[root]!
+    return root
+  }
   for (let i = 0; i < pieces.length; i += 1) {
     for (let j = i + 1; j < pieces.length; j += 1) {
-      intersectPieces(pieces[i]!, pieces[j]!).forEach((hit) => {
+      if (supports[i]!.kind !== supports[j]!.kind || find(i) === find(j)) continue
+      const fitted = commonSupport([...samples[i]!, ...samples[j]!], supports[i]!.kind)
+      if (!fitted || fitted.residual > quantum) continue
+      parent[find(j)] = find(i)
+    }
+  }
+
+  const members = new Map<number, number[]>()
+  pieces.forEach((_, index) => {
+    const root = find(index)
+    const list = members.get(root)
+    if (list) list.push(index)
+    else members.set(root, [index])
+  })
+
+  const canonical = new Map<number, ComposeOutlineSupport>()
+  members.forEach((list, root) => {
+    // 累加次序按成员自身的数值定死：浮点加法不满足结合律，顺序不定会让产物差在末位上。
+    const ordered = [...list].sort((left, right) => compareSupports(supports[left]!, supports[right]!))
+    /*
+     * 组内本来就逐位落在同一条支撑上时原样留着（一条边被画了两遍就是这一档）：拟合会在末位上
+     * 引入 1e-14 的噪声，而那一档没有任何东西要对齐，重算只会让「归一前后一个字节不差」不成立。
+     * 只有一个成员的组同理——没有邻居要对齐。
+     */
+    if (ordered.every((index) => compareSupports(supports[index]!, supports[ordered[0]!]!) === 0)) {
+      canonical.set(root, supports[ordered[0]!]!)
+      return
+    }
+    const fitted = commonSupport(ordered.flatMap((index) => [...samples[index]!]), supports[ordered[0]!]!.kind)
+    canonical.set(root, fitted?.support ?? supports[ordered[0]!]!)
+  })
+
+  return pieces.map((piece, index) => {
+    const support = canonical.get(find(index))!
+    return compareSupports(supports[index]!, support) === 0 ? piece : reprojectPiece(piece, support)
+  })
+}
+
+/** 支撑自身数值的字典序；只用于把组内成员排成一个与输入顺序无关的次序。 */
+function compareSupports(a: ComposeOutlineSupport, b: ComposeOutlineSupport) {
+  if (a.kind !== b.kind) return a.kind === 'line' ? -1 : 1
+  const left = a.kind === 'line' ? [a.nx, a.ny, a.c] : [a.cx, a.cy, a.r]
+  const right = b.kind === 'line' ? [b.nx, b.ny, b.c] : [b.cx, b.cy, b.r]
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index]! !== right[index]!) return left[index]! < right[index]! ? -1 : 1
+  }
+  return 0
+}
+
+/** 支撑的比较键；归一之后同组成员逐位相同，因此字符串相等就是同一条支撑。 */
+function supportKey(support: ComposeOutlineSupport) {
+  return support.kind === 'line'
+    ? `L${support.nx},${support.ny},${support.c}`
+    : `C${support.cx},${support.cy},${support.r}`
+}
+
+/**
+ * 某个点落在片段上的参数；不在这条片段**内部**时给 `null`。
+ *
+ * @remarks
+ * 只用于同支撑的两条片段互相切开，因此不再验证点是否真的落在支撑上——调用处已经归一过了。
+ */
+function parameterOnPiece(
+  piece: ComposeOutlinePiece,
+  point: ComposePlanarPoint,
+): number | null {
+  if (piece.kind === 'segment') {
+    const direction = subtract(piece.segment.end, piece.segment.start)
+    const lengthSquared = dot(direction, direction)
+    if (lengthSquared === 0) return null
+    const parameter = dot(subtract(point, piece.segment.start), direction) / lengthSquared
+    return parameter > 0 && parameter < 1 ? parameter : null
+  }
+  const { arc } = piece
+  const bearing = Math.atan2(point.y - arc.center.y, point.x - arc.center.x) / TO_RADIANS
+  const sign = Math.sign(arc.sweep || 1)
+  let travelled = sign * (bearing - arc.startAngle)
+  travelled -= 360 * Math.floor(travelled / 360)
+  const span = Math.abs(arc.sweep)
+  return travelled > 0 && travelled < span ? travelled : null
+}
+
+/** 把一组片段按彼此的交点切开，并建成平面图。 */
+export function buildGraph(
+  pieces: readonly ComposeOutlinePiece[],
+  epsilon: number,
+  quantum = 0,
+) {
+  const welded = weldComposeOutlineSupports(pieces, quantum)
+  const keys = welded.map((piece) => supportKey(composeOutlineSupport(piece)))
+  const cuts: number[][] = welded.map(() => [])
+  for (let i = 0; i < welded.length; i += 1) {
+    for (let j = i + 1; j < welded.length; j += 1) {
+      /*
+       * 同一条支撑上的两条片段之间没有横穿的交点，只有**重叠**：求交在这一档给不出有意义的
+       * 答案（近似共圆的两个圆，径向线本身就是病态的）。改为按对方的端点把自己切开，重叠的
+       * 那一截于是逐位相同，交给下面的叠边去重收掉。
+       */
+      if (keys[i] === keys[j]) {
+        const cutAt = (index: number, point: ComposePlanarPoint) => {
+          const parameter = parameterOnPiece(welded[index]!, point)
+          if (parameter !== null) cuts[index]!.push(parameter)
+        }
+        cutAt(i, pieceStart(welded[j]!))
+        cutAt(i, pieceEnd(welded[j]!))
+        cutAt(j, pieceStart(welded[i]!))
+        cutAt(j, pieceEnd(welded[i]!))
+        continue
+      }
+      intersectPieces(welded[i]!, welded[j]!).forEach((hit) => {
         cuts[i]!.push(hit.a)
         cuts[j]!.push(hit.b)
       })
@@ -261,7 +607,7 @@ export function buildGraph(pieces: readonly ComposeOutlinePiece[], epsilon: numb
   }
 
   const subEdges: RegionSubEdge[] = []
-  pieces.forEach((piece, index) => {
+  welded.forEach((piece, index) => {
     const span = pieceSpan(piece)
     const closed = piece.kind === 'arc' && isComposeFullCircle(piece.arc)
     const parameters = [...cuts[index]!, 0, span]
@@ -279,7 +625,11 @@ export function buildGraph(pieces: readonly ComposeOutlinePiece[], epsilon: numb
       const sub = slicePiece(piece, unique[i]!, unique[i + 1]!)
       const start = pieceStart(sub)
       const end = pieceEnd(sub)
-      if (!closed && Math.hypot(end.x - start.x, end.y - start.y) <= epsilon && sub.kind === 'segment') {
+      /*
+       * 两端并成同一个节点的子边一律丢掉，**不只丢线段**：按对方端点切开之后，重叠段两侧会各
+       * 留一条长度在容差之内的尾巴，而它在弧上同样会出现——绕行走到一条零长的弧上读不出朝向。
+       */
+      if (!closed && Math.hypot(end.x - start.x, end.y - start.y) <= epsilon) {
         continue
       }
       subEdges.push({

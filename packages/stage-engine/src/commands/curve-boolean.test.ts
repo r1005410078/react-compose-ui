@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   COMPOSE_BUILTIN_COMPONENT_KEYS,
+  COMPOSE_GEOMETRY_QUANTUM,
   composeCurveBounds,
+  resolveComposeCurveRegion,
+  type ComposeOutlinePiece,
   flattenComposeCurves,
   normalizeComposeCurveGeometry,
   type ComposeCurve,
   type ComposeEntity,
 } from '@compose-ui/core'
 import { resolveStageBoolean, resolveStageFlatten } from './curve-boolean'
+import { stageWorldQuantum } from './curve-world'
 import { createStageSceneIndex } from '../hit-testing'
 import { document, entity, layoutSnapshot } from '../test-fixtures'
 
@@ -275,5 +279,66 @@ describe('OpenSpec: stage-engine / 操作数合不合格在解算层判定，命
       'intersect',
     )
     expect(second.status).toBe('resolved')
+  })
+})
+
+describe('OpenSpec: stage-engine / 求解的调用方说出自己的坐标量化步长', () => {
+  it('盒放大到取景框十倍时，交下去的步长跟着放大十倍', () => {
+    /*
+     * 判据是**盒 / 取景框**而不是文档精度本身：几何的舍入发生在几何空间，而交给求解的是世界
+     * 片段。盒被拉大十倍时，几何上相差一个步长的两个点在世界上就相差十个。
+     */
+    const curve = rect(0, 0, 100, 100)
+    const normalized = normalizeComposeCurveGeometry(curve)
+    const stretched = entity('wide', {
+      x: normalized.offset.x,
+      y: normalized.offset.y,
+      width: normalized.size.width * 10,
+      height: normalized.size.height * 10,
+    })
+    const wide = {
+      ...stretched,
+      components: {
+        ...stretched.components,
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.renderer]: { type: 'curve', props: {} },
+        [COMPOSE_BUILTIN_COMPONENT_KEYS.curve]: normalized.curve,
+      },
+    } as ComposeEntity
+    const index = indexOf([wide, curveEntity('plain', rect(0, 0, 100, 100))])
+    expect(stageWorldQuantum(index, 'wide', index.getWorldMatrix('wide')!))
+      .toBeCloseTo(COMPOSE_GEOMETRY_QUANTUM * 10, 6)
+    expect(stageWorldQuantum(index, 'plain', index.getWorldMatrix('plain')!))
+      .toBeCloseTo(COMPOSE_GEOMETRY_QUANTUM, 6)
+  })
+
+})
+
+describe('OpenSpec: compose-document / 重合的边界在建图之前归一到同一条支撑', () => {
+  it('两块共用一段弧边界的填充，走完整条落地管线之后求得出并集', () => {
+    /*
+     * 用户报的那张图：两个相交的圆、油漆桶填出的几块面，全选求并集。共用的那段弧在图里存了
+     * **两份**，各自经归一化与盒尺寸量化写进文档，读回来再由三点定圆反解——两份的圆心因此
+     * 差到三个量化步长。
+     *
+     * 断的是**几何尺寸**：左月牙 ∪ 透镜恰好是整个左边那个圆，120 × 120。断「算出来了」会被
+     * 一个几像素大的退化产物骗过，上一个变更就栽在这里。
+     */
+    const boundaries: ComposeOutlinePiece[] = [
+      { kind: 'arc', arc: { center: { x: 100, y: 100 }, radius: 60, startAngle: 0, sweep: 360 } },
+      { kind: 'arc', arc: { center: { x: 160, y: 100 }, radius: 60, startAngle: 0, sweep: 360 } },
+    ]
+    const left = resolveComposeCurveRegion(boundaries, { x: 60, y: 100 })
+    const lens = resolveComposeCurveRegion(boundaries, { x: 130, y: 100 })
+    expect(left.status).toBe('resolved')
+    expect(lens.status).toBe('resolved')
+    if (left.status !== 'resolved' || lens.status !== 'resolved') return
+
+    const index = indexOf([curveEntity('left', left.curve), curveEntity('lens', lens.curve)])
+    const resolution = resolveStageBoolean(index, ['left', 'lens'], 'union')
+    expect(resolution.status).toBe('resolved')
+    if (resolution.status !== 'resolved') return
+    const bounds = composeCurveBounds(resolution.curve)
+    expect(bounds.width).toBeCloseTo(120, 1)
+    expect(bounds.height).toBeCloseTo(120, 1)
   })
 })
