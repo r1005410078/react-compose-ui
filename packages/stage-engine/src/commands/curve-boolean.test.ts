@@ -61,20 +61,44 @@ describe('OpenSpec: stage-engine / 拍平的解算', () => {
     const resolution = resolveStageFlatten(index, ['a'])
     expect(resolution.status).toBe('resolved')
     if (resolution.status !== 'resolved') return
-    expect(resolution.curve.kind).toBe('path')
-    expect(resolution.operands).toHaveLength(1)
+    expect(resolution.pieces).toHaveLength(1)
+    expect(resolution.pieces[0]!.curve.kind).toBe('path')
   })
 
-  it('操作数按层序从下到上排，最下面那个排在第一个', () => {
+  it('三个操作数交回三条几何，顺序与层序一致', () => {
+    /*
+     * 判别性所在：交回的是**逐个**的产物而不是一条合并的。交回一条合并的，宿主除了新建一个
+     * 对象之外无事可做——而一个对象只有一个填充，那正是「拍平会丢颜色」的来路。
+     */
     // `document()` 按传入顺序建 `rootIds`，先建的画在下面。
     const index = indexOf([
       curveEntity('bottom', rect(0, 0, 40, 40)),
-      curveEntity('top', rect(20, 20, 40, 40)),
+      curveEntity('middle', rect(20, 20, 40, 40)),
+      curveEntity('top', rect(40, 40, 40, 40)),
     ])
-    const resolution = resolveStageFlatten(index, ['top', 'bottom'])
+    const resolution = resolveStageFlatten(index, ['top', 'bottom', 'middle'])
     expect(resolution.status).toBe('resolved')
     if (resolution.status !== 'resolved') return
-    expect(resolution.operands.map((operand) => operand.entityId)).toEqual(['bottom', 'top'])
+    expect(resolution.pieces.map((piece) => piece.operand.entityId))
+      .toEqual(['bottom', 'middle', 'top'])
+    resolution.pieces.forEach((piece) => { expect(piece.curve.kind).toBe('path') })
+  })
+
+  it('一个闭合多段线与一个整圆拍平，两条产物都是 path', () => {
+    const index = indexOf([
+      curveEntity('box', rect(0, 0, 40, 40)),
+      curveEntity('ring', {
+        kind: 'arc',
+        center: { x: 80, y: 20 },
+        radius: 20,
+        startAngle: 0,
+        sweep: 360,
+      }),
+    ])
+    const resolution = resolveStageFlatten(index, ['box', 'ring'])
+    expect(resolution.status).toBe('resolved')
+    if (resolution.status !== 'resolved') return
+    expect(resolution.pieces.map((piece) => piece.curve.kind)).toEqual(['path', 'path'])
   })
 
   it('一个操作数都没有时以 too-few 拒绝', () => {

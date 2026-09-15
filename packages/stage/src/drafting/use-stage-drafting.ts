@@ -732,7 +732,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
        * 与编组一样**先看事务提没提交**：被拒绝的命令不改变文档，此时把选区挪到一个根本没建
        * 出来的 id 上，画布上会一个东西都不选中。
        */
-      if (committed && plan.resultId) current.onSelectedIdsChange([plan.resultId])
+      if (committed && plan.resultIds.length > 0) current.onSelectedIdsChange([...plan.resultIds])
       if (plan.notice) notice = plan.notice
     }
 

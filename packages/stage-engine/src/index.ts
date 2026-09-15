@@ -175,6 +175,8 @@ export {
   type StageBooleanOperand,
   type StageBooleanRejection,
   type StageBooleanResolution,
+  type StageFlattenPiece,
+  type StageFlattenResolution,
   type StageHatchOptions,
   type StageHatchRejection,
   type StageHatchResolution,

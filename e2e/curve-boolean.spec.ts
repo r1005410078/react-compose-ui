@@ -546,3 +546,60 @@ test('OpenSpec: compose-document / 重合的边界在建图之前归一到同一
   expect((merged.width - ruler.width) / zoom).toBeCloseTo(200 - 120, 0)
   expect((merged.height - ruler.height) / zoom).toBeCloseTo(0, 0)
 })
+
+/**
+ * 拍平多个对象：逐个原地，颜色各自留着。
+ *
+ * 这是用户报的那一档——选中两块颜色不同的填充与两个空心圆执行拍平，得到的曾经是**一个**对象：
+ * 只剩层序最下面那个操作数的颜色，另外三份外观连同名称、id、层序一起消失；两个空心圆被并进
+ * 同一条 `path` 之后按 `nonzero` 填充，原本透明的透镜区被填实。
+ *
+ * 断言要**两半**：四个对象都还在且两块填充各自留着自己的颜色（挡住「颜色被挤掉」），以及两个
+ * 圆仍然 `fill=none`（挡住「透明的地方被填实」——那是合并语义的第二处症状，只断颜色会漏掉它）。
+ */
+test('OpenSpec: stage / 布尔运算的落地规划 / 拍平多个对象逐个原地，颜色各自留着', async ({ page }) => {
+  const { at, commandInput, curves, key, prompt } = await openBooleanStage(page)
+  await key('CIRCLE', ['100,100', '160,100'])
+  await key('CIRCLE', ['180,100', '240,100'])
+  for (const [seed, color] of [[[50, 100], '#4a7cf0'], [[230, 100], '#e04b45']] as const) {
+    await commandInput.fill('HATCH')
+    await commandInput.press('Enter')
+    await commandInput.fill('C')
+    await commandInput.press('Enter')
+    await commandInput.fill(color)
+    await commandInput.press('Enter')
+    await page.mouse.click(at(seed[0], seed[1]).x, at(seed[0], seed[1]).y)
+    await commandInput.press('Escape')
+    await commandInput.press('Escape')
+  }
+  await page.keyboard.press('Escape')
+  await expect(curves).toHaveCount(4)
+
+  await page.mouse.move(at(20, 20).x, at(20, 20).y)
+  await page.mouse.down()
+  await page.mouse.move(at(270, 185).x, at(270, 185).y, { steps: 8 })
+  await page.mouse.up()
+
+  await page.mouse.move(at(20, 20).x, at(20, 20).y)
+  await page.mouse.down()
+  await page.mouse.move(at(270, 185).x, at(270, 185).y, { steps: 8 })
+  await page.mouse.up()
+
+  await commandInput.fill('FLATTEN')
+  await commandInput.press('Enter')
+  await expect(prompt).toContainText('命令：')
+
+  // 四个对象一个都没少，四条几何都变成了 path。
+  await expect(curves).toHaveCount(4)
+  const after = await measureCurves(page)
+  expect(after.map((item) => item.tag)).toEqual(['path', 'path', 'path', 'path'])
+  // 两块填充各自留着自己的颜色；两个圆仍然空心。
+  expect(after.map((item) => item.fill).sort())
+    .toEqual(['#4a7cf0', '#e04b45', 'none', 'none'])
+
+  // 撤销一步全回去：一个事务，不是「拍平了一半」。
+  await page.keyboard.press('Escape')
+  await commandInput.press('Control+z')
+  const undone = await measureCurves(page)
+  expect(undone.map((item) => item.tag).sort()).toEqual(['circle', 'circle', 'path', 'path'])
+})

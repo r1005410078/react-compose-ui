@@ -31,6 +31,7 @@ import {
   type StageBooleanRejection,
   type StageBooleanResolution,
 } from '@compose-ui/stage-engine'
+import type { ComposeCurve } from '@compose-ui/core'
 import type { ComposeBooleanOp } from '@compose-ui/core'
 import { lowestSiblingIndex, type StageDraftingCommitContext } from './drafting-entity'
 import { planStageHatchDetach } from './hatch-plan'
@@ -55,17 +56,17 @@ export interface StageBooleanPlan {
   /** 走了哪一支；呈现层据此决定要不要把新建的 id 记进栈。 */
   readonly branch: 'in-place' | 'create' | 'rejected'
   /**
-   * 运算之后该选中谁；被拒绝时是 null。
+   * 运算之后该选中谁；被拒绝时是空的。
    *
    * @remarks
-   * 呈现层据此把选区挪到**产物**上，与编组把选区挪到新建的那个 Group 上是同一条：一次消费
-   * 选区、产出一个对象的操作，做完之后用户手上握着的应当是结果。不挪的话操作数被删掉、选区
-   * 跟着被静默清空——用户读到的是「我按了一下，东西没了」。
+   * 呈现层据此把选区挪到**结果**上，与编组把选区挪到新建的那个 Group 上是同一条：一次消费
+   * 选区的操作，做完之后用户手上握着的应当是结果。不挪的话操作数被删掉、选区跟着被静默清空
+   * ——用户读到的是「我按了一下，东西没了」。
    *
-   * 原地那一支填的是操作数自己的 id：它本来就在选区里，写出来是为了让这个字段的含义只有
-   * 一句话，而不是「有时候是产物、有时候是 null」。
+   * 是一列而不是一个：拍平不删任何东西，它的结果**就是**那几个操作数，写成一个会把选区从
+   * 几个缩成一个。区域运算那一支填的是新建出来那一个，因此这个字段的含义仍然只有一句话。
    */
-  readonly resultId: string | null
+  readonly resultIds: readonly string[]
 }
 
 const rejected = (
@@ -76,7 +77,7 @@ const rejected = (
   commands: [],
   notice: options.rejection(reason, entityName),
   branch: 'rejected',
-  resultId: null,
+  resultIds: [],
 })
 
 /**
@@ -89,13 +90,13 @@ const rejected = (
 function planInPlace(
   context: StageDraftingCommitContext,
   operand: StageBooleanOperand,
-  resolution: StageBooleanResolution & { readonly status: 'resolved' },
+  curve: ComposeCurve,
   options: StageBooleanPlanOptions,
-): StageBooleanPlan {
+): readonly EditorCommand[] {
   const local = stageCurveToParent(
     context.document,
     context.layoutSnapshot,
-    resolution.curve,
+    curve,
     operand.entityId,
   )
   const geometry: EditorCommand = {
@@ -119,18 +120,13 @@ function planInPlace(
    * 填充色一个字节不动，只删 `Hatch`。两条命令进同一个事务：撤销一步两样一起回去。
    */
   const detach = planStageHatchDetach(context, operand.entityId, options.label, 'stage')
-  const batched = detach && batchStageCommands(
-    context.idFactory,
-    [geometry, detach],
-    options.label(operand.name),
-    { label: options.label(operand.name), source: 'stage', targetIds: [operand.entityId] },
-  )
-  return {
-    commands: detach ? (batched ? [batched] : [geometry, detach]) : [geometry],
-    notice: null,
-    branch: 'in-place',
-    resultId: operand.entityId,
-  }
+  /*
+   * 交回的是**平的**一列，不在这里自己批一层：`transaction.batch` 明令不许嵌套
+   * （`asBatchCommands` 见到子命令还是 batch 就整条拒绝），而调用方拍平多个操作数时要把
+   * 全部命令批进一个事务。多包一层的症状是**整条事务被静默拒绝**——屏幕上什么都没发生，
+   * 命令行也不说话，因为拒绝发生在派发那一层而不是规划那一层。
+   */
+  return detach ? [geometry, detach] : [geometry]
 }
 
 /**
@@ -159,7 +155,7 @@ function planMerged(
    * 运算补一句话，得到的是「按并集有提示、按直线没提示」这种更难解释的不一致。要补就四处一起
    * 补，那是另一件事。
    */
-  if (!seed.ok) return { commands: [], notice: null, branch: 'rejected', resultId: null }
+  if (!seed.ok) return { commands: [], notice: null, branch: 'rejected', resultIds: [] }
 
   const bottom = operands[0]!
   const source = context.document.entities[bottom.entityId]!
@@ -227,7 +223,7 @@ function planMerged(
     commands: batched ? [batched] : [create, remove],
     notice: null,
     branch: 'create',
-    resultId: entityId,
+    resultIds: [entityId],
   }
 }
 
@@ -245,10 +241,28 @@ export function planStageFlatten(
   if (resolution.status === 'rejected') {
     return rejected(options, resolution.reason, resolution.entityName)
   }
-  const { operands } = resolution
-  return operands.length === 1
-    ? planInPlace(context, operands[0]!, resolution, options)
-    : planMerged(context, operands, resolution, options)
+  const { pieces } = resolution
+  const commands = pieces.flatMap(
+    (piece) => planInPlace(context, piece.operand, piece.curve, options),
+  )
+  const label = options.label(pieces[0]!.operand.name)
+  const targetIds = pieces.map((piece) => piece.operand.entityId)
+  /*
+   * 全部命令进**一个**事务，且只批**一层**：撤销一步 MUST 回到拍平之前，而不是回到「拍平了
+   * 一半」；而 `transaction.batch` 不许嵌套，因此 `planInPlace` 交回的是平的一列。
+   */
+  const batched = batchStageCommands(context.idFactory, commands, label, {
+    label,
+    source: 'stage',
+    targetIds,
+  })
+  return {
+    commands: batched ? [batched] : commands,
+    notice: null,
+    branch: 'in-place',
+    // 拍平不删任何东西，操作数就是结果：选区本来就是对的，挪过去是一次 no-op。
+    resultIds: targetIds,
+  }
 }
 
 /**
