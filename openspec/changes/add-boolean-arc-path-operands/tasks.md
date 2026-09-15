@@ -120,4 +120,11 @@
       >   吃掉，选区不增加，而用例看起来只是「少选了一个」。换成 `(200, 100)`。
       > - Playwright 的 `boundingBox()` 量的是**绘制**边界，尖角上的斜接把描边甩出形状之外，
       >   同一个 320 × 240 的产物读成 335 × 269。改成页面内的 `getBoundingClientRect`。
-- [ ] 3.3 门禁：lint、typecheck、单测、构建、端到端
+- [x] 3.3 门禁：lint、typecheck、单测、构建、端到端
+
+      > `bun run lint` EXIT 0；`bun run typecheck` EXIT 0（56/56）；`bun run build` EXIT 0（29/29）；
+      > `bun run test:e2e` EXIT 0（363 passed）。
+      > `bun run test` 在并行满载下报 `@compose-ui/components#test` 失败，单独跑
+      > `bun run test`（packages/components）13 files / 91 tests 全过——本仓库已多次观测到
+      > 这类只在并行负载下出现的超时（canvas-kit、editor、core、materials、preview 都发生过），
+      > 与本变更无关。
