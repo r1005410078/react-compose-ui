@@ -120,6 +120,7 @@ const translations = {
     booleanRejectBezier: (name: string) => `「${name}」含自由曲线段，布尔运算只收直线与圆弧`,
     booleanRejectLine: (name: string) => `「${name}」是直线，没有可运算的面积`,
     flattenLabel: (name: string) => `拍平 ${name}`,
+    booleanFlattened: (count: number) => `已拍平 ${count} 个对象，顶点已换成控制手柄`,
     booleanRejectTooFew: '布尔运算至少需要两个形状（拍平一个就够）',
     booleanRejectNoGeometry: (name: string) => `「${name}」不是形状，布尔运算只作用于曲线`,
     booleanRejectLocked: (name: string) => `「${name}」锁着，先解锁再运算`,
@@ -318,6 +319,7 @@ const translations = {
     booleanRejectBezier: (name: string) => `“${name}” has free-form curve segments; boolean operations take lines and arcs only`,
     booleanRejectLine: (name: string) => `“${name}” is a line and has no area to operate on`,
     flattenLabel: (name: string) => `Flatten ${name}`,
+    booleanFlattened: (count: number) => `Flattened ${count} object${count === 1 ? '' : 's'}; vertices are now control handles`,
     booleanRejectTooFew: 'Boolean operations need at least two shapes (Flatten needs one)',
     booleanRejectNoGeometry: (name: string) => `“${name}” is not a shape; boolean operations only apply to curves`,
     booleanRejectLocked: (name: string) => `“${name}” is locked — unlock it first`,
@@ -570,6 +572,10 @@ export function getStageMessages(
       messages.booleanRejectLine(name),
     ),
     flattenLabel: (name: string) => formatMessage('stage.flattenLabel', messages.flattenLabel(name)),
+    booleanFlattened: (count: number) => formatMessage(
+      'stage.booleanFlattened',
+      messages.booleanFlattened(count),
+    ),
     booleanRejectTooFew: formatMessage('stage.booleanRejectTooFew', messages.booleanRejectTooFew),
     booleanRejectNoGeometry: (name: string) => formatMessage(
       'stage.booleanRejectNoGeometry',

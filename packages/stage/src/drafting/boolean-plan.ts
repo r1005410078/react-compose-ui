@@ -46,6 +46,14 @@ export interface StageBooleanPlanOptions {
   readonly label: (name: string) => string
   /** 被拒绝时的说明；每种原因一句，互不相同。 */
   readonly rejection: (reason: StageBooleanRejection, entityName?: string) => string
+  /**
+   * 拍平成功之后那一句。
+   *
+   * @remarks
+   * 拍平改的是**表示**不是**呈现**：成功之后画布逐像素不变、场景树一行不变，因此「拍平好了」
+   * 与「敲了没反应」在屏幕上完全一样。区域运算不需要这一句——它的产物画在屏幕上。
+   */
+  readonly flattened: (count: number) => string
 }
 
 /** {@link planStageBoolean} 的结果。 @internal */
@@ -258,7 +266,7 @@ export function planStageFlatten(
   })
   return {
     commands: batched ? [batched] : commands,
-    notice: null,
+    notice: options.flattened(pieces.length),
     branch: 'in-place',
     // 拍平不删任何东西，操作数就是结果：选区本来就是对的，挪过去是一次 no-op。
     resultIds: targetIds,

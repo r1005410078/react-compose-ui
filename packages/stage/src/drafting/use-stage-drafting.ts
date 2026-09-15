@@ -117,6 +117,8 @@ export interface StageDraftingHookMessages extends StageDraftingMessages {
   readonly booleanLabel: (operation: StageBooleanOperation) => (name: string) => string
   /** 布尔运算被拒绝时的说明；每种原因一句，互不相同。 */
   readonly booleanRejection: (reason: StageBooleanRejection, entityName?: string) => string
+  /** 拍平成功之后那一句；它是这套命令里唯一一条成功了屏幕上也看不出来的。 */
+  readonly booleanFlattened: (count: number) => string
   /** 悬停在「会改某个既有对象」那一支上时命令行说的话。 */
   readonly hatchWillFill: (name: string) => string
   /** 悬停在「会改一块已有填充的颜色」那一支上时命令行说的话。 */
@@ -713,6 +715,7 @@ export function useStageDrafting(options: StageDraftingOptions) {
       const planOptions = {
         label: current.messages.booleanLabel(effect.boolean.operation),
         rejection: current.messages.booleanRejection,
+        flattened: current.messages.booleanFlattened,
       }
       const plan = effect.boolean.operation === 'flatten'
         ? planStageFlatten(planContext, effect.boolean.ids, planOptions)
