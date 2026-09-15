@@ -633,6 +633,7 @@ function ComposeStageReady({
      * 每种原因一句，互不相同：「敲了没反应」与敲错字在屏幕上无法区分，而「没有重叠」与
      * 「算不出来」要给用户两句不同的话——前者按一下别的运算就好，后者要把形状错开再试。
      */
+    booleanFlattened: messages.booleanFlattened,
     booleanRejection: (reason: StageBooleanRejection, entityName?: string) => {
       if (reason === 'too-few') return messages.booleanRejectTooFew
       if (reason === 'empty') return messages.booleanRejectEmpty

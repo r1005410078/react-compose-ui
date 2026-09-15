@@ -48,7 +48,8 @@ test('OpenSpec: stage / 布尔运算的落地规划 / 拍平一个矩形之后�
 
   await commandInput.fill('FLAT')
   await commandInput.press('Enter')
-  await expect(prompt).toContainText('命令：')
+  // 拍平成功要说一句：它是这套命令里唯一一条成功了屏幕上也看不出来的。
+  await expect(prompt).toContainText('已拍平 1 个对象')
 
   /*
    * 场景树上还是原来那一行：单操作数走原地改几何，Entity 没有被换掉。少了这一条，
@@ -68,7 +69,8 @@ test('OpenSpec: stage / 布尔运算的落地规划 / 拍平一个矩形之后�
 /**
  * 并集把两个形状合成一个：产物是一个新对象，两个操作数在**同一个事务**里消失。
  *
- * 与拍平那一支的差别是**操作数有几个**——多于一个就合并，因为这时它确实不再是原来任何一个。
+ * 与拍平那一支的差别是**运算是哪一条**——区域运算合并，因为它的产物确实不再是原来任何一个；
+ * 它也因此**不报**拍平那句成功说明：产物画在屏幕上，用户看得见。
  */
 test('OpenSpec: stage / 布尔运算的落地规划 / 并集把两个矩形合成一个，撤销一步全回去', async ({ page }) => {
   await page.goto('/?no-auto-fit')
@@ -110,7 +112,9 @@ test('OpenSpec: stage / 布尔运算的落地规划 / 并集把两个矩形合�
 
   await commandInput.fill('UNI')
   await commandInput.press('Enter')
+  // 区域运算**不报**拍平那句成功说明：产物画在屏幕上，再补一句话是噪音。
   await expect(prompt).toContainText('命令：')
+  await expect(prompt).not.toContainText('已拍平')
 
   /*
    * 两个操作数合成了一个：场景树上只剩一行，而它叫的是**层序最靠后**那个操作数的名字——
@@ -587,7 +591,11 @@ test('OpenSpec: stage / 布尔运算的落地规划 / 拍平多个对象逐个�
 
   await commandInput.fill('FLATTEN')
   await commandInput.press('Enter')
-  await expect(prompt).toContainText('命令：')
+  /*
+   * 拍平成功之后命令行要说一句：它改的是表示不是呈现，画布逐像素不变、场景树一行不变，
+   * 少了这句话「拍平好了」与「敲了没反应」在屏幕上完全一样。
+   */
+  await expect(prompt).toContainText('已拍平 4 个对象')
 
   // 四个对象一个都没少，四条几何都变成了 path。
   await expect(curves).toHaveCount(4)

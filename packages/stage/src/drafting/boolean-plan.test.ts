@@ -137,6 +137,7 @@ function context(document: ComposeDocument): StageDraftingCommitContext {
 const OPTIONS = {
   label: (name: string) => `拍平 ${name}`,
   rejection: (reason: string, entityName?: string) => `${reason}:${entityName ?? ''}`,
+  flattened: (count: number) => `已拍平 ${count} 个对象`,
 }
 
 /**
@@ -177,6 +178,21 @@ describe('OpenSpec: stage / 布尔运算的落地规划', () => {
     expect(Object.keys(after.entities)).toEqual(Object.keys(before.entities))
     expect(getComposeCurve(after.entities.a!)?.kind).toBe('path')
     expect(after.entities.a!.name).toBe('外框')
+  })
+
+  it('拍平成功之后报出个数，区域运算不报', () => {
+    /*
+     * 拍平改的是表示不是呈现：成功之后画布逐像素不变、场景树一行不变，因此「拍平好了」与
+     * 「敲了没反应」在屏幕上完全一样。区域运算不需要这一句——它的产物画在屏幕上。
+     */
+    const before = scene([
+      curveEntity('bottom', '底板', rect(0, 0, 40, 40)),
+      curveEntity('top', '盖板', rect(20, 20, 40, 40)),
+    ])
+    expect(planStageFlatten(context(before), ['bottom'], OPTIONS).notice).toBe('已拍平 1 个对象')
+    expect(planStageFlatten(context(before), ['top', 'bottom'], OPTIONS).notice)
+      .toBe('已拍平 2 个对象')
+    expect(planStageBoolean(context(before), ['top', 'bottom'], 'union', OPTIONS).notice).toBeNull()
   })
 
   it('拍平的 `resultIds` 就是那几个操作数——这个字段的含义只有一句话', () => {
