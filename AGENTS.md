@@ -1424,6 +1424,19 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   混合组件目录，可依赖 `core`、`assets`、`component-registry`、`components` 和 `ui-context`，
   不得依赖 `editor`、`stage`、`scene-tree` 或 `asset-browser`；Registry Preset 仍是代码物料，
   Project Component/Variant 才是 Provider 资源。
+- `@compose-ui/library` 是无 React、无 DOM 的**页面库端口**包，只能依赖 `core` 与 `assets`。
+  它与资源端口是**两个端口不是两个服务**：库记录与资源记录一对一挂在同一个 key 上
+  （`pageKey === assetKey`），实现上可以就是同一张表的几个业务列，因此 `modifiedAt` 与
+  `revision` **不需要在两边同步**——漏掉那条同步的症状是「图改了但首页上的排序没动」。
+  **不放进 `pages`**：那个包的边界是页面清单、聚合 Store 与运行时导航，而首页是一个可以完全
+  不加载编辑器的宿主。三条硬约束：`items` 与 `facets` **一次返回**（分两条会让用户改一次筛选
+  就看到计数是旧的、图是新的）；按场景类型求 facet 时 **MUST 摘掉 `categories` 这一项条件**
+  （不摘的话选中某一类之后其余每一类都是 0，左栏再也切不出去）；**分页用游标不用 offset**
+  （多人同时写时 offset 会漏项与重项）。性质是 `kind` 加正交的 `deletedAt` 两个字段而**不是
+  三元枚举**——模板删掉再恢复必须回到模板，三元把「恢复到哪儿」从数据里擦掉了。场景类型是
+  标签数组，**「未分类」是数组为空**而不是一个保留 id（留一个会造出「既打了未分类又打了 PCS」
+  这种非法态）。`useCount` **只能由 `instantiate` 在同一个事务里加一**，端口上没有可单独调的
+  自增——那样打开一次就能刷。端口上**没有鉴权参数**，那是 HTTP 适配器的事。
 - `@compose-ui/pages` 是无 React、无 DOM 的页面清单、页面目录、页面聚合 Store 与**页面导航
   会话**包，只能依赖 `core` 和 `assets`；不得依赖任何 React chrome、`asset-browser`、
   `editor`、`preview` 或 `stage`。导航会话只决定「当前应该是哪一页」，不渲染、不执行脚本、

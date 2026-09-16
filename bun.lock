@@ -291,6 +291,14 @@
         "yoga-layout": "3.2.1",
       },
     },
+    "packages/library": {
+      "name": "@compose-ui/library",
+      "version": "0.1.0",
+      "dependencies": {
+        "@compose-ui/assets": "workspace:*",
+        "@compose-ui/core": "workspace:*",
+      },
+    },
     "packages/materials": {
       "name": "@compose-ui/materials",
       "version": "0.1.0",
@@ -581,6 +589,8 @@
     "@compose-ui/interaction-kernel": ["@compose-ui/interaction-kernel@workspace:packages/interaction-kernel"],
 
     "@compose-ui/layout-engine": ["@compose-ui/layout-engine@workspace:packages/layout-engine"],
+
+    "@compose-ui/library": ["@compose-ui/library@workspace:packages/library"],
 
     "@compose-ui/materials": ["@compose-ui/materials@workspace:packages/materials"],
 

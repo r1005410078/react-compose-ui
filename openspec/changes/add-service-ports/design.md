@@ -185,6 +185,30 @@ UI 的三段与数据的两个字段不必一一对应。**回收站 = `deletedA
 在库这边逐条成立，而 `library` 本来就依赖 `assets`。另起一套同样六档的分类，只会让消费方
 把同一个 `switch` 写两遍。
 
+### D14. 目录的列举由调用方注入，本包不依赖 `pages`
+
+那趟 BFS（按媒体类型从目录树里挑出页面）已经住在 `@compose-ui/pages` 的
+`listComposePageDescriptors` 里。`library` **不能依赖 `pages`**——那个包还装着运行时导航，而首页
+是一个可以完全不加载编辑器的宿主；也**不能各写一份**——两处对「什么算一个页面」的判断会分家。
+
+下沉到 `core` 也走不通：它要 `provider.list`，而 `core` 不依赖 `assets`。
+
+因此 `createProviderLibraryPort` 收一个 `listPages` 函数，宿主把 `listComposePageDescriptors`
+传进来（结构兼容，不需要任何适配）。这与「Preset seed 由调用方注入，本包因此不认识 Registry」
+是同一条判断。
+
+### D15. 缩略图交字节，不交 URL
+
+本地实现给不出 URL，而在这里用 Blob 合成一个 objectURL 就是一处**没有归属的泄漏**——本包既不
+认识 DOM，也不知道谁该释放它。因此端口上有两条，与 `ComposeAssetProvider` 的
+`resolveAsset` / `resolveUrl` 分工逐字相同：
+
+- `ComposeLibraryRecord.thumbnailUrl`：能给出 URL 的实现填它（服务端预签名）。
+- `ComposeLibraryPort.readThumbnail`：给不出 URL 的实现交出字节，由渲染它的**组件**持有
+  objectURL 的生命周期。
+
+没有缩略图时 `readThumbnail` 返回 `null` 而不抛错：没有图是常态（见 D11），不是失败。
+
 ## 端口定义
 
 ### `@compose-ui/library`

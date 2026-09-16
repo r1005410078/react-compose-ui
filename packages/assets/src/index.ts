@@ -14,6 +14,21 @@ export interface ComposeAssetCapabilities {
   readonly write: boolean
   /** 是否允许把带 assetKey 的文件引用写入 ComposeDocument。 */
   readonly reference?: boolean
+  /**
+   * 是否能给出可直接交给浏览器的资源 URL。
+   *
+   * @remarks
+   * 缺席即按 `false` 处理，消费方退回 {@link ComposeAssetProvider.resolveAsset} 的 Blob 路径。
+   */
+  readonly directUrl?: boolean
+  /**
+   * 是否能授权一次直传。
+   *
+   * @remarks
+   * 缺席即按 `false` 处理。只用于**新建**大文件；改写已有文件一律走
+   * {@link ComposeAssetProvider.writeFile}，因为那里有上一版要守。
+   */
+  readonly directUpload?: boolean
 }
 
 /** 资源树中的目录或文件。 @public */
@@ -47,12 +62,81 @@ export interface ComposeResolvedAsset {
   readonly mediaType: string
 }
 
+/**
+ * 可直接交给浏览器的资源 URL。
+ *
+ * @remarks
+ * 对象存储支撑的 Provider 用预签名 URL 回答「这份资源在哪儿」，浏览器直连存储，内容因此
+ * 不必穿过业务服务两次，页面上几十个符号也不再各自占一个 objectURL。
+ * @public
+ */
+export interface ComposeResolvedAssetUrl {
+  readonly url: string
+  readonly revision: string
+  readonly mediaType: string
+  /**
+   * 这个 URL 失效的时刻（epoch 毫秒）；缺席即不过期。
+   *
+   * @remarks
+   * 签名会过期而一张图可能开着好几个小时。消费方 MUST 在失效前重新解析——不带这个字段的
+   * 症状是**图在某一刻集体变成裂图**，而那时页面上没有任何东西解释原因。
+   */
+  readonly expiresAt?: number
+}
+
+/**
+ * 直传一个新文件的一次授权。
+ *
+ * @remarks
+ * 只服务**新建**：导入的图纸、位图与字体可能有几十 MB，让它们穿过业务服务是纯粹的带宽浪费。
+ * 改写已有文件不走这条——那里有 `expectedRevision` 要守，而直传要多一次回执握手才拿得到
+ * 新的 revision，页面文件本来就只有几十到几百 KB，不值。
+ * @public
+ */
+export interface ComposeAssetUpload {
+  readonly uploadUrl: string
+  readonly method: 'PUT' | 'POST'
+  readonly headers?: Readonly<Record<string, string>>
+  /** 授权失效的时刻（epoch 毫秒）；缺席即不过期。 */
+  readonly expiresAt?: number
+  /** 交回 {@link ComposeAssetProvider.completeUpload} 的回执凭据。 */
+  readonly uploadToken: string
+}
+
+/** @public */
+export interface CreateAssetUploadInput {
+  readonly parentId: string
+  readonly name: string
+  readonly mediaType: string
+  /** 字节数；实现可据此决定分片策略，缺席即未知。 */
+  readonly size?: number
+  readonly signal?: AbortSignal
+}
+
+/** @public */
+export interface CompleteAssetUploadInput {
+  readonly uploadToken: string
+  readonly signal?: AbortSignal
+}
+
 /** Stage 与 Preview 解析文档资源引用的运行时端口。 @public */
 export interface ComposeAssetResolver {
   resolve(input: {
     readonly reference: ComposeAssetReference
     readonly signal?: AbortSignal
   }): Promise<ComposeResolvedAsset>
+  /**
+   * 取一个浏览器可直接使用的 URL。
+   *
+   * @remarks
+   * **只在底层 Provider 提供它时才存在**。缺席不是一种失败，而是「这个 Provider 给不出 URL」
+   * ——此时消费方照旧走 {@link ComposeAssetResolver.resolve}。这里刻意不在缺席时用 Blob 合成
+   * 一个 objectURL：那个 URL 的生命周期没有归属，而本包既不认识 DOM 也不知道谁该释放它。
+   */
+  resolveUrl?(input: {
+    readonly reference: ComposeAssetReference
+    readonly signal?: AbortSignal
+  }): Promise<ComposeResolvedAssetUrl>
   subscribe?(
     reference: ComposeAssetReference,
     listener: () => void,
@@ -128,6 +212,24 @@ export interface ComposeAssetProvider {
   }): Promise<{ readonly blob: Blob; readonly revision: string }>
   /** 通过稳定 assetKey 读取最新内容；缺少时不可拖入 Canvas。 */
   resolveAsset?(input: ResolveAssetInput): Promise<ComposeResolvedAsset>
+  /**
+   * 通过稳定 assetKey 取一个浏览器可直接使用的 URL。
+   *
+   * @remarks
+   * 缺席时消费方 MUST 退回 {@link ComposeAssetProvider.resolveAsset}，因此既有 Provider
+   * 的行为逐字不变。返回的 URL 可能带失效时刻，见 {@link ComposeResolvedAssetUrl.expiresAt}。
+   */
+  resolveUrl?(input: ResolveAssetInput): Promise<ComposeResolvedAssetUrl>
+  /**
+   * 授权一次直传，用于**新建**大文件。
+   *
+   * @remarks
+   * 上传完成后必须调用 {@link ComposeAssetProvider.completeUpload} 换回条目——在那之前
+   * 资源树里还没有这个文件。改写已有文件不走这条，见 {@link ComposeAssetUpload}。
+   */
+  createUpload?(input: CreateAssetUploadInput): Promise<ComposeAssetUpload>
+  /** 回执一次直传，产出新条目。 */
+  completeUpload?(input: CompleteAssetUploadInput): Promise<ComposeAssetEntry>
   createFolder?(input: CreateFolderInput): Promise<ComposeAssetEntry>
   createFile?(input: CreateFileInput): Promise<ComposeAssetEntry>
   renameEntry?(input: RenameAssetInput): Promise<ComposeAssetEntry>
@@ -260,6 +362,7 @@ export function createComposeAssetResolver(
       `Asset provider "${provider.id}" does not support stable references`,
     )
   }
+  const resolveUrl = provider.resolveUrl
   return {
     async resolve({ reference, signal }) {
       if (reference.providerId !== provider.id) {
@@ -277,6 +380,23 @@ export function createComposeAssetResolver(
         throw normalizeComposeAssetError(error)
       }
     },
+    // Provider 给不出 URL 时这个方法整个不存在，消费方一个 in 判断就分流完；
+    // 挂一个恒抛错的实现会让「能不能」退化成只有调用过才知道。
+    ...(resolveUrl === undefined ? {} : {
+      async resolveUrl({ reference, signal }) {
+        if (reference.providerId !== provider.id) {
+          throw new ComposeAssetError(
+            'not-found',
+            `Asset provider "${reference.providerId}" is not connected`,
+          )
+        }
+        try {
+          return await resolveUrl.call(provider, { assetKey: reference.assetKey, signal })
+        } catch (error) {
+          throw normalizeComposeAssetError(error)
+        }
+      },
+    }),
     subscribe(reference, listener) {
       if (reference.providerId !== provider.id) return () => undefined
       return provider.subscribe?.(listener) ?? (() => undefined)
