@@ -19,8 +19,8 @@ import { DEFAULT_SVG_PROPS } from '../svg/defaults'
 import { SVG_RENDERER_PROP_SCHEMAS } from '../svg/props'
 import {
   DEFAULT_TEXT_PROPS,
-  DEFAULT_TEXT_TYPOGRAPHY_PROPS,
   defaultTextLineHeight,
+  DEFAULT_TEXT_TYPOGRAPHY_PROPS,
 } from '../text/defaults'
 import { CURVE_RENDERER_PROP_SCHEMAS } from '../curve/props'
 import { readComponentInstanceAnimations } from '../component-instance/animation'
@@ -132,6 +132,9 @@ const TEXT_CONTENT_RENDERER: ComposePropertyPanelRenderer = {
 export function createTextRendererInspector(idFactory: InspectorIdFactory) {
   return function TextRendererInspector(context: ComposeRendererInspectorProps) {
     const zh = (useComposeI18nContext()?.locale ?? 'zh-CN') === 'zh-CN'
+    const props = inspectorBaseProps(context)
+    const defaultFontSize = DEFAULT_TEXT_PROPS.fontSize as number
+    const fontSize = typeof props.fontSize === 'number' ? props.fontSize : defaultFontSize
     const fullSchema = v.object({
       text: v.pipe(
         TEXT_RENDERER_PROP_SCHEMAS.text,
@@ -161,8 +164,18 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
         v.title(title(zh, 'Letter spacing', '字间距')),
         v.metadata({ propertyPanel: { unit: 'px' } }),
       ),
+      /*
+       * 行高**可缺席，缺席即浏览器的 `normal`**。此前面板在缺席时顶替 `字号 × 1.2` 显示，
+       * 而渲染与测量走的都是 `normal`——28px 的一行真实高度 40，面板却写着 33.6，用户照它
+       * 微调会让文字反而变矮 6px。可缺席之后那一格空着（占位写「自动」），存在性开关就是
+       * 「回到自动」的入口，而此前写下一个数就再也回不去了。
+       */
       lineHeight: v.pipe(
-        TEXT_RENDERER_PROP_SCHEMAS.lineHeight,
+        // 标题与元数据挂在**最外层**：面板读的是 `getTitle(schema)`，包在 `optional` 里面
+        // 的那一份它取不到，症状是这一行退回按字段名显示。
+        // 不给 Schema 默认值：那个默认会让 `safeParse` 的 output 在字段缺席时也报出一个数，
+        // 等于把刚刚拆掉的那份顶替换个地方装回来。勾上这一项时的起始值在下面的写回处给。
+        v.optional(TEXT_RENDERER_PROP_SCHEMAS.lineHeight),
         v.title(title(zh, 'Line height', '行高')),
         v.metadata({ propertyPanel: { unit: 'px' } }),
       ),
@@ -218,9 +231,6 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
             'textDecoration',
           ])
         : fullSchema
-    const props = inspectorBaseProps(context)
-    const defaultFontSize = DEFAULT_TEXT_PROPS.fontSize as number
-    const fontSize = typeof props.fontSize === 'number' ? props.fontSize : defaultFontSize
     const value = {
       text: typeof props.text === 'string' || typeof props.text === 'number'
         ? props.text
@@ -238,9 +248,7 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
       letterSpacing: typeof props.letterSpacing === 'number'
         ? props.letterSpacing
         : DEFAULT_TEXT_TYPOGRAPHY_PROPS.letterSpacing,
-      lineHeight: typeof props.lineHeight === 'number'
-        ? props.lineHeight
-        : defaultTextLineHeight(fontSize),
+      lineHeight: typeof props.lineHeight === 'number' ? props.lineHeight : undefined,
       textAlign: props.textAlign === 'center' || props.textAlign === 'right' || props.textAlign === 'justify'
         ? props.textAlign
         : DEFAULT_TEXT_TYPOGRAPHY_PROPS.textAlign,
@@ -259,15 +267,14 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
         : DEFAULT_TEXT_TYPOGRAPHY_PROPS.textDecoration,
     }
     /*
-     * 行高的默认值依赖字号，因此基线用默认字号推导，而不是当前字号：基线必须与
-     * Definition 默认 props 完全一致，才能让重置回到新建 Text 的排版。
+     * 基线必须与 Definition 默认 props 完全一致，重置才回得到新建 Text 的排版——而新建的
+     * Text **没有**行高字段，因此基线里也不写它。
      */
     const defaultValue = {
       text: DEFAULT_TEXT_PROPS.text as string,
       color: DEFAULT_TEXT_PROPS.color as string,
       fontSize: defaultFontSize,
       ...DEFAULT_TEXT_TYPOGRAPHY_PROPS,
-      lineHeight: defaultTextLineHeight(defaultFontSize),
     }
     return (
       <ComposePropertyPanel
@@ -280,15 +287,27 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
         value={value}
         onValueChange={(next, change) => {
           const propName = change.path[0]
-          if (change.path.length !== 1 || typeof propName !== 'string' || !(propName in next)) {
-            return
+          if (change.path.length !== 1 || typeof propName !== 'string') return
+          // 只落盘本次编辑的顶层字段；显示用的字体默认值不能被其他字段修改意外固化。
+          const authored = { ...context.authoredProps }
+          if (change.value === undefined || change.value === null) {
+            // 可缺席字段关掉时**删掉它**：写一个值回去等于把「自动」固化成一个数，
+            // 而缺席正是渲染与测量读出 `normal` 的那一档。
+            if (!(propName in authored)) return
+            delete authored[propName]
           }
-          dispatchProps(
-            context,
-            // 只落盘本次编辑的顶层字段；显示用的字体默认值不能被其他字段修改意外固化。
-            { ...context.authoredProps, [propName]: change.value as JsonValue },
-            idFactory,
-          )
+          else {
+            if (!(propName in next)) return
+            /*
+             * 勾上一个可缺席字段时，面板按**解包后**的 Schema 造初值——数字那一档是 0，
+             * 而 `line-height: 0` 会把每一行压进同一个像素。起始值只有物料自己知道，
+             * 因此在这里替换成按当前字号推出来的那一个。
+             */
+            authored[propName] = change.reason === 'set-presence' && propName === 'lineHeight'
+              ? defaultTextLineHeight(fontSize)
+              : change.value as JsonValue
+          }
+          dispatchProps(context, authored, idFactory)
         }}
       />
     )

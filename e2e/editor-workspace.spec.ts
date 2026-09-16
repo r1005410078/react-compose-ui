@@ -785,6 +785,14 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
   await expect(textInspector.getByRole('textbox', { name: '字体' })).toBeVisible()
   await expect(textInspector.getByRole('textbox', { name: '字重' })).toBeVisible()
   await expect(textInspector.getByRole('spinbutton', { name: '字间距' })).toBeVisible()
+  /*
+   * 行高**可缺席，缺席即浏览器的 `normal`**，而新建的 Text 没有这个字段——因此它起手是
+   * 「未设置」加一个存在性开关，而不是一个数。下面要断的是编辑区宽度，先把它打开。
+   */
+  await expect(textInspector.getByRole('checkbox', { name: '行高 存在' })).not.toBeChecked()
+  // 用 click 而不是 check：打开之后这一行多出一个值编辑器，存在性开关随即收进「更多」
+  // 聚合菜单，`check()` 的回读会找不到它。
+  await textInspector.getByRole('checkbox', { name: '行高 存在' }).click()
   await expect(textInspector.getByRole('spinbutton', { name: '行高' })).toBeVisible()
   // OpenSpec: property-panel / 受控属性变量绑定 / 绑定入口不占用编辑区
   for (const label of ['字号', '字体', '字重', '字间距', '行高']) {
