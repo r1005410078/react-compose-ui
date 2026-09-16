@@ -5,13 +5,17 @@ import type { ComposeLibraryMessages } from '../library-i18n'
 import { useThumbnail } from '../library-wall/use-thumbnail'
 
 /**
- * 「就用这个」。
+ * 「就用这个」与「新建页面」。
  *
  * @remarks
- * 它做的是**复制一份**：客户指中的这张成为你自己那一份的底，此后两边再无关系。
+ * 「就用这个」做的是**复制一份**：客户指中的这张成为你自己那一份的底，此后两边再无关系。
  *
  * **只问一个必须问的问题——它叫什么。**客户就在旁边等着；分类、落点这些之后都能改，而在这一步
  * 问它们只是让用户在客户面前多停留几秒。
+ *
+ * 「新建页面」是**同一个框**（`source` 为 null）：两条路各自要回答的都只有这一个问题，而分两个
+ * 框写必然在焦点、回车与错误呈现上漂移。走 `port.create`，因此这一屏**不需要宿主接一个新建
+ * 回调**——它不知道该把新页面放进哪个文件夹，而端口知道。
  *
  * 图墙上那颗按钮与演示屏上那颗落到**同一条路径**（都开这个框），否则两处迟早行为不同。
  * @internal
@@ -23,7 +27,8 @@ export function InstantiateDialog({
   onDone,
   onClose,
 }: {
-  readonly source: ComposeLibraryRecord
+  /** 以哪一张为底；`null` 即新建一张空白页面。 */
+  readonly source: ComposeLibraryRecord | null
   readonly port: ComposeLibraryPort
   readonly messages: ComposeLibraryMessages
   readonly onDone: (record: ComposeLibraryRecord) => void
@@ -31,7 +36,7 @@ export function InstantiateDialog({
 }) {
   const titleId = useId()
   const nameId = useId()
-  const [name, setName] = useState(source.title)
+  const [name, setName] = useState(source?.title ?? messages.newPageDefaultName)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -48,7 +53,9 @@ export function InstantiateDialog({
     setBusy(true)
     setError(null)
     try {
-      const created = await port.instantiate?.({ sourcePageKey: source.pageKey, title })
+      const created = source === null
+        ? await port.create?.({ title, kind: 'project' })
+        : await port.instantiate?.({ sourcePageKey: source.pageKey, title })
       if (created !== undefined) onDone(created)
     }
     catch (cause) {
@@ -77,7 +84,7 @@ export function InstantiateDialog({
         role="dialog"
       >
         <div className="compose-library__dialog-head">
-          <b id={titleId}>{messages.instantiateTitle}</b>
+          <b id={titleId}>{source === null ? messages.newPageTitle : messages.instantiateTitle}</b>
         </div>
         <div className="compose-library__dialog-body">
           <div className="compose-library__dialog-hero">
@@ -87,8 +94,8 @@ export function InstantiateDialog({
                 : <img alt="" src={thumbnail} />}
             </div>
             <div>
-              <b>{source.title}</b>
-              <p>{messages.instantiateHint}</p>
+              <b>{source === null ? messages.newPageTitle : source.title}</b>
+              <p>{source === null ? messages.newPageHint : messages.instantiateHint}</p>
             </div>
           </div>
           <div className="compose-library__field">

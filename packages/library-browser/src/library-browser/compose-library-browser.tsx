@@ -1,6 +1,5 @@
 import type { ComposeLibraryRecord } from '@compose-ui/library'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 import { InstantiateDialog } from '../instantiate-dialog'
 import { LibraryDemoScreen } from '../demo-screen'
@@ -29,25 +28,19 @@ import { useLibraryView } from './use-library-view'
 export function ComposeLibraryBrowser({
   port,
   onOpenPage,
-  onNewPage,
   pageSize = 48,
   renderPage,
   className,
-}: ComposeLibraryBrowserProps & {
-  /**
-   * 把一页渲染成真实画面，用于全屏演示。
-   *
-   * @remarks
-   * **由宿主注入**：它就是既有的只读 Preview。缺席即不提供演示入口——一个按下去什么都不发生的
-   * 按钮比没有更差。
-   */
-  readonly renderPage?: (record: ComposeLibraryRecord) => ReactNode
-}) {
+}: ComposeLibraryBrowserProps) {
   const i18n = useComposeI18nContext()
   const locale = i18n?.locale ?? 'zh-CN'
   const messages = getLibraryMessages(locale)
   const { state, patch, load, items, loadMore, retry } = useLibraryView(port, pageSize)
-  const [instantiating, setInstantiating] = useState<ComposeLibraryRecord | null>(null)
+  /*
+   * 这个框问的那一个问题（叫什么）对两条路是同一个，因此只有一份状态：
+   * `record` 是以谁为底，`null` 是新建一张空白的，`undefined` 是框没开着。
+   */
+  const [naming, setNaming] = useState<ComposeLibraryRecord | null | undefined>(undefined)
   const [demoIndex, setDemoIndex] = useState<number | null>(null)
 
   const sections = useMemo(() => sectionizeLibraryRecords({
@@ -61,7 +54,12 @@ export function ComposeLibraryBrowser({
 
   const onUse = port.instantiate === undefined
     ? undefined
-    : (record: ComposeLibraryRecord) => setInstantiating(record)
+    : (record: ComposeLibraryRecord) => setNaming(record)
+  /*
+   * 新建走端口自己的 `create`，不要宿主再接一个回调：新页面落进哪个文件夹是端口知道的事，
+   * 而这一屏（应用入口）此刻还没有任何工作区上下文可谈。
+   */
+  const onNewPage = port.create === undefined ? undefined : () => setNaming(null)
 
   const empty = load.status === 'ready' && items.length === 0
 
@@ -133,18 +131,18 @@ export function ComposeLibraryBrowser({
         </div>
       </div>
 
-      {instantiating === null ? null : (
+      {naming === undefined ? null : (
         <InstantiateDialog
           messages={messages}
-          onClose={() => setInstantiating(null)}
+          onClose={() => setNaming(undefined)}
           onDone={(created) => {
-            setInstantiating(null)
+            setNaming(undefined)
             setDemoIndex(null)
             // 落地即打开：客户就在旁边等着，多一步「去库里找到它再点开」没有任何信息。
             onOpenPage(created.pageKey)
           }}
           port={port}
-          source={instantiating}
+          source={naming}
         />
       )}
 

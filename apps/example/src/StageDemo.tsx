@@ -36,9 +36,13 @@ import {
   createComposeNavigationSession,
   createComposePageLoader,
   createComposePageStore,
+  listComposePageDescriptors,
 } from '@compose-ui/pages'
+import { createProviderLibraryPort } from '@compose-ui/library'
+import type { ComposeLibraryRecord } from '@compose-ui/library'
 import { createComposeChartMaterials } from '@compose-ui/chart-materials'
 import { createDemoAssetProvider } from './demo-asset-provider'
+import { LibraryPagePreview } from './LibraryPagePreview'
 
 /** 与 `StageToolbarIcon` 共用同一套 20×20 画幅——它就摆在那条工具栏的末尾。 */
 function PreviewIcon() {
@@ -268,6 +272,16 @@ export function StageDemoWorkspace() {
   const [switchDemo] = useState(
     () => new URLSearchParams(window.location.search).has('switch-demo'),
   )
+  /**
+   * `?library`：把页面库那一屏接上，编辑器的入口因此变成它。
+   *
+   * @remarks
+   * 走开关而不是默认打开，与上面两条同一条理由——默认开着会让**每一条**以「打开就在画布上」
+   * 起手的既有端到端用例先经过一屏页面库。示例应用是集成示例，不是正式产品的形态决定。
+   */
+  const [libraryDemo] = useState(
+    () => new URLSearchParams(window.location.search).has('library'),
+  )
   /** `?symbols`：把 `apps/example/symbols/` 里那批储能一次接线图元件挂进资源浏览器，用来试 SVG 导入。 */
   const [symbols] = useState(
     () => new URLSearchParams(window.location.search).has('symbols'),
@@ -314,9 +328,48 @@ export function StageDemoWorkspace() {
     () => createComposeAssetResolver(assetProvider),
     [assetProvider],
   )
+  /**
+   * 页面库端口：本地实现，用现有的 Provider 顶起来。
+   *
+   * @remarks
+   * `listPages` 由这里注入——那趟 BFS 已经住在 `@compose-ui/pages` 里，而 `library` 与 `pages`
+   * 之间没有依赖关系，各写一份的症状是「两处对『什么算一个页面』的判断分家」。
+   */
+  const libraryPort = useMemo(
+    () => (libraryDemo
+      ? createProviderLibraryPort({
+          provider: assetProvider,
+          listPages: ({ provider, signal }) => listComposePageDescriptors({
+            provider,
+            ...(signal === undefined ? {} : { signal }),
+          }),
+        })
+      : undefined),
+    [assetProvider, libraryDemo],
+  )
   const pagesConfig = useMemo(
-    () => ({ store: pageStore, onActiveSessionChange: setActivePage }),
-    [pageStore],
+    () => ({
+      store: pageStore,
+      onActiveSessionChange: setActivePage,
+      ...(libraryPort === undefined
+        ? {}
+        : {
+            library: {
+              port: libraryPort,
+              // 演示的是**真实渲染**而不是缩略图：客户要凑近看数值与线宽。渲染器由宿主注入，
+              // 因为它就是既有的只读 Preview——`editor` 与 `preview` 是同一层的两个入口包。
+              renderPage: (record: ComposeLibraryRecord) => (
+                <LibraryPagePreview
+                  assetResolver={assetResolver}
+                  pageKey={record.pageKey}
+                  registry={registry}
+                  store={pageStore}
+                />
+              ),
+            },
+          }),
+    }),
+    [assetResolver, libraryPort, pageStore],
   )
   const componentsConfig = useMemo(
     () => ({ store: componentStore, onActiveSessionChange: setActiveComponent }),

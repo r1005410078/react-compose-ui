@@ -12,7 +12,7 @@ import type {
   ComposeComponentDocumentSession,
   ComposePageDocumentSession,
 } from './workspace-context'
-import { WorkspaceDocumentTabs } from './workspace-chrome'
+import { CanvasDocumentBreadcrumb } from './canvas-breadcrumb'
 import { WORKSPACE_COMPONENT_IDS, WORKSPACE_PANEL_IDS } from './workspace-layout'
 import { WORKSPACE_HOST_KEYS } from './workspace-hosts'
 import type { WorkspaceHostKey } from './workspace-hosts'
@@ -118,8 +118,11 @@ export function CanvasPanel() {
       {/*
         * 画布列的头：它与左右两栏的组头落在同一条线上，因为三列是 Dockview 网格里同一行的
         * 兄弟，而画布组隐藏组头——这一行天然从组头那条线开始，不需要任何对齐代码。
+        *
+        * 上面是**面包屑**而不是文档标签：标签回答「我开着哪几份」，那是应用作用域、住顶栏；
+        * 这一行回答「我正在编哪一份、哪一层」。
         */}
-      <WorkspaceDocumentTabs />
+      <CanvasDocumentBreadcrumb />
       {singleDocument ? (
         // 固定画布常驻挂载：切到一个资源文档再切回来，Stage 与它的 surface 不该重连一次。
         <div

@@ -45,14 +45,27 @@ function ChevronIcon() {
  * 菜单本期恰好两项（设置、命令面板），两项都不是各自能力的唯一入口：`editor.settings` 的动作
  * 与键位仍在，命令面板也仍是底部的一个面板。
  *
- * 标志不带文字标记：30px 一行里的字母会挤掉紧邻的工作区，而标志的职责是那颗把手，不是署名。
+ * **标志同时是回页面库的门**（`openLibrary`）：页面库成为应用入口之后，「回库」与「切到另一份
+ * 打开的图」是同类动作，而标签条就在它右边——浏览器早就把这件事的答案写进了每个人的肌肉记忆。
+ * 因此那一档标志与 `▾` 是**两颗按钮**：一颗按钮只能有一个动作，把两件事挂在同一颗上，用户读不出
+ * 按下去会发生哪一件。没接页面库端口时它们仍是**一颗**——此时标志只有「打开菜单」这一个含义，
+ * 拆成两颗会多出一颗按下去什么都不发生的按钮。
+ *
+ * 标志不带文字标记：30px 一行里的字母会挤掉紧邻的标签条，而标志的职责是那颗把手，不是署名。
  * @internal
  */
 export function EditorBrandMenu() {
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
-  const { openCommandPanel, setSettingsButton, settingsOpen, settingsPanelId, toggleSettings }
-    = useWorkspaceContent()
+  const {
+    libraryOpen,
+    openCommandPanel,
+    openLibrary,
+    setSettingsButton,
+    settingsOpen,
+    settingsPanelId,
+    toggleSettings,
+  } = useWorkspaceContent()
   const [open, setOpen] = useState(false)
   const menuId = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -100,31 +113,50 @@ export function EditorBrandMenu() {
     items[next]?.focus()
   }
 
+  const menuTrigger = (
+    <button
+      aria-controls={open ? menuId : settingsOpen ? settingsPanelId : undefined}
+      aria-expanded={open}
+      aria-haspopup="menu"
+      aria-label={messages.appMenu}
+      className="compose-editor__brand"
+      data-only-chevron={openLibrary === undefined ? undefined : 'true'}
+      ref={(element) => {
+        triggerRef.current = element
+        // 设置弹框关闭后焦点回到这里：它现在是设置的入口，也是它唯一的锚点。
+        setSettingsButton(element)
+      }}
+      title={messages.appMenu}
+      type="button"
+      onClick={() => { if (open) setOpen(false); else expand() }}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowDown') return
+        event.preventDefault()
+        expand()
+      }}
+    >
+      {openLibrary === undefined ? <BrandMark /> : null}
+      <span className="compose-editor__brand-chevron"><ChevronIcon /></span>
+    </button>
+  )
+
   return (
     <div className="compose-editor__brand-anchor">
-      <button
-        aria-controls={open ? menuId : settingsOpen ? settingsPanelId : undefined}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={messages.appMenu}
-        className="compose-editor__brand"
-        ref={(element) => {
-          triggerRef.current = element
-          // 设置弹框关闭后焦点回到这里：它现在是设置的入口，也是它唯一的锚点。
-          setSettingsButton(element)
-        }}
-        title={messages.appMenu}
-        type="button"
-        onClick={() => { if (open) setOpen(false); else expand() }}
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowDown') return
-          event.preventDefault()
-          expand()
-        }}
-      >
-        <BrandMark />
-        <span className="compose-editor__brand-chevron"><ChevronIcon /></span>
-      </button>
+      {openLibrary === undefined ? null : (
+        <button
+          // 它是一个去处，因此正在那儿时走 `aria-current`——与文档标签同一种画法、同一种语义。
+          aria-current={libraryOpen === true ? 'page' : undefined}
+          aria-label={messages.backToLibrary}
+          className="compose-editor__brand compose-editor__brand--home"
+          data-on={libraryOpen === true ? 'true' : undefined}
+          title={messages.backToLibrary}
+          type="button"
+          onClick={openLibrary}
+        >
+          <BrandMark />
+        </button>
+      )}
+      {menuTrigger}
       {open ? (
         <div
           aria-label={messages.appMenu}

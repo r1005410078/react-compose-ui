@@ -4,6 +4,7 @@ import type {
   ComposeLibraryRecord,
   ComposeLibrarySort,
 } from '@compose-ui/library'
+import type { ReactNode } from 'react'
 
 /**
  * 左栏上段的四个去处。
@@ -37,12 +38,13 @@ export interface ComposeLibraryBrowserProps {
   /** 打开一个页面去编辑它。 */
   readonly onOpenPage: (pageKey: string) => void
   /**
-   * 新建一份空白页面。
+   * 把一页渲染成真实画面，用于全屏演示。
    *
    * @remarks
-   * 缺席即不画那颗按钮——一个按下去什么都不发生的按钮比没有更差。
+   * **由宿主注入**：它就是既有的只读 Preview。缺席即不提供演示入口——一个按下去什么都不发生的
+   * 按钮比没有更差。
    */
-  readonly onNewPage?: () => void
+  readonly renderPage?: (record: ComposeLibraryRecord) => ReactNode
   /** 一页取多少条。 */
   readonly pageSize?: number
   readonly className?: string

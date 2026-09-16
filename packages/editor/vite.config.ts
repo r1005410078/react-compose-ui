@@ -39,6 +39,7 @@ export default defineConfig({
         '@compose-ui/history',
         '@compose-ui/layout-engine',
         '@compose-ui/library',
+        '@compose-ui/library-browser',
         '@compose-ui/pages',
         '@compose-ui/property-panel',
         '@compose-ui/scene-tree',

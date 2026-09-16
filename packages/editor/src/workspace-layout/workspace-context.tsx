@@ -75,6 +75,30 @@ export interface WorkspaceContent {
    */
   entryOriginPanelId?: string | null
   /**
+   * 回到来路里的某一段。
+   *
+   * @remarks
+   * 画布列头的面包屑点一个祖先走它。它与场景树根行的返回是**同一条实现**的两个入口——
+   * 一个面包屑，它的前几段点下去什么都不发生的话，画它就是在撒谎。
+   */
+  exitEntryLayerTo?: (panelId: string) => void
+  /**
+   * 此刻 body 上是页面库那一屏。
+   *
+   * @remarks
+   * 页面库是 body 的一种状态而不是第二个应用：顶栏不变、body 换成它——「回库」与「切到另一份
+   * 图」是同类动作（去哪儿），做成两个应用会让它们住在两个地方，而它们在屏幕上紧挨着。
+   * 这一档不渲染工作区切换器：那一屏没有画布，因而没有工作区。
+   */
+  libraryOpen?: boolean
+  /**
+   * 回页面库；顶栏最左那颗标志走它。
+   *
+   * @remarks
+   * 缺席即宿主没有接页面库端口，标志照旧只是应用菜单的把手。
+   */
+  openLibrary?: () => void
+  /**
    * 自定义物料面板对话框要用的两份目录：当前可见的基础 Preset，与资源里存在的文件夹路径。
    *
    * @remarks

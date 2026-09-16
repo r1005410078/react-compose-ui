@@ -12,14 +12,18 @@ import { useEffect, useState } from 'react'
  *   objectURL 的归属只能在认识 DOM 的这一层，headless 的端口里合成它就是一处没人释放的泄漏。
  *
  * 两条都拿不到时返回 `null`，由调用方画占位：**没有图是常态，不是失败**。
+ *
+ * `record` 可以为 `null`（新建页面那一档没有底图），此时恒返回 `null`——Hook 不能按条件调用，
+ * 而调用方那一侧「有没有底图」正是一个条件。
  * @internal
  */
-export function useThumbnail(port: ComposeLibraryPort, record: ComposeLibraryRecord) {
-  const { pageKey, thumbnailUrl } = record
+export function useThumbnail(port: ComposeLibraryPort, record: ComposeLibraryRecord | null) {
+  const pageKey = record?.pageKey ?? null
+  const thumbnailUrl = record?.thumbnailUrl ?? null
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    if (thumbnailUrl !== null) return
+    if (thumbnailUrl !== null || pageKey === null) return
     const read = port.readThumbnail
     if (!read) return
     let revoked = false

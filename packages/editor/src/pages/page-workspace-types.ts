@@ -1,5 +1,6 @@
 import type { ComposePageFile, TransactionRuntime } from '@compose-ui/core'
-import type { ComposeLibraryPort } from '@compose-ui/library'
+import type { ComposeLibraryPort, ComposeLibraryRecord } from '@compose-ui/library'
+import type { ReactNode } from 'react'
 import type { ComposePageStore } from '@compose-ui/pages'
 import type { ComposePageScriptScope, ComposeScriptModuleLoader } from '@compose-ui/script-runtime'
 
@@ -35,7 +36,8 @@ export interface ComposeEditorLibraryDiagnostic {
  * Editor 与页面库端口的接线。
  *
  * @remarks
- * Editor 只用它做**两件事**：保存成功后异步上传缩略图，以及打开页面时记一次「最近打开」。
+ * 接上它，编辑器的 body 就多出**页面库**那一档，标志成为回库的门。除此之外 Editor 只用它做
+ * 两件事：保存成功后异步上传缩略图，以及打开页面时记一次「最近打开」。
  * 它 MUST NOT 成为第二条保存入口——页面内容仍然只走 `ComposePageStore.writePage` 与它的
  * `expectedRevision` 乐观锁；同一件事的两个入口迟早写出两种行为。
  * @public
@@ -67,6 +69,15 @@ export interface ComposeEditorLibraryConfig {
    * 而弹一个用户无从处理的错误只是把同一件事换个地方打断他。
    */
   readonly onDiagnostic?: (diagnostic: ComposeEditorLibraryDiagnostic) => void
+  /**
+   * 把一页渲染成真实画面，用于页面库的全屏演示。
+   *
+   * @remarks
+   * **由宿主注入**，与 `renderThumbnail` 同一条理由：它就是既有的只读 `ComposePreview`，
+   * 而 `editor` 与 `preview` 是同一层的两个入口包，谁也不该依赖谁。缺席即那一屏没有演示按钮
+   * ——一个按下去什么都不发生的按钮比没有更差。
+   */
+  readonly renderPage?: (record: ComposeLibraryRecord) => ReactNode
 }
 
 /** Editor 的页面系统集成配置。 @public */

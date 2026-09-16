@@ -179,6 +179,35 @@ describe('OpenSpec: library-browser / 「就用这个」只问一个必须问的
     expect(port.instantiate).toHaveBeenCalledWith({ sourcePageKey: 'k1', title: '南山储能 PCS' })
   })
 
+  it('「新建页面」与它是同一个框，走端口自己的 create', async () => {
+    const onOpenPage = vi.fn()
+    const port = createPort({
+      create: vi.fn(async ({ title }) => record({ pageKey: 'blank', title })),
+    })
+    render(<ComposeLibraryBrowser onOpenPage={onOpenPage} port={port} />)
+    fireEvent.click(await screen.findByRole('button', { name: '新建页面' }))
+
+    /*
+     * 两条路各自要回答的都只有这一个问题（叫什么），分两个框写必然在焦点、回车与错误呈现上
+     * 漂移。新建那一档没有底图，因此没有那块缩略图。
+     */
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByRole('textbox')).toHaveLength(1)
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '空白一张' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '新建' }))
+
+    await waitFor(() => { expect(onOpenPage).toHaveBeenCalledWith('blank') })
+    expect(port.create).toHaveBeenCalledWith({ title: '空白一张', kind: 'project' })
+    expect(port.instantiate).not.toHaveBeenCalled()
+  })
+
+  it('端口不支持新建时不画那颗按钮', async () => {
+    render(<ComposeLibraryBrowser onOpenPage={vi.fn()} port={createPort()} />)
+    await screen.findByText('PCS 详情')
+    // 宿主不必再接一个新建回调：新页面落进哪个文件夹是端口知道的事。
+    expect(screen.queryByRole('button', { name: '新建页面' })).not.toBeInTheDocument()
+  })
+
   it('端口不支持复制时不画那颗按钮', async () => {
     const port: ComposeLibraryPort = { ...createPort(), instantiate: undefined }
     render(<ComposeLibraryBrowser onOpenPage={vi.fn()} port={port} />)

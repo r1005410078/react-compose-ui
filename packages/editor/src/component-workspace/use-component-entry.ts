@@ -66,6 +66,14 @@ export interface ComponentEntrySession {
   readonly enter: (entityId: string) => Promise<void>
   /** 返回上一层。 */
   readonly exit: () => void
+  /**
+   * 回到来路里的某一段。
+   *
+   * @remarks
+   * 面包屑上点一个祖先走它——那是**同一个返回**的第二个入口，不是第二份实现：多一个入口允许，
+   * 两份实现必然漂移。目标不在来路里、或它就是当前这一段时什么都不做。
+   */
+  readonly exitTo: (panelId: string) => void
   /** 当前这棵树有没有来路可回；根行据此决定画不画返回控件。 */
   readonly canExit: boolean
   /**
@@ -299,16 +307,24 @@ export function useComponentEntry(input: UseComponentEntryInput): ComponentEntry
     visible,
   ])
 
-  const exit = useCallback(() => {
-    const top = visible[visible.length - 1]
-    const previous = visible[visible.length - 2]
-    if (!top || !previous) return
-    pendingRestoreRef.current = { panelId: previous.panelId, selection: previous.selection }
-    setStack(visible.slice(0, -1))
+  const exitTo = useCallback((panelId: string) => {
+    const index = visible.findIndex((segment) => segment.panelId === panelId)
+    // 最后一段就是当前这一段：回到自己不是一次返回。
+    if (index === -1 || index === visible.length - 1) return
+    const target = visible[index]!
+    const popped = visible.slice(index + 1)
+    pendingRestoreRef.current = { panelId: target.panelId, selection: target.selection }
+    setStack(visible.slice(0, index + 1))
     // 先切走再放开：`closeDocument` 只在关掉的正是当前文档时才去挑邻居，而这里已经挑好了。
-    setActiveDocumentPanelId(previous.panelId)
-    releaseLayer(top)
+    setActiveDocumentPanelId(target.panelId)
+    for (const segment of popped) releaseLayer(segment)
   }, [releaseLayer, setActiveDocumentPanelId, visible])
+
+  const exit = useCallback(() => {
+    const previous = visible[visible.length - 2]
+    if (!previous) return
+    exitTo(previous.panelId)
+  }, [exitTo, visible])
 
   /*
    * 还原来路选区。判据是 controller 的 runtime 确实换成了目标文档那一份——只比对
@@ -349,8 +365,9 @@ export function useComponentEntry(input: UseComponentEntryInput): ComponentEntry
   return useMemo(() => ({
     enter,
     exit,
+    exitTo,
     canExit: visible.length >= 2,
     layerPanelIds,
     originPanelId: visible.length >= 2 ? visible[0]!.panelId : null,
-  }), [enter, exit, layerPanelIds, visible])
+  }), [enter, exit, exitTo, layerPanelIds, visible])
 }

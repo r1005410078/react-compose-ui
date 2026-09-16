@@ -9,6 +9,7 @@
 @import '@compose-ui/command-panel/styles.css';
 @import '@compose-ui/asset-browser/styles.css';
 @import '@compose-ui/component-library/styles.css';
+@import '@compose-ui/library-browser/styles.css';
 
 @layer theme, base, components, utilities;
 
@@ -63,7 +64,28 @@
 
 .compose-editor__body {
   @apply ct:flex ct:min-h-0 ct:min-w-0 ct:flex-1 ct:items-stretch;
+  position: relative;
   padding: var(--compose-workspace-gap);
+}
+
+/*
+ * 页面库压在 Dockview 之上而不是取代它：卸载 Dockview 会连布局、面板宿主与正在取点的命令
+ * 一起销毁，而「回库看一眼再回来」是一次导航，不是一次重启。被盖住的那一层仍然按原尺寸布局，
+ * 因此回来时没有一帧是错的。
+ */
+.compose-editor__dockview-layer {
+  @apply ct:flex ct:min-h-0 ct:min-w-0 ct:flex-1 ct:items-stretch;
+}
+
+/*
+ * 库那一屏铺满 body 并**盖掉沟槽**：它不是一张卡，没有可停靠的邻居，留一圈沟槽等于给一块
+ * 整屏内容画一条没有对手的边。
+ */
+.compose-editor__library {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: var(--compose-workspace-bg);
 }
 
 /* 高度由 flex 行拉伸给出，不写 height: 100%——百分比高度在 flex 列里会解析成上一次布局的值。 */
@@ -112,10 +134,10 @@
 }
 
 /*
- * 应用顶栏：标志 ▾ ｜ 工作区 ｜ 三个布局开关，横贯全宽、在 Dockview 之外。
+ * 应用顶栏：标志 ▾ ｜ 文档标签条 ｜ 工作区 ｜ 三个布局开关，横贯全宽、在 Dockview 之外。
  *
- * 三段之间**只有间距**：标志钉在最左、开关钉在最右，位置本身已经分好段，而竖线是把「我数得清
- * 有几段」画出来，那件事本来不需要用户去数。
+ * 段与段之间**只有间距**：标志与标签钉在最左、切换器与开关钉在最右，位置本身已经分好段，
+ * 而竖线是把「我数得清有几段」画出来，那件事本来不需要用户去数。
  */
 .compose-editor__top-bar {
   display: flex;
@@ -133,12 +155,20 @@
   font-size: 12px;
 }
 
+/*
+ * 弹性空间先被压到 8px，再轮到标签条自己压缩——`flex-basis` 取 8px 而不是 auto，就是让
+ * 它在同一个收缩因子下**先**让出那一段。右端两组是 `flex: none`，一格都不让。
+ */
 .compose-editor__top-bar-spacer {
-  flex: 1 1 auto;
+  flex: 1 1 8px;
   min-width: 8px;
 }
 
-/* 标志：实心图形 + `▾`，整体是一颗按钮（应用菜单的把手）。 */
+/*
+ * 标志：实心图形 + `▾`。接了页面库端口时它们是**两颗按钮**（图形回库、`▾` 开菜单），
+ * 一颗按钮只能有一个动作；没接时是一颗。两颗时靠得很近，因此 hover 的底各画各的——
+ * 用户指着哪一颗，亮的就是哪一颗。
+ */
 .compose-editor__brand-anchor {
   position: relative;
   display: flex;
@@ -167,6 +197,20 @@
 .compose-editor__brand:focus-visible {
   outline: 2px solid var(--compose-focus);
   outline-offset: -2px;
+}
+
+.compose-editor__brand--home {
+  padding: 0 4px;
+}
+
+/* 正在库里：走 chrome 唯一那一种选中画法——一块柔和的圆角底。 */
+.compose-editor__brand--home[data-on='true'] {
+  background: var(--compose-surface-hover);
+}
+
+/* 只剩 `▾` 的那一颗把左内边距收回来：它此刻不再驮着标志。 */
+.compose-editor__brand[data-only-chevron='true'] {
+  padding: 0 2px;
 }
 
 .compose-editor__brand-mark {
@@ -232,27 +276,26 @@
 }
 
 /*
- * 文档标签条：画布列自己的头，30px，与左右两栏的 Dockview 组头落在同一条线上。
+ * 文档标签条：应用顶栏上紧接标志的一段。
  *
  * 标签遵循 chrome 唯一的那一种选中画法——**一块柔和的圆角底**。不用下划线（它只在活动那一格
  * 出现，另一态屏幕上没有任何东西可看，而且与「文字下的强调线」同形）、不贴满整格（贴满就需要
  * 竖线来分隔）、格与格之间因此也不画竖线。
  */
 /*
- * 内边距 8 与工具行同值：活动标签的填充与选中工具的填充是两块相距 30px 的实心矩形，
- * 它们的左边必须落在同一个数上。文字 17 与图标 13 不必对齐——那是两种控件各自的内衬，
- * 眼睛对齐的是填充块的边。
+ * 横向滚动收进内层，外层 `overflow: hidden` + `min-width: 0`：标签再多也只压缩自己这一段，
+ * 右端的工作区切换器与三个布局开关一格都不让——顶栏右端是固定的去处，被标签推走就等于按
+ * 开着几个文件换位置。
  *
- * 横向滚动收进内层：模式切换器钉在滚动区之外，标签再多也不会把它推走。
+ * 它不自带底色，也不自带 30px：它此刻是顶栏里的一段，那两样都由顶栏给。
  */
 .compose-editor__document-tabs {
   display: flex;
-  height: 30px;
-  flex: none;
+  min-width: 0;
+  height: 22px;
+  flex: 0 1 auto;
   align-items: center;
-  padding-inline: 8px;
   overflow: hidden;
-  background: var(--compose-surface-raised);
 }
 
 .compose-editor__document-tabs-scroll {
@@ -325,11 +368,83 @@
 }
 
 /*
+ * 画布列头：文档面包屑，30px，与左右两栏的 Dockview 组头落在同一条线上。
+ *
+ * 内边距 8 与工具行同值：面包屑的文字与选中工具的填充块是相距 30px 的两样东西，左边必须落在
+ * 同一个数上。这一行**不画下边框**——卡内不画横线，分层交给色阶。
+ */
+.compose-editor__canvas-head {
+  display: flex;
+  height: 30px;
+  flex: none;
+  align-items: center;
+  padding-inline: 8px;
+  overflow: hidden;
+  background: var(--compose-surface-raised);
+}
+
+.compose-editor__document-trail {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.compose-editor__trail-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+/*
+ * 分隔用「/」而不是「›」：它在面包屑里是路径的通用记号，而箭头在这套 chrome 里已经归了
+ * 「展开 / 折叠」与「看全部」。
+ */
+.compose-editor__trail-sep {
+  padding-inline: 5px;
+  color: var(--compose-text-muted);
+  opacity: 0.6;
+}
+
+.compose-editor__trail-crumb {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--compose-text-muted);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 当前那一段是终点，不可点，因此只加重它的文字——这一行上没有「选中」，它不是一组选项。 */
+.compose-editor__trail-crumb[data-current='true'] {
+  color: var(--compose-text-strong);
+}
+
+button.compose-editor__trail-crumb {
+  cursor: pointer;
+}
+
+button.compose-editor__trail-crumb:hover {
+  color: var(--compose-text-subtle);
+  text-decoration: underline;
+}
+
+button.compose-editor__trail-crumb:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--compose-focus);
+  outline-offset: 1px;
+}
+
+/*
  * 布局开关：折叠与展开的唯一入口，位置不随面板存亡而移动——那正是它取代 8px 边缘把手的
  * 全部理由。两种状态都画：实心的那一条边表示该侧展开着，描边表示收起。
  */
 .compose-editor__layout-toggles {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 2px;
 }
@@ -390,6 +505,8 @@
  */
 .compose-editor__workspace-control {
   display: inline-flex;
+  /* 顶栏右端的去处是固定的：标签再多也不该把它挤走。 */
+  flex: none;
   align-items: center;
   gap: 2px;
 }
@@ -2317,11 +2434,11 @@
 }
 
 /*
- * 画布列是一列：第一行是文档标签条（30px，与左右面板头齐平），其余是活动文档的表面。
- * 表面此前写死 `height: 100%`——上面多了一行之后那会溢出一整条标签条的高度，因此改由 flex
+ * 画布列是一列：第一行是文档面包屑（30px，与左右面板头齐平），其余是活动文档的表面。
+ * 表面此前写死 `height: 100%`——上面多了一行之后那会溢出一整条头部行的高度，因此改由 flex
  * 分配剩下的高度。
  */
-.compose-editor__canvas-panel > .compose-editor__document-tabs {
+.compose-editor__canvas-panel > .compose-editor__canvas-head {
   flex: none;
 }
 

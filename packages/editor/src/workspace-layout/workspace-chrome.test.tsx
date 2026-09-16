@@ -65,7 +65,7 @@ function fakeContent(overrides: Partial<WorkspaceContent>) {
   } as unknown as WorkspaceContent
 }
 
-/** 画布列头上的文档标签条。 */
+/** 顶栏上的文档标签条。 */
 function renderTabs(overrides: Partial<WorkspaceContent>) {
   const content = fakeContent(overrides)
   render(
@@ -78,7 +78,7 @@ function renderTabs(overrides: Partial<WorkspaceContent>) {
   return content
 }
 
-/** 应用顶栏：标志 ▾ ｜ 工作区 ｜ 三个布局开关。 */
+/** 应用顶栏：标志 ▾ ｜ 文档标签条 ｜ 工作区 ｜ 三个布局开关。 */
 function renderTopBar(overrides: Partial<WorkspaceContent> = {}) {
   const content = fakeContent(overrides)
   render(
@@ -232,15 +232,53 @@ describe('EditorTopBar', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
-  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 顶栏恰好三段', () => {
+  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 顶栏恰好四段', () => {
     renderTopBar({ documents: new Map([['a', pageSession('a', 'Home')]]), activeDocumentPanelId: 'a' })
-    // 文档标签、保存按钮与模式切换器都不在顶栏上。
-    expect(screen.queryAllByRole('tab')).toHaveLength(0)
-    expect(screen.queryByRole('button', { name: /保存/ })).toBeNull()
-    expect(screen.queryByRole('radiogroup', { name: '编辑模式' })).toBeNull()
+    // 标志、文档标签条、工作区切换器、三个布局开关。
     expect(screen.getByRole('button', { name: '应用菜单' })).toBeInTheDocument()
+    expect(screen.getByRole('tablist', { name: '文档' })).toBeInTheDocument()
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
     expect(screen.getByRole('radiogroup', { name: '工作区' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '收起左侧面板' })).toBeInTheDocument()
+    // 保存按钮与模式切换器仍不在顶栏上：它们是文档作用域。
+    expect(screen.queryByRole('button', { name: /保存/ })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: '编辑模式' })).toBeNull()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 页面库状态下没有工作区切换器', () => {
+    /*
+     * 那一屏没有画布，因而没有工作区；而标签条照常——它正是「我手上开着哪几张图」，
+     * 去库里找下一张时最需要它。
+     */
+    renderTopBar({
+      documents: new Map([['a', pageSession('a', 'Home')]]),
+      activeDocumentPanelId: 'a',
+      libraryOpen: true,
+      openLibrary: vi.fn(),
+    })
+    expect(screen.queryByRole('radiogroup', { name: '工作区' })).toBeNull()
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '收起左侧面板' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 标志是回页面库的门', () => {
+    const openLibrary = vi.fn()
+    renderTopBar({ openLibrary })
+    /*
+     * 接了页面库时标志与 `▾` 是两颗按钮：一颗按钮只能有一个动作。菜单仍在——回库不取代
+     * 应用菜单，两者是顶栏最左这一段的两件事。
+     */
+    fireEvent.click(screen.getByRole('button', { name: '回页面库' }))
+    expect(openLibrary).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: '应用菜单' }))
+    expect(screen.getByRole('menu', { name: '应用菜单' })).toBeInTheDocument()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 没接页面库时标志只是菜单把手', () => {
+    // 拆成两颗会多出一颗按下去什么都不发生的按钮。
+    renderTopBar()
+    expect(screen.queryByRole('button', { name: '回页面库' })).toBeNull()
+    expect(screen.getByRole('button', { name: '应用菜单' })).toBeInTheDocument()
   })
 
   it('OpenSpec: editor-workspace-layout / 顶栏布局开关 / 三颗常驻', () => {

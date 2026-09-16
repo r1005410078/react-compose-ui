@@ -41,6 +41,9 @@ export interface ComposeLibraryMessages {
   readonly instantiateTitle: string
   readonly instantiateName: string
   readonly instantiateHint: string
+  readonly newPageTitle: string
+  readonly newPageHint: string
+  readonly newPageDefaultName: string
   readonly cancel: string
   readonly confirm: string
 }
@@ -80,6 +83,9 @@ const zhCN: ComposeLibraryMessages = {
   instantiateTitle: '以此新建页面',
   instantiateName: '名称',
   instantiateHint: '复制一份。此后两边再无关系。',
+  newPageTitle: '新建页面',
+  newPageHint: '一张空白的页面。',
+  newPageDefaultName: '未命名页面',
   cancel: '取消',
   confirm: '新建',
 }
@@ -119,6 +125,9 @@ const enUS: ComposeLibraryMessages = {
   instantiateTitle: 'New page from this',
   instantiateName: 'Name',
   instantiateHint: 'Makes a copy. The two are unrelated from here on.',
+  newPageTitle: 'New page',
+  newPageHint: 'A blank page.',
+  newPageDefaultName: 'Untitled page',
   cancel: 'Cancel',
   confirm: 'Create',
 }

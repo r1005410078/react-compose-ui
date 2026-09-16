@@ -81,6 +81,7 @@ export {
   type ComposeWorkspaceSessionItem,
   type ComposeWorkspaceSessionPort,
 } from './use-workspace-session'
+export { CanvasDocumentBreadcrumb } from './canvas-breadcrumb'
 export { WorkspaceDialogs } from './workspace-dialogs'
 export { WorkspaceTab } from './workspace-tab'
 export { EditorTopBar, WorkspaceDocumentTabs, WorkspaceLayoutToggles, WorkspaceSwitcher } from './workspace-chrome'
