@@ -733,7 +733,7 @@ describe('OpenSpec: property-panel / 自定义类型 Renderer Registry / 使用�
     const content = screen.getByRole('group', { name: '深层图表' })
     const field = content.closest('.property-panel__field')
     expect(field).toHaveAttribute('data-property-depth', '2')
-    expect(field).toHaveStyle({ '--pp-field-depth': '2', '--pp-branch-depth': '1' })
+    expect(field).toHaveStyle({ '--pp-field-depth': '1' })
 
     fireEvent.click(within(content).getByRole('button', { name: '编辑 ECharts 1 series' }))
     expect(onValueChange).toHaveBeenCalledWith(
@@ -1170,8 +1170,8 @@ describe('OpenSpec: property-panel / 嵌套与集合属性编辑 / 修改数组�
 
     const field = screen.getByLabelText('深层字段').closest('.property-panel__field')
     expect(field).toHaveAttribute('data-property-depth', '6')
-    expect(field).toHaveStyle({ '--pp-field-depth': '4' })
-    expect(field).toHaveStyle({ '--pp-branch-depth': '3' })
+    // 这个数是缩进的格数而不是树深度，两者差一；第 3 格封顶。
+    expect(field).toHaveStyle({ '--pp-field-depth': '3' })
 
     const deepestGroup = screen.getByRole('button', { name: 'Level6' }).closest('.property-panel__group')
     expect(deepestGroup).toHaveAttribute('data-property-depth', '5')

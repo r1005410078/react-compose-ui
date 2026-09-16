@@ -27,7 +27,9 @@
     --pp-nested-group-height: 26px;
     --pp-row-height: 26px;
     --pp-control-height: 22px;
-    --pp-tree-indent: 14px;
+    --pp-tree-indent: 10px;
+    --pp-tree-inset: 16px;
+    --pp-disclosure-width: 14px;
     --pp-border: var(--compose-border, #303131);
     --pp-border-strong: var(--compose-border-strong, #3a3b3b);
     --pp-border-soft: var(--compose-border, #242525);
@@ -321,9 +323,18 @@
     border-top: 1px solid #303131;
   }
 
+  /*
+   * 分组标题前面有一枚折叠三角（`--pp-disclosure-width` = 9px 图标 + 5px 间距），因此标题的
+   * **缩进**要比同层字段正好少这一枚，两者的**文字**才落在同一个 x 上。少了这一步，`Data`
+   * 这种分组的标题会排到它自己子项的右边——屏幕上看起来就是「Data 是 Name 的子集」，而两者
+   * 是兄弟。三角宽度**不等于**缩进步长，因此必须各有各的变量：曾经它们碰巧都是 14px，
+   * 步长一改就错位。
+   */
   .property-panel__group {
-    --pp-group-indent: calc(6px + var(--pp-group-depth, 0) * var(--pp-tree-indent));
-    --pp-guide-indent: calc(16px + var(--pp-group-depth, 0) * var(--pp-tree-indent));
+    --pp-group-indent: calc(
+      var(--pp-tree-inset) - var(--pp-disclosure-width)
+      + var(--pp-group-depth, 0) * var(--pp-tree-indent)
+    );
 
     border-bottom: 0;
     box-shadow: none;
@@ -382,7 +393,9 @@
     text-shadow: none;
   }
 
+  /* 不可折叠的分组没有三角，自己补上那一枚的宽度，否则标题比可折叠的兄弟靠左。 */
   .property-panel__group-title {
+    padding-left: calc(var(--pp-group-indent, 2px) + var(--pp-disclosure-width));
     cursor: default;
   }
 
@@ -409,33 +422,17 @@
     position: relative;
   }
 
-  .property-panel__group[data-property-depth]:not([data-property-depth="0"]) > .property-panel__group-content::before {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    bottom: 0;
-    left: var(--pp-guide-indent, 30px);
-    width: 1px;
-    background: #676868;
-    content: "";
-    pointer-events: none;
-  }
-
-  .property-panel__field[data-property-nested="true"]::before {
-    position: absolute;
-    z-index: 1;
-    top: 50%;
-    left: var(--pp-branch-indent, 30px);
-    width: calc(var(--pp-field-indent, 44px) - var(--pp-branch-indent, 30px) - 4px);
-    height: 1px;
-    background: #676868;
-    content: "";
-    pointer-events: none;
-  }
-
+  /*
+   * 层级只由缩进表达，每层一个 `--pp-tree-indent`，**没有例外的一档**。
+   *
+   * 曾经画过引导线（组一条竖线、字段一截分支短线），于是缩进被拆成「让给线的那一段」加
+   * 「文字再右移的那一段」，第一层级不画线因而白让了一整格——它比同层的分组标题还靠右，
+   * 而两者是兄弟。线去掉之后那个拆分没有任何东西支撑，阶梯因此收成一条。
+   */
   .property-panel__field {
-    --pp-branch-indent: calc(16px + var(--pp-branch-depth, 0) * var(--pp-tree-indent));
-    --pp-field-indent: calc(16px + var(--pp-field-depth, 0) * var(--pp-tree-indent));
+    --pp-field-indent: calc(
+      var(--pp-tree-inset) + var(--pp-field-depth, 0) * var(--pp-tree-indent)
+    );
 
     position: relative;
     display: grid;
@@ -454,10 +451,6 @@
 
   .property-panel__field--full-width {
     grid-template-rows: minmax(var(--pp-row-height), auto) auto;
-  }
-
-  .property-panel__field--full-width[data-property-nested="true"]::before {
-    top: calc(var(--pp-row-height) / 2);
   }
 
   .property-panel__field--full-width > .property-panel__label {

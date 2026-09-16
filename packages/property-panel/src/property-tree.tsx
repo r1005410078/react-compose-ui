@@ -2048,23 +2048,27 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
 }
 
 type TreeIndentStyle = CSSProperties & {
-  '--pp-branch-depth'?: number
   '--pp-field-depth'?: number
   '--pp-group-depth'?: number
 }
 
-// 同一层的 group guide 与下一层 field branch 必须落在同一 X 坐标；14px 是 UE4 紧凑层级步长，
-// 文字比竖线再右移 14px。两者分别在 3/4 层封顶，深层仍保留可读的标签宽度。
+/*
+ * 两者都在第 3 格封顶，深层仍保留可读的标签宽度。步长本身住样式表——去掉层级线之后缩进是
+ * 唯一的层级信号，它多宽是观感问题，不该写死在这里。
+ */
 function createGroupIndentStyle(depth: number): TreeIndentStyle {
   return {
-    '--pp-group-depth': Math.min(depth, 3),
+    '--pp-group-depth': Math.min(Math.max(depth - 1, 0), 3),
   }
 }
 
+/*
+ * 字段的第一层不缩进：它是所在分组（或 Section）的直接内容，那一级已经由分组标题表达了。
+ * 因此这里的数是**缩进的格数**而不是树深度，两者差一。
+ */
 function createFieldIndentStyle(depth: number): TreeIndentStyle {
   return {
-    '--pp-field-depth': Math.min(depth, 4),
-    '--pp-branch-depth': Math.min(Math.max(depth - 1, 0), 3),
+    '--pp-field-depth': Math.min(Math.max(depth - 1, 0), 3),
   }
 }
 
