@@ -490,6 +490,6 @@ interface ComposeAssetProvider {
   免得为一个没有消费者的字段定语义。
 - **全文检索**：`search` 只匹配标题。匹配内容要服务端解析每一份 `.page.json`。
 - **多人协同编辑**：`expectedRevision` 只保证「后写的不会悄悄盖掉先写的」，不是 OT/CRDT。
-- **首页宿主应用本身**：这次只落端口与本地实现。
+- **首页宿主应用本身**：这次只落端口与本地实现，它在 `add-page-library-home` 里。
 - **权限模型**：`capabilities` 表达「这个端口能不能做」，不表达「这个用户能不能做这一条」。
   后者出现时它是每条记录上的一个字段，与 `ComposeAssetEntry.capabilities` 同构。

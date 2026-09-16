@@ -4,6 +4,9 @@
 [架构图](../../../docs/mockups/service-ports.html) —— 全景、身份、三条写路径与「就用这个」时序；
 [产品形态](../../../docs/mockups/product-home.html) —— 首页那一屏长什么样、为什么。
 
+前端那一半是 [`add-page-library-home`](../add-page-library-home/proposal.md)，它消费本变更的
+`ComposeLibraryPort`。
+
 ## 原因
 
 产品要长出后端，而**后端还不存在**。现在把服务端的形状定成一组前端端口，服务端照着实现即可；
