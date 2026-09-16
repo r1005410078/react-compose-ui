@@ -1,22 +1,14 @@
 import type {
-  ComposeEntityPreset,
   ComposeRendererDefinition,
-  ComposeRendererInspectorProps,
   ComposeRendererProps,
 } from '@compose-ui/component-registry'
 import {
   BUILTIN_COMMAND_TYPES,
   createDefaultCanvasSettings,
-  createDefaultComposeLayoutItem,
   createComposeFrameEntity,
   createTransactionRuntime,
 } from '@compose-ui/core'
-import type {
-  ComposeDocument,
-  ComposeEntity,
-  JsonObject,
-  JsonValue,
-} from '@compose-ui/core'
+import type { ComposeDocument } from '@compose-ui/core'
 import {
   ComposeEditor,
   useComposeEditorController,
@@ -25,7 +17,6 @@ import type { ComposeEditorTransactionEvent, ComposeToolbarItem } from '@compose
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import { createComposeComponentStore } from '@compose-ui/component-library'
 import {
-  ComposeEchartsMaterialIcon,
   createComposeBasicMaterials,
 } from '@compose-ui/materials'
 import {
@@ -33,22 +24,8 @@ import {
   useComposeOperationLog,
 } from '@compose-ui/operation-log'
 import type { ComposeOperationLogCategory, ComposeOperationLogRecordInput } from '@compose-ui/operation-log'
-import {
-  ComposePropertyPanel,
-  type ComposePropertyPanelBindingConfig,
-} from '@compose-ui/property-panel'
 import { ComposePreviewDialog, ComposePreviewPage } from '@compose-ui/preview'
 import type { ComposePreviewHandoff } from '@compose-ui/preview'
-import { BarChart } from 'echarts/charts'
-import {
-  GridComponent,
-  TitleComponent,
-} from 'echarts/components'
-import {
-  init as initECharts,
-  use as registerECharts,
-} from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ComposeEditorActiveComponentSession,
@@ -60,10 +37,8 @@ import {
   createComposePageLoader,
   createComposePageStore,
 } from '@compose-ui/pages'
-import * as v from 'valibot'
+import { createComposeChartMaterials } from '@compose-ui/chart-materials'
 import { createDemoAssetProvider } from './demo-asset-provider'
-
-registerECharts([BarChart, GridComponent, TitleComponent, CanvasRenderer])
 
 /** 与 `StageToolbarIcon` 共用同一套 20×20 画幅——它就摆在那条工具栏的末尾。 */
 function PreviewIcon() {
@@ -82,76 +57,6 @@ const emptyDocument: ComposeDocument = {
   canvas: createDefaultCanvasSettings(),
   rootIds: [DEMO_FRAME_ID],
   entities: { [DEMO_FRAME_ID]: createComposeFrameEntity({ id: DEMO_FRAME_ID, name: '场景' }) },
-}
-
-const chartSchema = v.object({
-  title: v.pipe(v.string(), v.title('图表标题')),
-  values: v.pipe(v.array(v.number()), v.title('数据')),
-})
-
-function setAllProps(
-  entity: ComposeEntity,
-  current: JsonObject,
-  value: JsonObject,
-  dispatch: ComposeRendererInspectorProps['dispatch'],
-  mergeKey: string,
-) {
-  const changed = [...new Set([...Object.keys(current), ...Object.keys(value)])]
-    .filter((key) => JSON.stringify(current[key]) !== JSON.stringify(value[key]))
-    .slice(0, 2)
-    .map((key) => `${key} ${formatLogValue(current[key])} → ${formatLogValue(value[key])}`)
-  dispatch({
-    id: `inspector:${entity.id}:${Date.now()}`,
-    type: BUILTIN_COMMAND_TYPES.setRendererProps,
-    payload: { entityId: entity.id, props: value },
-    meta: {
-      label: `Update ${entity.name}${changed.length > 0 ? ` · ${changed.join(', ')}` : ''}`,
-      source: 'inspector',
-      targetIds: [entity.id],
-      mergeKey,
-    },
-  })
-}
-
-function formatLogValue(value: JsonValue | undefined) {
-  if (value === undefined) return 'undefined'
-  const serialized = JSON.stringify(value)
-  return serialized.length > 28 ? `${serialized.slice(0, 27)}…` : serialized
-}
-
-function ChartRenderer({ props }: ComposeRendererProps) {
-  const root = useRef<HTMLDivElement>(null)
-  const title = typeof props.title === 'string' ? props.title : '季度数据'
-  const values = useMemo(() => Array.isArray(props.values)
-    ? props.values.filter((item): item is number => typeof item === 'number')
-    : [18, 28, 22, 36], [props.values])
-
-  useEffect(() => {
-    const element = root.current
-    if (!element) return
-    const chart = initECharts(element)
-    chart.setOption({
-      animation: false,
-      backgroundPaint: { kind: 'solid', color: 'transparent' },
-      grid: { left: 38, right: 16, top: 48, bottom: 28 },
-      title: { text: title, left: 12, textStyle: { color: '#dce8fa', fontSize: 14 } },
-      xAxis: {
-        type: 'category',
-        data: values.map((_, index) => `Q${index + 1}`),
-        axisLabel: { color: '#91a0b6' },
-      },
-      yAxis: { type: 'value', axisLabel: { color: '#91a0b6' } },
-      series: [{ type: 'bar', data: values, itemStyle: { color: '#5794f2' } }],
-    })
-    const resize = () => chart.resize()
-    window.addEventListener('resize', resize)
-    return () => {
-      window.removeEventListener('resize', resize)
-      chart.dispose()
-    }
-  }, [title, values])
-
-  return <div aria-label={title} className="stage-demo__chart" ref={root} role="img" />
 }
 
 function ActionButtonRenderer({ props }: ComposeRendererProps) {
@@ -192,128 +97,15 @@ const actionButtonRenderer = {
   propCategories: [{ id: 'button', label: '按钮' }],
 } satisfies ComposeRendererDefinition
 
-function ChartInspector({
-  authoredProps,
-  entity,
-  dispatch,
-  propsBinding,
-  readOnly,
-}: ComposeRendererInspectorProps) {
-  const props = propsBinding?.baseProps ?? authoredProps
-  const values = Array.isArray(props.values)
-    ? props.values.filter((item): item is number => typeof item === 'number')
-    : [18, 28, 22, 36]
-  const value = {
-    title: typeof props.title === 'string' ? props.title : '季度数据',
-    values,
-  }
-  const binding = propsBinding ? {
-    value: ['title', 'values'].flatMap((propName) => {
-      const exportName = propsBinding.fields[propName]?.exportName
-      return exportName ? [{
-        target: { path: [propName], targetId: 'value' },
-        variableId: exportName,
-      }] : []
-    }),
-    variables: propsBinding.variables.map((variable) => ({
-      ...variable,
-      scope: 'page' as const,
-    })),
-    isTargetEnabled: ({ address }) => (
-      address.targetId === 'value'
-      && address.path.length === 1
-      && (address.path[0] === 'title' || address.path[0] === 'values')
-    ),
-    onChange: (next, change) => {
-      const propName = change.target.path[0]
-      if (propName !== 'title' && propName !== 'values') return
-      const selected = next.find((item) => item.target.path[0] === propName)
-      propsBinding.setField(propName, selected?.variableId ?? null)
-    },
-  } satisfies ComposePropertyPanelBindingConfig : undefined
-  return (
-    <ComposePropertyPanel
-      aria-label="ECharts 图表属性"
-      binding={binding}
-      defaultValue={{ title: '季度数据', values: [18, 28, 22, 36] }}
-      readOnly={readOnly}
-      schema={chartSchema}
-      value={value}
-      onValueChange={(next) =>
-        setAllProps(
-          entity,
-          authoredProps,
-          { ...authoredProps, ...next },
-          dispatch,
-          `inspector:${entity.id}`,
-        )}
-    />
-  )
-}
-
-const echartsRenderer = {
-  type: 'echarts-bar',
-  label: 'ECharts Chart',
-  renderer: ChartRenderer,
-  propContracts: [
-    {
-      name: 'title',
-      kind: 'value',
-      label: 'Title',
-      category: 'chart',
-      affectsMeasurement: false,
-      validate: (value: unknown) => v.safeParse(chartSchema.entries.title, value).success
-        ? true
-        : 'Title must be a string',
-    },
-    {
-      name: 'values',
-      kind: 'value',
-      label: 'Values',
-      category: 'chart',
-      affectsMeasurement: false,
-      validate: (value: unknown) => v.safeParse(chartSchema.entries.values, value).success
-        ? true
-        : 'Values must be an array of numbers',
-    },
-  ],
-  propCategories: [{ id: 'chart', label: '图表' }],
-  inspectorPropNames: ['title', 'values'],
-  inspector: ChartInspector,
-} satisfies ComposeRendererDefinition
-
-const echartsPreset = {
-  id: 'echarts-bar',
-  label: '图表',
-  defaultName: 'ECharts Chart',
-  icon: <ComposeEchartsMaterialIcon />,
-  createComponents: () => ({
-    Transform: { rotation: 0 },
-    LayoutItem: createDefaultComposeLayoutItem(420, 260),
-    Visibility: { visible: true },
-    Lock: { locked: false },
-    Appearance: {
-      backgroundPaint: { kind: 'solid', color: 'transparent' },
-      borderColor: 'transparent',
-      borderWidth: 0,
-      borderRadius: 0,
-      opacity: 1,
-      shadow: null,
-    },
-    Renderer: {
-      type: 'echarts-bar',
-      props: {
-        title: 'Quarterly data',
-        values: [18, 28, 22, 36],
-      },
-    },
-  }),
-} satisfies ComposeEntityPreset
-
+/*
+ * 图表来自第一方物料包 `@compose-ui/chart-materials`，示例只负责把它与基础物料组合起来——
+ * 这正是宿主该做的事。此前这里自己注册了一个 `echarts-bar`，而示例应用不是产品能力。
+ */
+const chartMaterials = createComposeChartMaterials()
 const basicMaterials = createComposeBasicMaterials({
   extensions: {
-    renderers: [echartsRenderer, actionButtonRenderer],
-    presets: [echartsPreset],
+    renderers: [...chartMaterials.renderers, actionButtonRenderer],
+    presets: [...chartMaterials.presets],
   },
 })
 const { registry } = basicMaterials

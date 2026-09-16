@@ -31,10 +31,15 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
    * 因此圆的瓦片在这里**出现**——`paletteHidden` 的判据按货架求值，不然页面里既没有按钮也
    * 没有瓦片。Text 与箭头的入口都在页面货架上，因此仍不出现；Wire 是自己的理由，恒不出现。
    */
-  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (6)' })).toBeVisible()
+  // 8 格：容器、组件切换器、曲线、圆、矩形，加上图表的三格——用户找的是「饼图」，
+  // 不是「图表，然后去属性面板改类型」。
+  await expect(componentLibrary.getByRole('heading', { name: '基础组件 (8)' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 圆' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 矩形' })).toBeVisible()
   await expect(componentLibrary.getByRole('button', { name: '添加 组件切换器' })).toBeVisible()
+  for (const chart of ['折线图', '柱状图', '饼图']) {
+    await expect(componentLibrary.getByRole('button', { name: `添加 ${chart}` })).toBeVisible()
+  }
   await expect(componentLibrary.getByRole('button', { name: '添加 Text' })).toHaveCount(0)
 
   const editorBox = await editor.boundingBox()
@@ -672,7 +677,7 @@ test('OpenSpec: editor-workspace-layout / Controller 驱动的默认组合 / 使
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   // Text 与箭头在页面货架上有工具栏入口，因此不出现在 Palette；圆没有，因此出现。
-  await expect(editor.getByRole('button', { name: /^添加 (容器|矩形|图表)$/ }))
+  await expect(editor.getByRole('button', { name: /^添加 (容器|矩形|柱状图)$/ }))
     .toHaveCount(3)
   await editor.getByRole('button', { name: '添加 矩形' }).click()
   await expect(stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer'))
@@ -880,18 +885,18 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   const stage = editor.getByRole('application', { name: 'Stage' })
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   /*
-   * 用宿主注册的**图表**物料而不是矩形：这条用例最后要给这个 Entity 加「容器」能力，而矩形
-   * 现在是曲线，「`Curve` 不能与 Hierarchy 组合」——一条曲线不是容器。图表同样是叶子
-   * Renderer，「一个 Entity 既是 Renderer 又是 Container」这件要验的事一个字不变。
+   * 用**图表**物料而不是矩形：这条用例最后要给这个 Entity 加「容器」能力，而矩形现在是曲线，
+   * 「`Curve` 不能与 Hierarchy 组合」——一条曲线不是容器。图表同样是叶子 Renderer，
+   * 「一个 Entity 既是 Renderer 又是 Container」这件要验的事一个字不变。
    */
-  await editor.getByRole('button', { name: '添加 图表' }).click()
+  await editor.getByRole('button', { name: '添加 柱状图' }).click()
 
   const rectangle = stage.locator('.compose-stage__node.is-renderer').first()
   await rectangle.click()
   const entityId = await rectangle.getAttribute('data-entity-id')
   expect(entityId).not.toBeNull()
-  const inspector = editor.getByRole('region', { name: 'ECharts Chart 属性', exact: true })
-  const propertyRoot = inspector.getByRole('region', { name: 'ECharts Chart 属性字段' })
+  const inspector = editor.getByRole('region', { name: '柱状图 属性', exact: true })
+  const propertyRoot = inspector.getByRole('region', { name: '柱状图 属性字段' })
   const capability = inspector.getByRole('combobox', { name: '添加能力' })
   await expect(propertyRoot.getByRole('searchbox', { name: '搜索属性' })).toHaveCount(1)
 
@@ -931,7 +936,7 @@ test('OpenSpec: editor-workspace-layout / ECS 聚合 Inspector / 添加能力并
   await capability.selectOption('container')
   const composed = stage.locator(`[data-entity-id="${entityId}"]`)
   await expect(composed).toHaveClass(/is-container/)
-  await expect(composed.locator('.stage-demo__chart')).toBeVisible()
+  await expect(composed.locator('.compose-chart')).toBeVisible()
   await expect(propertyRoot.getByRole('button', { name: '容器' })).toBeVisible()
   await expandInspectorSection(inspector, '容器')
   await expect(propertyRoot.getByRole('spinbutton', { name: '子项数量' })).toHaveValue('0')
