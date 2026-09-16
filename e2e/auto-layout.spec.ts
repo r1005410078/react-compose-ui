@@ -557,3 +557,53 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子
   const held = (await rect.boundingBox())!.width
   await expect.poll(async () => (await rect.boundingBox())!.width).toBe(held)
 })
+
+
+test('OpenSpec: stage-engine / 跨容器落进 Flex 容器时解算插入位 / 连拖两个得到两个同级子项', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const tree = editor.getByRole('treegrid', { name: '场景树' })
+
+  await drawContainer(page, editor)
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await expandInspectorSection(inspector, '布局')
+  await enableAutoLayout(inspector)
+
+  // 落进来的子级也是 stage-container，因此板子取最外层那一个（DOM 序即层级序）。
+  const board = stage.getByTestId('stage-container').first()
+  const boardBox = (await board.boundingBox())!
+  const palette = editor.getByRole('button', { name: '添加 容器' })
+
+  /*
+   * 判别性的那一半：第一个子级按 Flow 排进来就盖住了父容器中心。按「最深的容器赢」，
+   * 第二次拖放会落进第一个子级，得到的是嵌套而不是同级——「往排队容器里拖第二个同级子项」
+   * 在画布上根本做不到，而屏幕上没有任何东西说明为什么。
+   */
+  await pointerDrop(page, palette, {
+    x: boardBox.x + boardBox.width / 2,
+    y: boardBox.y + boardBox.height / 2,
+  })
+  const first = board.locator(':scope > .compose-stage__node').first()
+  const firstBox = (await first.boundingBox())!
+  // 第二下必须落在**第一个子级里面**——那正是复现的形状，落在它外面根本断不出东西。
+  await pointerDrop(page, palette, {
+    x: firstBox.x + firstBox.width / 2,
+    y: firstBox.y + firstBox.height / 2,
+  })
+
+  // 两个新容器必须是这块板子的**直接**子级，而不是一个套着另一个。
+  const shape = await board.evaluate((element) => {
+    const direct = [...element.children].filter((child) => (
+      child.classList.contains('compose-stage__node')
+    ))
+    return {
+      direct: direct.length,
+      nested: direct.map((child) => [...child.children].filter((grandChild) => (
+        grandChild.classList.contains('compose-stage__node')
+      )).length),
+    }
+  })
+  expect(shape).toEqual({ direct: 2, nested: [0, 0] })
+  void tree
+})

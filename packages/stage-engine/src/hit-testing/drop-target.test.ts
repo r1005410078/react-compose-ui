@@ -501,3 +501,118 @@ describe('resolveStageDropIndicator', () => {
     })
   })
 })
+
+/** Flow 定位的**容器**：带 Hierarchy，因此它自己也是一个合法落点。 */
+function flowContainer(
+  id: string, x: number, y: number, width: number, height: number,
+): ComposeEntity {
+  const base = entity(id, { x, y, width, height, childIds: [] })
+  return {
+    ...base,
+    components: {
+      ...base.components,
+      LayoutItem: { ...base.components.LayoutItem, positioning: 'flow' },
+    },
+  } as ComposeEntity
+}
+
+describe('OpenSpec: stage-engine / 跨容器落进 Flex 容器时解算插入位', () => {
+  /** 一个横向排队容器，两个 Flow 子级各占一半、合起来盖满父级。 */
+  function queueFixture() {
+    const board = layoutContainer('board', {
+      x: 400, y: 0, width: 200, height: 200, childIds: ['a', 'b'],
+    })
+    return [
+      board,
+      /*
+       * 子级的 offset 是**局部**坐标：board 在世界 x=400，因此 a 局部 0、b 局部 100。
+       * 两个子级都是**容器**（带 Hierarchy）——这正是 L-2 的复现形状：它们各自都是合法
+       * 落点，且合起来盖满了父级。是叶子的话「最深的容器」本来就是 board，断不出东西。
+       */
+      flowContainer('a', 0, 0, 100, 200),
+      flowContainer('b', 100, 0, 100, 200),
+      entity('dragged', { x: 0, y: 0, width: 50, height: 50 }),
+    ]
+  }
+
+  it('拖到已占满父级的 Flow 子级上，落点仍是 Flex 父级', () => {
+    /*
+     * 判别性的那一半：排队容器里第一个子级本来就盖住了父容器中心。按「最深的容器赢」，
+     * 此后每一次拖放都落进上一个子级，「拖第二个同级子项」在画布上根本做不到。
+     */
+    const index = indexFor(queueFixture(), ['board', 'dragged'])
+    const target = resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: { x: 430, y: 100 },
+      zoom: 1,
+    })
+    expect(target).toEqual({ kind: 'reorder', containerId: 'board', index: 0 })
+  })
+
+  it('插入位说明落在哪两个之间', () => {
+    const index = indexFor(queueFixture(), ['board', 'dragged'])
+    // 越过 a 的中点、未越过 b 的中点：插在两者之间。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: { x: 480, y: 100 },
+      zoom: 1,
+    })).toEqual({ kind: 'reorder', containerId: 'board', index: 1 })
+    // 越过 b 的中点：插到末尾。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: { x: 580, y: 100 },
+      zoom: 1,
+    })).toEqual({ kind: 'reorder', containerId: 'board', index: 2 })
+  })
+
+  it('Alt 下钻进 Flow 子级', () => {
+    const index = indexFor(queueFixture(), ['board', 'dragged'])
+    // `alt` 的既有语义就是以命中的最内层合法容器为落点，这条不因为上面那条而收走。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: { x: 430, y: 100 },
+      zoom: 1,
+      modifiers: { alt: true },
+    })).toEqual({ kind: 'reparent', containerId: 'a' })
+  })
+
+  it('没有 Layout 的普通容器仍然追加到末尾', () => {
+    // 只断上面几条时，「所有容器都产出插入位」同样绿——而普通容器根本没有队列可言。
+    const plain = entity('plain', { x: 400, y: 0, width: 200, height: 200, childIds: ['inner'] })
+    const index = indexFor(
+      [plain, entity('inner', { x: 400, y: 0, width: 20, height: 20 }),
+        entity('dragged', { x: 0, y: 0, width: 50, height: 50 })],
+      ['plain', 'dragged'],
+    )
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: { x: 500, y: 100 },
+      zoom: 1,
+    })).toEqual({ kind: 'reparent', containerId: 'plain' })
+  })
+
+  it('落在边缘留白里时上浮到祖先，而不是没有落点', () => {
+    /*
+     * 判别性的那一半：此前这一档返回 null，用户看到的是「拖过去松手什么都没发生」——
+     * 而边缘留白想表达的恰恰是「你不是要放进这个，是要放进它外面那个」。
+     */
+    const outer = entity('outer', { x: 0, y: 0, width: 400, height: 400, childIds: ['inner'] })
+    const inner = entity('inner', { x: 100, y: 100, width: 200, height: 200, childIds: [] })
+    const index = indexFor(
+      [outer, inner, entity('dragged', { x: 900, y: 900, width: 10, height: 10 })],
+      ['outer', 'dragged'],
+    )
+    // 距 inner 左边 4px，落在它的 16px 留白里；outer 在这一点上深入成立。
+    expect(resolveStageDropTarget({
+      index,
+      draggedIds: ['dragged'],
+      worldPoint: { x: 104, y: 200 },
+      zoom: 1,
+    })).toEqual({ kind: 'reparent', containerId: 'outer' })
+  })
+})

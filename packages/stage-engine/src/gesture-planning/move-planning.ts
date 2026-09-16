@@ -337,15 +337,23 @@ export function planMoveCommit(query: StageMoveCommitQuery): StageInteractionEff
     return (left < 0 ? Number.MAX_SAFE_INTEGER : left)
       - (right < 0 ? Number.MAX_SAFE_INTEGER : right)
   })
+  /*
+   * `reorder` 不再隐含「留在原容器」：它说的是「落进 `containerId` 的第 index 位」，父级变
+   * 没变在这里比出来。换了父级就得走 reparent 那条——几何要跟着换算（Flex 容器丢弃 offset
+   * 改走 flow），而插入位正是 `createReparentCommand` 第五个参数本来就要的那个下标，
+   * `reparent` 只是恒把它取成末尾。
+   */
+  const reparenting = target.kind === 'reparent'
+    || orderedIds.some((id) => index.getParentId(id) !== target.containerId)
   return {
     type: 'command.dispatch',
-    command: target.kind === 'reparent'
+    command: reparenting
       ? createReparentCommand(
           document,
           layoutSnapshot,
           orderedIds,
           target.containerId,
-          childIds.length,
+          target.kind === 'reorder' ? target.index : childIds.length,
           idFactory(),
           transforms,
         )

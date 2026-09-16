@@ -86,6 +86,7 @@ export {
   resolveMarqueeHitTest,
   resolveMarqueeSelection,
   resolveStageDropIndicator,
+  resolveStageDropParent,
   resolveStageDropTarget,
   resolveStageGridCell,
   resolveStageGridContext,
