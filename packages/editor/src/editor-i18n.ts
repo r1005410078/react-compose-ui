@@ -14,7 +14,7 @@ const messages = {
   'zh-CN': {
     settings: '设置',
     appMenu: '应用菜单',
-    backToLibrary: '回页面库',
+    backToLibrary: '返回页面库',
     commandPanel: '命令面板',
     user: '用户',
     close: '关闭设置',

@@ -1498,7 +1498,7 @@ describe('OpenSpec: editor-workspace-layout / 页面库是 body 的一种状态'
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '打开 Home' })).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: '回页面库' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '返回页面库' })).toBeInTheDocument()
     // 那一屏没有画布，因而没有工作区。
     expect(screen.queryByRole('radiogroup', { name: '工作区' })).toBeNull()
     // 首页没有被自动打开：它才是入口，自动打开等于让用户越过那一屏。
@@ -1520,7 +1520,7 @@ describe('OpenSpec: editor-workspace-layout / 页面库是 body 的一种状态'
     // 离开库之后工作区切换器回来了，而标签条自始至终都在。
     expect(screen.getByRole('radiogroup', { name: '工作区' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '回页面库' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回页面库' }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '打开 Home' })).toBeInTheDocument()
     })
@@ -1537,6 +1537,6 @@ describe('OpenSpec: editor-workspace-layout / 页面库是 body 的一种状态'
     await waitFor(() => {
       expect(screen.getByRole('radiogroup', { name: '工作区' })).toBeInTheDocument()
     })
-    expect(screen.queryByRole('button', { name: '回页面库' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '返回页面库' })).toBeNull()
   })
 })

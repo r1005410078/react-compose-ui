@@ -255,8 +255,10 @@
 }
 
 .compose-editor__brand-menu > button {
-  display: block;
+  display: flex;
   width: 100%;
+  align-items: center;
+  gap: 8px;
   padding: 6px 10px;
   border: 0;
   border-radius: 4px;
@@ -273,6 +275,32 @@
   background: var(--compose-surface-hover);
   color: var(--compose-text-strong);
   outline: none;
+}
+
+/*
+ * 三条都带图标：只给「返回页面库」上图标会让它的文字比下面两条多缩进一个图标宽，而屏幕上没有
+ * 任何东西解释那个台阶。分隔线仍在——它说的是另一件事：只有第一条会把当前这一屏换掉。
+ */
+/*
+ * 记号比标签淡一档：这一列图标回答「是哪一类」，而用户在这副菜单里读的是文字。
+ * 线宽 2 是在 24 的 viewBox 上量的——缩到 15px 之后它与顶栏那几颗按钮的图标同粗。
+ */
+.compose-editor__brand-menu-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--compose-text-muted);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.compose-editor__brand-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--compose-border);
 }
 
 /*

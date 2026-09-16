@@ -29,6 +29,27 @@ function BrandMark() {
   )
 }
 
+/**
+ * 菜单里三条各自的图标。
+ *
+ * @remarks
+ * **三条都有**：只给「返回页面库」上图标会让它的文字比下面两条多缩进一个图标宽，而屏幕上
+ * 没有任何东西解释那个台阶。一支向左的箭头说的是「回去」，另两条沿用各自领域的通行记号。
+ */
+function BrandMenuIcon({ kind }: { kind: 'back' | 'settings' | 'command' }) {
+  return (
+    <svg aria-hidden="true" className="compose-editor__brand-menu-icon" viewBox="0 0 24 24">
+      {kind === 'back' ? <path d="m12 19-7-7 7-7M19 12H5" /> : null}
+      {kind === 'settings'
+        ? <><path d="M20 7h-9M14 17H5" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></>
+        : null}
+      {kind === 'command'
+        ? <><path d="m7 11 2-2-2-2M11 13h4" /><rect height="18" rx="2" width="18" x="3" y="3" /></>
+        : null}
+    </svg>
+  )
+}
+
 function ChevronIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16">
@@ -50,6 +71,11 @@ function ChevronIcon() {
  * 因此那一档标志与 `▾` 是**两颗按钮**：一颗按钮只能有一个动作，把两件事挂在同一颗上，用户读不出
  * 按下去会发生哪一件。没接页面库端口时它们仍是**一颗**——此时标志只有「打开菜单」这一个含义，
  * 拆成两颗会多出一颗按下去什么都不发生的按钮。
+ *
+ * **菜单里同时留一条「返回页面库」**，沿用仓库既有那条「不得成为任何能力的唯一入口」：一个
+ * 19px 的图形认不认得出是「回去」，取决于用户见没见过——标志是那条路的**快捷入口**，不该是它
+ * 唯一的入口。菜单里那条带文字，读得出来。两条走**同一个** `openLibrary`：多一个入口允许，
+ * 两份实现必然漂移。
  *
  * 标志不带文字标记：30px 一行里的字母会挤掉紧邻的标签条，而标志的职责是那颗把手，不是署名。
  * @internal
@@ -166,10 +192,26 @@ export function EditorBrandMenu() {
           role="menu"
           onKeyDown={onMenuKeyDown}
         >
+          {openLibrary === undefined ? null : (
+            <>
+              <button
+                role="menuitem"
+                type="button"
+                onClick={() => choose(openLibrary)}
+              >
+                <BrandMenuIcon kind="back" />
+                {messages.backToLibrary}
+              </button>
+              {/* 它是一个去处，下面两条是应用设置——分隔线说的就是这件事。 */}
+              <div className="compose-editor__brand-menu-sep" role="separator" />
+            </>
+          )}
           <button role="menuitem" type="button" onClick={() => choose(toggleSettings)}>
+            <BrandMenuIcon kind="settings" />
             {messages.settings}
           </button>
           <button role="menuitem" type="button" onClick={() => choose(openCommandPanel)}>
+            <BrandMenuIcon kind="command" />
             {messages.commandPanel}
           </button>
         </div>

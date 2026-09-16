@@ -268,16 +268,39 @@ describe('EditorTopBar', () => {
      * 接了页面库时标志与 `▾` 是两颗按钮：一颗按钮只能有一个动作。菜单仍在——回库不取代
      * 应用菜单，两者是顶栏最左这一段的两件事。
      */
-    fireEvent.click(screen.getByRole('button', { name: '回页面库' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回页面库' }))
     expect(openLibrary).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: '应用菜单' }))
     expect(screen.getByRole('menu', { name: '应用菜单' })).toBeInTheDocument()
   })
 
+  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 标志不是回库的唯一入口', () => {
+    /*
+     * 「货架不得成为任何能力的唯一入口」在这里的样子：一个 19px 的图形认不认得出是「回去」，
+     * 取决于用户见没见过；菜单里那条带文字，读得出来。两条走的是同一个回调。
+     */
+    const openLibrary = vi.fn()
+    renderTopBar({ openLibrary })
+    fireEvent.click(screen.getByRole('button', { name: '应用菜单' }))
+    const menu = screen.getByRole('menu', { name: '应用菜单' })
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent))
+      .toEqual(['返回页面库', '设置', '命令面板'])
+    fireEvent.click(within(menu).getByRole('menuitem', { name: '返回页面库' }))
+    expect(openLibrary).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 应用顶栏 / 没接页面库时菜单里也没有那一条', () => {
+    renderTopBar()
+    fireEvent.click(screen.getByRole('button', { name: '应用菜单' }))
+    expect(within(screen.getByRole('menu', { name: '应用菜单' })).getAllByRole('menuitem'))
+      .toHaveLength(2)
+  })
+
   it('OpenSpec: editor-workspace-layout / 应用顶栏 / 没接页面库时标志只是菜单把手', () => {
     // 拆成两颗会多出一颗按下去什么都不发生的按钮。
     renderTopBar()
-    expect(screen.queryByRole('button', { name: '回页面库' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '返回页面库' })).toBeNull()
     expect(screen.getByRole('button', { name: '应用菜单' })).toBeInTheDocument()
   })
 

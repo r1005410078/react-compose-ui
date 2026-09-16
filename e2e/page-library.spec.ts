@@ -17,7 +17,7 @@ test('OpenSpec: library-browser / 页面库是应用入口，左栏两段的选�
    * 不渲染——那一屏没有画布，因而没有工作区。
    */
   const topBar = editor.locator('.compose-editor__top-bar')
-  await expect(topBar.getByRole('button', { name: '回页面库' })).toBeVisible()
+  await expect(topBar.getByRole('button', { name: '返回页面库' })).toBeVisible()
   await expect(topBar.getByRole('button', { name: '应用菜单' })).toBeVisible()
   await expect(topBar.getByRole('radiogroup', { name: '工作区' })).toHaveCount(0)
   // 首页没有被自动打开：页面库才是入口。
@@ -67,7 +67,7 @@ test('OpenSpec: library-browser / 从库打开一页即离开库，点标志回�
   await expect(topBar.getByRole('tab', { name: /Home/ })).toBeVisible()
   await expect(topBar.getByRole('radiogroup', { name: '工作区' })).toBeVisible()
 
-  await topBar.getByRole('button', { name: '回页面库' }).click()
+  await topBar.getByRole('button', { name: '返回页面库' }).click()
   await expect(library).toBeVisible()
   /*
    * 标签一个都没关——它正是「我手上开着哪几张图」，去库里找下一张时最需要它，而这正是标签条
