@@ -22,6 +22,7 @@ import {
   type ComposeEditableColor,
   type ComposeHsvColor,
 } from './color-model'
+import { applyComposeHexInput } from './hex-input'
 import { useComposeColorHistory } from './use-compose-color-history'
 
 type EyeDropperResult = { readonly sRGBHex: string }
@@ -47,7 +48,6 @@ function useColorPickerMessages() {
     common: text('components.colorPicker.common', '常用', 'Common'),
     dialog: (label: string) => suffix(label),
     eyedropper: text('components.colorPicker.eyedropper', '吸管', 'Eyedropper'),
-    exact: text('components.colorPicker.exact', '精确', 'Exact'),
     hex: text('components.colorPicker.hex', 'HEX', 'HEX'),
     hue: (label: string) => text('components.colorPicker.hue', '{label}色相', '{label} hue', { label }),
     plane: (label: string) => text('components.colorPicker.plane', '{label}色盘', '{label} color plane', { label }),
@@ -285,6 +285,12 @@ export function ComposeColorPicker({
   const displayHex = parsed.color === 'transparent' ? '#000000' : parsed.color.slice(0, 7)
   const rgbaChannels = [1, 3, 5].map((start) => Number.parseInt(displayHex.slice(start, start + 2), 16))
   const rgbaText = `${rgbaChannels.join(', ')}, ${Math.round(parsed.alpha * 100)}%`
+  /** 两个 HEX 框共用的提交：只换色相/明度，保留当前不透明度。 */
+  const commitHex = (normalized: ComposeColor) => {
+    emitColor(parsed.alpha < 1
+      ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha)
+      : normalized)
+  }
 
   const content = (
     <div className={`compose-color-picker__content${embedded ? ' compose-color-picker__content--embedded' : ''}`}>
@@ -313,34 +319,42 @@ export function ComposeColorPicker({
             : <input aria-label={messages.alpha(label)} className="compose-color-picker__alpha" max="100" min="0" type="range" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} onLostPointerCapture={finishPointerDrag} onPointerCancel={finishPointerDrag} onPointerDown={startPointerDrag} onPointerUp={finishPointerDrag} />}
         </div>
       </div>
-      {embedded ? <div className="compose-color-picker__embedded-values">
-        <span aria-hidden="true" className="compose-color-picker__value-swatch" style={triggerStyle} />
-        <label>{messages.hex}<input aria-label={messages.hex} key={displayHex} defaultValue={displayHex.toUpperCase()} onBlur={(event) => {
-          const normalized = normalizeComposeColor(event.target.value)
-          if (normalized) emitColor(parsed.alpha < 1 ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha) : normalized)
-        }} /></label>
+      {/*
+        * 两种形态共用同一块值行，因此一个取色器只有**一个** HEX 框。此前内嵌形态在这里画一份、
+        * 折叠的「精确」里又画一份，两个 `aria-label` 都是 HEX、值也相同——同一块面板里同一个
+        * 读数出现两次，用户读不出它们有什么区别。
+        *
+        * 值行**常显**：这个产品的主路径是照着设计稿填 HEX，藏进折叠块的代价是用户找不到，
+        * 而屏幕上没有任何东西提示那里面有什么。
+        *
+        * 唯一保留的形态差别是色块——默认形态的 Trigger 上已经有一个，面板里再画一个是同一件事
+        * 说两遍。
+        */}
+      <div className="compose-color-picker__values">
+        {embedded ? <span aria-hidden="true" className="compose-color-picker__value-swatch" style={triggerStyle} /> : null}
+        <label>{messages.hex}<input
+          aria-label={messages.hex}
+          defaultValue={displayHex.toUpperCase()}
+          key={displayHex}
+          onBlur={(event) => applyComposeHexInput(
+            event.currentTarget, displayHex.toUpperCase(), commitHex,
+          )}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            applyComposeHexInput(event.currentTarget, displayHex.toUpperCase(), commitHex)
+          }}
+        /></label>
         <label>RGBA<input aria-label="RGBA" readOnly value={rgbaText} /></label>
-        <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
-      </div> : <div className="compose-color-picker__actions">
-          <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
-          {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
-        </div>}
-      <ColorRow colors={recentColors} label={messages.recent} onSelect={emitColor} />
-      <ColorRow colors={COMPOSE_COMMON_COLORS} label={messages.common} onSelect={emitColor} />
-      <details className="compose-color-picker__exact">
-        <summary>{messages.exact}</summary>
-        <label>
-          {messages.hex}
-          <input aria-label={messages.hex} defaultValue={parsed.color === 'transparent' ? '#000000' : parsed.color.slice(0, 7)} onBlur={(event) => {
-            const normalized = normalizeComposeColor(event.target.value)
-            if (normalized) emitColor(parsed.alpha < 1 ? composeColorFromHsv(parseComposeEditableColor(normalized).hsv, parsed.alpha) : normalized)
-          }} />
-        </label>
-        <label>
-          {messages.alpha(label)}
+        <label className="compose-color-picker__value-alpha">
+          {messages.alpha(label).replace(label, '').trim() || messages.alpha(label)}
           <input aria-label={`${messages.alpha(label)} 精确输入`} max="100" min="0" type="number" value={Math.round(parsed.alpha * 100)} onChange={(event) => emitAlpha(Number(event.target.value) / 100)} />
         </label>
-      </details>
+        <button aria-label={messages.eyedropper} className="compose-color-picker__eyedropper" type="button" onClick={() => { void startEyedropper() }}>⌖</button>
+        {allowTransparent ? <button aria-pressed={transparent} className="compose-color-picker__transparent" type="button" onClick={() => emitColor('transparent')}><span aria-hidden="true" className="compose-color-picker__transparent-swatch" />{messages.transparent}</button> : null}
+      </div>
+      <ColorRow colors={recentColors} label={messages.recent} onSelect={emitColor} />
+      <ColorRow colors={COMPOSE_COMMON_COLORS} label={messages.common} onSelect={emitColor} />
     </div>
   )
 

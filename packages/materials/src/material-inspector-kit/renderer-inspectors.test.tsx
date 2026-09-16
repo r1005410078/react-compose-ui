@@ -109,6 +109,55 @@ describe('Text Renderer Inspector', () => {
     expect(screen.getByRole('combobox', { name: '文字装饰' })).toHaveValue('underline')
   })
 
+  it('OpenSpec: 基础物料 / 行高缺席即自动 / 面板不顶替一个数，关掉它是删字段', () => {
+    const Inspector = createTextRendererInspector(() => 'command-id')
+    const dispatch = vi.fn()
+    const authoredProps: JsonObject = { text: 'Hello', fontSize: 28 }
+    const target = entity({ Renderer: { type: 'text', props: authoredProps } })
+    const view = render(
+      <Inspector
+        authoredProps={authoredProps}
+        dispatch={dispatch}
+        entity={target}
+        propCategory={{ id: 'typography', label: '排版' }}
+        props={authoredProps}
+        readOnly={false}
+        renderer={{ type: 'text', props: authoredProps }}
+      />,
+    )
+    /*
+     * 判别性的那一半：面板此前在缺席时顶替 `字号 × 1.2`，28px 上写着 33.6——而渲染与测量
+     * 走的是 CSS `normal`，那一行真实高度 40。用户照面板上的数微调，文字会反而变矮。
+     */
+    expect(screen.queryByRole('spinbutton', { name: '行高' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '行高 存在' })).not.toBeChecked()
+
+    // 勾上它取的是按当前字号推出来的起始值——面板自己造的初值是 0，而 `line-height: 0`
+    // 会把每一行压进同一个像素。
+    fireEvent.click(screen.getByRole('checkbox', { name: '行高 存在' }))
+    const seeded = dispatch.mock.calls[dispatch.mock.calls.length - 1]![0] as EditorCommand
+    expect(seeded.payload).toMatchObject({ props: { lineHeight: 33.6 } })
+
+    // 关掉存在性写回的是**删掉这个字段**，而不是把「自动」固化成一个数。
+    const present: JsonObject = { text: 'Hello', fontSize: 28, lineHeight: 40 }
+    view.rerender(
+      <Inspector
+        authoredProps={present}
+        dispatch={dispatch}
+        entity={entity({ Renderer: { type: 'text', props: present } })}
+        propCategory={{ id: 'typography', label: '排版' }}
+        props={present}
+        readOnly={false}
+        renderer={{ type: 'text', props: present }}
+      />,
+    )
+    expect(screen.getByRole('spinbutton', { name: '行高' })).toHaveValue(40)
+    fireEvent.click(screen.getByRole('checkbox', { name: '行高 存在' }))
+    const command = dispatch.mock.calls[dispatch.mock.calls.length - 1]![0] as EditorCommand
+    expect((command.payload as { props: JsonObject }).props)
+      .toEqual({ text: 'Hello', fontSize: 28 })
+  })
+
   it('OpenSpec: 基础物料 / 编辑 Text 内容保留 schema 之外的 props', () => {
     const dispatch = vi.fn()
     const Inspector = createTextRendererInspector(() => 'command-id')

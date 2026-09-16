@@ -7,6 +7,7 @@ import {
   emptyWorkspaceRect,
   enableAutoLayout,
   expandInspectorSection,
+  selectAxisSizing,
   selectChildInSceneTree,
   selectContainer,
 } from './support/test-helpers'
@@ -28,7 +29,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
   expect(outputBox).not.toBeNull()
 
   // 点击（而不是拖拽）创建 Auto width 文字，光标应当直接落进去。
-  await editor.getByRole('button', { name: '文字' }).click()
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
 
   const editable = stage.getByTestId('compose-material-text-editable')
@@ -73,7 +74,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 缩窄文字框时高度�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  await editor.getByRole('button', { name: '文字' }).click()
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
   await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
   await page.keyboard.type('Hello canvas world')
@@ -116,7 +117,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  await editor.getByRole('button', { name: '文字' }).click()
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
   await expect(stage.getByTestId('compose-material-text-editable')).toHaveText('')
 
@@ -552,7 +553,12 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
   await selectContainer(editor)
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
-  // 进入 Auto Layout 后子级交叉轴被采纳为 fill；选中容器本身拖 S 边，子级高度应实时跟随。
+  // 进入 Auto Layout 只改定位方式，交叉轴尺寸仍是子级自己的固定值——要它跟着容器长，
+  // 得显式把高度设成 Fill。本条要的是「拖手柄时 Fill 子级实时重排」，因此先把它设上。
+  await selectChildInSceneTree(editor, frame, children.nth(0))
+  await selectAxisSizing(
+    editor.getByRole('region', { name: 'Rectangle 属性', exact: true }), '高度', 'Fill',
+  )
   const firstBefore = await children.nth(0).boundingBox()
   await editor.getByRole('treegrid', { name: '场景树' })
     .getByRole('row')
@@ -824,4 +830,41 @@ test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落�
   // 网格吸附会带来几像素偏差，落点本身必须就在手势松手处。
   expect(Math.abs(center.x - drop.x)).toBeLessThan(16)
   expect(Math.abs(center.y - drop.y)).toBeLessThan(16)
+})
+
+
+test('OpenSpec: materials / Text 内容测量 / 中文 Hug 文字量出来的宽度够它排一行', async ({ page }) => {
+  await page.goto('/')
+
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const output = stage.getByTestId('stage-frame-boundary-frame-root')
+  await expect(output).toBeVisible()
+  const outputBox = (await output.boundingBox())!
+
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
+  await page.mouse.click(outputBox.x + 200, outputBox.y + 160)
+  const editable = stage.getByTestId('compose-material-text-editable')
+  await expect(editable).toBeFocused()
+  await page.keyboard.insertText('储能系统运行监控大屏')
+  await page.keyboard.press('Escape')
+
+  const node = stage.getByTestId('compose-material-text')
+  await expect(node).toContainText('储能系统运行监控大屏')
+
+  /*
+   * 中日韩字形回退按 locale 选字体而不按 `font-family`：测量宿主与渲染节点的 locale 一旦
+   * 不同，同一段文字就按两套字宽算。量窄了配上 `overflow-wrap: anywhere`（每个汉字都是
+   * 合法断点）就折行，而 Hug 高度只留一行、节点又 `overflow: hidden`——屏幕上只剩最后一个字。
+   *
+   * 断的是**行盒数量**而不是宽度：字宽随机器上装了哪些字体变，而「排得下一行」不变。
+   * 拉丁文字断不出这条——同一段英文在两种 locale 下选中的是同一个字体。
+   */
+  const lineBoxes = await node.evaluate((el) => {
+    const span = el.querySelector('.compose-material--text-content')!
+    const range = document.createRange()
+    range.selectNodeContents(span)
+    return range.getClientRects().length
+  })
+  expect(lineBoxes).toBe(1)
 })

@@ -15,7 +15,6 @@ import {
   getComposeHierarchy,
   BUILTIN_COMMAND_TYPES,
   COMPOSE_DEFAULT_FRAME_SIZE,
-  adoptComposeCrossAxisSizing,
   createComposeBatchCommand,
   getComposeLayout,
   getComposeLayoutItem,
@@ -147,13 +146,8 @@ function entityFromSeed(
     components: {
       ...seed.components,
       Transform: { rotation: transform.rotation },
-      // 父级是 Auto Layout 容器时进入排队并采纳交叉轴，与画布 reparent/拖入判定一致。
-      // 网格容器不走交叉轴采纳（格中子级的轴尺寸模式在求解里被忽略），改为落进第一块空位。
-      LayoutItem: isComposeGridLayout(parentLayout)
-        ? { ...placed, positioning: 'flow' as const }
-        : parentLayout
-          ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
-          : placed,
+      // 父级是布局容器时进入排队，轴尺寸保持子项自己写下的值；网格容器另外落进第一块空位。
+      LayoutItem: parentLayout ? { ...placed, positioning: 'flow' as const } : placed,
       ...(isComposeGridLayout(parentLayout) && gridPlacement
         ? { GridItem: gridPlacement }
         : {}),

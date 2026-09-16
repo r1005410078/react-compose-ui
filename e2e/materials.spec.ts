@@ -91,7 +91,7 @@ test('OpenSpec: Preview 原生 Container 滚动 / 滚动范围保留底部内边
 })
 
 
-test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染 ECharts Canvas', async ({ page }) => {
+test('OpenSpec: basic-materials / 第一方图表物料 / 在 Stage 中画出 Canvas 并分别绑定数据', async ({ page }) => {
   await page.goto('/')
 
   const editor = page.getByRole('region', { name: 'Compose editor' })
@@ -101,33 +101,65 @@ test('OpenSpec: component-registry / 完整示例 renderer / 在 Stage 中渲染
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   expect(frameBox).not.toBeNull()
 
-  await pointerDrop(page, editor.getByRole('button', { name: '添加 图表' }), {
+  await pointerDrop(page, editor.getByRole('button', { name: '添加 柱状图' }), {
     x: frameBox!.x + 320,
     y: frameBox!.y + 240,
   })
 
-  const chart = stage.getByRole('img', { name: 'Quarterly data' })
+  // 图表是一块真的 canvas，不是占位。
+  const chart = stage.getByTestId('compose-material-chart')
   await expect(chart).toBeVisible()
+  await expect(chart).toHaveAttribute('data-chart-kind', 'bar')
   await expect(chart.locator('canvas')).toBeVisible()
-  const inspector = editor.getByRole('region', { name: 'ECharts Chart 属性', exact: true })
+
+  const inspector = editor.getByRole('region', { name: '柱状图 属性', exact: true })
   await expandInspectorSection(inspector, '图表')
-  // OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / ECharts 输入分别绑定
-  const titleActions = inspector.getByRole('button', { name: '绑定 图表标题' })
-  const dataActions = inspector.getByRole('button', { name: '绑定 数据' })
-  const titleHeader = titleActions.locator('..').locator('..')
-  await expect(titleActions).toHaveCSS('opacity', '0')
-  await expect(dataActions).toHaveCSS('opacity', '0')
-  await titleHeader.hover()
-  await expect(titleActions).toHaveCSS('opacity', '1')
-  await titleActions.click()
-  await expect(inspector.getByRole('dialog', { name: '绑定 图表标题' })).toBeVisible()
-  await inspector.getByRole('button', { name: '关闭变量选择器' }).click()
-  const dataHeader = dataActions.locator('..').locator('..')
-  await dataHeader.hover()
-  await expect(dataActions).toHaveCSS('opacity', '1')
-  await dataActions.click()
-  await expect(inspector.getByRole('dialog', { name: '绑定 数据' })).toBeVisible()
-  await expect(inspector.getByRole('button', { name: '高级' })).toHaveCount(0)
+  /*
+   * OpenSpec: property-panel / 自定义 Renderer 子目标绑定 / 图表输入分别绑定
+   * 「数据从哪儿来」是类目与系列两个问题，页面脚本喂进来的正是它们，因此两个入口各自独立。
+   */
+  const categoryActions = inspector.getByRole('button', { name: '绑定 类目' })
+  const seriesActions = inspector.getByRole('button', { name: '绑定 系列' })
+  const categoryHeader = categoryActions.locator('..').locator('..')
+  await expect(categoryActions).toHaveCSS('opacity', '0')
+  await expect(seriesActions).toHaveCSS('opacity', '0')
+  await categoryHeader.hover()
+  await expect(categoryActions).toHaveCSS('opacity', '1')
+  await categoryActions.click()
+  await expect(inspector.getByRole('dialog', { name: '绑定 类目' })).toBeVisible()
+  // Escape 关闭：关闭按钮被变量选择器自己的浮层压住，而 Escape 本来就是它的关闭语义。
+  await page.keyboard.press('Escape')
+  await expect(inspector.getByRole('dialog', { name: '绑定 类目' })).toHaveCount(0)
+  const seriesHeader = seriesActions.locator('..').locator('..')
+  await seriesHeader.hover()
+  await expect(seriesActions).toHaveCSS('opacity', '1')
+  await seriesActions.click()
+  await expect(inspector.getByRole('dialog', { name: '绑定 系列' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  /*
+   * 配色的每一项都是颜色，因此走颜色选择器而不是文本框。编辑器是按**每个节点自己**的 schema
+   * 元数据解析的：挂在数组上只描述数组那一个节点，六个条目仍会落到默认的文本输入。
+   */
+  await expect(inspector.getByRole('button', { name: /^选择配色 \d+颜色$/ })).toHaveCount(6)
+})
+
+
+test('OpenSpec: basic-materials / 第一方图表物料 / 三格各画出对应的图，改类型不丢数据', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+
+  for (const [label, kind] of [['折线图', 'line'], ['柱状图', 'bar'], ['饼图', 'pie']] as const) {
+    await editor.getByRole('button', { name: `添加 ${label}` }).click()
+    const node = stage.locator(`[data-chart-kind="${kind}"]`)
+    await expect(node).toBeVisible()
+    await expect(node.locator('canvas')).toBeVisible()
+  }
+
+  // 用户找的是「饼图」，不是「图表，然后去属性面板改类型」——三格各出一个 Entity。
+  await expect(stage.getByTestId('compose-material-chart')).toHaveCount(3)
 })
 
 

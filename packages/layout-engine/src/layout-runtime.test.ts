@@ -103,6 +103,17 @@ function frameEntity(childIds: readonly string[]): ComposeEntity {
   }
 }
 
+/** 把 {@link entity} 造出来的 Flex 容器改成显式拉伸——拉伸不再是默认值。 */
+function withStretch(container: ComposeEntity): ComposeEntity {
+  return {
+    ...container,
+    components: {
+      ...container.components,
+      Layout: { ...container.components.Layout, alignItems: 'stretch' },
+    },
+  }
+}
+
 function documentFixture(entities: Record<string, ComposeEntity>): ComposeDocument {
   return {
     schemaVersion: 7,
@@ -302,7 +313,8 @@ describe('Yoga Compose layout runtime', () => {
 
   it('OpenSpec: layout-engine / Auto Layout 交叉轴拉伸继承 / stretch 父级拉伸 Hug 子级', async () => {
     // 容器 300x200、border 2、padding 10 → 交叉轴内容区 200 - 2*2 - 2*10 = 176。
-    const container = entity('container', fixedItem(0, 0, 300, 200), ['child'])
+    // 拉伸不是默认值（默认 flex-start），因此这条用例显式声明它。
+    const container = withStretch(entity('container', fixedItem(0, 0, 300, 200), ['child']))
     const child = entity('child', {
       ...fixedItem(0, 0, 50, 20, 'flow'),
       height: { mode: 'hug', value: 20, min: null, max: null },
@@ -317,7 +329,9 @@ describe('Yoga Compose layout runtime', () => {
   })
 
   it('OpenSpec: layout-engine / Auto Layout 交叉轴拉伸继承 / 子级显式 alignSelf 优先于父级', async () => {
-    const container = entity('container', fixedItem(0, 0, 300, 200), ['pinned', 'stretched'])
+    const container = withStretch(
+      entity('container', fixedItem(0, 0, 300, 200), ['pinned', 'stretched']),
+    )
     const pinned = entity('pinned', {
       ...fixedItem(0, 0, 50, 20, 'flow'),
       height: { mode: 'hug', value: 20, min: null, max: null },
@@ -782,5 +796,84 @@ describe('Interaction 不参与布局求解', () => {
     const after = await resolveComposeDocumentLayout(interactive)
 
     expect(after.boxes).toEqual(before.boxes)
+  })
+})
+
+describe('OpenSpec: layout-engine / 样式解析住在布局 Runtime', () => {
+  it('交出的已解算文档里排版值已解析，而 sourceDocument 仍是输入那一份', async () => {
+    /*
+     * 判别性的那一半：样式与导线、填充一样是派生的——解析一次，Stage 渲染、Preview、文字测量
+     * 与 Inspector 四条路径一行不改。各路径自己解析一遍正是仓库为导线几何明令禁止的那一类，
+     * 而漏掉任何一条的症状是「这处文字没跟着样式变」。
+     */
+    const label = entity('container', fixedItem(0, 0, 100, 20))
+    const withRef: ComposeDocument = {
+      ...documentFixture({
+        container: {
+          ...label,
+          components: {
+            ...label.components,
+            Renderer: { type: 'text', props: { text: '标题' } },
+            Style: { text: 'heading' },
+          },
+        },
+      }),
+      styles: { heading: { name: '卡片标题', props: { fontSize: 22 } } },
+    }
+    const runtime = createComposeLayoutRuntime({ document: withRef })
+    const state = await waitForReady(runtime)
+    const resolvedProps = (state.document.entities.container!.components.Renderer as {
+      props: Record<string, unknown>
+    }).props
+    expect(resolvedProps).toMatchObject({ text: '标题', fontSize: 22 })
+    // `sourceDocument` 的语义是「我传进来的那份」，身份判定读它，因此它 MUST NOT 被换掉。
+    expect(state.sourceDocument).toBe(withRef)
+    // 纯函数：输入文档一个字节不变。
+    expect((withRef.entities.container!.components.Renderer as {
+      props: Record<string, unknown>
+    }).props).toEqual({ text: '标题' })
+    runtime.dispose()
+  })
+
+  it('Hug 文字按样式的字号测量——这正是样式排在求解之前的理由', async () => {
+    /*
+     * 判别性的那一半：样式若排在求解**之中**（像导线与填充那样），文字测量拿到的还是作者
+     * 写下的字号，而盒是按测量结果定的——屏幕上是「字变大了，盒没跟上」。样式不依赖几何，
+     * 因此它能排在前面；反过来测量依赖它。
+     */
+    const seen: { fontSize?: unknown }[] = []
+    const port: ComposeLayoutMeasurementPort = {
+      revision: 0,
+      measure: ({ entity }) => {
+        const props = (entity.components.Renderer as { props?: Record<string, unknown> })?.props
+        seen.push({ fontSize: props?.fontSize })
+        const size = typeof props?.fontSize === 'number' ? props.fontSize : 12
+        return { width: size * 4, height: size }
+      },
+      subscribe: () => () => undefined,
+    }
+    const label = entity('container', {
+      positioning: 'absolute',
+      offset: { x: 0, y: 0 },
+      width: { mode: 'hug' },
+      height: { mode: 'hug' },
+    } as Partial<ComposeLayoutItem>)
+    const withRef: ComposeDocument = {
+      ...documentFixture({
+        container: {
+          ...label,
+          components: {
+            ...label.components,
+            Renderer: { type: 'text', props: { text: '标题' } },
+            Style: { text: 'heading' },
+          },
+        },
+      }),
+      styles: { heading: { name: '卡片标题', props: { fontSize: 22 } } },
+    }
+    const solved = await resolveComposeDocumentLayout(withRef, port)
+    expect(seen.some((item) => item.fontSize === 22)).toBe(true)
+    // 夹具的 Appearance 带 2px 边框，而边框计入内容盒：88 + 4 = 92、22 + 4 = 26。
+    expect(solved.boxes.container).toMatchObject({ width: 92, height: 26 })
   })
 })

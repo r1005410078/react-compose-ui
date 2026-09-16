@@ -34,6 +34,11 @@ const translations = {
     presence: (label: string) => `${label} 存在`,
     reset: (label: string) => `重置 ${label}`,
     add: (label: string) => `添加 ${label}`,
+    bulkEdit: (label: string) => `批量编辑 ${label}`,
+    bulkPlaceholder: '一行一项，也收制表符与逗号分隔',
+    bulkConfirm: '替换',
+    bulkCancel: '取消',
+    bulkInvalid: (position: number, text: string) => `第 ${position} 项「${text}」不合法，没有改动`,
     remove: (label: string) => `删除 ${label}`,
     moveUp: (label: string) => `上移 ${label}`,
     moveDown: (label: string) => `下移 ${label}`,
@@ -81,6 +86,11 @@ const translations = {
     presence: (label: string) => `${label} present`,
     reset: (label: string) => `Reset ${label}`,
     add: (label: string) => `Add ${label}`,
+    bulkEdit: (label: string) => `Bulk edit ${label}`,
+    bulkPlaceholder: 'One item per line; tabs and commas also work',
+    bulkConfirm: 'Replace',
+    bulkCancel: 'Cancel',
+    bulkInvalid: (position: number, text: string) => `Item ${position} “${text}” is invalid; nothing changed`,
     remove: (label: string) => `Delete ${label}`,
     moveUp: (label: string) => `Move ${label} up`,
     moveDown: (label: string) => `Move ${label} down`,
@@ -107,6 +117,7 @@ type DynamicKey =
   | 'presence'
   | 'reset'
   | 'add'
+  | 'bulkEdit'
   | 'remove'
   | 'moveUp'
   | 'moveDown'
@@ -156,6 +167,15 @@ export function usePropertyPanelMessages() {
     presence: (label: string) => dynamic('presence', label),
     reset: (label: string) => dynamic('reset', label),
     add: (label: string) => dynamic('add', label),
+    bulkEdit: (label: string) => dynamic('bulkEdit', label),
+    bulkPlaceholder: format('bulkPlaceholder', current.bulkPlaceholder),
+    bulkConfirm: format('bulkConfirm', current.bulkConfirm),
+    bulkCancel: format('bulkCancel', current.bulkCancel),
+    bulkInvalid: (position: number, text: string) => format(
+      'bulkInvalid',
+      current.bulkInvalid(position, text),
+      { position, text },
+    ),
     remove: (label: string) => dynamic('remove', label),
     moveUp: (label: string) => dynamic('moveUp', label),
     moveDown: (label: string) => dynamic('moveDown', label),

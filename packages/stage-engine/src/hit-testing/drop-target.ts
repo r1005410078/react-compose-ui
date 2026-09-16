@@ -19,8 +19,9 @@ import type { StageSceneIndex } from './scene-index'
  * 画布拖拽在 Pointer Up 前的落点判定。
  *
  * @remarks
- * `reparent` 表示松手会把选区移入 `containerId`；`reorder` 表示选区停留在原容器内，
- * 只调整 `Hierarchy.childIds` 顺序。为 null 时松手按既有规则只更新坐标。
+ * `reparent` 表示松手会把选区移入 `containerId` 的末尾；`reorder` 表示落进 `containerId` 的
+ * 第 `index` 位——**不区分是不是原容器**，父级变没变由提交方比较得出。为 null 时松手按既有
+ * 规则只更新坐标。
  * @public
  */
 export type StageDropTarget =
@@ -48,6 +49,14 @@ export type StageDropTarget =
       readonly h?: number
     }
   | {
+      /**
+       * 落进一个 Flex 容器的第 `index` 位。
+       *
+       * @remarks
+       * 与 `grid-cell` 同一句话：它同时表达重排与 reparent——排队容器里「放到哪儿」只有一个
+       * 答案，就是插入位；父级变没变由提交方比较 `containerId` 与当前父级得出，不需要第二个
+       * kind。
+       */
       readonly kind: 'reorder'
       readonly containerId: string
       /** 目标位置在容器**原始** `childIds` 中的索引，与 `entity.move` 命令的语义一致。 */
@@ -364,6 +373,78 @@ function resolveSameContainerReorder(input: {
 }
 
 /**
+ * Flex 容器的 Flow 子级不接管落点。
+ *
+ * @remarks
+ * 判据是**这个盒是谁写下的**：Flow 子级的盒是父级排出来的，不是作者写的；在排队容器里，
+ * 把东西放到某个子项「里面」与放到它「旁边」在屏幕上是同一块面积，而用户在排队容器里做的
+ * 绝大多数是排队。不这么判的症状很具体——排队容器里第一个子项本来就盖住了父容器中心，
+ * 此后每一次拖放都落进上一个子项，「拖第二个同级子项」在画布上根本做不到。
+ *
+ * 要钻进去按住 `Alt`，那是它的既有语义（调用方在 alt 下不走这条）。
+ */
+export function isFlowChildOfFlex(index: StageSceneIndex, entityId: string): boolean {
+  const entity = index.document.entities[entityId]
+  if (!entity || getComposeLayoutItem(entity).positioning !== 'flow') return false
+  const parentId = index.getParentId(entityId)
+  const parent = parentId ? index.document.entities[parentId] : undefined
+  const layout = parent ? getComposeLayout(parent) : undefined
+  return layout !== undefined && !isComposeGridLayout(layout)
+}
+
+/**
+ * 把命中的最内层容器归约成这次**落子**真正的父级。
+ *
+ * @remarks
+ * 只应用「Flex 容器的 Flow 子级不接管落点」这一条，不要求深入内部——物料面板拖放与点击
+ * 添加都没有「贴边掠过」那个问题（它们是一次明确的落子，不是路过）。拖动手势那条路还要
+ * 叠上深入判定与插入位，见 {@link resolveStageDropTarget}。
+ *
+ * @public
+ */
+export function resolveStageDropParent(
+  index: StageSceneIndex,
+  containerId: string | null,
+): string | null {
+  let current = containerId
+  while (current && isFlowChildOfFlex(index, current)) current = index.getParentId(current)
+  return current
+}
+
+/**
+ * 从命中的最内层容器向上找出这次拖拽真正的落点容器。
+ *
+ * @remarks
+ * 两条规则叠在一起：Flex 容器的 Flow 子级不接管落点（见 {@link isFlowChildOfFlex}）；
+ * 候选不满足「深入内部」判定时**上浮到最近一个满足的祖先**，而不是交回「没有落点」——
+ * 后者的症状是指针贴着子项边缘时一个落点都没有，用户看到的是「拖过去松手什么都没发生」，
+ * 而边缘留白想表达的恰恰是「你不是要放进这个，是要放进它外面那个」。
+ *
+ * 留在原容器内的那一档不要求深入判定：那是重排，不是换父级。
+ */
+function resolveDropContainer(input: {
+  readonly index: StageSceneIndex
+  readonly deepestId: string
+  readonly draggedIds: readonly string[]
+  readonly worldPoint: StagePoint
+  readonly zoom: number
+}): string | null {
+  const { index, deepestId, draggedIds, worldPoint, zoom } = input
+  let current: string | null = deepestId
+  while (current) {
+    const container = index.document.entities[current]
+    const hierarchy = container ? getComposeHierarchy(container) : null
+    const usable = Boolean(container && hierarchy && !getComposeLock(container).locked)
+    if (usable && !isFlowChildOfFlex(index, current)) {
+      const staysInPlace = draggedIds.every((id) => index.getParentId(id) === current)
+      if (staysInPlace || isDeepInside(index, current, worldPoint, zoom)) return current
+    }
+    current = index.getParentId(current)
+  }
+  return null
+}
+
+/**
  * 判定一次画布拖拽当前的落点。
  *
  * @remarks
@@ -410,7 +491,13 @@ export function resolveStageDropTarget(input: {
     })
   }
 
-  const containerId = index.containerAtPoint(worldPoint, draggedIds)
+  const deepestId = index.containerAtPoint(worldPoint, draggedIds)
+  if (!deepestId) return null
+  // `alt` 的既有语义就是「以指针命中的最内层合法容器为落点」：跳过深入判定，也跳过
+  // 「Flow 子级不接管」——它是用户显式要求下钻的那一下。
+  const containerId = modifiers?.alt
+    ? deepestId
+    : resolveDropContainer({ index, deepestId, draggedIds, worldPoint, zoom })
   if (!containerId) return null
   const container = index.document.entities[containerId]
   const hierarchy = container ? getComposeHierarchy(container) : null
@@ -427,11 +514,24 @@ export function resolveStageDropTarget(input: {
     })
   }
 
-  if (!modifiers?.alt && !isDeepInside(index, containerId, worldPoint, zoom)) return null
   // 拖进网格容器同样落到格上：目标格就是它松手之后的位置，与同容器内拖动没有区别。
   if (isComposeGridLayout(getComposeLayout(container))) {
     return resolveGridDropTarget({ index, containerId, draggedIds, worldPoint, draggedBounds })
   }
+  /*
+   * Flex 容器与网格对称：跨容器落进来时也要说出**插进第几位**，插入指示线因此直接生效。
+   * 插入位解算与同容器重排共用 `resolveInsertIndex`——它只认 `childIds` 与 `draggedIds`，
+   * 跨容器时后者不在前者里，函数照样给出一个合法插入位。没有 Layout 的普通容器拿不到
+   * 插入位（没有队列可言），退回 `reparent` 追加到末尾。
+   */
+  const insertIndex = resolveInsertIndex({
+    index,
+    containerId,
+    childIds: hierarchy.childIds,
+    draggedIds,
+    worldPoint,
+  })
+  if (insertIndex !== null) return { kind: 'reorder', containerId, index: insertIndex }
   return { kind: 'reparent', containerId }
 }
 

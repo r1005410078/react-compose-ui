@@ -10,7 +10,6 @@ import {
   DEFAULT_COMPOSE_APPEARANCE,
   createDefaultComposeLayoutItem,
   getComposeAppearance,
-  adoptComposeCrossAxisSizing,
   getComposeHierarchy,
   getComposeLayout,
   getComposeLayoutItem,
@@ -87,13 +86,17 @@ interface BasicGeometryInspectorView {
   readonly fillAllowed: boolean
   readonly hugAllowed: boolean
   /**
-   * 尺寸只读。
+   * 尺寸为什么只读；可编辑时为 `null`。
    *
    * @remarks
    * 格中子级的盒**就是**格矩形，三种尺寸模式一个都用不上。仍然渲染而不是隐藏——
    * 「它现在到底多少像素」是个正当问题，只是答案不由这里给出。
+   *
+   * 记的是**原因**而不是一个布尔：两种只读对代码是同一句话（都不让改），对用户不是——
+   * 「去改网格尺寸」与「这个物料就是不能调尺寸」一个有下一步、一个没有，而一个按不动
+   * 又不说为什么的输入框，用户只会当成坏了。
    */
-  readonly sizeReadOnly: boolean
+  readonly sizeReadOnlyReason: 'grid' | 'material' | null
   readonly zh: boolean
 }
 
@@ -102,7 +105,7 @@ const BasicGeometryInspectorContext = createContext<BasicGeometryInspectorView>(
   computedWidth: 0,
   fillAllowed: false,
   hugAllowed: false,
-  sizeReadOnly: false,
+  sizeReadOnlyReason: null,
   zh: true,
 })
 
@@ -419,7 +422,7 @@ const ALIGN_SELF_VALUES = ALIGN_SELF_OPTIONS.map((option) => option.value) as [
 function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRendererProps) {
   const view = useContext(BasicGeometryInspectorContext)
   const size = value as unknown as BasicSizeValue
-  const locked = readOnly || view.sizeReadOnly
+  const locked = readOnly || view.sizeReadOnlyReason !== null
   const suggestions = [
     ...(view.fillAllowed
       ? [{ value: 'fill' as const, label: 'Fill' as const }]
@@ -428,27 +431,44 @@ function BasicSizeEditor({ commit, readOnly, value }: ComposePropertyPanelRender
       ? [{ value: 'hug' as const, label: 'Hug' as const }]
       : []),
   ]
+  /*
+   * 只读的理由写在两个框下面。**只在这里写一次而不是每个轴写一遍**——两个轴的理由恒相同，
+   * 写两遍会让用户去找它们有什么不同；而放在框外面才既是可见文本、又能被读屏顺着读到
+   * （框已经 `disabled`，聚焦不到它，挂 `aria-describedby` 到框上等于没写）。
+   *
+   * **只有网格那一档写**：`resize: 'none'` 在同一个面板里已经有一处可见的说明（几何约束
+   * 分组的「Resize 模式：禁止」），再写一句是把同一件事说两遍；而网格那一档在面板上
+   * 一个字都没有，还恰恰是唯一有下一步可做的——去改「网格尺寸」。
+   */
+  const note = view.sizeReadOnlyReason === 'grid'
+    ? (view.zh ? '尺寸由网格决定，改下面的「网格尺寸」' : 'Size comes from the grid — use “Grid size” below')
+    : null
   return (
-    <div className="layout-item-inspector__size">
-      <AxisSizingControl
-        axis="width"
-        computed={view.computedWidth}
-        readOnly={locked}
-        sizing={size.width}
-        suggestions={suggestions}
-        zh={view.zh}
-        onCommit={(width) => commit({ ...size, width }, 'commit')}
-      />
-      <AxisSizingControl
-        axis="height"
-        computed={view.computedHeight}
-        readOnly={locked}
-        sizing={size.height}
-        suggestions={suggestions}
-        zh={view.zh}
-        onCommit={(height) => commit({ ...size, height }, 'commit')}
-      />
-    </div>
+    <>
+      <div className="layout-item-inspector__size">
+        <AxisSizingControl
+          axis="width"
+          computed={view.computedWidth}
+          readOnly={locked}
+          sizing={size.width}
+          suggestions={suggestions}
+          zh={view.zh}
+          onCommit={(width) => commit({ ...size, width }, 'commit')}
+        />
+        <AxisSizingControl
+          axis="height"
+          computed={view.computedHeight}
+          readOnly={locked}
+          sizing={size.height}
+          suggestions={suggestions}
+          zh={view.zh}
+          onCommit={(height) => commit({ ...size, height }, 'commit')}
+        />
+      </div>
+      {note === null ? null : (
+        <p className="layout-item-inspector__size-note">{note}</p>
+      )}
+    </>
   )
 }
 
@@ -863,8 +883,8 @@ export function createLayoutItemInspector(
         computedWidth: box?.width ?? item.width.value,
         fillAllowed,
         // 格中子级的盒就是格矩形；`resize: 'none'` 则是尺寸根本不是作者写下的量。
-        // 两者对这一格是同一句话，因此共用同一个标记。
-        sizeReadOnly: isGridChild || sizeLocked,
+        // 网格排在前面：两者同时成立时「去改网格尺寸」才是用户接下来做得到的那一步。
+        sizeReadOnlyReason: isGridChild ? 'grid' : sizeLocked ? 'material' : null,
         hugAllowed,
         zh,
       }}>
@@ -900,17 +920,13 @@ export function createLayoutItemInspector(
                   })
                 }
                 else if (!next.ignoreLayout && item.positioning === 'absolute') {
-                  // 回流：保持 childIds 位置不变。网格父级不走交叉轴采纳（格中子级的轴尺寸
-                  // 模式在求解里被忽略），改为按当前视觉位置就近落格——落格由下一次求解
-                  // 统一解开碰撞，这里只给出一个起点。
+                  // 回流：保持 childIds 位置不变。网格父级按当前视觉位置就近落格——落格由
+                  // 下一次求解统一解开碰撞，这里只给出一个起点。
                   if (isComposeGridLayout(parentLayout)) {
                     updateLayoutItem({ ...item, positioning: 'flow' }, gridPlacementForReflow())
                   }
                   else {
-                    updateLayoutItem(adoptComposeCrossAxisSizing(
-                      { ...item, positioning: 'flow' },
-                      parentLayout,
-                    ))
+                    updateLayoutItem({ ...item, positioning: 'flow' })
                   }
                 }
                 return

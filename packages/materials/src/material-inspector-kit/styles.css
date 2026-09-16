@@ -264,3 +264,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr)) 28px;
   }
 }
+
+/*
+ * 尺寸只读时的理由。压在两个框下面、与它们同宽：它说明的是上面那一整行，挤在某一个框
+ * 旁边会被读成只说明那一个轴。
+ */
+.layout-item-inspector__size-note {
+  margin: 4px 0 0;
+  color: #8f9a9a;
+  font-size: 11px;
+  line-height: 1.4;
+}

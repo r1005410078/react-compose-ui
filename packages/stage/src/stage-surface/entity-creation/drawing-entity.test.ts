@@ -43,13 +43,13 @@ describe('OpenSpec: stage-engine / ECS 外部拖入', () => {
     })
   })
 
-  it('落入 Auto Layout 容器转为 Flow 并采纳交叉轴', () => {
+  it('落入 Auto Layout 容器转为 Flow，但不改写轴尺寸', () => {
     const entity = entityFromSeed(seed, 'r1', { x: 200, y: 100 }, stretchRowLayout)
-    // 与画布 reparent 的 targetManagesFlow 判定一致：进入排队，stretch 交叉轴 fixed→fill。
+    // 与画布 reparent 的 targetManagesFlow 判定一致：只进入排队，两轴都保持 Preset 的固定值。
     expect(getComposeLayoutItem(entity)).toMatchObject({
       positioning: 'flow',
       width: { mode: 'fixed', value: 240 },
-      height: { mode: 'fill' },
+      height: { mode: 'fixed', value: 140 },
     })
   })
 })

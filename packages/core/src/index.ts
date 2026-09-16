@@ -10,7 +10,6 @@
 
 export {
   createComposeEdges,
-  adoptComposeCrossAxisSizing,
   createDefaultComposeLayoutItem,
   createDefaultComposeFlexLayout,
   createDefaultComposeGridLayout,
@@ -227,6 +226,19 @@ export type {
   ComposePorts,
   ComposePortsValidationIssue,
 } from './ports'
+export {
+  getComposeStyleRef,
+  planComposeApplyTextStyle,
+  planComposeDetachTextStyle,
+  getComposeTextStyleState,
+  getComposeTextStyles,
+  resolveComposeStyles,
+} from './text-style'
+export type {
+  ComposeStyleRef,
+  ComposeStyleRefState,
+  ComposeTextStyle,
+} from './text-style'
 export {
   collectComposeWireValidationIssues,
   getComposeWire,

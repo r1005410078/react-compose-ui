@@ -1,7 +1,6 @@
 import type { ComposeEntitySeed } from '@compose-ui/component-registry'
 import {
   isComposeGridLayout,
-  adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
   getComposeSpatialTransform,
   type ComposeCurve,
@@ -47,11 +46,7 @@ export function entityFromSeed(
     components: {
       ...structuredClone(seed.components),
       Transform: { rotation: transform.rotation },
-      LayoutItem: isComposeGridLayout(parentLayout)
-        ? { ...placed, positioning: 'flow' }
-        : parentLayout
-          ? adoptComposeCrossAxisSizing({ ...placed, positioning: 'flow' }, parentLayout)
-          : placed,
+      LayoutItem: parentLayout ? { ...placed, positioning: 'flow' } : placed,
       ...(isComposeGridLayout(parentLayout) && gridPlacement
         ? { GridItem: gridPlacement }
         : {}),

@@ -1450,6 +1450,19 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   **非 1 缩放的 INSERT 按 1 导入并报告**：实例尺寸的唯一事实来源是组件根，`Transform` 里
   也没有 scale，缩放在页面世界无处可放。静默导入与整份拒绝分别是这个功能已经拒绝过的两种
   做法。
+- `@compose-ui/chart-materials` 是折线、柱状与饼图的第一方物料包，可以依赖 `core`、
+  `component-registry`、`property-panel`、`ui-context` 与 echarts，React 为 peer。
+  **它不在 `@compose-ui/materials` 里**：图表自带一个第三方图表运行时，放进基础物料包会让
+  只画方块与文字的宿主也装上它——这与 `dxf`、`svg-import` 各自独立成包是同一条判断，
+  而配套那条边界照此办理：**echarts 不出现在公共 API 的类型里**，换掉图表运行时不该是一次
+  破坏性变更，`import` 它的地方 MUST 只有一个模块，因此这条边界看一个文件就能核对。
+  **一个 Renderer，`kind` 是三元联合**（line/bar/pie），不是三个 Renderer：三者只差底层的
+  系列类型，另立会让绑定契约、Inspector、校验与渲染各多两支逐字相同的实现——这是 `Curve`
+  的 `kind` 四元联合那条判断的第二次应用。**物料面板出三格 Preset**，因为用户找的是「饼图」，
+  不是「图表，然后去属性面板改类型」。数据模型三种 kind 共用（类目 + 系列），**饼图取第一条
+  系列**：让它另立一套数据形状会让「把柱图改成饼图」丢掉数据，而那正是用户最常做的一次尝试；
+  代价写在明处——饼图的多系列无处安放。尺寸跟随**自身盒子**（`ResizeObserver`）而不是窗口：
+  画布缩放、Auto Layout 与属性面板改尺寸都会改变这个盒子而窗口一动不动。
 - `@compose-ui/svg-import` 是无 React、无 DOM 的 SVG 导入包，只依赖 `core` 与两个解析库
   （`fast-xml-parser`、`svgpath`，都是 MIT、零运行时依赖，且**不出现在公共 API 的类型里**——
   换掉解析库不该是一次破坏性变更，与 `layout-engine` 不让 Yoga 类型进公共 API 是同一条边界）。

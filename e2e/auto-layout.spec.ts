@@ -182,9 +182,12 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
 
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
   const crossStartNode = await previewNodes.first().boundingBox()
-  await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
-  await expect(crossAxis.getByRole('radio', { name: '拉伸', checked: true })).toBeVisible()
-  await expect(preview).toHaveAttribute('data-align-items', 'stretch')
+  // 「再次点击已选项恢复默认值」：交叉轴的默认是 flex-start，因此要从一个**非默认**选项
+  // 点两下才看得出恢复——从默认项点两下，前后都是它，这条规则会被一条永远绿的用例盖住。
+  await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
+  await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
+  await expect(crossAxis.getByRole('radio', { name: '起始', checked: true })).toBeVisible()
+  await expect(preview).toHaveAttribute('data-align-items', 'flex-start')
   await crossAxis.getByRole('radio', { name: '末端', exact: true }).click()
   const crossEndNode = await previewNodes.first().boundingBox()
   await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
@@ -458,7 +461,7 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
 })
 
 
-test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺寸子项填满交叉轴', async ({ page }) => {
+test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用不改写子项尺寸，Fill 才填满交叉轴', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -481,24 +484,26 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
 
-  // 默认 Layout 是 row + alignItems stretch。子项 Preset 交叉轴是 fixed，若不在采纳时改成
-  // fill，stretch 对它们就是空操作——这正是启用自动布局后「拉伸没反应」的原因。
-  // 子项填满的是容器内容区。Yoga 会扣掉容器 Appearance.borderWidth，而该边框在 DOM 侧不是
-  // 真实 CSS border，因此实测高度比容器 boundingBox 少几个像素；这里断言「几乎填满且明显
-  // 高于启用前」，而不是钉死一个依赖边框宽度的数值。
+  // 启用 Auto Layout 只改定位方式：父级不静默改写子级尺寸，两个子项高度逐像素不变。
   for (const index of [0, 1]) {
     await expect.poll(async () => (await children.nth(index).boundingBox())!.height)
-      .toBeGreaterThan(frameBox!.height - 8)
+      .toBeCloseTo(beforeHeight, 0)
   }
-  const stretched = (await children.nth(0).boundingBox())!.height
-  expect(stretched).toBeGreaterThan(beforeHeight)
-  expect((await children.nth(1).boundingBox())!.height).toBe(stretched)
 
-  // 从**场景树**选中这个子项，理由同上一条用例：矩形默认空心，而它填满了容器的交叉轴。
+  // 从**场景树**选中这个子项，理由同上一条用例：矩形默认空心，盒中心点不中。
   await selectChildInSceneTree(editor, frame, children.nth(0))
   const rectInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
-  await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('Fill')
-  await expect(rectInspector.getByRole('combobox', { name: '尺寸宽度' })).not.toHaveValue('Fill')
+  await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).not.toHaveValue('Fill')
+
+  // 要填满交叉轴是用户的显式选择：把高度设成 Fill，它才长到容器内容区。
+  // Yoga 会扣掉容器 Appearance.borderWidth，而该边框在 DOM 侧不是真实 CSS border，
+  // 因此实测高度比容器 boundingBox 少几个像素；这里断言「几乎填满且明显高于启用前」。
+  await selectAxisSizing(rectInspector, '高度', 'Fill')
+  await expect.poll(async () => (await children.nth(0).boundingBox())!.height)
+    .toBeGreaterThan(frameBox!.height - 8)
+  expect((await children.nth(0).boundingBox())!.height).toBeGreaterThan(beforeHeight)
+  // 另一个子项没被碰过，仍是它自己的固定高度。
+  expect((await children.nth(1).boundingBox())!.height).toBeCloseTo(beforeHeight, 0)
 })
 
 
@@ -551,4 +556,54 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子
   // 松手提交后宽度保持一致，不发生二次跳变。
   const held = (await rect.boundingBox())!.width
   await expect.poll(async () => (await rect.boundingBox())!.width).toBe(held)
+})
+
+
+test('OpenSpec: stage-engine / 跨容器落进 Flex 容器时解算插入位 / 连拖两个得到两个同级子项', async ({ page }) => {
+  await page.goto('/')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  const stage = editor.getByRole('application', { name: 'Stage' })
+  const tree = editor.getByRole('treegrid', { name: '场景树' })
+
+  await drawContainer(page, editor)
+  const inspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
+  await expandInspectorSection(inspector, '布局')
+  await enableAutoLayout(inspector)
+
+  // 落进来的子级也是 stage-container，因此板子取最外层那一个（DOM 序即层级序）。
+  const board = stage.getByTestId('stage-container').first()
+  const boardBox = (await board.boundingBox())!
+  const palette = editor.getByRole('button', { name: '添加 容器' })
+
+  /*
+   * 判别性的那一半：第一个子级按 Flow 排进来就盖住了父容器中心。按「最深的容器赢」，
+   * 第二次拖放会落进第一个子级，得到的是嵌套而不是同级——「往排队容器里拖第二个同级子项」
+   * 在画布上根本做不到，而屏幕上没有任何东西说明为什么。
+   */
+  await pointerDrop(page, palette, {
+    x: boardBox.x + boardBox.width / 2,
+    y: boardBox.y + boardBox.height / 2,
+  })
+  const first = board.locator(':scope > .compose-stage__node').first()
+  const firstBox = (await first.boundingBox())!
+  // 第二下必须落在**第一个子级里面**——那正是复现的形状，落在它外面根本断不出东西。
+  await pointerDrop(page, palette, {
+    x: firstBox.x + firstBox.width / 2,
+    y: firstBox.y + firstBox.height / 2,
+  })
+
+  // 两个新容器必须是这块板子的**直接**子级，而不是一个套着另一个。
+  const shape = await board.evaluate((element) => {
+    const direct = [...element.children].filter((child) => (
+      child.classList.contains('compose-stage__node')
+    ))
+    return {
+      direct: direct.length,
+      nested: direct.map((child) => [...child.children].filter((grandChild) => (
+        grandChild.classList.contains('compose-stage__node')
+      )).length),
+    }
+  })
+  expect(shape).toEqual({ direct: 2, nested: [0, 0] })
+  void tree
 })

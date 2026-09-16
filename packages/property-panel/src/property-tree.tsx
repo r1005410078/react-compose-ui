@@ -30,6 +30,11 @@ import type {
   PropertyPanelResolvedBindingTarget,
 } from './property-panel/compose-property-panel'
 import {
+  formatComposeBulkArray,
+  isComposeBulkArrayItem,
+  parseComposeBulkArray,
+} from './bulk-array-model'
+import {
   canBindPropertyVariable,
   createBindingAddressKey,
   resolvePropertyBindings,
@@ -1446,6 +1451,29 @@ function ArrayGroup({
     if (!itemSchema) return
     commit(path, [...items, createInitialValue(itemSchema)], 'array-add')
   }
+  /*
+   * 批量录入只对**基本类型**元素成立：「一行一个对象」没有意义。判据走解包之后的 `type`，
+   * 因此 `v.pipe(v.number(), v.minValue(0))` 这类带校验的管道同样算 number。
+   */
+  const itemType = itemSchema ? inspectSchema(itemSchema).type : null
+  const bulkEditable = Boolean(itemSchema && itemType && isComposeBulkArrayItem(itemType))
+  const [bulkDraft, setBulkDraft] = useState<string | null>(null)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const openBulk = () => {
+    setBulkError(null)
+    setBulkDraft(formatComposeBulkArray(items))
+  }
+  const submitBulk = () => {
+    if (!itemSchema || !itemType || bulkDraft === null) return
+    const parsed = parseComposeBulkArray(bulkDraft, itemSchema, itemType)
+    if (!parsed.ok) {
+      setBulkError(messages.bulkInvalid(parsed.position, parsed.text))
+      return
+    }
+    // 整体替换，一次受控变更——逐项提交会让撤销要按 N 下。
+    commit(path, [...parsed.items], 'array-bulk')
+    setBulkDraft(null)
+  }
   return (
     <GroupShell
       bindingTargets={bindingTargets}
@@ -1458,8 +1486,42 @@ function ArrayGroup({
         disabled: readOnly || !canAdd,
         icon: <PlusIcon />,
         onSelect: add,
-      }, ...nodeActions]}
+      }, ...(bulkEditable ? [{
+        id: 'bulk',
+        label: messages.bulkEdit(label),
+        priority: 15,
+        disabled: readOnly,
+        onSelect: openBulk,
+      }] : []), ...nodeActions]}
     >
+      {bulkDraft === null ? null : (
+        <div className="property-panel__bulk" data-property-part="bulk">
+          <textarea
+            aria-label={messages.bulkEdit(label)}
+            autoFocus
+            placeholder={messages.bulkPlaceholder}
+            rows={Math.min(12, Math.max(4, items.length + 1))}
+            value={bulkDraft}
+            onChange={(event) => {
+              setBulkDraft(event.target.value)
+              setBulkError(null)
+            }}
+            onKeyDown={(event) => {
+              // Escape 放弃这次录入；Enter 留给换行——这块文本区的每一行都是一项。
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              setBulkDraft(null)
+            }}
+          />
+          {bulkError === null ? null : (
+            <p className="property-panel__bulk-error" role="alert">{bulkError}</p>
+          )}
+          <div className="property-panel__bulk-actions">
+            <button type="button" onClick={() => setBulkDraft(null)}>{messages.bulkCancel}</button>
+            <button type="button" onClick={submitBulk}>{messages.bulkConfirm}</button>
+          </div>
+        </div>
+      )}
       {itemSchema ? items.map((item, index) => {
         const itemLabel = `${label} ${index + 1}`
         return (
@@ -1986,23 +2048,27 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
 }
 
 type TreeIndentStyle = CSSProperties & {
-  '--pp-branch-depth'?: number
   '--pp-field-depth'?: number
   '--pp-group-depth'?: number
 }
 
-// 同一层的 group guide 与下一层 field branch 必须落在同一 X 坐标；14px 是 UE4 紧凑层级步长，
-// 文字比竖线再右移 14px。两者分别在 3/4 层封顶，深层仍保留可读的标签宽度。
+/*
+ * 两者都在第 3 格封顶，深层仍保留可读的标签宽度。步长本身住样式表——去掉层级线之后缩进是
+ * 唯一的层级信号，它多宽是观感问题，不该写死在这里。
+ */
 function createGroupIndentStyle(depth: number): TreeIndentStyle {
   return {
-    '--pp-group-depth': Math.min(depth, 3),
+    '--pp-group-depth': Math.min(Math.max(depth - 1, 0), 3),
   }
 }
 
+/*
+ * 字段的第一层不缩进：它是所在分组（或 Section）的直接内容，那一级已经由分组标题表达了。
+ * 因此这里的数是**缩进的格数**而不是树深度，两者差一。
+ */
 function createFieldIndentStyle(depth: number): TreeIndentStyle {
   return {
-    '--pp-field-depth': Math.min(depth, 4),
-    '--pp-branch-depth': Math.min(Math.max(depth - 1, 0), 3),
+    '--pp-field-depth': Math.min(Math.max(depth - 1, 0), 3),
   }
 }
 

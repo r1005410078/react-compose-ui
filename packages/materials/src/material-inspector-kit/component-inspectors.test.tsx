@@ -9,6 +9,7 @@ import {
   BUILTIN_COMMAND_TYPES,
   DEFAULT_COMPOSE_APPEARANCE,
   createDefaultCanvasSettings,
+  createDefaultComposeGridLayout,
   createDefaultComposeFlexLayout,
   createComposeFrame,
   createDefaultComposeLayoutItem,
@@ -230,6 +231,69 @@ describe('内建 Component inspectors', () => {
     expect(screen.getByRole('spinbutton', { name: '旋转' })).toHaveAttribute('readonly')
     // `movable` 仍是 true：挪接头是接线图上的常规操作。
     expect(screen.getByRole('spinbutton', { name: '位置 X' })).not.toBeDisabled()
+  })
+
+  it('OpenSpec: basic-materials / 属性面板按几何约束决定只读 / 格中子级说明尺寸在哪儿改', () => {
+    /*
+     * 判别性的那一半：一个按不动又不说为什么的输入框，用户只会当成坏了。而
+     * `resize: 'none'` 那一档**不写**——同一个面板里的「Resize 模式：禁止」已经说了，
+     * 写第二遍是把同一件事说两遍。
+     */
+    const Inspector = inspectorOf('LayoutItem')
+    const material = entity({
+      GeometryConstraints: { movable: true, resize: 'none', rotatable: false },
+    })
+    const view = render(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={material}
+        readOnly={false}
+        value={material.components.LayoutItem!}
+      />,
+    )
+    expect(screen.queryByText(/尺寸由网格决定/u)).not.toBeInTheDocument()
+
+    const child = entity({ GridItem: { x: 0, y: 0, w: 3, h: 2 } })
+    const board: ComposeEntity = {
+      id: 'board',
+      name: 'Board',
+      components: {
+        Composition: { presetId: null, baseComponentKeys: [], capabilityIds: [] },
+        Hierarchy: { childIds: [child.id] },
+        Layout: createDefaultComposeGridLayout(),
+      },
+    }
+    view.rerender(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        document={{
+          schemaVersion: 7,
+          canvas: createDefaultCanvasSettings(),
+          rootIds: ['board'],
+          entities: { board, [child.id]: child },
+        }}
+        entity={child}
+        readOnly={false}
+        value={child.components.LayoutItem!}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: '尺寸宽度' })).toBeDisabled()
+    expect(screen.getByText(/尺寸由网格决定/u)).toBeInTheDocument()
+
+    // 可改的那一档不出这句话：只断上面两条时，「永远显示一句说明」同样绿。
+    const plain = entity()
+    view.rerender(
+      <Inspector
+        componentKey="LayoutItem"
+        dispatch={vi.fn()}
+        entity={plain}
+        readOnly={false}
+        value={plain.components.LayoutItem!}
+      />,
+    )
+    expect(screen.queryByText(/尺寸由网格决定/u)).not.toBeInTheDocument()
   })
 
   it('OpenSpec: basic-materials / 属性面板按几何约束决定只读 / 不动的那一端锁位置', () => {
@@ -547,7 +611,7 @@ describe('内建 Component inspectors', () => {
     })
   })
 
-  it('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 关闭回流并采纳容器规则', () => {
+  it('OpenSpec: basic-materials / 忽略 Auto Layout 开关 / 关闭即回流，轴尺寸不被改写', () => {
     const dispatch = vi.fn()
     const Inspector = inspectorOf('LayoutItem')
     const child = entity({
@@ -557,7 +621,7 @@ describe('内建 Component inspectors', () => {
         positioning: 'absolute',
       },
     })
-    // 默认 Flex 布局是 row + stretch：回流采纳规则应把交叉轴（height）fixed 改写为 fill。
+    // 回流只改 positioning：父级不静默改写子级两轴的尺寸模式。
     const parent = { ...entity({
       Hierarchy: { childIds: [child.id] },
       Layout: createDefaultComposeFlexLayout(),
@@ -588,7 +652,7 @@ describe('内建 Component inspectors', () => {
       value: {
         positioning: 'flow',
         width: { mode: 'fixed', value: 80 },
-        height: { mode: 'fill', value: 40 },
+        height: { mode: 'fixed', value: 40 },
       },
     })
   })
@@ -882,7 +946,7 @@ describe('内建 Component inspectors', () => {
     expect(within(preview).getByTestId('flex-preview-cross-axis')).toHaveTextContent('交叉轴')
     expect(within(preview).queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(within(preview).queryByRole('button')).not.toBeInTheDocument()
-    expect(preview).toHaveAttribute('data-align-items', 'stretch')
+    expect(preview).toHaveAttribute('data-align-items', 'flex-start')
     expect(screen.getByText('实时预览')).toBeInTheDocument()
   })
 
@@ -1035,7 +1099,7 @@ describe('内建 Component inspectors', () => {
       { ...defaults, alignItems: 'center' },
       '交叉轴',
       '居中',
-      { alignItems: 'stretch' },
+      { alignItems: 'flex-start' },
     )
 
     const defaultContainer = entity({ Hierarchy: { childIds: [] }, Layout: defaults })

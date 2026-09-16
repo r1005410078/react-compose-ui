@@ -378,6 +378,7 @@ export const COMPOSE_BUILTIN_COMPONENT_KEYS = {
   curve: 'Curve',
   ports: 'Ports',
   wire: 'Wire',
+  style: 'Style',
   hatch: 'Hatch',
 } as const
 
@@ -562,6 +563,17 @@ export interface ComposeDocument {
    */
   readonly rootIds: readonly string[]
   readonly entities: Readonly<Record<string, ComposeEntity>>
+  /**
+   * 可选的共享文字样式表。
+   *
+   * @remarks
+   * **缺席即没有样式**，因此既有文档逐字节不变、不需要迁移、协议版本不变——与
+   * `Transform.pivot`、多段线的 `cornerRadius`、`path` 的 `fillRule` 是同一条。
+   *
+   * 值的形状见 `ComposeTextStyle`。这里用结构化字面量而不是引用那个类型，是为了让
+   * `ComposeDocument` 保持在 document-types 这个不向外依赖的模块里。
+   */
+  readonly styles?: Readonly<Record<string, { readonly name: string; readonly props: JsonObject }>>
 }
 
 /** 文档校验问题稳定机器码。 @public */

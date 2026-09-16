@@ -44,6 +44,7 @@ export interface ComposeGridLayoutPlanIssue {
     | 'grid.child-locked'
     | 'grid.snapshot-missing'
     | 'grid.box-missing'
+    | 'grid.no-children'
   readonly message: string
 }
 
@@ -157,6 +158,87 @@ function gridItemCommands(
       value as unknown as JsonObject,
     )
   })
+}
+
+/**
+ * 按容器**当前**的网格参数，把全部直接子项重新就近落格。
+ *
+ * @remarks
+ * 落位是在**启用网格那一刻**从像素推出来的，用的是那一刻的网格参数；而菜单只提供默认网格
+ * （12 列 / 行高 48 / 行间距 6 / 内边距 16），行高、间距、内边距都得启用之后再改。
+ * 参数一改，先前推出来的格坐标就不再对应作者画出来的版面——而它不会自己重推：
+ * 格坐标此后是作者的显式意图，凭参数变化去改写它会把手动摆好的格子冲掉。
+ *
+ * 这条命令就是那个缺掉的显式入口：**用户说了「按现在的几何重来一遍」才重推**。
+ * 与 {@link planEnableComposeGridLayout} 共用 `nearestCell` 与求解器——
+ * 两处各算一遍的话，下一个改落位数学的人只会改到其中一处。
+ *
+ * 读的是子项**自己写下的** `LayoutItem`（offset 与两轴的 value），**不是**求解后的快照盒：
+ * 网格一旦接管，快照里的盒子就是格坐标算出来的结果，拿它重推只会把同一个答案再算一遍，
+ * 这条命令在它唯一该起作用的场合（参数改过、版面对不上）就成了空操作。
+ * 作者写下的尺寸在进网格之后仍然留在文档里（只是属性面板把输入禁用了），那才是「我画的版面」。
+ *
+ * @internal
+ */
+export function planReflowComposeGridLayout(
+  document: ComposeDocument,
+  entityId: string,
+  snapshot: ComposeLayoutSnapshot | undefined,
+  idFactory: () => string,
+): ComposeGridLayoutPlanResult {
+  const entity = document.entities[entityId]
+  if (!entity) return failure('grid.entity-missing', `Entity ${entityId} 不存在`)
+  const hierarchy = getComposeHierarchy(entity)
+  if (!hierarchy) return failure('grid.hierarchy-missing', '只有容器可以启用网格')
+  const layout = getComposeLayout(entity)
+  if (!layout || !isComposeGridLayout(layout)) {
+    return failure('grid.not-enabled', '该容器还不是网格容器')
+  }
+  if (getComposeLock(entity).locked) return failure('grid.entity-locked', '锁定容器不能重新落位')
+  if (!snapshot) return failure('grid.snapshot-missing', '布局结果尚未就绪')
+  const parentBox = snapshot.boxes[entity.id]
+  if (!parentBox) return failure('grid.box-missing', `缺少 ${entity.name} 的布局结果`)
+  const collected = collectChildren(document, hierarchy)
+  if (!collected.ok) return { ok: false, issue: collected.issue }
+
+  const border = resolveComposeAppearance(entity).borderWidth
+  const origin = { x: border + layout.padding.left, y: border + layout.padding.top }
+  const contentWidth = Math.max(
+    0,
+    parentBox.width - border * 2 - layout.padding.left - layout.padding.right,
+  )
+  const cells: ComposeGridCell[] = collected.children.map((child) => {
+    const item = getComposeLayoutItem(child)
+    return nearestCell(
+      child.id,
+      {
+        x: item.offset.x,
+        y: item.offset.y,
+        width: item.width.value,
+        height: item.height.value,
+        positioning: item.positioning,
+      },
+      origin,
+      layout,
+      contentWidth,
+    )
+  })
+  const solved = solveComposeGrid(cells, { columns: layout.columns, float: layout.float })
+  const commands = gridItemCommands(document, idFactory, solved)
+  if (commands.length === 0) return failure('grid.no-children', '容器里没有可落位的子项')
+
+  return {
+    ok: true,
+    command: createComposeBatchCommand({
+      id: idFactory(),
+      commands,
+      meta: {
+        label: `按当前几何重新落位 ${entity.name}`,
+        source: 'inspector',
+        targetIds: [entity.id, ...collected.children.map((child) => child.id)],
+      },
+    }),
+  }
 }
 
 /**

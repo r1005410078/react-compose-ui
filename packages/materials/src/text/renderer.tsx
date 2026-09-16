@@ -3,6 +3,7 @@ import type {
   ComposeRendererTextEditing,
 } from '@compose-ui/component-registry'
 import { useEffect, useRef, type ClipboardEvent, type CSSProperties } from 'react'
+import { COMPOSE_TEXT_LAYOUT_LOCALE } from './defaults'
 
 function textAlign(value: unknown): CSSProperties['textAlign'] {
   return value === 'center' || value === 'right' || value === 'justify' ? value : 'left'
@@ -117,6 +118,10 @@ export function TextRenderer({ props, textEditing }: ComposeRendererProps) {
     <div
       className="compose-material compose-material--text"
       data-testid="compose-material-text"
+      // 排版 locale 由物料自己钉住，不继承 Stage 根或宿主页面的 `lang`：中日韩字形回退按
+      // locale 选字体，跟着环境走会让同一份文档在画布、预览与导出页里字宽各不相同，而 Hug
+      // 盒是按其中一处量出来写进布局的。测量宿主用的是同一个常量。
+      lang={COMPOSE_TEXT_LAYOUT_LOCALE}
       style={{
         alignItems: verticalAlign(props.verticalAlign),
         color: typeof props.color === 'string' ? props.color : '#ffffff',

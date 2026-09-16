@@ -1,7 +1,6 @@
 import {
   BUILTIN_COMMAND_TYPES,
   createComposeBatchCommand,
-  adoptComposeCrossAxisSizing,
   createDefaultComposeFlexLayout,
   getComposeComposition,
   getComposeHierarchy,
@@ -115,12 +114,10 @@ export function planEnableComposeAutoLayout(
   for (const child of children) {
     const item = getComposeLayoutItem(child)
     if (item.positioning === 'flow') continue
-    // 转 Flow 与交叉轴采纳是同一次「进入 Auto Layout」，必须在同一条命令里完成，
-    // 否则子项会先以 fixed 尺寸参与一次布局再跳变。
-    commands.push(updateLayoutItemCommand(idFactory, child, adoptComposeCrossAxisSizing(
-      { ...item, positioning: 'flow' },
-      layout,
-    )))
+    // 进入 Auto Layout 只改定位方式，不动子项自己写下的轴尺寸——父级静默改写子级尺寸
+    // 会让「我明明设了 40 高」在面板上读不出原因。交叉轴要不要拉伸由 alignItems 在渲染
+    // 时决定。
+    commands.push(updateLayoutItemCommand(idFactory, child, { ...item, positioning: 'flow' }))
   }
   return {
     ok: true,

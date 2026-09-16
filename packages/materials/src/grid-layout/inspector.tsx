@@ -19,6 +19,7 @@ import { ResetLayoutIcon } from '../flex-layout/icons'
 import { LayoutActionMenu } from '../flex-layout/layout-action-menu'
 import { GridColumnBar } from './grid-column-bar'
 import {
+  planReflowComposeGridLayout,
   planRemoveComposeGridLayout,
   planSwitchComposeLayoutType,
 } from './grid-mode-commands'
@@ -121,6 +122,32 @@ export function createGridInspectorHeaderActions(
                   document,
                   entity.id,
                   'flex',
+                  layoutSnapshot,
+                  idFactory,
+                )
+                if (plan.ok) dispatch(plan.command)
+              },
+            },
+            {
+              label: zh ? '按当前几何重新落位' : 'Reflow to current geometry',
+              // 落位是在启用那一刻按**当时**的网格参数从像素推出来的，而菜单只给默认网格；
+              // 行高/间距/内边距改过之后，先前的格坐标不再对应作者画出来的版面。
+              // 它不自动重推——格坐标此后是作者的显式意图；这里给的是那条显式入口。
+              content: (
+                <>
+                  <span>{zh ? '按当前几何重新落位' : 'Reflow to current geometry'}</span>
+                  <code>{zh ? '按像素重推格坐标' : 'from pixel boxes'}</code>
+                </>
+              ),
+              disabled: readOnly || !document || !layoutSnapshot,
+              title: !layoutSnapshot
+                ? (zh ? '布局结果尚未就绪' : 'Layout result is not ready')
+                : undefined,
+              onSelect: () => {
+                if (!document) return
+                const plan = planReflowComposeGridLayout(
+                  document,
+                  entity.id,
                   layoutSnapshot,
                   idFactory,
                 )

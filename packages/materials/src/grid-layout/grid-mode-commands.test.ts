@@ -14,6 +14,7 @@ import {
 } from '@compose-ui/core'
 import {
   planEnableComposeGridLayout,
+  planReflowComposeGridLayout,
   planRemoveComposeGridLayout,
   planSwitchComposeLayoutType,
 } from './grid-mode-commands'
@@ -263,5 +264,68 @@ describe('OpenSpec: basic-materials / 网格按需启用 / 切换布局类型', 
     expect(plan.ok).toBe(false)
     if (plan.ok) return
     expect(plan.issue.code).toBe('grid.already-enabled')
+  })
+})
+
+describe('OpenSpec: basic-materials / 网格按需启用 / 按当前几何重新落位', () => {
+  /** 作者要的网格：行高 36、间距 12、内边距 12——与默认的 48/6/16 都不同。 */
+  const AUTHORED = {
+    ...createDefaultComposeGridLayout(),
+    rowHeight: 36,
+    rowGap: 12,
+    columnGap: 12,
+    padding: { top: 12, right: 12, bottom: 12, left: 12 },
+  }
+
+  it('按作者写下的盒子重推，而不是按求解后的快照盒', () => {
+    // 容器内容宽 752 - 24 = 728，12 列间距 12 → 列宽 (728 - 132) / 12 ≈ 49.67，列步长 ≈ 61.67。
+    // 作者写的 180px 高在「行高 36 + 间距 12」下正好是 4 行：(180 + 12) / 48 = 4。
+    //
+    // 判别点：快照里的盒子给成 3 行（默认网格算出来的那个结果，108px 高）——网格一旦接管，
+    // 快照就是格坐标的产物，读它只会把同一个答案再算一遍，这条命令在它唯一该起作用的场合
+    // 就成了空操作。夹具必须让两者不同，否则用例读哪一份都绿。
+    const target = child('a', {
+      GridItem: createComposeGridItem(0, 0, 3, 3),
+      LayoutItem: {
+        ...createDefaultComposeLayoutItem(),
+        positioning: 'flow',
+        offset: { x: 12, y: 12 },
+        width: { mode: 'fixed', value: 185, min: null, max: null },
+        height: { mode: 'fixed', value: 180, min: null, max: null },
+      },
+    })
+    const value = documentOf([frame(['grid']), container(['a'], AUTHORED), target])
+    const result = planReflowComposeGridLayout(
+      value,
+      'grid',
+      snapshotOf({
+        grid: { x: 0, y: 0, width: 752, height: 400 },
+        a: { x: 12, y: 12, width: 185, height: 108 },
+      }),
+      idFactory,
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(gridWrites(result.command)).toEqual([
+      expect.objectContaining({
+        entityId: 'a',
+        value: expect.objectContaining({ x: 0, y: 0, w: 3, h: 4 }),
+      }),
+    ])
+  })
+
+  it('容器还不是网格容器时以 not-enabled 说明，而不是什么都不做', () => {
+    const value = documentOf([frame(['grid']), container(['a'], createDefaultComposeFlexLayout()), child('a')])
+    expect(planReflowComposeGridLayout(value, 'grid', snapshotOf({
+      grid: { x: 0, y: 0, width: 752, height: 400 },
+      a: { x: 0, y: 0, width: 100, height: 50 },
+    }), idFactory)).toMatchObject({ ok: false, issue: { code: 'grid.not-enabled' } })
+  })
+
+  it('布局结果尚未就绪时以 snapshot-missing 说明', () => {
+    const value = documentOf([frame(['grid']), container(['a'], AUTHORED), child('a')])
+    expect(planReflowComposeGridLayout(value, 'grid', undefined, idFactory))
+      .toMatchObject({ ok: false, issue: { code: 'grid.snapshot-missing' } })
   })
 })

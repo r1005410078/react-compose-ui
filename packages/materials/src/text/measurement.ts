@@ -1,5 +1,6 @@
 import type { ComposeMeasuredSize } from '@compose-ui/core'
 import type { ComposeRendererMeasurementDefinition } from '@compose-ui/component-registry'
+import { COMPOSE_TEXT_LAYOUT_LOCALE } from './defaults'
 
 function numeric(value: unknown, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
@@ -86,6 +87,9 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
     const host = document.createElement('span')
     host.dataset.composeMeasurementHost = 'text'
     host.setAttribute('aria-hidden', 'true')
+    // 与渲染节点钉同一个 locale：中日韩字形回退按 locale 选字体，宿主页面的 `<html lang>`
+    // 与 Stage 根上的 `lang` 不相等时，量出来的就是另一套字体的字宽。见常量注释。
+    host.lang = COMPOSE_TEXT_LAYOUT_LOCALE
     Object.assign(host.style, {
       position: 'fixed',
       left: '-100000px',
@@ -116,6 +120,17 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
     document.body.append(host)
     try {
       const rect = host.getBoundingClientRect()
+      /*
+       * Hug 轴直接用量出来的**分数**尺寸，不取整。
+       *
+       * 测量宿主与渲染节点的排版上下文已经由 `lang` 钉成同一个（见
+       * `COMPOSE_TEXT_LAYOUT_LOCALE`），因此同一段文字两边解析出同一个字体、同一串字宽；
+       * 渲染那一侧的可用宽度实测还比这里量到的多出不到一个布局单位（1/64px），够用。
+       *
+       * 曾经在这两条上加过 `Math.ceil`，当时把中文被裁成一个字归因为 flex 与 `width: 100%`
+       * 的亚像素取整——那条归因被逐段二分推翻了，真正的原因是 locale。取整还与「量化不作用于
+       * 布局求解结果，Hug 的文字测量宽度本就是真实小数」这条相抵触。
+       */
       const measuredWidth = width.mode === 'exactly'
         ? width.value
         : width.mode === 'at-most'
@@ -126,7 +141,6 @@ export const TEXT_RENDERER_MEASUREMENT: ComposeRendererMeasurementDefinition = {
         : height.mode === 'at-most'
           ? Math.min(rect.height, height.value)
           : rect.height
-      // 空内容保留一个光标宽度：编辑边框才可见，空文字也仍能被指针命中。
       const contentWidth = empty ? Math.max(measuredWidth, EMPTY_TEXT_CARET_WIDTH) : measuredWidth
       const measurement = contentWidth <= 0 || measuredHeight <= 0
         ? null

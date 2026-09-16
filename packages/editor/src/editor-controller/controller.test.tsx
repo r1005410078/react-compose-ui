@@ -1306,7 +1306,8 @@ describe('useComposeEditorController', () => {
     const titles = [...root.querySelectorAll(
       ':scope > .property-panel__group > .property-panel__group-header > button',
     )].map((button) => button.textContent?.trim())
-    expect(titles).toEqual(['基础', '可见性', '锁定', '外观', '高级'])
+    // 「文字样式」排在 Renderer 分组之后、「高级」之前：它管的是排版值，因此紧跟着那些值。
+    expect(titles).toEqual(['基础', '可见性', '锁定', '外观', '文字样式', '高级'])
 
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索属性' }), {
       target: { value: '背景填充' },

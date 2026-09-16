@@ -1216,6 +1216,37 @@ function validateAnimations(value: JsonObject, basePath: Path, issues: DocumentV
 }
 
 /** 校验未知输入是否满足 ComposeDocument v7 ECS 协议。 @public */
+/**
+ * 校验可选的文字样式表。
+ *
+ * @remarks
+ * **缺席即没有样式**，因此不在这里报缺失。校验的是表本身的结构：每条样式要有非空名称与一个
+ * props 对象。
+ *
+ * **不校验引用**：指向不存在的样式只是解析失败，跟随者保留作者写下的值——把它做成非法会让
+ * 删掉一条样式就阻断保存，而「还没配」「配错了」「配的东西没了」必须可区分。这与导线绑定的
+ * 悬空引用是同一条判断。
+ */
+function validateTextStyles(input: unknown, issues: DocumentValidationIssue[]): void {
+  if (input === undefined) return
+  if (!isRecord(input)) {
+    addIssue(issues, 'document.invalid', ['styles'], 'styles 必须是对象')
+    return
+  }
+  Object.entries(input).forEach(([id, style]) => {
+    if (!isRecord(style)) {
+      addIssue(issues, 'document.invalid', ['styles', id], '样式必须是对象')
+      return
+    }
+    if (typeof style.name !== 'string' || style.name.length === 0) {
+      addIssue(issues, 'document.invalid', ['styles', id, 'name'], '样式需要非空 name')
+    }
+    if (!isRecord(style.props)) {
+      addIssue(issues, 'document.invalid', ['styles', id, 'props'], '样式的 props 必须是对象')
+    }
+  })
+}
+
 export function validateComposeDocument(input: unknown): DocumentValidationResult {
   if (!isRecord(input)) {
     return {
@@ -1241,6 +1272,7 @@ export function validateComposeDocument(input: unknown): DocumentValidationResul
     addIssue(issues, 'animation.invalid', ['animations'], 'v7 的动画清单归属 Frame 的 Animations Component')
   }
   validateCanvas(input.canvas, issues)
+  validateTextStyles(input.styles, issues)
   if (!isRecord(input.entities)) {
     addIssue(issues, 'document.invalid', ['entities'], 'entities 必须是对象')
   }

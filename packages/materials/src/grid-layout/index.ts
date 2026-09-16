@@ -2,6 +2,7 @@ export { createGridInspector, createGridInspectorHeaderActions } from './inspect
 export { createLayoutInspectorDispatch } from './layout-inspector-dispatch'
 export {
   planEnableComposeGridLayout,
+  planReflowComposeGridLayout,
   planRemoveComposeGridLayout,
   planSwitchComposeLayoutType,
   type ComposeGridLayoutPlanIssue,

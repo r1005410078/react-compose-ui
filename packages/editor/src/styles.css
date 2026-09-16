@@ -2744,3 +2744,101 @@
   box-shadow: 0 0 0 1px var(--compose-accent, #3b8ef0);
   border-radius: 2px;
 }
+
+/*
+ * 文字样式分组。它管的是排版值，因此紧跟着那些值；提取与应用两档互斥地占同一块位置——
+ * 没跟随时问「要不要提取一条」，跟随之后问「写回还是脱离」。
+ */
+.text-style-inspector {
+  display: grid;
+  gap: 6px;
+  /*
+   * 右侧让出操作列：那一列归属性面板自己的操作轨道，而列宽分隔线是**绝对定位**压在上面的
+   * ——内容伸到它底下时，那里的按钮点不着（指针事件被分隔线截走），而屏幕上看不出为什么。
+   * 普通属性行由面板自己排布，只有 Section 里这种自定义内容需要自己让。
+   */
+  padding: 4px var(--pp-action-width, 38px) 4px 0;
+}
+
+.text-style-inspector label {
+  display: grid;
+  gap: 3px;
+  color: var(--compose-text-muted, #8e98a8);
+  font-size: 11px;
+}
+
+.text-style-inspector select,
+.text-style-inspector input {
+  min-width: 0;
+  height: 26px;
+  border: 1px solid var(--compose-border, #303640);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--compose-text, #e6edf7);
+  background: var(--compose-surface-control, #1d2025);
+  font: inherit;
+}
+
+.text-style-inspector__extract,
+.text-style-inspector__manage,
+.text-style-inspector__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.text-style-inspector__rename input {
+  width: 100%;
+}
+
+.text-style-inspector__hint {
+  margin: 0;
+  color: var(--compose-text-muted, #8e98a8);
+  font-size: 11px;
+}
+
+/*
+ * 多选面板：空态提示之上多一段样式控制。样式段自己已经让出了操作列（那是 Section 里的规矩），
+ * 这里只补一个与 Inspector 其余分组同量的外边距与一条分隔。
+ */
+.compose-editor__multi-inspector {
+  display: grid;
+  gap: 8px;
+}
+
+.compose-editor__multi-inspector section {
+  border-top: 1px solid var(--compose-border, #303640);
+  padding: 8px 0 0 8px;
+}
+
+.compose-editor__multi-inspector h3 {
+  margin: 0 0 6px;
+  color: var(--compose-text-muted, #8e98a8);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.text-style-inspector__extract input {
+  flex: 1;
+}
+
+.text-style-inspector button {
+  height: 26px;
+  border: 1px solid var(--compose-border, #303640);
+  border-radius: 4px;
+  padding: 0 10px;
+  color: var(--compose-text, #e6edf7);
+  background: var(--compose-surface-control, #1d2025);
+  font: inherit;
+  cursor: pointer;
+}
+
+.text-style-inspector button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.text-style-inspector__dangling {
+  margin: 0;
+  color: var(--compose-warning, #ffb454);
+  font-size: 11px;
+}

@@ -174,3 +174,57 @@ describe('OpenSpec: stage-engine / 画布拖拽 reparent 会话 / 提交规划',
     expect(planned).toBeNull()
   })
 })
+
+describe('OpenSpec: stage-engine / 跨容器落进 Flex 容器时解算插入位 / 提交', () => {
+  function queueFixture() {
+    const value = document([
+      entity('dragged', { x: 0, y: 0, width: 40, height: 40 }),
+      entity('board', { x: 400, y: 0, width: 200, height: 200, childIds: ['a', 'b'] }),
+      entity('a', { x: 0, y: 0, width: 100, height: 200, childIds: [] }),
+      entity('b', { x: 100, y: 0, width: 100, height: 200, childIds: [] }),
+    ])
+    const solved = layoutSnapshot(value)
+    return {
+      document: value,
+      layoutSnapshot: solved,
+      index: createStageSceneIndex(value, solved),
+      ids: ['dragged'],
+      transforms: { dragged: { x: 420, y: 20, width: 40, height: 40, rotation: 0 } },
+      idFactory: () => 'move-id',
+    }
+  }
+
+  it('换了父级的 reorder 走 reparent，并把插入位当作新父级的下标', () => {
+    /*
+     * 判别性的那一半：`reorder` 不再隐含「留在原容器」。按 `moveEntity` 提交的话几何不会
+     * 跟着换算，节点会停在原来的世界位置上；而插入位正是 `createReparentCommand` 第五个
+     * 参数本来就要的那个下标。
+     */
+    const planned = planMoveCommit({
+      ...queueFixture(),
+      dropTarget: { kind: 'reorder', containerId: 'board', index: 1 },
+    })
+    expect(planned).toMatchObject({ type: 'command.dispatch' })
+    const command = (planned as { command: { type: string; payload: Record<string, unknown> } }).command
+    // 跨父级要在同一条事务里同时改层级与几何，因此是一条 batch 而不是裸 move。
+    expect(command.type).not.toBe('entity.move')
+    expect(JSON.stringify(command)).toContain('"index":1')
+  })
+
+  it('同父级的 reorder 仍然只改顺序', () => {
+    const base = queueFixture()
+    const planned = planMoveCommit({
+      ...base,
+      ids: ['a'],
+      transforms: { a: { x: 500, y: 0, width: 100, height: 200, rotation: 0 } },
+      dropTarget: { kind: 'reorder', containerId: 'board', index: 2 },
+    })
+    expect(planned).toMatchObject({
+      type: 'command.dispatch',
+      command: {
+        type: 'entity.move',
+        payload: { entityIds: ['a'], parentId: 'board', index: 2 },
+      },
+    })
+  })
+})

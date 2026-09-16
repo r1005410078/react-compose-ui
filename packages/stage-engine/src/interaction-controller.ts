@@ -18,6 +18,7 @@ import {
 } from './hit-testing'
 import {
   createStageSceneIndex,
+  resolveStageDropParent,
   type StageSceneIndex,
 } from './hit-testing'
 import {
@@ -1091,9 +1092,17 @@ export function createStageInteractionController(): StageInteractionController {
     const world = worldPoint(surfacePoint)
     // 点击添加没有空间意图：没有选区时也要按落点找容器，否则会被当成"在所有场景之外新建"
     // 而升格出一块新场景——而用户只是点了一下物料面板。
-    const parentId = clientPoint
-      ? index.containerAtPoint(world)
-      : selectionParentId ?? index.containerAtPoint(world)
+    /*
+     * 归约一次落子的父级：Flex 容器的 Flow 子级不接管落点。排队容器里第一个子级本来就盖住了
+     * 父容器中心，不归约的话往同一个地方连拖三个物料会得到三层嵌套而不是三个同级子项——
+     * 而屏幕上没有任何东西说明为什么。
+     */
+    const parentId = resolveStageDropParent(
+      index,
+      clientPoint
+        ? index.containerAtPoint(world)
+        : selectionParentId ?? index.containerAtPoint(world),
+    )
     apply([{
       type: 'external.drop',
       item,
