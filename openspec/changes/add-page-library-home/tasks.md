@@ -2,32 +2,36 @@
 
 ## 1. 新包 `@compose-ui/library-browser`
 
-- [ ] 1.1 `packages/library-browser/`：package.json、tsconfig、vite、vitest、README
-- [ ] 1.2 `AGENTS.md` 补上包边界（可依赖 `library`/`components`/`preview`/`ui-context`；
+- [x] 1.1 `packages/library-browser/`：package.json、tsconfig、vite、vitest、README
+- [x] 1.2 `AGENTS.md` 补上包边界（可依赖 `library`/`components`/`preview`/`ui-context`；
       不得依赖 `editor`/`stage`/`asset-browser`）
-- [ ] 1.3 边界用例：公共 API 不出现 `editor` 与 `stage`
+- [x] 1.3 边界用例：公共 API 不出现 `editor` 与 `stage`
 
 ## 2. 页面库那一屏
 
-- [ ] 2.1 左栏两段：去处（互斥）与场景类型筛选；两种选中画法可分
-- [ ] 2.2 左栏与主区读**同一次** `query()` 的结果（items 与 facets 不分两次取）
-- [ ] 2.3 图墙：无卡片容器，名称与使用次数压在图的底边；次数为 0 时不写
-- [ ] 2.4 hover 才出尺寸、修改时间与两颗按钮
-- [ ] 2.5 分段、排序、检索与滚动加载（游标）
-- [ ] 2.6 缩略图缺席时画占位
-- [ ] 2.7 WAI-ARIA：左栏两段各自的角色与键盘、图墙的网格语义与焦点
+- [x] 2.1 左栏两段：去处（互斥）与场景类型筛选；两种选中画法可分
+- [x] 2.2 左栏与主区读**同一次** `query()` 的结果（items 与 facets 不分两次取）
+- [x] 2.3 图墙：无卡片容器，名称与使用次数压在图的底边；次数为 0 时不写
+- [x] 2.4 hover 才出尺寸、修改时间与两颗按钮
+- [x] 2.5 分段、排序、检索与滚动加载（游标）
+- [x] 2.6 缩略图缺席时画占位
+- [x] 2.7 WAI-ARIA：去处走 `nav` + `aria-current`、筛选走 `aria-pressed`（**两段的画法不同，
+      背后就是这两种不同的语义**）；图墙是 `list`/`listitem` 而不是 grid——一块图上有两颗按钮，
+      做成 `option` 或 `gridcell` 都要求里面没有可交互后代。tile 上那两颗按钮静息时透明且不吃
+      指针但**仍在 Tab 序里**：`visibility: hidden` 会让它们根本聚焦不到，而键盘用户没有 hover
+      这条路；聚焦任一颗即 `:focus-within`，遮罩与 hover 同一条呈现
 
 ## 3. 全屏演示屏
 
-- [ ] 3.1 复用既有只读 Preview 渲染，不新写渲染器
-- [ ] 3.2 整屏只有图与一条控制条；左右翻页只写序号与总数
-- [ ] 3.3 用例：屏上不出现分类、文件名与修改时间
+- [x] 3.1 复用既有只读 Preview 渲染，不新写渲染器
+- [x] 3.2 整屏只有图与一条控制条；左右翻页只写序号与总数
+- [x] 3.3 用例：屏上不出现分类、文件名与修改时间
 
 ## 4. 「就用这个」
 
-- [ ] 4.1 只问名称的对话框；落地走 `instantiate`
-- [ ] 4.2 图墙与演示屏两处按钮落到同一条路径
-- [ ] 4.3 成功后直接打开新页面
+- [x] 4.1 只问名称的对话框；落地走 `instantiate`
+- [x] 4.2 图墙与演示屏两处按钮落到同一条路径
+- [x] 4.3 成功后直接打开新页面
 
 ## 5. 编辑器壳子
 

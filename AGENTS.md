@@ -1405,6 +1405,17 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   运行期没有正确答案。这条由构建期的用例挡在前面。
 - `@compose-ui/scene-tree` 是独立受控 React 树组件，可依赖 `components` 和 `ui-context`，
   不得依赖 `core` 或 `editor`；`editor` 可以通过公共入口依赖并默认集成它。
+- `@compose-ui/library-browser` 是页面库那一屏，可依赖 `library`、`components`、`ui-context`
+  与宿主注入的页面渲染器，**不得依赖 `editor`、`stage` 或 `asset-browser`**——页面库是一个可以
+  完全不加载编辑器的宿主。几条判断写死在实现里：**左栏是两段不是一棵树**（去处走 `aria-current`
+  画实底、筛选走 `aria-pressed` 画左边一条竖条；两种画法不同背后就是两种不同的语义，同一种画法
+  会让两段读成并列的两个选项）；**主区是图墙、不套卡片**（名称与使用次数压在图的底边上，尺寸与
+  修改时间退到 hover，使用次数为 0 时不写）；**缩略图可以缺席**，缺席画占位；**演示屏上不出现
+  分类、文件名与修改时间**，只有图、序号与一条控制条——屏幕此刻正对着客户；**「就用这个」只问
+  名称**。tile 上那两颗按钮静息时透明且不吃指针但**仍在 Tab 序里**：用 `visibility: hidden`
+  会让它们根本聚焦不到，而键盘用户没有 hover 这条路。包内 reset 必须走 `:where()`——
+  `.x button` 是 (0,1,1)，会压过每一条 (0,1,0) 的组件类，症状是主按钮没有底色、
+  `margin-left: auto` 不生效，两处都不报错只是看起来「样式没写」。
 - `@compose-ui/asset-browser` 是独立文件浏览预览和 Monaco 编辑包，可依赖 `assets`、
   `components` 与 `ui-context`，不得依赖 `core`、`editor`、`scene-tree` 或文档历史；
   Provider 类型只从 `assets` 兼容转导。
