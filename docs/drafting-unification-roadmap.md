@@ -921,7 +921,7 @@ AutoCAD 的 `WINDOWAREACOLOR` / `CROSSINGAREACOLOR`），虚实保留。
   作用域且有明确的进出」）。绘图模式因此被删，`marquee`/`move`/`pan`/`draw-line` 四个工具值
   因「与既有手势完全重复」被删。这个菜单比它们更弱：**方向本身就是切换器**，一次拖拽即可选定，
   比开菜单快也不残留状态。
-- **它只有一个消费者，就是它自己。**`app/` 从来没设过 `marqueeMode`；删掉菜单之后那个 prop
+- **它只有一个消费者，就是它自己。**`apps/example/` 从来没设过 `marqueeMode`；删掉菜单之后那个 prop
   就是一个零消费者的旋钮。
 
 因此删两层：菜单（editor chrome）与 `policy.marqueeMode` / `ComposeStageProps.marqueeMode`。
@@ -931,7 +931,7 @@ AutoCAD 的 `WINDOWAREACOLOR` / `CROSSINGAREACOLOR`），虚实保留。
 
 **代价与它的处理方式。**用例里凡是靠传 `mode` 表达意图的，一律改成**用方向表达**（要相交就
 从右往左拖），而不是给测试留一个后门参数——后门会让「产品里没有开关」这条在测试里不成立。
-`app/` 一行未改，因为它从来没设过。
+`apps/example/` 一行未改，因为它从来没设过。
 
 **顺带删掉一条陈旧规范**：`editor-preferences` 的「框选工具快捷键」描述 `stage.marqueeTool`
 与 `marquee` 工具，两者都在更早那一刀里删了，仓库里今天一个引用都没有；剩下的半句

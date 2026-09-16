@@ -268,7 +268,7 @@ export function StageDemoWorkspace() {
   const [switchDemo] = useState(
     () => new URLSearchParams(window.location.search).has('switch-demo'),
   )
-  /** `?symbols`：把 `app/symbols/` 里那批储能一次接线图元件挂进资源浏览器，用来试 SVG 导入。 */
+  /** `?symbols`：把 `apps/example/symbols/` 里那批储能一次接线图元件挂进资源浏览器，用来试 SVG 导入。 */
   const [symbols] = useState(
     () => new URLSearchParams(window.location.search).has('symbols'),
   )

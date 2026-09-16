@@ -264,7 +264,7 @@ export const DEFAULT_WORKSPACE_SEEDS: ComposeWorkspaceSeeds = {
  * 绘图的新建种子：10×10 网格，**对齐吸附关**。
  *
  * @remarks
- * 步长取 AutoCAD `SNAPUNIT` 的默认值——量过 `app/symbols/` 的 88 个端子，它们不落在任何模数上
+ * 步长取 AutoCAD `SNAPUNIT` 的默认值——量过 `apps/example/symbols/` 的 88 个端子，它们不落在任何模数上
  * （两轴同时整除 8 的 13 个、整除 10 的 0 个），因此这份数据决定不了 8 还是 10，取舍回到默认值。
  * 这不构成缺陷：落点管线是「键入 > 捕捉 > 网格 > 角度约束」且**捕捉命中即短路**，接端子靠端口
  * 捕捉，网格从来不需要够着它们。

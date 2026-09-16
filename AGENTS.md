@@ -31,7 +31,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 ## 当前阶段
 
 - 当前仓库已经完成 Bun monorepo、包构建、测试、CI 和发布基座。
-- `app/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
+- `apps/example/` 提供集成示例和最小 E2E 操作演示，不是正式编辑器产品。
 - 当前正式文档协议只支持 `ComposeDocument v7`：显式 Frame 根（`rootIds` 只接受 Frame，
   隐式 Canvas 根与 `document.output` 已删除）、统一 ECS Entity/Component 组合、`LayoutItem`、
   `Hierarchy + Layout` Auto Layout 容器、`Renderer` 内容与结构化 `Appearance.backgroundPaint`、
@@ -1242,7 +1242,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   10 / 页面 8，AutoCAD `SNAPUNIT` 的默认值）：切换时改它等于在用户没动手的时候往撤销历史里塞
   一条，而按下
   「新建」的这一下本来就在创建文档。种子读的是**函数**而不是值——菜单项挂载时构造一次，工作区
-  随时会换，捕获住的那份会过期。符号库的端子坐标**没有模数**（量过 `app/symbols/` 的 88 个
+  随时会换，捕获住的那份会过期。符号库的端子坐标**没有模数**（量过 `apps/example/symbols/` 的 88 个
   端子：两轴同时整除 8 的 13 个、整除 10 的 0 个），因此步长取默认值而不是「对齐符号」；
   落点管线是「键入 > 捕捉 > 网格 > 角度约束」且**捕捉命中即短路**，接端子从来不靠网格够着。
 - **预览分两个问题：这块屏多大，我把它看多大。** 前者是**屏幕尺寸**（下拉、宽高输入、横竖

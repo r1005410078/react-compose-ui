@@ -388,7 +388,7 @@ export function createDemoAssetProvider(options: {
    */
   readonly switchDemo?: boolean
   /**
-   * 是否把 `app/symbols/` 整个映射成资源浏览器里的 `Symbols` 文件夹。
+   * 是否把 `apps/example/symbols/` 整个映射成资源浏览器里的 `Symbols` 文件夹。
    *
    * @remarks
    * 默认关闭，理由与上面两个相同：图片资源库列出 Provider 里的全部图片，而 `.svg` 算图片——

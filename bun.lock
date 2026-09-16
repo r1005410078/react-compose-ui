@@ -35,7 +35,7 @@
         "vitest": "^4.0.15",
       },
     },
-    "app": {
+    "apps/example": {
       "name": "@compose-ui/example",
       "version": "0.0.0",
       "dependencies": {
@@ -574,7 +574,7 @@
 
     "@compose-ui/editor": ["@compose-ui/editor@workspace:packages/editor"],
 
-    "@compose-ui/example": ["@compose-ui/example@workspace:app"],
+    "@compose-ui/example": ["@compose-ui/example@workspace:apps/example"],
 
     "@compose-ui/history": ["@compose-ui/history@workspace:packages/history"],
 

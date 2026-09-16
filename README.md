@@ -367,7 +367,7 @@ const controller = useComposeEditorController({
 - Domain Widgets：`stage`、`scene-tree`、`asset-browser`、`history`、`property-panel`、
   `operation-log`、`command-panel`、`component-library`、`materials`。
 - Entry：`editor`、`preview`。
-- `app/` 与 `apps/storybook/` 只承担集成演示和公共 API 契约。
+- `apps/example/` 与 `apps/storybook/` 只承担集成演示和公共 API 契约。
 
 跨包导入只使用 `@compose-ui/*` 公共入口。React、ReactDOM 与 JSX runtime 保持 peer
 dependency 和构建外置，避免宿主加载多份 React。

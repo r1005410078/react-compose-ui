@@ -4,7 +4,7 @@
 
 这个产品的目标是让实施工程师快速搭大屏，而**产品本身一个图表都没有**
 （`docs/dashboard-dogfood-issues.md` 的 M-1）。唯一那个 `echarts-bar` 住在
-`app/src/StageDemo.tsx` 里，而 AGENTS 明写示例应用「不是正式编辑器产品」、「不要把示例应用
+`apps/example/src/StageDemo.tsx` 里，而 AGENTS 明写示例应用「不是正式编辑器产品」、「不要把示例应用
 中的临时状态或演示交互当成稳定公共 API」。
 
 还原一张储能大屏时，效果图里的**折线**（功率曲线、SOC 变化）与**环形**（电量构成）都没有
@@ -36,5 +36,5 @@
   包的依赖）
 - 受影响的代码：
   - 新增 `packages/chart-materials/`
-  - `app/src/StageDemo.tsx`：示例改为消费第一方图表物料，删掉那份演示用的 `echarts-bar`
+  - `apps/example/src/StageDemo.tsx`：示例改为消费第一方图表物料，删掉那份演示用的 `echarts-bar`
   - `AGENTS.md`：新增包的架构边界
