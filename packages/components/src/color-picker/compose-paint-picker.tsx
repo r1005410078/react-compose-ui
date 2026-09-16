@@ -31,6 +31,7 @@ import {
 } from '@compose-ui/core'
 import { cn } from '#lib/utils'
 import { ComposeColorPicker } from './compose-color-picker'
+import { applyComposeHexInput } from './hex-input'
 import {
   COMPOSE_COMMON_COLORS,
   composeColorWithAlpha,
@@ -425,6 +426,19 @@ export function ComposePaintPicker({
         )),
       })
     }
+  }
+  /** 渐变色标的 HEX 回显值；非法输入退回这里。 */
+  const activeStopHex = activeColor === 'transparent'
+    ? '#000000'
+    : activeColor.slice(0, 7).toUpperCase()
+  /** 叠加色的 HEX 回显值；非法输入退回这里。 */
+  const overlayColorHex = value.kind === 'image' && value.overlay
+    ? value.overlay.color.toUpperCase()
+    : '#000000'
+  const commitOverlayColor = (color: ComposeColor) => {
+    updateImage((paint) => ({
+      ...paint, overlay: paint.overlay ? { ...paint.overlay, color } : null,
+    }))
   }
   const updateActiveColorText = (input: string) => {
     const normalized = normalizeComposeColor(input)
@@ -851,7 +865,19 @@ export function ComposePaintPicker({
                     <strong>{text.stop}</strong>
                     <div className="compose-paint-picker__stop-fields">
                       <input aria-label={text.stop} className="compose-paint-picker__native-color" type="color" value={activeColor === 'transparent' ? '#000000' : activeColor.slice(0, 7)} onChange={(event) => updateActiveColorText(event.target.value)} />
-                      <input aria-label="HEX" key={activeColor} defaultValue={activeColor === 'transparent' ? '#000000' : activeColor.slice(0, 7).toUpperCase()} onBlur={(event) => updateActiveColorText(event.target.value)} />
+                      <input
+                        aria-label="HEX"
+                        defaultValue={activeColor === 'transparent' ? '#000000' : activeColor.slice(0, 7).toUpperCase()}
+                        key={activeColor}
+                        onBlur={(event) => applyComposeHexInput(
+                          event.currentTarget, activeStopHex, updateActiveColorText,
+                        )}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter') return
+                          event.preventDefault()
+                          applyComposeHexInput(event.currentTarget, activeStopHex, updateActiveColorText)
+                        }}
+                      />
                       <button aria-label={text.deleteStop} disabled={gradientPaint.stops.length <= 2} type="button" onClick={deleteSelectedStop}>⌫</button>
                     </div>
                     <label>{text.opacity}<span><input aria-label={text.opacity} max="100" min="0" type="range" value={Math.round(parseComposeEditableColor(activeColor).alpha * 100)} onChange={(event) => updateCurrentStop(composeColorWithAlpha(activeColor, Number(event.target.value) / 100))} /><output>{Math.round(parseComposeEditableColor(activeColor).alpha * 100)}%</output></span></label>
@@ -983,10 +1009,20 @@ export function ComposePaintPicker({
                         />
                         <span aria-hidden="true" className="compose-paint-picker__overlay-chevron">⌄</span>
                       </label>
-                      <input aria-label={`${text.overlay} HEX`} key={value.overlay.color} defaultValue={value.overlay.color.toUpperCase()} type="text" onBlur={(event) => {
-                        const color = normalizeComposeColor(event.target.value)
-                        if (color) updateImage((paint) => ({ ...paint, overlay: paint.overlay ? { ...paint.overlay, color } : null }))
-                      }} />
+                      <input
+                        aria-label={`${text.overlay} HEX`}
+                        defaultValue={value.overlay.color.toUpperCase()}
+                        key={value.overlay.color}
+                        type="text"
+                        onBlur={(event) => applyComposeHexInput(
+                          event.currentTarget, overlayColorHex, commitOverlayColor,
+                        )}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter') return
+                          event.preventDefault()
+                          applyComposeHexInput(event.currentTarget, overlayColorHex, commitOverlayColor)
+                        }}
+                      />
                       <span aria-hidden="true" className="compose-paint-picker__overlay-alpha" />
                       <label className="compose-paint-picker__overlay-opacity"><input aria-label={`${text.overlay} ${text.opacity}`} max="100" min="0" type="number" value={Math.round(value.overlay.opacity * 100)} onChange={(event) => {
                         const opacity = Math.min(100, Math.max(0, Number(event.target.value)))

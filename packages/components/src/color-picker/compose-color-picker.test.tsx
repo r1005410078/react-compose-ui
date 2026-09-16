@@ -13,7 +13,7 @@ function ControlledPicker({ initial = '#336699' }: { readonly initial?: string }
 }
 
 describe('OpenSpec: components / 共享 Color Picker', () => {
-  it('以可访问色块触发器打开含 Alpha、常用色与折叠精确输入的颜色面板', () => {
+  it('以可访问色块触发器打开含 Alpha、常用色与常显 HEX 的颜色面板', () => {
     render(<ControlledPicker />)
 
     const trigger = screen.getByRole('button', { name: '选择背景颜色' })
@@ -21,8 +21,16 @@ describe('OpenSpec: components / 共享 Color Picker', () => {
     fireEvent.click(trigger)
 
     expect(screen.getByRole('dialog', { name: '背景颜色' })).toBeInTheDocument()
-    expect(screen.getByText('精确').closest('details')).not.toHaveAttribute('open')
+    /*
+     * 判别性的那一半：HEX 此前折在默认收起的「精确」里，而这个产品的主路径是照着设计稿填
+     * HEX——藏起来的代价是用户找不到，屏幕上也没有任何东西提示那里面有什么。
+     */
+    expect(screen.queryByText('精确')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '精确' })).not.toBeInTheDocument()
+    // 断在文档里而不是 `toBeVisible()`：jsdom 不跑弹层动画，定位层停在 `opacity: 0` 上，
+    // 那条断言对这块面板里的**每一个**元素都会红，与 HEX 藏没藏没有关系。
     expect(screen.getByLabelText('HEX')).toBeInTheDocument()
+    expect(screen.getByLabelText('背景不透明度 精确输入')).toBeInTheDocument()
     expect(screen.getByLabelText('背景色盘')).toBeInTheDocument()
     expect(screen.getByLabelText('背景色相')).toHaveAttribute('type', 'range')
     expect(screen.getByRole('slider', { name: '背景不透明度' })).toHaveAttribute('type', 'range')
@@ -39,6 +47,31 @@ describe('OpenSpec: components / 共享 Color Picker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '透明' }))
     expect(onValueChange).toHaveBeenLastCalledWith('transparent')
+  })
+
+  it('HEX 输入：回车提交，省略 # 也收，非法值退回当前值', () => {
+    const onValueChange = vi.fn()
+    render(<ComposeColorPicker label="边框" value="#336699" onValueChange={onValueChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '选择边框颜色' }))
+
+    // 回车提交：只有 onBlur 时，敲完回车看起来已经生效、实际没有。
+    const hex = screen.getByLabelText('HEX')
+    fireEvent.change(hex, { target: { value: '#0D1B3A' } })
+    fireEvent.keyDown(hex, { key: 'Enter' })
+    expect(onValueChange).toHaveBeenLastCalledWith('#0d1b3a')
+
+    // 省略 `#` 是 HEX 框里最常见的敲法，不能被静默丢弃。
+    onValueChange.mockClear()
+    fireEvent.change(hex, { target: { value: 'FF3B30' } })
+    fireEvent.blur(hex)
+    expect(onValueChange).toHaveBeenLastCalledWith('#ff3b30')
+
+    // 解析不出来时不提交，并把框里的值退回当前值——否则屏幕上看起来像是接受了。
+    onValueChange.mockClear()
+    fireEvent.change(hex, { target: { value: '不是颜色' } })
+    fireEvent.blur(hex)
+    expect(onValueChange).not.toHaveBeenCalled()
+    expect(hex).toHaveValue('#336699')
   })
 
   it('为非 HEX 初值保留可预览的触发色，并从安全回退色开始编辑', () => {
@@ -663,5 +696,29 @@ describe('OpenSpec: components / 共享 Color Picker', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('图片加载失败')
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('OpenSpec: components / 共享 Shadcn Color Picker / 两种形态共用同一块值行', () => {
+  it('默认形态与内嵌形态各只有一个 HEX，差别只在面板内色块', () => {
+    /*
+     * 判别性的那一半：这两块值行此前是**两份实现**，露哪一份由样式表决定
+     * （内嵌形态把折叠块整个 `display: none`）。用户看不见两个框，但改其中一份的人很容易
+     * 漏掉另一份——修「HEX 回车提交」时这两处就是各改了一遍。
+     */
+    const popover = render(
+      <ComposeColorPicker label="边框" value="#336699" onValueChange={() => undefined} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '选择边框颜色' }))
+    expect(screen.getAllByLabelText('HEX')).toHaveLength(1)
+    expect(document.querySelectorAll('.compose-color-picker__value-swatch')).toHaveLength(0)
+    popover.unmount()
+
+    render(
+      <ComposeColorPicker embedded label="边框" value="#336699" onValueChange={() => undefined} />,
+    )
+    expect(screen.getAllByLabelText('HEX')).toHaveLength(1)
+    // 内嵌形态没有 Trigger，色块与读数因此没有别的地方可放。
+    expect(document.querySelectorAll('.compose-color-picker__value-swatch')).toHaveLength(1)
   })
 })

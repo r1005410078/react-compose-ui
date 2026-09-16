@@ -161,12 +161,6 @@
     cursor: pointer;
   }
 
-  .compose-color-picker__actions {
-    display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
-    gap: 8px;
-  }
-
   .compose-color-picker__eyedropper {
     min-height: 30px;
     border: 1px solid var(--compose-border, #303640);
@@ -218,41 +212,6 @@
     border-color: var(--compose-focus, #4d9cff);
     outline: 1px solid var(--compose-focus, #4d9cff);
     outline-offset: 1px;
-  }
-
-  .compose-color-picker__exact {
-    border-top: 1px solid var(--compose-border, #303640);
-    padding-top: 8px;
-  }
-
-  .compose-color-picker__exact summary {
-    cursor: pointer;
-    color: var(--compose-text-muted, #8e98a8);
-    font-size: 12px;
-  }
-
-  .compose-color-picker__exact[open] {
-    display: grid;
-    gap: 8px;
-  }
-
-  .compose-color-picker__exact label {
-    display: grid;
-    grid-template-columns: 1fr 124px;
-    align-items: center;
-    gap: 8px;
-    color: var(--compose-text-muted, #8e98a8);
-    font-size: 12px;
-  }
-
-  .compose-color-picker__exact input {
-    min-width: 0;
-    height: 28px;
-    border: 1px solid var(--compose-border-strong, #414853);
-    border-radius: 4px;
-    padding: 0 8px;
-    color: var(--compose-text, #e6edf7);
-    background: var(--compose-surface-control, #1d2025);
   }
 
   .compose-paint-picker {
@@ -773,14 +732,21 @@
   .compose-color-picker__alpha-row { display: grid; gap: 3px; color: var(--compose-text-muted, #8e98a8); font-size: 12px; }
   .compose-color-picker__alpha-row > span:last-child { display: grid; grid-template-columns: 1fr 46px; align-items: center; gap: 8px; }
   .compose-color-picker__alpha-row output { color: var(--compose-text, #e6edf7); text-align: right; }
-  .compose-color-picker__embedded-values { display: grid; grid-template-columns: 46px 1fr 1.25fr 32px; gap: 6px; }
-  .compose-color-picker__value-swatch { border: 1px solid var(--compose-border-strong, #414853); border-radius: 6px; }
-  .compose-color-picker__embedded-values label { display: grid; gap: 3px; color: var(--compose-text-muted, #8e98a8); font-size: 11px; }
-  .compose-color-picker__embedded-values input { min-width: 0; height: 30px; border: 1px solid var(--compose-border, #303640); border-radius: 5px; padding: 0 7px; color: var(--compose-text, #e6edf7); background: var(--compose-surface-control, #1d2025); }
-  .compose-color-picker__embedded-values .compose-color-picker__eyedropper { align-self: end; height: 30px; }
+  /*
+   * 值行两种形态共用。默认（带 Trigger）形态没有面板内色块——Trigger 上已经有一个——因此
+   * 它的列少一格；`auto` 让「透明」按钮只在声明了 allowTransparent 时占位。
+   */
+  .compose-color-picker__values { display: grid; grid-template-columns: 1fr 1.1fr 0.8fr 32px; gap: 6px; align-items: end; }
+  .compose-color-picker__content--embedded .compose-color-picker__values { grid-template-columns: 40px 1fr 1.1fr 0.8fr 32px; }
+  /* 值行按 `align-items: end` 对齐输入框底边，色块没有内容会被压成零高，因此显式撑满。 */
+  .compose-color-picker__value-swatch { align-self: stretch; min-height: 30px; border: 1px solid var(--compose-border-strong, #414853); border-radius: 6px; }
+  .compose-color-picker__values label { display: grid; min-width: 0; gap: 3px; color: var(--compose-text-muted, #8e98a8); font-size: 11px; }
+  .compose-color-picker__values input { min-width: 0; height: 30px; border: 1px solid var(--compose-border, #303640); border-radius: 5px; padding: 0 7px; color: var(--compose-text, #e6edf7); background: var(--compose-surface-control, #1d2025); }
+  .compose-color-picker__values .compose-color-picker__eyedropper { align-self: end; height: 30px; }
+  /* 透明按钮换行独占一整行：它是一个动作，挤进读数列会被读成第四个读数。 */
+  .compose-color-picker__values .compose-color-picker__transparent { grid-column: 1 / -1; }
   .compose-color-picker__content--embedded .compose-color-picker__row > div { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
   .compose-color-picker__content--embedded .compose-color-picker__color-chip { aspect-ratio: 2; border-radius: 5px; }
-  .compose-color-picker__content--embedded .compose-color-picker__exact { display: none; }
 
   .compose-paint-picker__dropzone {
     display: grid;
