@@ -43,6 +43,7 @@
     "@compose-ui/dxf": "workspace:*",
     "@compose-ui/history": "workspace:*",
     "@compose-ui/layout-engine": "workspace:*",
+    "@compose-ui/library": "workspace:*",
     "@compose-ui/pages": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/scene-tree": "workspace:*",

@@ -28,6 +28,8 @@ export {
 export { useComposePageCatalog, useNodeEditorPort } from './pages'
 export type {
   ComposeEditorActivePage,
+  ComposeEditorLibraryConfig,
+  ComposeEditorLibraryDiagnostic,
   ComposeEditorPagesConfig,
 } from './pages'
 export type {

@@ -18,6 +18,7 @@ import type {
   ComposeAnimation,
   ComposeDocument,
   ComposePageAnimationReference,
+  ComposePageFile,
   ComposePageSetupReference,
 } from '@compose-ui/core'
 import { createComposePageStore, type ComposePageCatalog, type ComposePageStore } from '@compose-ui/pages'
@@ -206,6 +207,12 @@ export function usePageWorkspace({
   }, [hostStore, pagesEnabled, provider])
 
   const catalog = useComposePageCatalog(store)
+  // 与上面同一条理由：config 常常是行内对象字面量，不能进任何依赖数组。缩略图与「最近打开」
+  // 这两条支线在**调用那一刻**读最新的一份，因此用 ref 而不是把它接进 memo。
+  const configRef = useRef(config)
+  useEffect(() => {
+    configRef.current = config
+  })
   const sessionsRef = useRef(sessions)
   const ownedScopesRef = useRef(new Set<ComposePageScriptScope>())
   const reloadControllersRef = useRef(new Map<string, AbortController>())
@@ -320,6 +327,16 @@ export function usePageWorkspace({
     store?.invalidate()
   }, [store])
 
+  /** 记一次「最近打开」；失败只走诊断，绝不影响页面是否打开。 */
+  const recordOpen = useCallback((pageKey: string) => {
+    const library = configRef.current?.library
+    const record = library?.port.recordOpen
+    if (!library || !record) return
+    void record.call(library.port, { pageKey }).catch((cause: unknown) => {
+      library.onDiagnostic?.({ code: 'record-open-failed', pageKey, cause })
+    })
+  }, [])
+
   const openPage = useCallback(async (entry: ComposeAssetEntry): Promise<OpenPageResult> => {
     if (!store || !provider || !entry.assetKey) {
       return {
@@ -396,6 +413,7 @@ export function usePageWorkspace({
         save: null,
         animationFiles,
       }
+      recordOpen(pageKey)
       return { ok: true, session }
     }
     catch (error) {
@@ -406,7 +424,37 @@ export function usePageWorkspace({
           : new ComposeAssetError('io', '页面读取失败', { cause: error }),
       }
     }
-  }, [adoptScope, provider, scriptLoader, store])
+  }, [adoptScope, provider, recordOpen, scriptLoader, store])
+
+  /**
+   * 缩略图与「最近打开」这条支线。
+   *
+   * @remarks
+   * 它**永远不打断用户**：失败只走诊断。缩略图上传在保存成功之后异步进行——让保存因为一张
+   * 缩略图失败是不可接受的，而缺一张图在图墙上是一格占位，用户看得见。
+   *
+   * 这与动画文件那条「单份失败不中断循环」是同一条判断的又一次应用，区别是这一条连返回值都
+   * 不改：动画是文档的一部分，缩略图不是。
+   */
+  const publishThumbnail = useCallback((
+    pageKey: string,
+    page: ComposePageFile,
+  ) => {
+    const library = configRef.current?.library
+    if (!library?.port.putThumbnail || !library.renderThumbnail) return
+    const { port, renderThumbnail, onDiagnostic } = library
+    void (async () => {
+      try {
+        const image = await renderThumbnail({ pageKey, page })
+        // 渲染不出来是常态（页面是空的、宿主没接光栅化），不是失败。
+        if (image === null) return
+        await port.putThumbnail?.({ pageKey, image })
+      }
+      catch (cause) {
+        onDiagnostic?.({ code: 'thumbnail-failed', pageKey, cause })
+      }
+    })()
+  }, [])
 
   const savePage = useCallback(async (
     panelId: string,
@@ -437,6 +485,7 @@ export function usePageWorkspace({
       if (error instanceof ComposeAssetError && error.code === 'conflict') return { status: 'conflict' }
       return { status: 'failed' }
     }
+    publishThumbnail(session.pageKey, { ...session.page, document: documentAtSave })
     // 动画文件是静态权威：页面保存后把各 Frame 镜像的变化按其绑定的文件聚合回写。同一份
     // 文件只写一次、不同文件各自写入；单份失败不中断循环——文档镜像仍是权威，失败的文件
     // 在下次保存重试，其余文件与页面本体不受牵连。某块场景的镜像被撤销移除时该分区写空，
@@ -474,7 +523,7 @@ export function usePageWorkspace({
     if (animationConflict) return { status: 'conflict' }
     if (failedFiles.length > 0) return { status: 'animation-failed', failedFiles }
     return { status: 'saved' }
-  }, [store, updateSession])
+  }, [publishThumbnail, store, updateSession])
 
   /**
    * 切换页面的激活场景。

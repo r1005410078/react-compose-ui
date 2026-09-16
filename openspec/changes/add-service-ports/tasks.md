@@ -28,11 +28,16 @@
 
 ## 4. 编辑器一侧
 
-- [ ] 4.1 保存成功后异步产出并上传缩略图；失败只出诊断，不阻断保存
-- [ ] 4.2 打开页面时 `recordOpen`
-- [ ] 4.3 验证编辑器的保存路径**一个字符都没改**（仍走 `writeFile` + `expectedRevision`）
+- [x] 4.1 保存成功后异步产出并上传缩略图；失败只出诊断，不阻断保存。**光栅化由宿主注入**
+      （`renderThumbnail`）——把 DOM 变成位图要么引第三方运行时、要么走 `foreignObject`，
+      两条都是独立的决定，不该作为保存路径的副作用被带进来；缺席即不产出，图墙画占位
+- [x] 4.2 打开页面时 `recordOpen`；记不上不是打不开页面的理由
+- [x] 4.3 验证编辑器的保存路径**一个字符都没改**（仍走 `writeFile` + `expectedRevision`）：
+      既有 426 条用例一条没动就全过
 
 ## 5. 验证
 
-- [ ] 5.1 `bun run lint` / `typecheck` / `test` / `build`
-- [ ] 5.2 `openspec validate add-service-ports --strict`
+- [x] 5.1 `bun run lint` / `typecheck` / `build` 全绿；`test` 逐包全绿
+      （`turbo run test` 整跑在本机并发下会随机挂一个包，干净树上 `--force` 同样复现，
+      与本变更无关）
+- [x] 5.2 `openspec validate add-service-ports --strict`
