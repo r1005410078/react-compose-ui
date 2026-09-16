@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
+import { render } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { COMPOSE_TEXT_LAYOUT_LOCALE } from './defaults'
 import { TEXT_RENDERER_MEASUREMENT } from './measurement'
+import { TextRenderer } from './renderer'
 
 /**
  * 一份可控的 `document.fonts`：jsdom 没有 CSS Font Loading API，而这里要断的正是订阅那一刻
@@ -62,5 +66,42 @@ describe('text measurement / 字体订阅', () => {
     await new Promise((resolve) => { setTimeout(resolve, 0) })
     expect(invalidate).toHaveBeenCalled()
     unsubscribe()
+  })
+})
+
+describe('text measurement / 排版 locale', () => {
+  it('测量宿主与渲染节点钉同一个 locale', () => {
+    const hosts: HTMLElement[] = []
+    const append = vi.spyOn(document.body, 'append').mockImplementation(function (
+      this: HTMLElement,
+      ...nodes: (Node | string)[]
+    ) {
+      for (const node of nodes) if (node instanceof HTMLElement) hosts.push(node)
+      return Element.prototype.append.apply(this, nodes as never)
+    } as typeof document.body.append)
+    try {
+      TEXT_RENDERER_MEASUREMENT.measure({
+        props: { text: '储能系统运行监控大屏', fontSize: 28 },
+        width: { mode: 'undefined' },
+        height: { mode: 'undefined' },
+      } as never)
+    }
+    finally {
+      append.mockRestore()
+    }
+    /*
+     * 判别性的那一半：中日韩字形回退按 locale 选字体，而不按 `font-family`。宿主挂在
+     * `document.body` 上继承宿主页面的 `<html lang>`、渲染节点继承 Stage 根上的编辑器
+     * 语言，两边不相等时量出来的是另一套字体的字宽——中文 Hug 文字因此折行并被裁成
+     * 最后一个字。两处读同一个常量是这件事唯一的保证。
+     */
+    expect(hosts).toHaveLength(1)
+    expect(hosts[0]!.lang).toBe(COMPOSE_TEXT_LAYOUT_LOCALE)
+
+    const props = { props: { text: '储能系统运行监控大屏' } } as unknown as
+      ComponentProps<typeof TextRenderer>
+    const rendered = render(<TextRenderer {...props} />)
+    expect(rendered.getByTestId('compose-material-text').lang).toBe(COMPOSE_TEXT_LAYOUT_LOCALE)
+    rendered.unmount()
   })
 })
