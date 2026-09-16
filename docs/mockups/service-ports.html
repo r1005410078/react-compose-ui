@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>后端的两个端口</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+<style>
+/*
+ * 与《首页与二次编辑》同一套 token（Compose dark，packages/ui-context/src/providers.tsx）。
+ * 这份稿刻意只有一种视觉世界：它画的是编辑器与首页的架构，而那两块屏幕本身就是深色的。
+ */
+:root {
+  --ws: #0a0c0f;
+  --panel: #101216;
+  --raised: #181b20;
+  --sunken: #15181d;
+  --control: #1d2025;
+  --hover: #292e36;
+  --border: #303640;
+  --border-strong: #414853;
+  --text: #e6edf7;
+  --text-strong: #f4f7fb;
+  --muted: #8e98a8;
+  --primary: #3687ff;
+  --wire: #ff3b30;
+  --amber: #e9a23b;
+  --ok: #4ec9a0;
+  --violet: #a78bfa;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ws); color: var(--text);
+  font: 400 14px/1.68 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 1020px; margin: 0 auto; padding: 56px 28px 96px; }
+
+header { margin-bottom: 34px; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--primary); margin-bottom: 14px; }
+h1 { margin: 0 0 14px; font-size: 32px; line-height: 1.2; font-weight: 700; color: var(--text-strong); letter-spacing: -.015em; text-wrap: balance; }
+.lede { margin: 0; max-width: 68ch; color: var(--muted); font-size: 15px; }
+.lede b { color: var(--text); font-weight: 600; }
+
+.rule { border: 0; border-top: 1px solid var(--border); margin: 34px 0; }
+
+section { margin: 0 0 46px; }
+h2 { display: flex; align-items: baseline; gap: 12px; margin: 0 0 8px; font-size: 19px; font-weight: 600; color: var(--text-strong); letter-spacing: -.01em; }
+h2 .num { font: 500 11px/1 var(--mono); color: var(--primary); letter-spacing: .08em; }
+.sub { margin: 0 0 22px; max-width: 72ch; color: var(--muted); font-size: 13.5px; }
+.sub b, p b { color: var(--text); font-weight: 600; }
+code { font: 400 .88em/1 var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--text-strong); }
+
+/* 图：自己占一块沉底，不画卡片边框——图本身已经全是框了 */
+.fig { margin: 0 0 14px; padding: 20px 16px; border-radius: var(--radius-lg); background: var(--panel); overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.cap { margin: 0 0 30px; font-size: 12.5px; color: var(--muted); }
+.cap b { color: var(--text); font-weight: 600; }
+
+/* SVG 图元 */
+.bx { fill: var(--raised); stroke: var(--border-strong); stroke-width: 1; }
+.bx--port { fill: var(--control); stroke: var(--primary); stroke-width: 1.4; }
+.bx--svc { fill: var(--sunken); stroke: var(--border); }
+.bx--soft { fill: var(--sunken); stroke: var(--border); stroke-dasharray: 4 3; }
+.t { font-family: var(--sans); font-size: 13px; font-weight: 600; fill: var(--text-strong); }
+.t--sm { font-size: 12px; font-weight: 500; fill: var(--text); }
+.m { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.m--accent { fill: var(--primary); }
+.band { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; fill: var(--muted); text-transform: uppercase; }
+.ln { stroke: var(--border-strong); stroke-width: 1.4; fill: none; }
+.ln--key { stroke: var(--primary); stroke-width: 1.6; fill: none; }
+.ln--cut { stroke: var(--border); stroke-width: 1; stroke-dasharray: 5 4; }
+
+/* 身份：两张记录卡 + 一条钉住它们的 key */
+.idc { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0; margin-bottom: 4px; }
+.idc .hair { height: 1px; background: var(--primary); opacity: .55; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border: 1px solid var(--primary); border-radius: 999px; background: var(--control); font: 500 12px/1 var(--mono); color: var(--text-strong); white-space: nowrap; }
+.recs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.rec { padding: 14px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--raised); }
+.rec h4 { margin: 0 0 3px; font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.rec .src { margin: 0 0 11px; font: 400 10.5px/1 var(--mono); color: var(--muted); }
+.rec ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.rec li { display: flex; align-items: baseline; gap: 8px; font: 400 11.5px/1.5 var(--mono); color: var(--text); }
+.rec li span { margin-left: auto; font-family: var(--sans); font-size: 11px; color: var(--muted); text-align: right; }
+.store { margin-top: 14px; padding: 13px 16px; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--sunken); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.store b { font-size: 12.5px; color: var(--text-strong); }
+.store code { background: var(--panel); }
+.store i { font-style: normal; margin-left: auto; font-size: 12px; color: var(--muted); }
+
+/* 表 */
+.tbl { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.tr { display: grid; grid-template-columns: 200px 232px 1fr; gap: 0; border-top: 1px solid var(--border); }
+.tr:first-child { border-top: 0; }
+.tr > div { padding: 13px 16px; font-size: 13px; }
+.tr > div + div { border-left: 1px solid var(--border); }
+.td-k { background: var(--panel); font-weight: 600; color: var(--text-strong); }
+.td-p { background: var(--panel); font: 400 11.5px/1.55 var(--mono); color: var(--primary); }
+.td-v { color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.td-v b { color: var(--text); font-weight: 600; }
+.thead > div { padding: 9px 16px; font: 500 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--sunken); }
+
+/* 端口速查：两栏方法清单 */
+.ports { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.port { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.port-h { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.port-h b { display: block; font-size: 13.5px; color: var(--text-strong); }
+.port-h span { font: 400 10.5px/1.6 var(--mono); color: var(--muted); }
+.mrow { display: flex; align-items: baseline; gap: 10px; padding: 7px 16px; border-top: 1px solid var(--border); font: 400 11.5px/1.5 var(--mono); color: var(--text); }
+.mrow:first-of-type { border-top: 0; }
+.mrow em { margin-left: auto; font-style: normal; font-family: var(--sans); font-size: 11px; color: var(--muted); text-align: right; flex: none; max-width: 52%; }
+.mrow[data-new]::before { content: "新"; flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 3px; background: var(--primary); color: #101828; font: 600 9px/15px var(--sans); text-align: center; }
+.mrow[data-keep]::before { content: "旧"; flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 3px; background: var(--control); color: var(--muted); font: 600 9px/15px var(--sans); text-align: center; }
+
+/* 判据条 */
+.alert { display: flex; gap: 12px; margin: 16px 0 0; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--panel); border-left: 2px solid var(--primary); }
+.alert-t { font: 600 11px/1 var(--sans); letter-spacing: .04em; color: var(--primary); margin-bottom: 6px; }
+.alert-d { font-size: 12.5px; line-height: 1.68; color: var(--muted); }
+.alert-d b { color: var(--text); font-weight: 600; }
+.alert[data-kind="cost"] { border-left-color: var(--amber); }
+.alert[data-kind="cost"] .alert-t { color: var(--amber); }
+
+pre.mermaid { margin: 0; padding: 22px 16px; border-radius: var(--radius-lg); background: var(--panel); overflow-x: auto; text-align: center; }
+
+@media (max-width: 860px) {
+  .recs, .ports { grid-template-columns: 1fr; }
+  .tr { grid-template-columns: 1fr; }
+  .tr > div + div { border-left: 0; border-top: 1px solid var(--border); }
+  .idc { grid-template-columns: 1fr; justify-items: center; }
+  .idc .hair { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="eyebrow">架构 · 端口设计</div>
+  <h1>后端的两个端口</h1>
+  <p class="lede">
+    后端还不存在。先把它的形状定成<b>浏览器这一侧看见的两个端口</b>，服务端照着实现；
+    在它出现之前由本地实现顶在同一个位置。拆的是<b>接口</b>不是部署——
+    两个端口背后完全可以是同一个进程、同一张表。
+  </p>
+</header>
+
+<hr class="rule" />
+
+<!-- 01 全景 -->
+<section>
+  <h2><span class="num">01</span>全景</h2>
+  <p class="sub">
+    虚线是<b>可替换的那一条缝</b>。缝之上是产品代码，缝之下今天有三种实现：接 HTTP 的、
+    接本地目录的，以及<b>用资源端口去顶库端口</b>的那一个——它是「现在没有后端」这句话的落点。
+  </p>
+
+  <div class="fig">
+    <svg viewBox="0 0 960 496" role="img" aria-label="首页宿主与编辑器宿主各自经一个端口向下，端口之下是可替换的实现，再之下是业务服务、元数据库与对象存储">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="#414853"/>
+        </marker>
+        <marker id="ahk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="#3687ff"/>
+        </marker>
+      </defs>
+
+      <text class="band" x="60" y="20">浏览器</text>
+
+      <!-- A 宿主 -->
+      <rect class="bx" x="60" y="34" width="380" height="52" rx="8"/>
+      <text class="t" x="80" y="58">首页宿主</text>
+      <text class="m" x="80" y="74">页面库 · 图墙 · 就用这个</text>
+      <rect class="bx" x="520" y="34" width="380" height="52" rx="8"/>
+      <text class="t" x="540" y="58">编辑器宿主</text>
+      <text class="m" x="540" y="74">@compose-ui/editor</text>
+
+      <path class="ln" d="M250 86 V116" marker-end="url(#ah)"/>
+      <path class="ln" d="M710 86 V116" marker-end="url(#ah)"/>
+
+      <!-- B 端口 -->
+      <rect class="bx bx--port" x="60" y="122" width="380" height="66" rx="8"/>
+      <text class="t" x="80" y="148">ComposeLibraryPort</text>
+      <text class="m m--accent" x="80" y="167">@compose-ui/library　新增</text>
+      <text class="m" x="80" y="181">分类 · 计数 · 回收站 · 检索 · 缩略图 · 用过多少次</text>
+      <rect class="bx bx--port" x="520" y="122" width="380" height="66" rx="8"/>
+      <text class="t" x="540" y="148">ComposeAssetProvider</text>
+      <text class="m m--accent" x="540" y="167">@compose-ui/assets　已存在，加三个可选方法</text>
+      <text class="m" x="540" y="181">目录 · 字节 · revision 乐观锁</text>
+
+      <!-- 缝 -->
+      <path class="ln--cut" d="M210 205 H436 M524 205 H920"/>
+      <text class="band" x="40" y="209">端口边界 · 以下可替换</text>
+
+      <!-- 总线 -->
+      <path class="ln" d="M250 188 V228 M151 228 H349 M151 228 V244" marker-end="url(#ah)"/>
+      <path class="ln" d="M349 228 V244" marker-end="url(#ah)"/>
+      <path class="ln" d="M710 188 V228 M611 228 H809 M611 228 V244" marker-end="url(#ah)"/>
+      <path class="ln" d="M809 228 V244" marker-end="url(#ah)"/>
+
+      <!-- C 实现 -->
+      <rect class="bx" x="60" y="244" width="182" height="56" rx="8"/>
+      <text class="t--sm" x="76" y="266">HTTP 实现</text>
+      <text class="m" x="76" y="284">接业务服务</text>
+      <rect class="bx bx--soft" x="258" y="244" width="182" height="56" rx="8"/>
+      <text class="t--sm" x="274" y="266">Provider 实现</text>
+      <text class="m" x="274" y="284">没有后端时顶上</text>
+      <rect class="bx" x="520" y="244" width="182" height="56" rx="8"/>
+      <text class="t--sm" x="536" y="266">HTTP 实现</text>
+      <text class="m" x="536" y="284">接业务服务</text>
+      <rect class="bx bx--soft" x="718" y="244" width="182" height="56" rx="8"/>
+      <text class="t--sm" x="734" y="266">本地实现</text>
+      <text class="m" x="734" y="284">File System Access · 内存</text>
+
+      <!-- 关键那一条：库的 Provider 实现回去吃资源端口 -->
+      <path class="ln--key" d="M440 272 H474 V155 H514" marker-end="url(#ahk)"/>
+      <text class="m m--accent" x="456" y="202" text-anchor="middle" transform="rotate(-90 456 202)">用资源端口顶上</text>
+
+      <text class="band" x="60" y="332">服务端 · 待实现</text>
+
+      <!-- D 业务服务 -->
+      <path class="ln" d="M151 300 V344" marker-end="url(#ah)"/>
+      <path class="ln" d="M611 300 V344" marker-end="url(#ah)"/>
+      <rect class="bx bx--svc" x="60" y="344" width="840" height="52" rx="8"/>
+      <text class="t" x="80" y="368">业务服务</text>
+      <text class="m" x="80" y="384">一个进程，两组路由：/library/* 与 /assets/*</text>
+
+      <!-- E 存储 -->
+      <path class="ln" d="M300 396 V428" marker-end="url(#ah)"/>
+      <path class="ln" d="M660 396 V428" marker-end="url(#ah)"/>
+      <rect class="bx bx--svc" x="160" y="428" width="280" height="52" rx="8"/>
+      <text class="t--sm" x="176" y="450">元数据</text>
+      <text class="m" x="176" y="468">name · parentId · etag · 业务列</text>
+      <rect class="bx bx--svc" x="520" y="428" width="280" height="52" rx="8"/>
+      <text class="t--sm" x="536" y="450">对象存储</text>
+      <text class="m" x="536" y="468">扁平的 assets/{assetKey}</text>
+    </svg>
+  </div>
+  <p class="cap">
+    <b>编辑器那一列一行不改。</b>它今天就在用 <code>ComposeAssetProvider</code>，换的只是背后接的是谁。
+  </p>
+
+  <div class="alert">
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>一个端口答不了两边。</b><code>ComposeAssetProvider</code> 是一棵文件树，首页要的每一件事
+        它都答不了——「PCS 有 64 个」要遍历整棵树读每个文件的标签，而协议里<b>没有标签</b>；
+        「回收站」要软删，而协议里 delete 就是删；「用过多少次」是业务计数。反过来，页面库也答不了
+        编辑器要的事：用户往资源里放 SVG 符号、DXF 与脚本，那是目录与字节。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <div>
+      <div class="alert-t">今天的做法为什么撑不住</div>
+      <div class="alert-d">
+        首页那份目录现在是 <code>listComposePageDescriptors</code> <b>走遍整棵树</b>拿到的（BFS，
+        每个文件夹一次 <code>list</code>）。本地目录上这是对的；换成 HTTP 之后它就是
+        <b>打开首页要几十个来回</b>，而且拿回来的东西里<b>没有一样是首页真正要的</b>。
+        它不会被删——它降为 Provider 实现的内部细节。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 身份 -->
+<section>
+  <h2><span class="num">02</span>身份：一个 key，两个视图</h2>
+  <p class="sub">
+    两个端口之间<b>只有一个连接点</b>。库里一条记录的 <code>pageKey</code>，就是资源服务上那份
+    <code>.page.json</code> 的 <code>assetKey</code>。
+  </p>
+
+  <div class="idc">
+    <div class="hair"></div>
+    <div class="chip">pageKey&nbsp;&nbsp;===&nbsp;&nbsp;assetKey</div>
+    <div class="hair"></div>
+  </div>
+
+  <div class="recs">
+    <div class="rec">
+      <h4>库记录</h4>
+      <p class="src">ComposeLibraryRecord · 数据库</p>
+      <ul>
+        <li>kind<span>项目 / 模板</span></li>
+        <li>categories<span>场景类型标签，空即未分类</span></li>
+        <li>deletedAt<span>非空即在回收站</span></li>
+        <li>useCount<span>被用作底稿的次数</span></li>
+        <li>thumbnailUrl<span>可为空</span></li>
+      </ul>
+    </div>
+    <div class="rec">
+      <h4>资源记录</h4>
+      <p class="src">ComposeAssetEntry · 数据库</p>
+      <ul>
+        <li>name / parentId<span>目录结构住这儿</span></li>
+        <li>mediaType<span>页面的身份判据</span></li>
+        <li>revision<span>就是 ETag</span></li>
+        <li>size / modifiedAt<span>存储层给的</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="store">
+    <b>对象存储</b>
+    <code>assets/{assetKey}</code>
+    <i>扁平，不带路径 · 改名与移动只动表，零字节搬运</i>
+  </div>
+
+  <div class="alert">
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b><code>assetKey</code> 必须是服务端签发的不透明 id，不能是存储路径。</b>协议已经写着它
+        「在 rename/move 后保持不变」，而对象存储的 key 是路径——把路径当 <code>assetKey</code> 的话，
+        用户在资源浏览器里<b>改一下文件夹名，图上每一个引用它的实例同时断掉</b>，
+        而这个错误只在改名之后才出现，屏幕上没有任何东西解释它。
+      </div>
+    </div>
+  </div>
+  <div class="alert">
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        两条记录一对一挂在同一个 key 上，实现上可以就是<b>同一张表的几个业务列</b>。因此
+        <code>modifiedAt</code> 与 <code>revision</code> <b>不需要在两边同步</b>——它们本来就是同一行。
+        若把库做成独立服务、自己存一份 <code>modifiedAt</code>，那么每一次保存都要有人去通知它，
+        而漏掉那条通知的症状是<b>「图改了但首页上的排序没动」</b>，用户会以为保存没成功。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 写路径 -->
+<section>
+  <h2><span class="num">03</span>写有三条路，判据是有没有乐观锁要守</h2>
+  <p class="sub">
+    读只有一条（<code>query</code> 出目录、<code>resolveUrl</code> 出内容）。写要分开，
+    因为这三件事的失败方式完全不同。
+  </p>
+
+  <div class="tbl">
+    <div class="tr thead"><div>做什么</div><div>走哪儿</div><div>为什么是这一条</div></div>
+    <div class="tr">
+      <div class="td-k">新建 / 从模板复制</div>
+      <div class="td-p">库端口<br/>create · instantiate</div>
+      <div class="td-v">要<b>同时</b>落一份页面文件与一条库记录。让前端顺序做两步，中间失败就留下一个
+        孤儿文件或一条孤儿记录，而<b>它们都不可见</b>。复制在服务端完成，字节不经过浏览器。</div>
+    </div>
+    <div class="tr">
+      <div class="td-k">保存已有页面</div>
+      <div class="td-p">资源端口<br/>writeFile + expectedRevision</div>
+      <div class="td-v">有<b>上一版要守</b>，<code>expectedRevision</code> 直接映射成 <code>If-Match</code>。
+        库端口上<b>没有第二条保存入口</b>——同一件事的两个入口迟早写出两种行为。</div>
+    </div>
+    <div class="tr">
+      <div class="td-k">导入大文件</div>
+      <div class="td-p">资源端口<br/>createUpload → 直传 → completeUpload</div>
+      <div class="td-v">新建，<b>没有上一版可冲突</b>。一份几十 MB 的图纸穿过业务服务是纯粹的带宽浪费，
+        预签名 PUT 让浏览器直连对象存储。</div>
+    </div>
+    <div class="tr">
+      <div class="td-k">缩略图</div>
+      <div class="td-p">库端口<br/>putThumbnail</div>
+      <div class="td-v">保存成功<b>之后异步</b>上传，失败<b>不阻断保存</b>，记录上可以一直没有图。
+        缺一张图用户看得见，而让保存因为一张缩略图失败是不可接受的。</div>
+    </div>
+  </div>
+
+  <div class="alert" data-kind="cost">
+    <div>
+      <div class="alert-t">为什么保存不也走直传</div>
+      <div class="alert-d">
+        直传要多一次<b>回执握手</b>才拿得到新的 revision，而页面文件本来就只有几十到几百 KB。
+        为一条不省带宽的路径加一次握手，换来的是保存路径上多一处可失败的地方。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 时序 -->
+<section>
+  <h2><span class="num">04</span>「就用这个」是一次调用</h2>
+  <p class="sub">
+    首页上最要紧的那个动作：客户指中一张模板，以它为底开始改。
+    前端<b>只发一次请求</b>，复制、建记录与计数加一在服务端的同一个事务里。
+  </p>
+
+  <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'background':'#101216','primaryColor':'#181b20','primaryTextColor':'#e6edf7','primaryBorderColor':'#414853','lineColor':'#8e98a8','secondaryColor':'#1d2025','tertiaryColor':'#15181d','actorBkg':'#1d2025','actorBorder':'#3687ff','actorTextColor':'#f4f7fb','actorLineColor':'#414853','signalColor':'#e6edf7','signalTextColor':'#8e98a8','labelBoxBkgColor':'#1d2025','labelBoxBorderColor':'#414853','labelTextColor':'#e6edf7','noteBkgColor':'#15181d','noteBorderColor':'#3687ff','noteTextColor':'#e6edf7','sequenceNumberColor':'#101828','fontFamily':'Inter, PingFang SC, system-ui, sans-serif'}}}%%
+sequenceDiagram
+    autonumber
+    participant H as 首页
+    participant L as 库端口
+    participant S as 业务服务
+    participant O as 对象存储
+    participant E as 编辑器
+    H->>L: instantiate(来源 pageKey, 标题)
+    L->>S: POST /library/pages/{key}/instantiate
+    S->>O: server-side copy
+    Note over S: 同一个事务：<br/>INSERT 新记录<br/>UPDATE 来源 useCount + 1
+    S-->>H: 新记录（含新 pageKey）
+    H->>E: 打开 pageKey
+    E->>S: GET /assets/{pageKey}/content
+    S-->>E: 内容 + revision（此后保存的锁值）
+  </pre>
+  <p class="cap">
+    第 3 步<b>不经过浏览器</b>——一张大接线图好几 MB，而在对象存储里复制是一次服务端操作。
+    第 7 步之后编辑器回到它今天的老路：<code>writeFile</code> 加 <code>expectedRevision</code>。
+  </p>
+
+  <div class="alert">
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>「用过多少次」只能由这一步加。</b>端口上<b>没有</b>任何可以单独调的自增——那样打开一次
+        就能刷，而这个数存在的全部理由是回答<b>「哪个画法是大家在用的」</b>。
+        这也是整份设计里唯一要求服务端<b>写业务数据</b>的地方，别处它只管存取文件。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 速查 -->
+<section>
+  <h2><span class="num">05</span>两个端口的方法</h2>
+  <p class="sub">
+    契约是这些 TypeScript 端口本身，线上怎么走由实现方定。
+    <b>端口上没有鉴权参数</b>——那是 HTTP 适配器的事，放进端口会让本地实现凭空多出一个它答不了的参数。
+  </p>
+
+  <div class="ports">
+    <div class="port">
+      <div class="port-h">
+        <b>ComposeLibraryPort</b>
+        <span>@compose-ui/library · 新增</span>
+      </div>
+      <div class="mrow" data-new>query(...)<em>列表 + 游标 + 两组 facet，一次</em></div>
+      <div class="mrow" data-new>get(pageKey)<em>单条</em></div>
+      <div class="mrow" data-new>listCategories()<em>有序，就是左栏的顺序</em></div>
+      <div class="mrow" data-new>create(...)<em>文件与记录一起落</em></div>
+      <div class="mrow" data-new>instantiate(...)<em>就用这个 · useCount +1</em></div>
+      <div class="mrow" data-new>update(...)<em>只改业务字段</em></div>
+      <div class="mrow" data-new>trash / restore / purge<em>软删不动文件</em></div>
+      <div class="mrow" data-new>putThumbnail(...)<em>异步，可失败</em></div>
+      <div class="mrow" data-new>recordOpen / listRecents<em>最近打开</em></div>
+      <div class="mrow" data-new>subscribe(fn)<em>无参数失效通知</em></div>
+    </div>
+    <div class="port">
+      <div class="port-h">
+        <b>ComposeAssetProvider</b>
+        <span>@compose-ui/assets · 已存在，加三个可选方法</span>
+      </div>
+      <div class="mrow" data-keep>list(folderId)<em>一层目录</em></div>
+      <div class="mrow" data-keep>read(fileId)<em>Blob + revision</em></div>
+      <div class="mrow" data-keep>resolveAsset(assetKey)<em>按稳定 key 取内容</em></div>
+      <div class="mrow" data-keep>writeFile(..., expectedRevision)<em>乐观锁 → If-Match</em></div>
+      <div class="mrow" data-keep>createFolder / rename / move / delete<em>只动表</em></div>
+      <div class="mrow" data-keep>subscribe(fn)<em>协议一个字不用改</em></div>
+      <div class="mrow" data-new>resolveUrl(assetKey)<em>预签名 GET，必带 expiresAt</em></div>
+      <div class="mrow" data-new>createUpload(...)<em>预签名 PUT</em></div>
+      <div class="mrow" data-new>completeUpload(token)<em>回执</em></div>
+    </div>
+  </div>
+
+  <div class="alert" data-kind="cost">
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        预签名 URL <b>会过期</b>，而一张图可能开着好几个小时。返回值必须带
+        <code>expiresAt</code>，消费方在过期前重取——不带它的症状是
+        <b>图在某一刻集体变成裂图</b>。这条复用 <code>subscribe</code> 那条既有的重解路径，
+        不另造一套。
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.15.0/mermaid.min.js"></script>
+<script>
+  // 时序图由 mermaid 渲染；配色由块内的 %%{init}%% 指令给出，与这份稿的 token 同一套。
+  mermaid.initialize({ startOnLoad: true })
+</script>
+</body>
+</html>

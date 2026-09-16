@@ -9,6 +9,48 @@
 File System Access 与内存两个实现；`listComposePageDescriptors`（`@compose-ui/pages`）
 走遍整棵树、按媒体类型挑出 `.page.json`，产出页面目录。
 
+## 全景
+
+```mermaid
+flowchart TB
+  subgraph browser["浏览器"]
+    direction TB
+    H["首页宿主<br/>页面库 · 图墙 · 就用这个"]
+    E["编辑器宿主<br/>@compose-ui/editor"]
+    LP["ComposeLibraryPort<br/>@compose-ui/library（新增）"]
+    AP["ComposeAssetProvider<br/>@compose-ui/assets（已存在）"]
+    LH["HTTP 实现"]
+    LL["Provider 实现<br/>没有后端时顶上"]
+    AH["HTTP 实现"]
+    AL["本地实现<br/>File System Access · 内存"]
+    H --> LP
+    E --> AP
+    LP --> LH
+    LP --> LL
+    AP --> AH
+    AP --> AL
+    LL -. 用资源端口顶上 .-> AP
+  end
+  subgraph server["服务端（待实现）"]
+    direction TB
+    SVC["业务服务<br/>一个进程，两组路由：/library/* 与 /assets/*"]
+    DB[("元数据<br/>name · parentId · etag · 业务列")]
+    OS[("对象存储<br/>扁平的 assets/{assetKey}")]
+    SVC --> DB
+    SVC --> OS
+  end
+  LH --> SVC
+  AH --> SVC
+```
+
+端口是可替换的那一条缝。缝之上是产品代码，缝之下今天有三种实现：接 HTTP 的、接本地目录的，
+以及**用资源端口去顶库端口**的那一个——它是「现在没有后端」这句话的落点。
+
+**编辑器那一列一行不改**：它今天就在用 `ComposeAssetProvider`，换的只是背后接的是谁。
+
+完整的四张图（全景、身份、三条写路径、「就用这个」时序）在
+[`docs/mockups/service-ports.html`](../../../docs/mockups/service-ports.html)。
+
 ## 两个端口不等于两个服务
 
 拆的是**接口**，不是部署。库记录与资源记录**一对一挂在同一个 `assetKey` 上**，实现上

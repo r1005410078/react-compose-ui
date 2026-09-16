@@ -1,5 +1,9 @@
 # 变更：把后端收成两个纯接口（资源存取 / 页面库）
 
+配套设计稿（自包含 HTML，浏览器直接打开）：
+[架构图](../../../docs/mockups/service-ports.html) —— 全景、身份、三条写路径与「就用这个」时序；
+[产品形态](../../../docs/mockups/product-home.html) —— 首页那一屏长什么样、为什么。
+
 ## 原因
 
 产品要长出后端，而**后端还不存在**。现在把服务端的形状定成一组前端端口，服务端照着实现即可；
@@ -84,6 +88,7 @@ DXF 导入、接口直写这类不经过编辑器的写入方因此也不必产�
 
 - 受影响的规范：新增 `page-library`；`assets`（新增预签名 URL、assetKey 身份与目录语义三条需求）
 - 受影响的代码：
+  - 新增 `docs/mockups/service-ports.html`（架构图，四张）
   - 新增 `packages/library/`
   - `packages/assets/src/index.ts`：三个可选方法与返回类型
   - `AGENTS.md`：新增包的架构边界
