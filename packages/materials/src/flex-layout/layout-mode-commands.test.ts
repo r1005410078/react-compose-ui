@@ -1,5 +1,4 @@
 import {
-  adoptComposeCrossAxisSizing,
   BUILTIN_COMMAND_TYPES,
   createComposeFrameEntity,
   createDefaultCanvasSettings,
@@ -78,7 +77,7 @@ describe('Auto Layout mode command planning', () => {
     expect(getComposeLayoutItem(runtime.document.entities[childB.id]!).positioning).toBe('flow')
   })
 
-  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 固定尺寸子项转 Flow 时交叉轴改为 Fill', () => {
+  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 转 Flow 不改写子项自己写下的轴尺寸', () => {
     const child = entity('child', { LayoutItem: createDefaultComposeLayoutItem(80, 40) })
     const parent = entity('parent', { Hierarchy: { childIds: [child.id] } })
     const document = documentOf(parent, [child])
@@ -89,13 +88,14 @@ describe('Auto Layout mode command planning', () => {
     const runtime = createTransactionRuntime({ document })
     runtime.dispatch(plan.command)
 
-    // 默认 Layout 是 row + alignItems stretch，交叉轴是 height；固定值保留为回退。
+    // 启用 Auto Layout 只改定位方式：两轴都保持子项自己写下的固定值，父级不静默改写。
     const item = getComposeLayoutItem(runtime.document.entities[child.id]!)
-    expect(item.height).toMatchObject({ mode: 'fill', value: 40 })
+    expect(item.positioning).toBe('flow')
+    expect(item.height).toMatchObject({ mode: 'fixed', value: 40 })
     expect(item.width).toMatchObject({ mode: 'fixed', value: 80 })
   })
 
-  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 方向变化不回退采纳时改写的尺寸模式', () => {
+  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 改父级方向不级联改写子项', () => {
     const child = entity('child', { LayoutItem: createDefaultComposeLayoutItem(80, 40) })
     const parent = entity('parent', { Hierarchy: { childIds: [child.id] } })
     const document = documentOf(parent, [child])
@@ -105,8 +105,7 @@ describe('Auto Layout mode command planning', () => {
     if (!plan.ok) return
     const runtime = createTransactionRuntime({ document })
     runtime.dispatch(plan.command)
-    const adopted = getComposeLayoutItem(runtime.document.entities[child.id]!)
-    expect(adopted.height.mode).toBe('fill')
+    const before = getComposeLayoutItem(runtime.document.entities[child.id]!)
 
     // Inspector 改方向走的就是这条命令：只带父级 entityId，只写 Layout。
     const rowLayout = getComposeLayout(runtime.document.entities[parent.id]!)!
@@ -119,33 +118,14 @@ describe('Auto Layout mode command planning', () => {
     expect(result.status).toBe('committed')
 
     // 子项逐字不变：一次父级属性编辑不级联改写子级。
-    expect(getComposeLayoutItem(runtime.document.entities[child.id]!)).toEqual(adopted)
+    expect(getComposeLayoutItem(runtime.document.entities[child.id]!)).toEqual(before)
     if (result.status !== 'committed') return
     // 事务的正向 patch 与 targetIds 都不含子项：级联一旦被加进来，这两条会同时变红。
     expect(result.transaction.targetIds).toEqual([parent.id])
     expect(result.transaction.forward.every((patch) => !patch.path.includes(child.id))).toBe(true)
   })
 
-  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 采纳轴与当前交叉轴在方向翻转后分离', () => {
-    // 这是「尺寸模式没变、含义变了」的机制本身：采纳把 height 改成 fill，是因为它**当时**
-    // 是交叉轴；翻成 column 之后交叉轴是 width，而 fill 还留在 height——也就是主轴上，
-    // 按 flexGrow 生效。
-    const item = createDefaultComposeLayoutItem(80, 40)
-    const rowLayout = createDefaultComposeFlexLayout()
-    const columnLayout = { ...rowLayout, flexDirection: 'column' as const }
-
-    const adopted = adoptComposeCrossAxisSizing({ ...item, positioning: 'flow' }, rowLayout)
-    expect(adopted.height.mode).toBe('fill')
-    expect(adopted.width.mode).toBe('fixed')
-
-    // 同一个已采纳的子项，在新方向下「应采纳的轴」已经换成了 width。
-    const reAdopted = adoptComposeCrossAxisSizing(adopted, columnLayout)
-    expect(reAdopted.width.mode).toBe('fill')
-    // 而 height 仍是 fill——采纳不会把它退回 fixed。
-    expect(reAdopted.height.mode).toBe('fill')
-  })
-
-  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 子项显式 alignSelf 时不改写尺寸', () => {
+  it('OpenSpec: basic-materials / Auto Layout 按需启用 / 子项带 alignSelf 时同样保持固定尺寸', () => {
     const child = entity('child', {
       LayoutItem: { ...createDefaultComposeLayoutItem(80, 40), alignSelf: 'flex-start' },
     })

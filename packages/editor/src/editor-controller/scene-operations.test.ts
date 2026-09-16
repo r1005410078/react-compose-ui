@@ -151,7 +151,7 @@ describe('planSceneOperation', () => {
     }
   })
 
-  it('OpenSpec: stage-engine / ECS 结构命令 / 在 Auto Layout 容器下新建时转为 Flow 并采纳交叉轴', () => {
+  it('OpenSpec: stage-engine / ECS 结构命令 / 在 Auto Layout 容器下新建时转为 Flow，轴尺寸不被改写', () => {
     const base = documentFixture()
     const dashboard = base.entities.dashboard!
     const value: ComposeDocument = {
@@ -192,10 +192,11 @@ describe('planSceneOperation', () => {
       context({ document: value, layoutSnapshot: snapshot(value) }),
     )
     const nestedEntity = nested.command.payload.entity as unknown as ComposeEntity
-    // 父级是 stretch 的 row 容器：新建子级进入排队，交叉轴 fixed 采纳为 fill。
+    // 父级即使显式设了 stretch，新建子级也只进入排队：轴尺寸保持 Preset 写下的固定值，
+    // 拉伸由 alignItems 在求解时生效，不回写文档。
     expect(getComposeLayoutItem(nestedEntity)).toMatchObject({
       positioning: 'flow',
-      height: { mode: 'fill' },
+      height: { mode: 'fixed' },
     })
   })
 

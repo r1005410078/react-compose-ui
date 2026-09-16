@@ -182,9 +182,12 @@ test('OpenSpec: basic-materials / Flex Layout 紧凑属性与仅 Inspector 生�
 
   await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
   const crossStartNode = await previewNodes.first().boundingBox()
-  await crossAxis.getByRole('radio', { name: '起始', exact: true }).click()
-  await expect(crossAxis.getByRole('radio', { name: '拉伸', checked: true })).toBeVisible()
-  await expect(preview).toHaveAttribute('data-align-items', 'stretch')
+  // 「再次点击已选项恢复默认值」：交叉轴的默认是 flex-start，因此要从一个**非默认**选项
+  // 点两下才看得出恢复——从默认项点两下，前后都是它，这条规则会被一条永远绿的用例盖住。
+  await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
+  await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
+  await expect(crossAxis.getByRole('radio', { name: '起始', checked: true })).toBeVisible()
+  await expect(preview).toHaveAttribute('data-align-items', 'flex-start')
   await crossAxis.getByRole('radio', { name: '末端', exact: true }).click()
   const crossEndNode = await previewNodes.first().boundingBox()
   await crossAxis.getByRole('radio', { name: '拉伸', exact: true }).click()
@@ -458,7 +461,7 @@ test('OpenSpec: hug-content-layout / Text 与 Auto Layout 容器 Hug / Stage Pre
 })
 
 
-test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺寸子项填满交叉轴', async ({ page }) => {
+test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用不改写子项尺寸，Fill 才填满交叉轴', async ({ page }) => {
   await page.goto('/')
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
@@ -481,24 +484,26 @@ test('OpenSpec: basic-materials / Auto Layout 按需启用 / 启用后固定尺�
   const containerInspector = editor.getByRole('region', { name: 'Container 属性', exact: true })
   await enableAutoLayout(containerInspector)
 
-  // 默认 Layout 是 row + alignItems stretch。子项 Preset 交叉轴是 fixed，若不在采纳时改成
-  // fill，stretch 对它们就是空操作——这正是启用自动布局后「拉伸没反应」的原因。
-  // 子项填满的是容器内容区。Yoga 会扣掉容器 Appearance.borderWidth，而该边框在 DOM 侧不是
-  // 真实 CSS border，因此实测高度比容器 boundingBox 少几个像素；这里断言「几乎填满且明显
-  // 高于启用前」，而不是钉死一个依赖边框宽度的数值。
+  // 启用 Auto Layout 只改定位方式：父级不静默改写子级尺寸，两个子项高度逐像素不变。
   for (const index of [0, 1]) {
     await expect.poll(async () => (await children.nth(index).boundingBox())!.height)
-      .toBeGreaterThan(frameBox!.height - 8)
+      .toBeCloseTo(beforeHeight, 0)
   }
-  const stretched = (await children.nth(0).boundingBox())!.height
-  expect(stretched).toBeGreaterThan(beforeHeight)
-  expect((await children.nth(1).boundingBox())!.height).toBe(stretched)
 
-  // 从**场景树**选中这个子项，理由同上一条用例：矩形默认空心，而它填满了容器的交叉轴。
+  // 从**场景树**选中这个子项，理由同上一条用例：矩形默认空心，盒中心点不中。
   await selectChildInSceneTree(editor, frame, children.nth(0))
   const rectInspector = editor.getByRole('region', { name: 'Rectangle 属性', exact: true })
-  await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).toHaveValue('Fill')
-  await expect(rectInspector.getByRole('combobox', { name: '尺寸宽度' })).not.toHaveValue('Fill')
+  await expect(rectInspector.getByRole('combobox', { name: '尺寸高度' })).not.toHaveValue('Fill')
+
+  // 要填满交叉轴是用户的显式选择：把高度设成 Fill，它才长到容器内容区。
+  // Yoga 会扣掉容器 Appearance.borderWidth，而该边框在 DOM 侧不是真实 CSS border，
+  // 因此实测高度比容器 boundingBox 少几个像素；这里断言「几乎填满且明显高于启用前」。
+  await selectAxisSizing(rectInspector, '高度', 'Fill')
+  await expect.poll(async () => (await children.nth(0).boundingBox())!.height)
+    .toBeGreaterThan(frameBox!.height - 8)
+  expect((await children.nth(0).boundingBox())!.height).toBeGreaterThan(beforeHeight)
+  // 另一个子项没被碰过，仍是它自己的固定高度。
+  expect((await children.nth(1).boundingBox())!.height).toBeCloseTo(beforeHeight, 0)
 })
 
 

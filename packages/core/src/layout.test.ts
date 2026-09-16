@@ -17,7 +17,8 @@ describe('Compose Flex Layout', () => {
       flexWrap: 'nowrap',
       alignContent: 'stretch',
       justifyContent: 'flex-start',
-      alignItems: 'stretch',
+      // 交叉轴默认不拉伸：子项保持自己写下的高度，拉伸是用户的显式选择。
+      alignItems: 'flex-start',
       padding: { top: 0, right: 0, bottom: 0, left: 0 },
       rowGap: 0,
       columnGap: 0,

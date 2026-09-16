@@ -7,6 +7,7 @@ import {
   emptyWorkspaceRect,
   enableAutoLayout,
   expandInspectorSection,
+  selectAxisSizing,
   selectChildInSceneTree,
   selectContainer,
 } from './support/test-helpers'
@@ -552,7 +553,12 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
   await selectContainer(editor)
   await enableAutoLayout(editor.getByRole('region', { name: 'Container 属性', exact: true }))
 
-  // 进入 Auto Layout 后子级交叉轴被采纳为 fill；选中容器本身拖 S 边，子级高度应实时跟随。
+  // 进入 Auto Layout 只改定位方式，交叉轴尺寸仍是子级自己的固定值——要它跟着容器长，
+  // 得显式把高度设成 Fill。本条要的是「拖手柄时 Fill 子级实时重排」，因此先把它设上。
+  await selectChildInSceneTree(editor, frame, children.nth(0))
+  await selectAxisSizing(
+    editor.getByRole('region', { name: 'Rectangle 属性', exact: true }), '高度', 'Fill',
+  )
   const firstBefore = await children.nth(0).boundingBox()
   await editor.getByRole('treegrid', { name: '场景树' })
     .getByRole('row')

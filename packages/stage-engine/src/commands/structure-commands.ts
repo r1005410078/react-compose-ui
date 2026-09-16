@@ -6,7 +6,6 @@ import {
   getComposeHierarchy,
   getComposeGridItem,
   getComposeLayout,
-  adoptComposeCrossAxisSizing,
   getComposeLayoutItem,
   isComposeGridLayout,
   getComposeLock,
@@ -474,11 +473,8 @@ export function createReparentCommand(
     const currentItem = entity ? getComposeLayoutItem(entity) : null
     const item: ComposeLayoutItem | null = currentItem
       ? targetLayout
-        // 交叉轴采纳是 Flex 专属：网格子级的轴尺寸模式在求解里被忽略，改写它只会在属性面板
-        // 上留下一个既不生效也解释不通的值。
-        ? targetIsGrid
-          ? { ...currentItem, positioning: 'flow' }
-          : adoptComposeCrossAxisSizing({ ...currentItem, positioning: 'flow' }, targetLayout)
+        // 进入容器只改定位方式，轴尺寸保持子项自己写下的值。
+        ? { ...currentItem, positioning: 'flow' }
         : {
             ...currentItem,
             positioning: 'absolute',
