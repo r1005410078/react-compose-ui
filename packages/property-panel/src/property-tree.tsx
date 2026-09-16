@@ -30,6 +30,11 @@ import type {
   PropertyPanelResolvedBindingTarget,
 } from './property-panel/compose-property-panel'
 import {
+  formatComposeBulkArray,
+  isComposeBulkArrayItem,
+  parseComposeBulkArray,
+} from './bulk-array-model'
+import {
   canBindPropertyVariable,
   createBindingAddressKey,
   resolvePropertyBindings,
@@ -1446,6 +1451,29 @@ function ArrayGroup({
     if (!itemSchema) return
     commit(path, [...items, createInitialValue(itemSchema)], 'array-add')
   }
+  /*
+   * 批量录入只对**基本类型**元素成立：「一行一个对象」没有意义。判据走解包之后的 `type`，
+   * 因此 `v.pipe(v.number(), v.minValue(0))` 这类带校验的管道同样算 number。
+   */
+  const itemType = itemSchema ? inspectSchema(itemSchema).type : null
+  const bulkEditable = Boolean(itemSchema && itemType && isComposeBulkArrayItem(itemType))
+  const [bulkDraft, setBulkDraft] = useState<string | null>(null)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const openBulk = () => {
+    setBulkError(null)
+    setBulkDraft(formatComposeBulkArray(items))
+  }
+  const submitBulk = () => {
+    if (!itemSchema || !itemType || bulkDraft === null) return
+    const parsed = parseComposeBulkArray(bulkDraft, itemSchema, itemType)
+    if (!parsed.ok) {
+      setBulkError(messages.bulkInvalid(parsed.position, parsed.text))
+      return
+    }
+    // 整体替换，一次受控变更——逐项提交会让撤销要按 N 下。
+    commit(path, [...parsed.items], 'array-bulk')
+    setBulkDraft(null)
+  }
   return (
     <GroupShell
       bindingTargets={bindingTargets}
@@ -1458,8 +1486,42 @@ function ArrayGroup({
         disabled: readOnly || !canAdd,
         icon: <PlusIcon />,
         onSelect: add,
-      }, ...nodeActions]}
+      }, ...(bulkEditable ? [{
+        id: 'bulk',
+        label: messages.bulkEdit(label),
+        priority: 15,
+        disabled: readOnly,
+        onSelect: openBulk,
+      }] : []), ...nodeActions]}
     >
+      {bulkDraft === null ? null : (
+        <div className="property-panel__bulk" data-property-part="bulk">
+          <textarea
+            aria-label={messages.bulkEdit(label)}
+            autoFocus
+            placeholder={messages.bulkPlaceholder}
+            rows={Math.min(12, Math.max(4, items.length + 1))}
+            value={bulkDraft}
+            onChange={(event) => {
+              setBulkDraft(event.target.value)
+              setBulkError(null)
+            }}
+            onKeyDown={(event) => {
+              // Escape 放弃这次录入；Enter 留给换行——这块文本区的每一行都是一项。
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              setBulkDraft(null)
+            }}
+          />
+          {bulkError === null ? null : (
+            <p className="property-panel__bulk-error" role="alert">{bulkError}</p>
+          )}
+          <div className="property-panel__bulk-actions">
+            <button type="button" onClick={() => setBulkDraft(null)}>{messages.bulkCancel}</button>
+            <button type="button" onClick={submitBulk}>{messages.bulkConfirm}</button>
+          </div>
+        </div>
+      )}
       {itemSchema ? items.map((item, index) => {
         const itemLabel = `${label} ${index + 1}`
         return (

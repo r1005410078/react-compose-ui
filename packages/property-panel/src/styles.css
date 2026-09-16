@@ -1319,3 +1319,47 @@
   grid-column: 1 / -1;
   color: var(--property-danger, #ef4444);
 }
+
+/*
+ * 批量录入面。压在数组分组顶部、与逐项列表并存——收起它之后那份列表原样还在，因此用户可以
+ * 先贴一列再逐项微调。
+ */
+.property-panel__bulk {
+  display: grid;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.property-panel__bulk textarea {
+  min-width: 0;
+  border: 1px solid var(--compose-border, #303640);
+  border-radius: 5px;
+  padding: 6px 7px;
+  color: var(--compose-text, #e6edf7);
+  background: var(--compose-surface-control, #1d2025);
+  font: inherit;
+  resize: vertical;
+}
+
+.property-panel__bulk-error {
+  margin: 0;
+  color: var(--compose-danger, #ff6b6b);
+  font-size: 11px;
+}
+
+.property-panel__bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.property-panel__bulk-actions button {
+  height: 24px;
+  border: 1px solid var(--compose-border, #303640);
+  border-radius: 4px;
+  padding: 0 10px;
+  color: var(--compose-text, #e6edf7);
+  background: var(--compose-surface-control, #1d2025);
+  font: inherit;
+  cursor: pointer;
+}

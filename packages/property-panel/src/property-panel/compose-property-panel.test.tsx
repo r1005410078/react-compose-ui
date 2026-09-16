@@ -1068,7 +1068,12 @@ describe('OpenSpec: property-panel / 搜索筛选与默认值重置 / 重置属�
     )
 
     expect(screen.queryByRole('button', { name: '重置 列表 2' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '重置 列表' })).toBeVisible()
+    /*
+     * 数组分组现在有「添加」「批量编辑」「重置」三个动作，而操作列只有一个直接槽位，
+     * 因此重置收进了「更多」——它在不在是这条用例的主题，呈现在哪儿不是。
+     */
+    fireEvent.click(screen.getByRole('button', { name: '更多 列表 操作' }))
+    expect(screen.getByRole('menuitem', { name: '重置 列表' })).toBeInTheDocument()
   })
 })
 
@@ -2065,5 +2070,87 @@ describe('OpenSpec: property-panel / 搜索工具带的宿主动作槽', () => {
     expect(actions).not.toBeNull()
     // 同一行：它是工具带的子元素，而不是 chrome 里的第二个块。
     expect(actions?.parentElement).toHaveAttribute('data-property-part', 'toolbar')
+  })
+})
+
+describe('OpenSpec: property-panel / 基本类型数组的批量录入', () => {
+  const listSchema = v.object({ items: v.pipe(v.array(v.number()), v.title('数据')) })
+
+  function openBulk() {
+    selectPropertyAction('数据', '批量编辑 数据')
+    return screen.getByRole('textbox', { name: '批量编辑 数据' })
+  }
+
+  it('贴进一列数只产生一次受控变更', () => {
+    /*
+     * 判别性的那一半：面板此前一项一格，7 个数要先点 3 次「添加」再填 7 次；而这串数几乎
+     * 总是从别处复制来的一列。逐项提交还会让撤销要按 N 下。
+     */
+    const onValueChange = vi.fn()
+    render(
+      <ComposePropertyPanel
+        schema={listSchema}
+        value={{ items: [18, 28, 22, 36] }}
+        onValueChange={onValueChange}
+      />,
+    )
+    const area = openBulk()
+    fireEvent.change(area, { target: { value: '1\n2\n3\n4\n5\n6\n7' } })
+    fireEvent.click(screen.getByRole('button', { name: '替换' }))
+
+    expect(onValueChange).toHaveBeenCalledTimes(1)
+    expect(onValueChange).toHaveBeenCalledWith(
+      { items: [1, 2, 3, 4, 5, 6, 7] },
+      expect.objectContaining({ path: ['items'], reason: 'array-bulk' }),
+    )
+  })
+
+  it('非法项整体拒绝、指出位置，且不提交任何东西', () => {
+    const onValueChange = vi.fn()
+    render(
+      <ComposePropertyPanel
+        schema={listSchema}
+        value={{ items: [18] }}
+        onValueChange={onValueChange}
+      />,
+    )
+    const area = openBulk()
+    fireEvent.change(area, { target: { value: '1\n2\nabc' } })
+    fireEvent.click(screen.getByRole('button', { name: '替换' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('第 3 项')
+    expect(onValueChange).not.toHaveBeenCalled()
+  })
+
+  it('打开不改再确认是一次无变化的提交', () => {
+    const onValueChange = vi.fn()
+    render(
+      <ComposePropertyPanel
+        schema={listSchema}
+        value={{ items: [18, 28] }}
+        onValueChange={onValueChange}
+      />,
+    )
+    // 文本区以当前值打开，因此往返恒等——否则「点开看一眼」会悄悄改掉数据。
+    expect(openBulk()).toHaveValue('18\n28')
+    fireEvent.click(screen.getByRole('button', { name: '替换' }))
+    expect(onValueChange).toHaveBeenCalledWith(
+      { items: [18, 28] },
+      expect.objectContaining({ reason: 'array-bulk' }),
+    )
+  })
+
+  it('对象数组不出这个入口', () => {
+    // 只断上面几条时，「所有数组都给批量录入」同样绿——而「一行一个对象」没有意义。
+    render(
+      <ComposePropertyPanel
+        schema={v.object({ rows: v.pipe(v.array(v.object({ a: v.number() })), v.title('行')) })}
+        value={{ rows: [{ a: 1 }] }}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: '批量编辑 行' })).not.toBeInTheDocument()
+    // 只剩「添加」一个动作，因此连「更多」聚合按钮都不该出现——它出现就说明多了一项。
+    expect(screen.queryByRole('button', { name: '更多 行 操作' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '添加 行' })).toBeInTheDocument()
   })
 })

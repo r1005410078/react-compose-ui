@@ -332,6 +332,8 @@ export type PropertyPanelChangeReason =
   | 'array-add'
   | 'array-remove'
   | 'array-move'
+  /** 基本类型数组的批量录入：整体替换，一次变更。 */
+  | 'array-bulk'
   /** 用户把外部载荷拖入字段。 */
   | 'drop'
   | 'record-add'
