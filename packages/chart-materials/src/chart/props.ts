@@ -12,6 +12,19 @@ import * as v from 'valibot'
  */
 export const COMPOSE_CHART_KINDS = ['line', 'bar', 'pie'] as const
 
+/**
+ * 配色表里一项的 Schema。
+ *
+ * @remarks
+ * 单独拎出来是为了让 Inspector 能在**它**身上挂 `editor: 'color'`：属性面板的编辑器是按
+ * **每个节点自己**的 schema 元数据解析的，挂在数组上只描述数组这一个节点，条目仍然是裸
+ * 字符串、落到默认的文本输入。颜色编辑器也不能凭类型认领字符串——那样每个文本字段都会
+ * 变成颜色选择器。
+ *
+ * @internal
+ */
+export const CHART_PALETTE_ITEM_SCHEMA = v.pipe(v.string(), v.minLength(1))
+
 /** 图表 Renderer 对外公开的顶层 Props Schema；Inspector 与绑定 Contract 共用。 @internal */
 export const CHART_RENDERER_PROP_SCHEMAS = Object.freeze({
   kind: v.picklist(COMPOSE_CHART_KINDS),
@@ -21,7 +34,7 @@ export const CHART_RENDERER_PROP_SCHEMAS = Object.freeze({
     name: v.string(),
     data: v.array(v.number()),
   })),
-  palette: v.array(v.pipe(v.string(), v.minLength(1))),
+  palette: v.array(CHART_PALETTE_ITEM_SCHEMA),
   textColor: v.pipe(v.string(), v.minLength(1)),
   axisColor: v.pipe(v.string(), v.minLength(1)),
   showLegend: v.boolean(),

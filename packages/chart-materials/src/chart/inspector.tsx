@@ -7,7 +7,11 @@ import {
   type ComposePropertyPanelBindingConfig,
 } from '@compose-ui/property-panel'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
-import { CHART_RENDERER_PROP_SCHEMAS, DEFAULT_CHART_PROPS } from './props'
+import {
+  CHART_PALETTE_ITEM_SCHEMA,
+  CHART_RENDERER_PROP_SCHEMAS,
+  DEFAULT_CHART_PROPS,
+} from './props'
 import { resolveComposeChartModel } from './model'
 
 function title(zh: boolean, en: string, cn: string) {
@@ -38,8 +42,15 @@ export function createChartRendererInspector(idFactory: () => string) {
         CHART_RENDERER_PROP_SCHEMAS.series,
         v.title(title(zh, 'Series', '系列')),
       ),
+      /*
+       * 颜色编辑器挂在**条目**上而不是数组上：面板按每个节点自己的 schema 解析编辑器，
+       * 挂在数组上只描述数组那一个节点，六个条目仍是文本框——而它们个个都是颜色。
+       */
       palette: v.pipe(
-        CHART_RENDERER_PROP_SCHEMAS.palette,
+        v.array(v.pipe(
+          CHART_PALETTE_ITEM_SCHEMA,
+          v.metadata({ propertyPanel: { editor: 'color' } }),
+        )),
         v.title(title(zh, 'Palette', '配色')),
       ),
       textColor: v.pipe(

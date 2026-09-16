@@ -135,6 +135,13 @@ test('OpenSpec: basic-materials / 第一方图表物料 / 在 Stage 中画出 Ca
   await expect(seriesActions).toHaveCSS('opacity', '1')
   await seriesActions.click()
   await expect(inspector.getByRole('dialog', { name: '绑定 系列' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  /*
+   * 配色的每一项都是颜色，因此走颜色选择器而不是文本框。编辑器是按**每个节点自己**的 schema
+   * 元数据解析的：挂在数组上只描述数组那一个节点，六个条目仍会落到默认的文本输入。
+   */
+  await expect(inspector.getByRole('button', { name: /^选择配色 \d+颜色$/ })).toHaveCount(6)
 })
 
 
