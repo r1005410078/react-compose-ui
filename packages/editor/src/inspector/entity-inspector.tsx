@@ -35,6 +35,7 @@ import type { ComposePageScriptScope } from '@compose-ui/script-runtime'
 import {
   RendererBindingOnlyRows,
 } from './renderer-bindings-inspector'
+import { TextStyleInspector } from './text-style-inspector'
 import { useRendererInspectorBindingPort } from './renderer-inspector-binding-port'
 
 /**
@@ -338,7 +339,12 @@ export function EntityInspector({
               )}
               // 缺失入口（如未启用的布局）默认收起，避免空分组占满视野。
               defaultExpanded={false}
-              key={definition.key}
+              // 与「已存在」分支用不同的 key：两者是**两个不同的分组**——一个是添加入口、
+              // 一个是这个 Component 的字段。共用 key 会让 React 复用同一个 section 实例，
+              // 于是添加入口的收起态（`defaultExpanded={false}`）原样留给了新出现的字段分组，
+              // 症状是「加完 Auto Layout 布局分组里什么都没有」，而收起的分组会卸载子节点，
+              // 所以那些字段在 DOM 里也确实不存在，看起来像功能坏了。
+              key={`${definition.key}:missing`}
               title={definition.label}
             >
               {hasContent ? (
@@ -376,7 +382,7 @@ export function EntityInspector({
             ) : undefined}
             // 有内容的分组默认展开；定义可显式覆盖。
             defaultExpanded={definition.inspectorDefaultExpanded ?? true}
-            key={definition.key}
+            key={`${definition.key}:present`}
             renderFieldAdornment={fieldAdornment}
             title={definition.label}
           >
@@ -449,6 +455,26 @@ export function EntityInspector({
           </ComposePropertyPanelSection>
         )
       })}
+
+      {/*
+        * 样式分组排在 Renderer 分组之后、「高级」之前：它管的是排版值，因此紧跟着那些值；
+        * 只在有 Renderer 时出现——容器没有 props 可管。
+        */}
+      {renderer ? (
+        <ComposePropertyPanelSection
+          defaultExpanded={false}
+          title={zh ? '文字样式' : 'Text style'}
+        >
+          <TextStyleInspector
+            dispatch={dispatch}
+            document={document}
+            entities={[entity]}
+            idFactory={idFactory}
+            readOnly={locked}
+            zh={zh}
+          />
+        </ComposePropertyPanelSection>
+      ) : null}
 
       {renderer && rendererAdvancedHasContent ? (
         <ComposePropertyPanelSection

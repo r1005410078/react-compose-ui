@@ -100,8 +100,8 @@ import type {
   StageViewport,
 } from '@compose-ui/stage-engine'
 import {
-  DefaultEmptyInspector,
   EntityInspector,
+  MultiSelectionInspector,
   PageInspector,
 } from '../inspector'
 import { planSceneOperation } from './scene-operations'
@@ -2181,8 +2181,17 @@ export function useComposeEditorController({
       scriptScope={scriptScope}
     />
   ) : selectedIds.length > 1 ? (
-    // 多选下「页面配置」没有确定含义，且会让"点空白工作区"这个唯一入口变得不确定。
-    <DefaultEmptyInspector multiple />
+    /*
+     * 多选下「页面配置」没有确定含义，且会让"点空白工作区"这个唯一入口变得不确定。逐字段编辑
+     * 同样没有，因此这里只有空态提示——**唯一的例外是文字样式**，「把这一批统一成同一个样式」
+     * 本来就是以整组为对象的操作。
+     */
+    <MultiSelectionInspector
+      dispatch={dispatch}
+      document={document}
+      idFactory={nextId}
+      selectedIds={selectedIds}
+    />
   ) : (
     <PageInspector document={document} />
   )

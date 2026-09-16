@@ -29,7 +29,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
   expect(outputBox).not.toBeNull()
 
   // 点击（而不是拖拽）创建 Auto width 文字，光标应当直接落进去。
-  await editor.getByRole('button', { name: '文字' }).click()
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
 
   const editable = stage.getByTestId('compose-material-text-editable')
@@ -74,7 +74,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 缩窄文字框时高度�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  await editor.getByRole('button', { name: '文字' }).click()
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
   await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
   await page.keyboard.type('Hello canvas world')
@@ -117,7 +117,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入�
   const outputBox = await output.boundingBox()
   expect(outputBox).not.toBeNull()
 
-  await editor.getByRole('button', { name: '文字' }).click()
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
   await expect(stage.getByTestId('compose-material-text-editable')).toHaveText('')
 

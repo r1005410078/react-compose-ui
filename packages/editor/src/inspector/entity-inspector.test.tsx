@@ -92,6 +92,49 @@ describe('EntityInspector missing Component sections', () => {
     expect(screen.queryByRole('button', { name: '布局' })).not.toBeInTheDocument()
   })
 
+  it('Component 从缺失变成存在时，字段分组当场展开', () => {
+    // 「添加入口」与「字段分组」是两个不同的分组：前者默认收起，后者默认展开。
+    // 两边共用同一个 key 时 React 会复用同一个 section 实例，收起态原样带进字段分组，
+    // 而收起的分组会卸载子节点——于是加完布局面板里一个字段都没有，看起来像功能坏了。
+    const registry = createComposeEntityRegistry({
+      components: [{
+        key: 'Layout',
+        label: '布局',
+        createDefault: () => ({ type: 'flex' }),
+        inspector: () => <div data-testid="layout-fields">flex-direction</div>,
+        missingInspector: {
+          isVisible: (candidate) => candidate.components.Layout === undefined,
+          actions: () => <button type="button" aria-label="添加布局">+</button>,
+        },
+      }],
+    })
+    const withLayout: ComposeEntity = {
+      ...entity,
+      components: { ...entity.components, Layout: { type: 'flex' } },
+    }
+    const props = {
+      dispatch: vi.fn(),
+      idFactory: () => 'command-1',
+      registry,
+    }
+
+    const view = render(
+      <EntityInspector {...props} document={document} entity={entity} />,
+    )
+    expect(screen.getByRole('button', { name: '添加布局' })).toBeInTheDocument()
+    expect(screen.queryByTestId('layout-fields')).not.toBeInTheDocument()
+
+    // 只换 entity，不重挂载 EntityInspector——这正是加完布局那一帧发生的事。
+    view.rerender(
+      <EntityInspector
+        {...props}
+        document={{ ...document, entities: { [withLayout.id]: withLayout } }}
+        entity={withLayout}
+      />,
+    )
+    expect(screen.getByTestId('layout-fields')).toBeInTheDocument()
+  })
+
   it('OpenSpec: component-registry / 缺失 Component Inspector 协议 / Hierarchy 缺少 Layout 时显示入口', () => {
     const registry = createComposeEntityRegistry({
       components: [{

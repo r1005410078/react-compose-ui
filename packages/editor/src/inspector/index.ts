@@ -2,3 +2,4 @@
 export { DefaultEmptyInspector } from './empty-inspector'
 export { PageInspector, type PageInspectorProps } from './page-inspector'
 export { EntityInspector, type EntityInspectorChrome } from './entity-inspector'
+export { MultiSelectionInspector } from './multi-selection-inspector'

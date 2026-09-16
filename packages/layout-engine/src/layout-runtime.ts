@@ -10,6 +10,7 @@ import {
   projectComposeGridCell,
   resolveComposeAppearance,
   resolveComposeHatches,
+  resolveComposeStyles,
   resolveComposeWires,
   solveComposeGrid,
   type ComposeAlignContent,
@@ -217,7 +218,26 @@ function setAxisBounds(node: Node, axis: 'width' | 'height', sizing: ComposeAxis
 class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private state!: ComposeLayoutRuntimeState
   private readonly listeners = new Set<() => void>()
+  /**
+   * 宿主传进来的那份文档。
+   *
+   * @remarks
+   * **只作身份判定**（「这个状态是不是我传进来的那份产出的」、「传进来的还是不是上一份」）。
+   * 求解读的是 {@link ComposeLayoutRuntime.styledDocument}。
+   */
   private document: ComposeDocument
+  /**
+   * 样式解析之后、真正拿去求解的那份。
+   *
+   * @remarks
+   * 样式与导线、填充一样是**派生的**：解析一次、下游全部自动正确，而各路径自己解析一遍正是
+   * 仓库为导线几何明令禁止的那一类。它排在求解**之前**而不是之中——样式不依赖几何（导线与
+   * 填充依赖），而文字测量要用到排版值，排在之中会造出一个循环。
+   *
+   * 文档里没有样式时 `resolveComposeStyles` 原样交回输入，因此这两个字段**引用相同**，
+   * 既有行为一个字节不变。
+   */
+  private styledDocument: ComposeDocument
   private measurementPort: ComposeLayoutMeasurementPort | undefined
   private measurementUnsubscribe: (() => void) | undefined
   private yoga: Yoga | undefined
@@ -270,6 +290,12 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   /** 与 `state` 同步维护的最后提交态，见 {@link ComposeLayoutRuntime.getCommittedState}。 */
   private lastCommittedState: ComposeLayoutRuntimeState
 
+  /** 换一份输入文档：身份与「拿去求解的那份」一起刷新，两者只在这里同时写。 */
+  private setSourceDocument(document: ComposeDocument) {
+    this.document = document
+    this.styledDocument = resolveComposeStyles(document)
+  }
+
   /** 统一入口：非预览态的每次状态替换同时刷新提交态缓存。 */
   private setState(next: ComposeLayoutRuntimeState) {
     this.state = next
@@ -280,7 +306,9 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     options: ComposeLayoutRuntimeOptions,
     private readonly loadYoga: ComposeYogaLoader = loadYogaSingleton,
   ) {
+    // 直接赋一次：TS 的确定赋值分析看不穿 `setSourceDocument` 这层调用。
     this.document = options.document
+    this.styledDocument = resolveComposeStyles(options.document)
     this.committedDocument = options.document
     this.lastCommittedState = { status: 'loading', document: options.document }
     this.setState({ status: 'loading', document: options.document })
@@ -300,7 +328,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     // 正式提交隐式终止预览：即使文档引用与提交前相同，也要把求解结果切回提交态。
     this.previewing = false
     this.committedDocument = document
-    this.document = document
+    this.setSourceDocument(document)
     if (this.yoga) this.solve()
     else this.setState({ status: 'loading', document })
   }
@@ -309,14 +337,14 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     // 加载期不存在可交互手势，忽略而不是排队——迟到的预览只会覆盖首帧正式求解。
     if (this.disposed || !this.yoga || this.document === document) return
     this.previewing = true
-    this.document = document
+    this.setSourceDocument(document)
     this.solve()
   }
 
   clearPreview() {
     if (this.disposed || !this.previewing) return
     this.previewing = false
-    this.document = this.committedDocument
+    this.setSourceDocument(this.committedDocument)
     if (this.yoga) this.solve()
   }
 
@@ -365,7 +393,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       if (this.disposed) return
       this.setState({
         status: 'error',
-        document: this.document,
+        document: this.styledDocument,
         error: cause instanceof Error ? cause : new Error(String(cause)),
       })
       this.emit()
@@ -606,7 +634,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     parent: ComposeEntity | undefined,
     desiredChildren: Map<Node, readonly Node[]>,
   ): Node {
-    const entity = this.document.entities[entityId]!
+    const entity = this.styledDocument.entities[entityId]!
     const node = this.nodeFor(entityId)
     const parentLayout = parent && getComposeLayout(parent)
     const cached = this.styleCache.get(entityId)
@@ -633,9 +661,9 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       this.root.setFlexDirection(yoga.FLEX_DIRECTION_ROW)
       this.gridWrites.clear()
       const desiredChildren = new Map<Node, readonly Node[]>()
-      const rootChildren = this.document.rootIds.map((entityId) =>
+      const rootChildren = this.styledDocument.rootIds.map((entityId) =>
         this.prepareTree(entityId, undefined, desiredChildren))
-      const currentIds = new Set(Object.keys(this.document.entities))
+      const currentIds = new Set(Object.keys(this.styledDocument.entities))
       this.nodes.forEach((node, entityId) => {
         if (!currentIds.has(entityId)) desiredChildren.set(node, [])
       })
@@ -655,7 +683,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     catch (cause) {
       this.setState({
         status: 'error',
-        document: this.document,
+        document: this.styledDocument,
         error: cause instanceof Error ? cause : new Error(String(cause)),
       })
       this.emit()
@@ -673,8 +701,8 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
   private rootExtent(): { readonly width: number; readonly height: number } {
     let width = 0
     let height = 0
-    this.document.rootIds.forEach((entityId) => {
-      const entity = this.document.entities[entityId]
+    this.styledDocument.rootIds.forEach((entityId) => {
+      const entity = this.styledDocument.entities[entityId]
       if (!entity) return
       const frame = getComposeFrame(entity)
       if (!frame) return
@@ -746,7 +774,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       changed = true
     }
     this.nodes.forEach((node, entityId) => {
-      const entity = this.document.entities[entityId]
+      const entity = this.styledDocument.entities[entityId]
       if (!entity) return
       const layout = getComposeLayout(entity)
       if (!isComposeGridLayout(layout)) return
@@ -769,7 +797,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
 
       const cells: ComposeGridCell[] = []
       hierarchy.childIds.forEach((childId) => {
-        const child = this.document.entities[childId]
+        const child = this.styledDocument.entities[childId]
         const item = child && getComposeGridItem(child)
         if (!child || !item) return
         cells.push({ id: childId, x: item.x, y: item.y, w: item.w, h: item.h })
@@ -833,7 +861,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       const previousBoxes = this.state.status === 'ready' ? this.state.snapshot.boxes : undefined
       const boxes: Record<string, ComposeLayoutSnapshot['boxes'][string]> = {}
       this.nodes.forEach((node, entityId) => {
-        const item = getComposeLayoutItem(this.document.entities[entityId]!)
+        const item = getComposeLayoutItem(this.styledDocument.entities[entityId]!)
         const next = {
           x: node.getComputedLeft(),
           y: node.getComputedTop(),
@@ -854,7 +882,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
       })
       const diagnostics: ComposeLayoutDiagnostic[] = []
       this.measurementDiagnostics.forEach((measurement, entityId) => {
-        const entity = this.document.entities[entityId]
+        const entity = this.styledDocument.entities[entityId]
         if (!entity) return
         const item = getComposeLayoutItem(entity)
         for (const axis of ['width', 'height'] as const) {
@@ -900,7 +928,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
         this.emit()
         return
       }
-      const wired = resolveComposeWires(this.document, {
+      const wired = resolveComposeWires(this.styledDocument, {
         revision: ++this.revision,
         boxes: Object.freeze(boxes),
         diagnostics: Object.freeze(diagnostics),
@@ -927,7 +955,7 @@ class YogaLayoutRuntime implements ComposeLayoutRuntime {
     catch (cause) {
       this.setState({
         status: 'error',
-        document: this.document,
+        document: this.styledDocument,
         error: cause instanceof Error ? cause : new Error(String(cause)),
       })
       this.emit()

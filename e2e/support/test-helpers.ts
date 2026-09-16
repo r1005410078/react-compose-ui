@@ -111,7 +111,8 @@ export async function drawContainer(page: Page, editor: Locator) {
 export async function drawText(page: Page, editor: Locator, at: { x: number; y: number }) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   const before = await stage.getByTestId('compose-material-text').count()
-  await editor.getByRole('button', { name: '文字' }).click()
+  // 精确匹配：子串会同时命中「文字样式」分组标题那颗按钮。
+  await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(at.x, at.y)
   // 文字只按点创建，且以空内容进入编辑；空内容退出会被删除，所以这些用例先键入内容再提交。
   // 聚焦推迟一帧以避开 pointerdown 默认动作，打字前先等焦点落定。

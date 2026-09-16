@@ -43,6 +43,8 @@ import type {
 /** ComposeDocument v7 内置命令 type。 @public */
 export const BUILTIN_COMMAND_TYPES = {
   configureCanvas: 'canvas.configure',
+  setTextStyle: 'document.style.text.set',
+  removeTextStyle: 'document.style.text.remove',
   setFrameSize: 'entity.frame.size.set',
   createFrameGuide: 'frame.guide.create',
   moveFrameGuide: 'frame.guide.move',
@@ -163,6 +165,63 @@ function frameGuides(
   const frame = document.entities[frameId]?.components[COMPOSE_BUILTIN_COMPONENT_KEYS.frame]
   if (!frame) return null
   return Array.isArray(frame.guides) ? (frame.guides as readonly ComposeFrameGuide[]) : []
+}
+
+/**
+ * 新建或改写一条文字样式。
+ *
+ * @remarks
+ * 样式表是**文档级字段**，而既有命令里只有 `canvas.configure` 写这一层，因此这里必须有自己
+ * 的命令词。**upsert 而不是分成新建与更新两条**：两者的载荷与补丁逐字相同，差别只是「这个 id
+ * 在不在」——而那不是一个用户能说出来的区别，分成两条只会让调用方先查一次再选命令。
+ *
+ * 删掉一条样式**不追着去解除引用**：悬空引用只是解析失败，跟随者保留作者写下的值照常渲染。
+ * 追着解除等于把一次删除变成一次波及全文档的写入，而撤销还得把它们一条条放回去。
+ */
+function setTextStyleHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.setTextStyle,
+    execute(document, command) {
+      const styleId = valueAt(command.payload, 'styleId')
+      const name = valueAt(command.payload, 'name')
+      const props = valueAt(command.payload, 'props')
+      if (typeof styleId !== 'string' || styleId.length === 0) {
+        return issue('style.invalid-id', 'document.style.text.set 需要非空 styleId')
+      }
+      if (typeof name !== 'string' || name.length === 0) {
+        return issue('style.invalid-name', 'document.style.text.set 需要非空 name')
+      }
+      if (!isRecord(props)) {
+        return issue('style.invalid-props', 'document.style.text.set 的 props 必须是对象')
+      }
+      const next = { name, props: props as JsonObject }
+      if (jsonEqual(document.styles?.[styleId] as JsonValue, next as unknown as JsonValue)) {
+        return { status: 'noop', reason: '样式没有变化' }
+      }
+      /*
+       * 样式表缺席时先把整张表建出来：补丁引擎要求 `set` 的父容器已经存在，而
+       * 「缺席即没有样式」正是这个字段的默认态——第一次新建样式必然走这一支。
+       */
+      return patches([document.styles === undefined
+        ? { op: 'set', path: ['styles'], value: { [styleId]: next } as unknown as JsonValue }
+        : { op: 'set', path: ['styles', styleId], value: next as unknown as JsonValue }])
+    },
+  }
+}
+
+/** 删除一条文字样式；跟随者的引用变成悬空，保留作者写下的值。 */
+function removeTextStyleHandler(): CommandHandler {
+  return {
+    type: BUILTIN_COMMAND_TYPES.removeTextStyle,
+    execute(document, command) {
+      const styleId = valueAt(command.payload, 'styleId')
+      if (typeof styleId !== 'string') {
+        return issue('style.invalid-id', 'document.style.text.remove 需要 styleId')
+      }
+      if (!document.styles?.[styleId]) return { status: 'noop', reason: '样式不存在' }
+      return patches([{ op: 'remove', path: ['styles', styleId] }])
+    },
+  }
 }
 
 function configureCanvasHandler(): CommandHandler {
@@ -1145,6 +1204,8 @@ function setCurveHandler(): CommandHandler {
 export function createBuiltinCommandHandlers(): readonly CommandHandler[] {
   return [
     configureCanvasHandler(),
+    setTextStyleHandler(),
+    removeTextStyleHandler(),
     setFrameSizeHandler(),
     setCurveHandler(),
     createFrameGuideHandler(),
