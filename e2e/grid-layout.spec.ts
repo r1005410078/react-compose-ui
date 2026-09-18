@@ -558,8 +558,27 @@ test('OpenSpec: stage / 手势期实时布局反馈 / 网格里的缩放拖动�
   await page.mouse.move(start.x, start.y)
   await page.mouse.down()
 
+  /*
+   * 手势期这两个数走的是两条更新路径：选区框由手势状态每帧直接画，而卡片要过一趟布局求解再
+   * 回到 React，因此它落后**一次 `pointermove`**。移动之后立刻读会读到一对撕开的值——实测
+   * 卡片还停在上一个落点的宽度上、与框差 54px（恰好一步的行程），而停稳之后只差 1px，那是
+   * 轮廓描边。
+   *
+   * 因此先等卡片自己停稳，再一次性读两个值。**轮询条件不能是「两者对齐」**——那正是下面要断
+   * 的命题，拿它当前提这条用例就永远绿了；停稳的判据是连续两次读数相同。
+   *
+   * 症状有欺骗性：满载并行时每次 CDP 往返更慢，卡片在读到之前就追上了，于是它**只在机器不忙
+   * 时才红**，看起来像环境问题而不是用例问题。
+   */
   const widthsAt = async (dx: number) => {
     await page.mouse.move(start.x + dx, start.y, { steps: 3 })
+    let previous = Number.NaN
+    await expect.poll(async () => {
+      const width = (await first.boundingBox())!.width
+      const settled = width === previous
+      previous = width
+      return settled
+    }).toBe(true)
     const card = (await first.boundingBox())!
     const box = (await stage.getByTestId('stage-selection-bounds').first().boundingBox())!
     return { card: card.width, box: box.width }
