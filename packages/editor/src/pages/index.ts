@@ -7,5 +7,7 @@ export { PageScriptScopePanel } from './page-script-scope-panel'
 export type { OpenPageResult, PageWorkspaceHandle } from './use-page-workspace'
 export type {
   ComposeEditorActivePage,
+  ComposeEditorLibraryConfig,
+  ComposeEditorLibraryDiagnostic,
   ComposeEditorPagesConfig,
 } from './page-workspace-types'

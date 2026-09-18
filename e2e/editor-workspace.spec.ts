@@ -82,38 +82,53 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   await expect(editor.locator('.dv-dockview')).toHaveCount(1)
   await expect(editor.locator('.compose-editor__icon-tab')).toHaveCount(0)
   /*
-   * 应用顶栏：标志 ▾ ｜ 工作区 ｜ 三个布局开关。它横贯全宽、在 Dockview 之外，**只**承载应用
-   * 与视图作用域——文档标签、保存按钮与模式切换器都不在这里。
+   * 应用顶栏：标志 ▾ ｜ 文档标签条 ｜ 工作区 ｜ 三个布局开关。它横贯全宽、在 Dockview 之外。
+   * 「我开着哪几份」在页面库成为入口之后**就是**应用作用域，因此标签住这里；保存按钮与模式
+   * 切换器仍不在——它们是文档作用域。
    */
   const topBar = editor.locator('.compose-editor__top-bar')
   const topBarBox = await topBar.boundingBox()
   expect(Math.round(topBarBox!.width)).toBe(Math.round(editorBox!.width))
   expect(Math.round(topBarBox!.height)).toBe(30)
   await expect(topBar.getByRole('button', { name: '应用菜单' })).toBeVisible()
+  await expect(topBar.getByRole('tablist', { name: '文档' })).toBeVisible()
   await expect(topBar.getByRole('radiogroup', { name: '工作区' })).toBeVisible()
   await expect(topBar.getByRole('button', { name: '新建工作区' })).toBeVisible()
   await expect(topBar.locator('.compose-editor__layout-toggles').getByRole('button')).toHaveCount(3)
-  await expect(topBar.getByRole('tab')).toHaveCount(0)
   await expect(topBar.getByRole('button', { name: /保存/ })).toHaveCount(0)
   await expect(topBar.getByRole('button', { name: '设置', exact: true })).toHaveCount(0)
   await expect(topBar.getByRole('radiogroup', { name: '编辑模式' })).toHaveCount(0)
 
   /*
-   * 文档标签条下沉到**画布列自己的头**上：它只占画布那一列，且与左右两栏的面板头顶边同 y、
-   * 同高 30px——三列因此读成一行。
+   * 标签条住在顶栏里，而右端那两段一格都不让：标签再多也只压缩它自己。断的是**位置**——
+   * 切换器与开关的左边都排在标签条右边之外。
    */
-  const documentTabs = editor.locator('.compose-editor__document-tabs')
-  await expect(documentTabs.getByRole('tablist', { name: '文档' })).toBeVisible()
+  const documentTabs = topBar.locator('.compose-editor__document-tabs')
   const documentTabsBox = await documentTabs.boundingBox()
-  expect(documentTabsBox!.width).toBeLessThan(editorBox!.width - 300)
+  // radiogroup 自己是 `display: contents`（`▾` 靠 order 贴到活动段之后），量它外面那一层。
+  const switcherBox = await topBar.locator('.compose-editor__workspace-control').boundingBox()
+  const togglesBox = await topBar.locator('.compose-editor__layout-toggles').boundingBox()
+  expect(switcherBox!.x).toBeGreaterThan(documentTabsBox!.x + documentTabsBox!.width)
+  expect(togglesBox!.x).toBeGreaterThan(switcherBox!.x + switcherBox!.width)
+  expect(Math.round(togglesBox!.x + togglesBox!.width)).toBeLessThanOrEqual(
+    Math.round(topBarBox!.x + topBarBox!.width),
+  )
+
+  /*
+   * 画布列头留了下来，改画**文档面包屑**：标签回答「我开着哪几份」，这一行回答「我正在编
+   * 哪一份、哪一层」。它仍与左右两栏的面板头顶边同 y、同高 30px——三列因此读成一行。
+   */
+  const canvasHead = editor.locator('.compose-editor__canvas-head')
+  await expect(canvasHead.getByRole('navigation', { name: '文档位置' })).toContainText('Home')
+  await expect(canvasHead.getByRole('tab')).toHaveCount(0)
+  const canvasHeadBox = await canvasHead.boundingBox()
+  expect(canvasHeadBox!.width).toBeLessThan(editorBox!.width - 300)
   const sceneTab = editor.locator('[data-workspace-tab="compose-scene-content-panel"]').locator('xpath=ancestor::*[contains(@class, "dv-tabs-and-actions-container")][1]')
   const sceneHeadBox = await sceneTab.boundingBox()
-  expect(Math.round(documentTabsBox!.y)).toBe(Math.round(sceneHeadBox!.y))
-  expect(Math.round(documentTabsBox!.height)).toBe(30)
+  expect(Math.round(canvasHeadBox!.y)).toBe(Math.round(sceneHeadBox!.y))
+  expect(Math.round(canvasHeadBox!.height)).toBe(30)
   expect(Math.round(sceneHeadBox!.height)).toBe(30)
   await expect(editor.locator('[data-workspace-tab="compose-canvas"]')).toBeHidden()
-  await expect(documentTabs.getByRole('button', { name: /保存/ })).toHaveCount(0)
-  await expect(documentTabs.getByRole('radiogroup', { name: '工作区' })).toHaveCount(0)
   await expect(editor.locator('.compose-editor__collapse-side')).toHaveCount(0)
   await expect(editor.locator('.compose-editor__side-handle')).toHaveCount(0)
 
@@ -158,12 +173,12 @@ test('OpenSpec: editor-workspace-layout / 启动时打开标记首页 / 根路�
   const canvasContentBox = await editor.locator('.compose-editor__canvas-content').first().boundingBox()
   expect(Math.round(canvasContentBox!.y - editorBox!.y)).toBe(102)
   /*
-   * 两行的填充块左边落在同一个数上：活动标签的灰底与选中工具的蓝底是两块相距 30px 的实心
-   * 矩形。此前一个在 5、一个在 6——看得出不对，但指不出哪里。
+   * 画布列头与工具行的左内边距落在同一个数上：面包屑的文字与选中工具的填充块是相距 30px
+   * 的两样东西，左边必须对齐。标签条已经搬进顶栏，与这一列不再有对齐关系。
    */
-  const activeTabBox = await documentTabs.locator('[data-active="true"]').first().boundingBox()
+  const trailBox = await canvasHead.getByRole('navigation', { name: '文档位置' }).boundingBox()
   const pressedToolBox = await pressedTool.boundingBox()
-  expect(Math.round(activeTabBox!.x)).toBe(Math.round(pressedToolBox!.x))
+  expect(Math.round(trailBox!.x)).toBe(Math.round(pressedToolBox!.x))
   // 默认三栏下页面工作区那条货架放得下：没有「更多」。导线不在页面的货架上（接线是绘图的活儿），
   // 矩形在——它是大屏页面真会画的那一个。
   const toolbar = editor.getByRole('toolbar', { name: 'Stage 工具栏' })

@@ -223,7 +223,7 @@ renderer 可选 `labelComponent` 在左列替换静态属性名；它与 `compon
 `renderInlineValue` 仅用于 renderer 把子 Value 嵌入当前右列；Map 用它复用分支的内建和宿主
 renderer，且不会创建独立变量绑定目标。
 
-仓库示例在 `app/src/App.tsx` 中使用同一机制实现 ECharts `EChartOption` 自定义类型、结构化属性
+仓库示例在 `apps/example/src/App.tsx` 中使用同一机制实现 ECharts `EChartOption` 自定义类型、结构化属性
 编辑器和真实 Canvas 联动；ECharts 不属于本包的依赖或公共类型。
 
 ## 变量绑定

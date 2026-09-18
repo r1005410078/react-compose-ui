@@ -159,6 +159,7 @@ import type {
   ComposeWorkspaceSessionPort,
 } from '../workspace-layout'
 import type { ComposeEditorWorkspaceActions } from '../editor-controller/action-catalog'
+import { ComposeLibraryBrowser } from '@compose-ui/library-browser'
 import type { ComposePageDescriptor } from '@compose-ui/pages'
 import { getEditorMessages } from '../editor-i18n'
 import {
@@ -967,6 +968,17 @@ export function ComposeEditor({
     pageWorkspace.refreshCatalog()
     onHomePageChange?.(nextKey)
   }, [onHomePageChange, pageWorkspace])
+  /**
+   * 页面库那一屏此刻盖在 body 上。
+   *
+   * @remarks
+   * 接了端口就**从库开始**：页面库是应用的入口，而编辑器不再是——打开产品先看到一块空画布，
+   * 而用户此刻的问题是「这东西该怎么画」。没接端口时这一档恒为关，编辑器照旧是入口。
+   */
+  const [libraryOpen, setLibraryOpen] = useState(pages?.library !== undefined)
+  const libraryPort = pages?.library?.port
+  const libraryRenderPage = pages?.library?.renderPage
+  const openLibrary = useCallback(() => setLibraryOpen(true), [])
   const openPageDocument = useCallback(async (entry: ComposeAssetEntry) => {
     const provider = assets?.browser?.provider
     if (!provider || !entry.assetKey) return
@@ -986,6 +998,41 @@ export function ComposeEditor({
     setActiveDocumentPanelId(panelId)
   }, [assets?.browser?.provider, pageWorkspace, replaceDocuments])
 
+  /**
+   * 从页面库打开一份页面。
+   *
+   * @remarks
+   * 目录**现列一次**而不是读手上那份：刚在库里落地的新页面比目录快一拍，读缓存的症状是
+   * 「新建之后什么都没发生」。Store 的目录缓存随 Provider 通知失效，因此这一趟多半不产生
+   * 额外的 IO。
+   */
+  const openPageFromLibrary = useCallback(async (pageKey: string) => {
+    const store = pageWorkspace.store
+    if (!store) return
+    let descriptor: ComposePageDescriptor | undefined
+    try {
+      descriptor = (await store.listPages()).pages.find((page) => page.pageKey === pageKey)
+    }
+    catch (error) {
+      setPageNotice(error instanceof Error ? error.message : String(error))
+      return
+    }
+    if (!descriptor) {
+      setPageNotice(editorMessages.pages.homePageMissing)
+      return
+    }
+    // 先离开库再打开：打开是异步的，留在库里会让用户以为点空了。
+    setLibraryOpen(false)
+    await openPageDocument({
+      id: descriptor.entryId,
+      parentId: descriptor.parentId,
+      name: descriptor.fileName,
+      kind: 'file',
+      assetKey: descriptor.pageKey,
+      revision: descriptor.revision,
+    })
+  }, [editorMessages.pages.homePageMissing, openPageDocument, pageWorkspace.store])
+
   // 新页面 Store 代表一个新的工作区实例；此前 Provider 的一次性打开记录不能沿用。
   useEffect(() => {
     startupHomePageKeysRef.current.clear()
@@ -995,6 +1042,8 @@ export function ComposeEditor({
     const catalog = pageWorkspace.catalog
     if (
       pages === undefined
+      // 接了页面库就从库开始：自动打开首页会让用户越过那一屏，而它才是入口。
+      || pages.library !== undefined
       || !workspaceReady
       || !catalog
       || catalog.homePageMissing
@@ -2849,6 +2898,9 @@ export function ComposeEditor({
       activateDocument,
       entryLayerPanelIds: componentEntry.layerPanelIds,
       entryOriginPanelId: componentEntry.originPanelId,
+      exitEntryLayerTo: componentEntry.exitTo,
+      libraryOpen: libraryOpen && libraryPort !== undefined,
+      ...(libraryPort === undefined ? {} : { openLibrary }),
       stageHostPanelId,
       registerDocumentSave,
       setDocumentDirty,
@@ -3145,15 +3197,30 @@ export function ComposeEditor({
             <div className="compose-editor__body">
               {/*
                 * 组头上没有折叠按钮、边缘也没有把手：折叠的唯一入口是应用顶栏右端那三颗开关。
+                *
+                * 页面库压在 Dockview **之上**而不是取代它：卸载 Dockview 会连布局、面板宿主与
+                * 正在取点的命令一起销毁，而「回库看一眼再回来」是一次导航，不是一次重启。
+                * 它盖着的那一层用 `inert` 收走焦点与读屏——留在 Tab 序里的话，`Tab` 会走进
+                * 一块用户此刻看不见的画布。
                 */}
-              <DockviewReact
-                className="compose-editor__dockview"
-                components={workspaceComponents}
-                disableFloatingGroups
-                onReady={handleReady}
-                tabComponents={workspaceTabComponents}
-                theme={workspaceTheme}
-              />
+              <div className="compose-editor__dockview-layer" inert={libraryOpen || undefined}>
+                <DockviewReact
+                  className="compose-editor__dockview"
+                  components={workspaceComponents}
+                  disableFloatingGroups
+                  onReady={handleReady}
+                  tabComponents={workspaceTabComponents}
+                  theme={workspaceTheme}
+                />
+              </div>
+              {libraryOpen && libraryPort !== undefined ? (
+                <ComposeLibraryBrowser
+                  className="compose-editor__library"
+                  onOpenPage={(pageKey) => { void openPageFromLibrary(pageKey) }}
+                  port={libraryPort}
+                  {...(libraryRenderPage === undefined ? {} : { renderPage: libraryRenderPage })}
+                />
+              ) : null}
             </div>
           </div>
           {settingsOpen ? (

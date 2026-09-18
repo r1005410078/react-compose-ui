@@ -1,7 +1,7 @@
 # 电网电气符号（SVG 导入素材）
 
 这个文件夹是 `.svg` → 组件资产那条链路的**素材**，不是产品代码：示例应用把它整个映射成资源
-浏览器里的 `Symbols` 文件夹（`app/src/demo-asset-provider.ts` 里的 `import.meta.glob`），
+浏览器里的 `Symbols` 文件夹（`apps/example/src/demo-asset-provider.ts` 里的 `import.meta.glob`），
 一级子目录成为子文件夹，往里丢一个 `.svg` 就会多出一项，右键即可「导入为组件」。
 
 ```

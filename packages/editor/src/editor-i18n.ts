@@ -14,6 +14,7 @@ const messages = {
   'zh-CN': {
     settings: '设置',
     appMenu: '应用菜单',
+    backToLibrary: '返回页面库',
     commandPanel: '命令面板',
     user: '用户',
     close: '关闭设置',
@@ -69,6 +70,8 @@ const messages = {
       canvas: '画布',
       /** 文档标签条的可访问名称。 */
       documentTabs: '文档',
+      /** 画布列头那条面包屑的可访问名称：它回答「正在编哪一份、哪一层」。 */
+      documentTrail: '文档位置',
       /** 左右两侧的折叠按钮与把手用的名字：左栏装着场景图与工具组，右栏是属性。 */
       leftPane: '左侧面板',
       rightPane: '右侧面板',
@@ -362,6 +365,7 @@ const messages = {
   'en-US': {
     settings: 'Settings',
     appMenu: 'Application menu',
+    backToLibrary: 'Back to page library',
     commandPanel: 'Command panel',
     user: 'User',
     close: 'Close settings',
@@ -416,6 +420,7 @@ const messages = {
       componentLibrary: 'Components',
       canvas: 'Canvas',
       documentTabs: 'Documents',
+      documentTrail: 'Document location',
       leftPane: 'left panels',
       rightPane: 'right panel',
       bottomPane: 'bottom panel',
@@ -921,6 +926,7 @@ export function getEditorMessages(
   return {
     settings: format('settings', current.settings),
     appMenu: format('appMenu', current.appMenu),
+    backToLibrary: format('backToLibrary', current.backToLibrary),
     commandPanel: format('commandPanel', current.commandPanel),
     user: format('user', current.user),
     close: format('close', current.close),

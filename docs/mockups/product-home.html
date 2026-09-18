@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>首页与二次编辑</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght400;500;600;700&family=JetBrains+Mono:wght400;500;700&display=swap" />
+<style>
+/*
+ * 语义层照抄 packages/components/src/styles.css 的映射：Shadcn 的 token 指向既有
+ * Compose token，不另立第二套主题。尺寸档取 compose-button.tsx 的真实值
+ * （default h-8 / sm h-7 / xs h-6、rounded-md、图标 size-4），因此这份稿是紧凑档。
+ */
+:root {
+  /* Compose dark 主题（packages/ui-context/src/providers.tsx） */
+  --ws: #0a0c0f;
+  --panel: #101216;
+  --raised: #181b20;
+  --sunken: #15181d;
+  --surface-active: #20242b;
+  --control: #1d2025;
+  --surface-hover: #292e36;
+  --border-compose: #303640;
+  --border-strong: #414853;
+  --text-compose: #e6edf7;
+  --text-strong: #f4f7fb;
+  --text-muted: #8e98a8;
+  --accent-compose: #3687ff;
+  --focus: #4d9cff;
+  --danger: #ff9c9c;
+
+  /* Shadcn 语义层 */
+  --background: var(--panel);
+  --foreground: var(--text-compose);
+  --card: var(--raised);
+  --card-foreground: var(--text-compose);
+  --popover: var(--surface-active);
+  --primary: var(--accent-compose);
+  --primary-foreground: #101828;   /* 深色主题下蓝底压深字，见 styles.css */
+  --secondary: var(--control);
+  --muted: var(--sunken);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--text-strong);
+  --destructive: var(--danger);
+  --border: var(--border-compose);
+  --input: var(--border-strong);
+  --ring: var(--focus);
+
+  /* 数据色：不属于语义层，图上才用 */
+  --wire: #ff3b30;
+  --amber: #e9a23b;
+  --ok: #4ec9a0;
+  --screen: #0c0f14;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 34%);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 42%);
+  --shadow-lg: 0 18px 44px rgb(0 0 0 / 48%);
+
+  --sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 48px 24px 96px;
+  background: var(--ws);
+  color: var(--foreground);
+  font: 400 14px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+svg { display: block; }
+/* lucide：24 视框、stroke 2、圆头圆角 */
+.ic { width: 16px; height: 16px; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; stroke: currentColor; flex: none; }
+.ic-sm { width: 14px; height: 14px; }
+.ic-lg { width: 20px; height: 20px; }
+
+.page { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 52px; }
+
+/* ——— 文档级排版 ——— */
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-foreground); }
+h1 { margin: 12px 0 0; font-size: 30px; font-weight: 600; letter-spacing: -0.025em; color: var(--text-strong); text-wrap: balance; }
+.lede { margin: 12px 0 0; max-width: 68ch; color: var(--muted-foreground); font-size: 14px; line-height: 1.65; }
+.lede b { color: var(--foreground); font-weight: 500; }
+section { display: flex; flex-direction: column; }
+h2 { margin: 0; display: flex; align-items: baseline; gap: 10px; font-size: 16px; font-weight: 600; letter-spacing: -0.015em; color: var(--text-strong); }
+h2 .num { font: 500 11px/1 var(--mono); color: var(--muted-foreground); }
+.sub { margin: 6px 0 18px 26px; max-width: 72ch; color: var(--muted-foreground); font-size: 13px; line-height: 1.65; }
+.sub b { color: var(--foreground); font-weight: 500; }
+code, .m { font-family: var(--mono); font-size: 0.86em; }
+code { padding: 1px 4px; border-radius: var(--radius-sm); background: var(--muted); color: var(--foreground); }
+hr.rule { width: 100%; height: 1px; border: 0; background: var(--border); margin: 0; }
+
+/* ——— Alert（判据 / 代价 / 沿用） ——— */
+/* 判据块只留底色：一块填充已经说清「这是一段」，外面那圈线是同一句话的第二遍。 */
+.alert { display: grid; grid-template-columns: 16px minmax(0,1fr); gap: 0 11px; align-items: start; padding: 12px 14px; border-radius: var(--radius-lg); background: var(--card); margin-top: 8px; }
+.alert .ic { margin-top: 2px; color: var(--muted-foreground); }
+.alert[data-kind="cost"] .ic { color: var(--amber); }
+.alert[data-kind="derive"] .ic { color: var(--primary); }
+.alert-t { font-size: 13px; font-weight: 600; color: var(--text-strong); letter-spacing: -0.005em; }
+.alert-d { margin-top: 3px; font-size: 13px; line-height: 1.6; color: var(--muted-foreground); }
+.alert-d b { color: var(--foreground); font-weight: 500; }
+
+/* ——— 界面框 ——— */
+.shot { border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; background: var(--ws); }
+.shot-cap { display: flex; align-items: baseline; gap: 9px; margin: 9px 2px 0; font-size: 12px; color: var(--muted-foreground); }
+.shot-cap .t { color: var(--foreground); font-weight: 500; }
+
+/* ——— Button（尺寸取 compose-button.tsx） ——— */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-md); background: var(--secondary); color: var(--foreground); font: 500 13px/1 var(--sans); white-space: nowrap; }
+.btn .ic { width: 16px; height: 16px; }
+.btn--primary { background: var(--primary); color: var(--primary-foreground); }
+.btn--outline { background: var(--background); border-color: var(--border); }
+.btn--ghost { background: transparent; color: var(--muted-foreground); }
+.btn--sm { height: 28px; padding: 0 10px; gap: 4px; font-size: 12.8px; }
+.btn--xs { height: 24px; padding: 0 8px; gap: 4px; font-size: 12px; }
+.btn--sm .ic, .btn--xs .ic { width: 14px; height: 14px; }
+.btn--icon { width: 28px; padding: 0; }
+.split { display: inline-flex; align-items: stretch; }
+.split .btn { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.split .tbtn { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.split .tbtn + .btn-cv { height: 26px; padding: 0 6px; }
+.split .btn-cv { display: inline-flex; align-items: center; padding: 0 7px; border-radius: 0 var(--radius-md) 0 0; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: var(--primary); color: var(--primary-foreground); box-shadow: inset 1px 0 0 rgb(16 24 40 / 22%); }
+.split .btn-cv .ic { width: 14px; height: 14px; }
+
+/* ——— 首页外壳：逐条照抄 packages/editor/src/styles.css 的 chrome ——— */
+/* 顶栏 30 / 每格 22 / 圆角 6 / 字号 12 / padding-inline 6 / gap 2 */
+.app { display: grid; grid-template-rows: 30px minmax(0,1fr); background: var(--ws); font-size: 12px; }
+.app-top { display: flex; align-items: center; gap: 2px; height: 30px; padding-inline: 6px; background: var(--raised); }
+.brand { display: flex; align-items: center; gap: 2px; height: 22px; padding: 0 4px 0 6px; border-radius: var(--radius-md); color: var(--text-strong); }
+.brand-mark { width: 19px; height: 19px; flex: none; }
+.brand .cv { width: 13px; height: 13px; color: var(--muted-foreground); }
+.brand-wire { stroke: var(--primary); }
+/* 工作区 pill 的画法：没有外框、没有竖线，活动的一格只是一块柔和的圆角底 */
+.pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12px; }
+.pill[data-on] { background: var(--accent); color: var(--accent-foreground); }
+.top-sp { flex: 1 1 auto; min-width: 8px; }
+.tbtn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12px; }
+.tbtn .ic { width: 13px; height: 13px; }
+.tbtn[data-on] { background: var(--accent); color: var(--accent-foreground); }
+.tbtn--primary { background: var(--primary); color: var(--primary-foreground); font-weight: 500; }
+.rail-btn { display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-md); color: var(--muted-foreground); }
+.rail-btn svg { width: 13px; height: 13px; }
+.avatar { width: 20px; height: 20px; margin-left: 4px; border-radius: 50%; background: var(--control); border: 1px solid var(--border); display: grid; place-items: center; font: 500 9.5px/1 var(--sans); color: var(--muted-foreground); }
+
+/* ——— 左栏：两段，不是一棵树 ———
+ * 上段回答「在哪儿找」（位置，互斥），下段回答「找哪一类」（筛选，跟着上面选中的位置走）。
+ * 场景类型在项目与模板里都成立，做成树的二级就要把同样的八项在两棵子树下各抄一遍；
+ * 提成独立一段之后只写一遍，计数跟着位置变。代价是「项目 / PCS」不再是一条可读的路径。
+ * 两段因此画法不同——位置是实底（你在这儿），筛选是左边一条竖条（筛掉了什么）：
+ * 同一种选中画法会让两段看起来是并列的两个选项，而它们回答的是两个问题。
+ */
+.loc { display: flex; align-items: center; gap: 9px; height: 28px; padding: 0 9px; border-radius: var(--radius-md); color: var(--foreground); font-size: 13px; }
+.loc .ic { width: 14px; height: 14px; flex: none; color: var(--muted-foreground); }
+.loc .ct { margin-left: auto; font: 400 11px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.loc[data-on] { background: var(--accent); color: var(--accent-foreground); font-weight: 500; }
+.loc[data-on] .ic { color: var(--primary); }
+.loc[data-on] .ct { color: var(--accent-foreground); }
+/* 最近打开横跨那三个，因此与它们隔开——用留白说这句话，不用线 */
+.loc-gap { height: 10px; }
+
+/* 段头与筛选行共用 13px 左边——那 4px 的沟是给选中竖条留的，不是缩进 */
+.grp-h { display: flex; align-items: baseline; margin: 22px 0 3px; padding: 0 9px 0 13px; font-size: 11px; color: var(--muted-foreground); }
+.grp-h .of { margin-left: auto; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* 筛选行没有图标、没有色块：八个同性质的值不需要八个要学的记号，名字与计数已经够了 */
+.fil { position: relative; display: flex; align-items: center; height: 26px; padding: 0 9px 0 13px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 13px; }
+.fil .ct { margin-left: auto; font: 400 11px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.fil[data-on] { color: var(--foreground); font-weight: 500; }
+.fil[data-on] .ct { color: var(--foreground); }
+.fil[data-on]::before { content: ""; position: absolute; left: 3px; top: 7px; bottom: 7px; width: 2px; border-radius: 1px; background: var(--primary); }
+
+/* 顶栏上的文件标签：h22 / max-width 220 / gap 6 / padding 0 5 0 8 / 圆角 6 / 字号 12 */
+.ftab { display: inline-flex; align-items: center; gap: 6px; height: 22px; max-width: 200px; min-width: 0; padding: 0 5px 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
+.ftab[data-on] { background: var(--accent); color: var(--accent-foreground); }
+.ftab .ic { width: 13px; height: 13px; flex: none; }
+.ftab .nm { overflow: hidden; text-overflow: ellipsis; }
+.ftab .x { display: grid; place-items: center; width: 14px; height: 14px; border-radius: 3px; color: var(--muted-foreground); flex: none; }
+.ftab .x svg { width: 10px; height: 10px; }
+.ftab-add { display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-md); color: var(--muted-foreground); }
+.ftab-add svg { width: 13px; height: 13px; }
+/* 首页时 logo 处在选中态——用的是 chrome 里唯一那种选中画法 */
+.brand[data-on] { background: var(--accent); }
+
+/*
+ * 首页有自己的布局语言：不分卡、不留沟槽、不设面板头。
+ * 编辑器那套密度（每块一张卡、6px 沟槽、30px 卡头）是给同屏七八个面板抢空间用的；
+ * 首页只有两块内容，照搬过来就是两块内容画四条边框。整屏只剩一条竖线。
+ */
+.app-body { display: flex; align-items: stretch; min-height: 0; background: var(--panel); }
+.pane--left { width: 236px; flex: none; display: flex; flex-direction: column; padding: 12px 8px; border-right: 1px solid var(--border); }
+.pane--main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; padding: 16px 20px 20px; overflow: hidden; }
+/* 内容区顶部那一行控件：它不是「面板头」，因此没有底色条，与内容同一条左边线 */
+.tools { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.tools .sp { flex: 1 1 auto; min-width: 6px; }
+.tools .grp { display: inline-flex; align-items: center; gap: 2px; }
+.tools .grp + .grp { margin-left: 12px; }
+
+
+/* 卡头里的输入与控件同样是 22 */
+.input { display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 9px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--background); color: var(--foreground); font-size: 12px; }
+.input .ic { width: 13px; height: 13px; color: var(--muted-foreground); }
+.input--search { flex: 1 1 auto; max-width: 420px; color: var(--muted-foreground); }
+.input--focus { border-color: var(--ring); box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 45%, transparent); }
+.input .caret { width: 1px; height: 12px; background: var(--ring); }
+.input--select { justify-content: space-between; }
+.seg { display: inline-flex; gap: 2px; }
+.seg span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-md); color: var(--muted-foreground); }
+.seg span[data-on] { background: var(--accent); color: var(--accent-foreground); }
+.seg .ic { width: 13px; height: 13px; }
+
+/* ——— 图墙：没有卡片容器，图自己就是那个对象 ——— */
+.wall { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.tile { position: relative; aspect-ratio: 16 / 9; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--screen); overflow: hidden; }
+.tile > svg { width: 100%; height: 100%; }
+.tile[data-hover] { border-color: var(--border-strong); }
+.tile[data-hover] .tile-cap { display: none; }
+/* 名称压在图的底边上：图是这一屏唯一有决定性的东西，文字让位给它 */
+/* 渐变要真的压住线条：接线图是细红线，压不住时标题读不出来 */
+.tile-cap { position: absolute; inset: auto 0 0 0; display: flex; align-items: baseline; gap: 7px; padding: 26px 8px 7px;
+  background: linear-gradient(transparent, rgb(6 8 11 / 72%) 42%, rgb(6 8 11 / 97%)); }
+.tile-cap b { font-size: 11.5px; font-weight: 500; color: var(--text-strong); text-shadow: 0 1px 2px rgb(6 8 11 / 80%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-cap .n { margin-left: auto; flex: none; font: 400 10px/1 var(--mono); font-variant-numeric: tabular-nums; color: rgb(230 237 247 / 58%); }
+.tile-veil { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 6px; background: rgb(6 8 11 / 52%); }
+.tile-veil .row { display: flex; gap: 6px; }
+.tile-veil .dim { position: absolute; left: 8px; bottom: 6px; font: 400 10px/1 var(--mono); color: rgb(230 237 247 / 70%); }
+.tile-badge { position: absolute; top: 6px; left: 6px; height: 17px; padding: 0 6px; display: inline-flex; align-items: center; border-radius: var(--radius-sm); background: rgb(6 8 11 / 80%); font: 500 10px/1 var(--sans); color: var(--subtle); }
+
+.sec-h { display: flex; align-items: center; gap: 7px; margin: 4px 0 7px; }
+.sec-h:not(:first-child) { margin-top: 14px; }
+.sec-h b { font-size: 12px; font-weight: 600; color: var(--text-strong); }
+.sec-h i { font: 400 10.5px/1 var(--mono); font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.sec-h .sp { margin-left: auto; }
+
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+.grid--5 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+
+/* ——— Card ——— */
+/* 卡片不画框：缩略图自己那一圈已经把它框住了，再套一层就是同一句话说两遍。 */
+.card { position: relative; background: transparent; }
+.card[data-hover] .thumb { border-color: var(--border-strong); }
+.thumb { position: relative; aspect-ratio: 16 / 9; background: var(--screen); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.thumb svg { width: 100%; height: 100%; }
+.card-b { padding: 7px 2px 0; }
+.card-t { display: flex; align-items: center; gap: 6px; }
+.card-t b { font-size: 12.5px; font-weight: 500; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-t .more { margin-left: auto; color: var(--muted-foreground); display: grid; place-items: center; }
+.card-t .more .ic { width: 14px; height: 14px; }
+.card-m { margin-top: 2px; font-size: 11.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.pips { position: absolute; left: 7px; bottom: 7px; display: flex; gap: 3px; }
+.pips i { width: 12px; height: 3px; border-radius: 999px; background: rgb(230 237 247 / 30%); }
+.pips i[data-on] { background: var(--text-strong); }
+/* Badge：rounded-md、border、text-xs、font-medium */
+.badge { position: absolute; top: 6px; left: 6px; display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: var(--radius-md); background: color-mix(in oklab, var(--background) 90%, transparent); font: 500 10.5px/1 var(--sans); color: var(--muted-foreground); backdrop-filter: blur(3px); }
+.badge[data-tone="official"] { color: var(--foreground); border-color: var(--border-strong); }
+.badge[data-tone="wip"] { color: var(--amber); border-color: color-mix(in oklab, var(--amber) 45%, transparent); }
+.hover-veil { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(rgb(10 12 15 / 10%), rgb(10 12 15 / 70%)); }
+.hover-veil .row { display: flex; gap: 6px; }
+.veil-dim { position: absolute; left: 7px; bottom: 6px; font: 400 10.5px/1 var(--mono); color: rgb(230 237 247 / 72%); }
+
+/* ——— Dialog ——— */
+.dlg-wrap { position: relative; background: var(--ws); padding: 24px; display: grid; place-items: center; }
+.dlg-wrap::before { content: ""; position: absolute; inset: 0; background: rgb(6 8 11 / 60%); }
+.dlg { position: relative; width: 520px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--background); box-shadow: var(--shadow-lg); overflow: hidden; }
+.dlg-h { display: flex; align-items: center; gap: 10px; padding: 14px 16px 0; }
+.dlg-h b { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-strong); }
+.dlg-h .x { margin-left: auto; color: var(--muted-foreground); }
+.dlg-b { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.dlg-hero { display: grid; grid-template-columns: 132px minmax(0,1fr); gap: 12px; align-items: start; }
+.dlg-hero .thumb { border-radius: var(--radius-md); }
+.dlg-hero .meta b { display: block; font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.dlg-hero .meta p { margin: 4px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted-foreground); }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--foreground); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.manifest { border-radius: var(--radius-lg); background: var(--muted); padding: 10px 12px; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+.manifest div { display: flex; flex-direction: column; gap: 1px; }
+.manifest b { font: 600 15px/1.2 var(--mono); font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.manifest span { font-size: 11px; color: var(--muted-foreground); }
+.dlg-f { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--muted); }
+.dlg-f .sp { margin-left: auto; display: flex; gap: 8px; }
+
+/* ——— 两栏对比 ——— */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.col { border-radius: var(--radius-lg); background: var(--card); overflow: hidden; }
+.col-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.col-h b { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+.tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--radius-md); border: 1px solid var(--border); font: 500 10px/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-foreground); }
+.tag[data-t="next"] { border-color: color-mix(in oklab, var(--primary) 45%, transparent); color: var(--focus); background: color-mix(in oklab, var(--primary) 14%, transparent); }
+.col-b { padding: 14px 12px 16px; display: grid; justify-items: start; gap: 12px; }
+.col-b .tip, .col-b .menu { margin-left: 6px; }
+.col-b [data-under="chev"] { margin-left: 34px; }
+
+.bar { width: 100%; height: 30px; display: flex; align-items: center; gap: 2px; padding-inline: 6px; border-radius: var(--radius-lg); background: var(--raised); }
+.bar .wsname { margin-left: 8px; font-size: 12.5px; color: var(--muted-foreground); }
+.bar .wsname b { color: var(--foreground); font-weight: 500; }
+.hit { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 4px 0 6px; border-radius: var(--radius-md); }
+.hit[data-box] { outline: 1px dashed var(--ring); outline-offset: -1px; background: color-mix(in oklab, var(--primary) 12%, transparent); }
+.hit .ic { width: 13px; height: 13px; color: var(--muted-foreground); }
+.hit .brand-mark { width: 19px; height: 19px; color: var(--text-strong); }
+.tip { position: relative; padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); font-size: 11.5px; color: var(--foreground); box-shadow: var(--shadow-md); }
+.tip::before { content: ""; position: absolute; top: -5px; left: 13px; width: 8px; height: 8px; background: var(--popover); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg); }
+/* Popover / Menu：p-1、条目 h-7 rounded-sm */
+.menu { width: 208px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--popover); box-shadow: var(--shadow-md); }
+.menu .mi { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 12.5px; color: var(--foreground); }
+.menu .mi .ic { width: 15px; height: 15px; color: var(--muted-foreground); }
+.menu .mi .kb { margin-left: auto; font: 400 10.5px/1 var(--mono); color: var(--muted-foreground); }
+.menu .mi[data-on] { background: var(--accent); color: var(--accent-foreground); }
+.menu .mi[data-on] .ic { color: var(--accent-foreground); }
+.menu .sepm { height: 1px; margin: 4px 6px; background: var(--border); }
+.legend { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted-foreground); }
+.legend i { width: 12px; height: 12px; border-radius: 3px; outline: 1px dashed var(--ring); outline-offset: -1px; background: color-mix(in oklab, var(--primary) 12%, transparent); flex: none; }
+
+/* ——— 状态四联 ——— */
+.states { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; align-items: start; }
+.state-vis { display: flex; height: 202px; }
+.state-vis > * { flex: 1; min-width: 0; }
+.state-vis .card { display: flex; flex-direction: column; }
+.state-vis .thumb { aspect-ratio: auto; flex: 1; }
+.state-cap { margin-top: 8px; font-size: 12.5px; font-weight: 500; color: var(--foreground); }
+.state-cap span { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 400; color: var(--muted-foreground); }
+.sk .ln { height: 8px; border-radius: var(--radius-sm); background: var(--secondary); }
+.empty-b { display: grid; place-items: center; align-content: center; gap: 7px; border: 1px dashed var(--input); border-radius: var(--radius-lg); background: var(--muted); text-align: center; padding: 14px; }
+.empty-b .ic { color: var(--muted-foreground); }
+.empty-b b { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+.empty-b p { margin: 0; font-size: 11.5px; color: var(--muted-foreground); }
+.prog { position: absolute; inset: auto 0 0 0; height: 2px; background: var(--secondary); }
+.prog i { display: block; height: 100%; width: 62%; background: var(--primary); }
+.fail-veil { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 6px; background: color-mix(in oklab, var(--screen) 82%, transparent); text-align: center; padding: 12px; }
+.fail-veil .ic { color: var(--destructive); }
+.fail-veil b { font-size: 12px; font-weight: 600; color: var(--destructive); }
+.fail-veil p { margin: 0; font-size: 11px; color: var(--muted-foreground); }
+
+/* ——— Table ——— */
+.tbl { border-radius: var(--radius-lg); background: var(--card); overflow: hidden; }
+.tr { display: grid; grid-template-columns: 216px minmax(0,1fr); gap: 0 16px; padding: 11px 14px; align-items: baseline; }
+.tr + .tr { border-top: 1px solid var(--border); }
+.td-k { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+.td-k span { display: block; margin-top: 3px; font: 400 10.5px/1.5 var(--mono); color: var(--muted-foreground); }
+.td-v { font-size: 13px; line-height: 1.6; color: var(--muted-foreground); }
+.td-v b { color: var(--foreground); font-weight: 500; }
+.td-v em { font-style: normal; color: var(--amber); }
+.tr--q { grid-template-columns: 30px minmax(0,1fr); gap: 0 12px; }
+.td-n { font: 500 11px/1.6 var(--mono); color: var(--muted-foreground); }
+.td-q { font-size: 13px; color: var(--foreground); }
+.td-q em { display: block; margin-top: 4px; font-style: normal; font-size: 12.5px; line-height: 1.6; color: var(--muted-foreground); }
+
+/* ——— 分类树（按场景浏览） ——— */
+.tree-i { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: 12.5px; }
+.tree-i .ct { margin-left: auto; font: 400 11px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.tree-i[data-on] { background: var(--accent); color: var(--accent-foreground); font-weight: 500; }
+.tree-i .sw { width: 6px; height: 6px; border-radius: 2px; flex: none; background: var(--border-strong); }
+
+/* ——— 卡片上的来源 ——— */
+.card-src { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 11px; color: var(--muted-foreground); }
+.card-src .ic { width: 12px; height: 12px; }
+.card-src .sep { color: var(--border-strong); }
+
+/* ——— 给客户看：全屏演示 ——— */
+.demo { position: relative; aspect-ratio: 16 / 9; background: #000; display: grid; place-items: center; overflow: hidden; }
+.demo-stage { width: 78%; box-shadow: 0 24px 70px rgb(0 0 0 / 70%); border-radius: 2px; overflow: hidden; }
+.demo-stage svg { width: 100%; height: 100%; }
+.demo-bar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 8px 0 10px; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in oklab, var(--popover) 92%, transparent); box-shadow: var(--shadow-md); backdrop-filter: blur(8px); }
+.demo-bar .nav { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--muted-foreground); }
+.demo-bar .who { display: flex; flex-direction: column; gap: 1px; min-width: 116px; text-align: center; }
+.demo-bar .who b { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+.demo-bar .who span { font: 400 10.5px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.demo-bar .divider { width: 1px; height: 20px; background: var(--border); }
+.demo-top { position: absolute; top: 14px; right: 14px; display: flex; align-items: center; gap: 8px; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.key { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--card); font-size: 11.5px; color: var(--muted-foreground); }
+.key kbd { font: 500 10.5px/1 var(--mono); padding: 2px 5px; border-radius: var(--radius-sm); background: var(--secondary); color: var(--foreground); }
+
+media (max-width: 1040px) {
+  .cols, .states, .grid, .grid--5 { grid-template-columns: 1fr 1fr; }
+  .app-body { grid-template-columns: 1fr; }
+  .side { display: none; }
+}
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01M3 18h.01M3 6h.01M8 12h13M8 18h13M8 6h13"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-template" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></symbol>
+  <symbol id="i-briefcase" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-ellipsis" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m7 11 2-2-2-2M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></symbol>
+  <symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1"/><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/></symbol>
+  <symbol id="i-brand" viewBox="0 0 24 24" fill="none"><rect fill="currentColor" stroke="none" height="9.4" rx="2.4" width="9.8" x="1.8" y="12.8"/><rect fill="currentColor" stroke="none" height="8.6" rx="2.2" width="8.8" x="13.4" y="1.8"/><path class="brand-wire" d="M11.6 17.5h6.2v-7.1" stroke-width="2"/></symbol>
+</svg>
+
+<div class="page">
+
+<header>
+  <div class="eyebrow">设计稿 · 产品形态</div>
+  <h1>首页与二次编辑</h1>
+  <p class="lede">
+    编辑器不再是应用的入口，<b>页面库</b>才是。它回答的是<b>「这东西该怎么画」</b>——左栏是两段：
+    上段是<b>项目 / 模板 / 回收站</b>三个去处，下段是<b>场景类型</b>（PCS、BMS、一次接线、总览），
+    跟着上面选中的那一个走。同一类里并排摆着已经画过的几十种画法。而它真正的用法是<b>当着客户翻</b>：客户指中哪一张，
+    就以那一张为底开始改；<b>演示那一屏不出现任何内部信息</b>——屏幕正对着客户。
+    后端只出现在一个位置：<b>资源管理服务</b>，连同分类标签一起由它交回来。
+  </p>
+</header>
+
+<hr class="rule" />
+
+<!-- ============ 00 ============ -->
+<section>
+  <h2><span class="num">00</span>三个名词</h2>
+  <p class="sub">
+    先把词对齐，后面每一条都压在它们上面。三者各自已经在代码里有确切含义，<b>这次不新造任何一个</b>。
+  </p>
+  <div class="tbl">
+    <div class="tr">
+      <div class="td-k">页面<span>= 一份 .page.json = 一张卡</span></div>
+      <div class="td-v">
+        库里的每一张卡就是一个页面，打开它就是编辑它。<b>这是仓库既有的单位</b>，不新造——
+        页面文件是 <code>{ document, setupScript, activeFrameId }</code> 的聚合，
+        缩略图取它的<b>激活场景</b>渲染，因此缩略图有唯一来源、不会与内容不符。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">三个大分类<span>项目 / 模板 / 回收站</span></div>
+      <div class="td-v">
+        这是左栏的上段，分的是<b>性质</b>：真交付出去的图、拿来给客户挑的底、已删除的。
+        场景类型（PCS、一次接线、总览……）在这三者<b>内部</b>都成立，因此它不与三者并排，
+        而是作为下段跟着选中的那一个走——切到模板，那八项的计数跟着换成模板的。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">场景类型<span>= 资源服务上的标签</span></div>
+      <div class="td-v">
+        PCS / BMS / 一次接线 / 总览 / 报表……它回答「这张图画的是什么」，
+        <b>不进文档</b>，见第 04 节。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 01 ============ -->
+<section>
+  <h2><span class="num">01</span>页面库</h2>
+  <p class="sub">
+    默认落点。左栏分两段，各回答一个问题：<b>上段是「在哪儿找」</b>——<b>项目</b>（真交付出去的图）、
+    <b>模板</b>（拿来给客户挑的底）、<b>回收站</b>，互斥；<b>下段是「找哪一类」</b>——场景类型，
+    跟着上段选中的那一个走。<b>最近打开</b>不是第四个去处，它横跨三者，所以隔一段留白摆在最上面。
+    主区按类型分段，一段里并排的是同一类东西的<b>各种画法</b>——这一屏回答的是「这东西该怎么画」。
+  </p>
+
+  <div class="shot">
+    <div class="app">
+      <div class="app-top">
+        <span class="brand" data-on title="返回页面库">
+          <svg class="brand-mark ic"><use href="#i-brand"/></svg>
+          <svg class="cv ic"><use href="#i-chevron-down"/></svg>
+        </span>
+        <span class="ftab"><svg class="ic"><use href="#i-image"/></svg><span class="nm">PCS 详情</span><span class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></span>
+        <span class="ftab"><svg class="ic"><use href="#i-image"/></svg><span class="nm">一次接线图</span><span class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></span>
+        <span class="ftab-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></svg></span>
+        <span class="top-sp"></span>
+        <span class="rail-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="2" y="3" width="4.4" height="10" rx="1.5" fill="currentColor"/></svg></span>
+        <span class="rail-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><rect x="9.6" y="3" width="4.4" height="10" rx="1.5" fill="currentColor"/></svg></span>
+        <span class="avatar">RT</span>
+      </div>
+
+      <div class="app-body">
+        <div class="pane pane--left">
+            <div class="loc"><svg class="ic"><use href="#i-clock"/></svg>最近打开</div>
+            <div class="loc-gap"></div>
+            <div class="loc" data-on><svg class="ic"><use href="#i-briefcase"/></svg>项目<span class="ct">418</span></div>
+            <div class="loc"><svg class="ic"><use href="#i-template"/></svg>模板<span class="ct">42</span></div>
+            <div class="loc"><svg class="ic"><use href="#i-trash"/></svg>回收站<span class="ct">6</span></div>
+
+            <div class="grp-h">场景类型</div>
+            <div class="fil">总览大屏<span class="ct">71</span></div>
+            <div class="fil">一次接线图<span class="ct">68</span></div>
+            <div class="fil">PCS<span class="ct">64</span></div>
+            <div class="fil">BMS / 电池簇<span class="ct">59</span></div>
+            <div class="fil">消防<span class="ct">41</span></div>
+            <div class="fil">暖通<span class="ct">33</span></div>
+            <div class="fil">报表与台账<span class="ct">52</span></div>
+            <div class="fil">未分类<span class="ct">30</span></div>
+        </div>
+
+        <div class="pane pane--main">
+          <div class="tools">
+            <span class="input input--search"><svg class="ic"><use href="#i-search"/></svg>搜索页面…</span>
+            <span class="sp"></span>
+            <span class="grp">
+              <span class="tbtn">最近修改<svg class="ic"><use href="#i-chevron-down"/></svg></span>
+              <span class="seg">
+                <span data-on><svg class="ic"><use href="#i-grid"/></svg></span>
+                <span><svg class="ic"><use href="#i-list"/></svg></span>
+              </span>
+            </span>
+            <span class="grp">
+              <span class="split">
+                <span class="tbtn tbtn--primary"><svg class="ic"><use href="#i-plus"/></svg>新建页面</span>
+                <span class="btn-cv"><svg class="ic"><use href="#i-chevron-down"/></svg></span>
+              </span>
+            </span>
+          </div>
+            <div class="sec-h" style="margin-top:0"><b>PCS</b><i>64</i><span class="sp"><span class="tbtn">看全部<svg class="ic"><use href="#i-arrow-right"/></svg></span></span></div>
+            <div class="wall">
+            <div class="tile" data-hover>
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <rect width="320" height="20" fill="#141922"/><rect x="10" y="7" width="76" height="6" rx="3" fill="#7e8b9e"/>
+                  <rect x="10" y="30" width="112" height="140" rx="4" fill="#161c26"/>
+                  <g stroke="#ff3b30" stroke-width="2.2" fill="none"><path d="M40 44v20M40 96v20M40 140v18M22 158h88"/></g>
+                  <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="2"><rect x="28" y="64" width="24" height="32" rx="2"/><circle cx="40" cy="128" r="12"/></g>
+                  <g stroke="#d8e2f1" stroke-width="1.8" fill="none"><path d="M34 72h12M34 80h12M34 88h12M33 121l14 14M47 121l-14 14"/></g>
+                  <g fill="#4e5866"><rect x="60" y="70" width="46" height="5" rx="2"/><rect x="60" y="82" width="34" height="5" rx="2"/><rect x="60" y="124" width="40" height="5" rx="2"/></g>
+                  <g fill="#161c26"><rect x="132" y="30" width="86" height="42" rx="4"/><rect x="228" y="30" width="82" height="42" rx="4"/><rect x="132" y="82" width="178" height="88" rx="4"/></g>
+                  <rect x="142" y="44" width="40" height="13" rx="2" fill="#3687ff"/><rect x="238" y="44" width="32" height="13" rx="2" fill="#4ec9a0"/>
+                  <polyline points="142,150 172,132 202,140 232,116 262,124 300,104" fill="none" stroke="#3687ff" stroke-width="2.4"/>
+                  <polyline points="142,158 172,148 202,152 232,138 262,144 300,132" fill="none" stroke="#4ec9a0" stroke-width="1.7" opacity=".8"/>
+                </svg>
+              <div class="tile-cap"><b>PCS 详情</b><span class="n">34×</span></div>
+              <div class="tile-veil">
+                <div class="row"><span class="tbtn tbtn--primary">就用这个</span><span class="tbtn" style="background:var(--control);color:var(--foreground)">打开</span></div>
+                <span class="dim">1920 × 1080 · 上周</span>
+              </div>
+            </div>
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <circle cx="92" cy="88" r="52" fill="none" stroke="#1b222c" stroke-width="16"/>
+                  <path d="M92 36a52 52 0 0 1 40 85" fill="none" stroke="#4ec9a0" stroke-width="16" stroke-linecap="round"/>
+                  <rect x="64" y="76" width="56" height="16" rx="3" fill="#e6edf7"/>
+                  <rect x="76" y="100" width="32" height="7" rx="3" fill="#4e5866"/>
+                  <g fill="#161c26"><rect x="164" y="16" width="146" height="34" rx="4"/><rect x="164" y="58" width="146" height="34" rx="4"/><rect x="164" y="100" width="146" height="34" rx="4"/></g>
+                  <g fill="#4e5866"><rect x="176" y="24" width="52" height="6" rx="3"/><rect x="176" y="66" width="44" height="6" rx="3"/><rect x="176" y="108" width="58" height="6" rx="3"/></g>
+                  <g fill="#3687ff"><rect x="176" y="36" width="40" height="8" rx="2"/></g>
+                  <g fill="#e6edf7"><rect x="176" y="78" width="32" height="8" rx="2"/></g>
+                  <g fill="#e9a23b"><rect x="176" y="120" width="26" height="8" rx="2"/></g>
+                  <g fill="#3687ff" opacity=".9"><rect x="18" y="156" width="14" height="14" rx="2"/><rect x="40" y="150" width="14" height="20" rx="2"/><rect x="62" y="160" width="14" height="10" rx="2"/><rect x="84" y="146" width="14" height="24" rx="2"/><rect x="106" y="154" width="14" height="16" rx="2"/><rect x="128" y="142" width="14" height="28" rx="2"/></g>
+                  <g fill="#39424f"><rect x="164" y="146" width="146" height="6" rx="3"/><rect x="164" y="160" width="104" height="6" rx="3"/></g>
+                </svg>
+              <div class="tile-cap"><b>PCS 运行监视</b><span class="n">12×</span></div>
+            </div>
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <rect width="320" height="22" fill="#141922"/><rect x="10" y="8" width="88" height="6" rx="3" fill="#7e8b9e"/>
+                  <rect x="252" y="8" width="58" height="6" rx="3" fill="#39424f"/>
+                  <rect x="10" y="30" width="300" height="16" rx="3" fill="#161c26"/>
+                  <g fill="#5c6878"><rect x="20" y="36" width="52" height="5" rx="2"/><rect x="120" y="36" width="36" height="5" rx="2"/><rect x="196" y="36" width="36" height="5" rx="2"/><rect x="264" y="36" width="28" height="5" rx="2"/></g>
+                  <g stroke="#1e2531" stroke-width="1"><path d="M10 62h300M10 80h300M10 98h300M10 116h300M10 134h300M10 152h300"/></g>
+                  <g fill="#39424f">
+                    <rect x="20" y="52" width="74" height="5" rx="2"/><rect x="120" y="52" width="30" height="5" rx="2"/><rect x="196" y="52" width="26" height="5" rx="2"/>
+                    <rect x="20" y="70" width="62" height="5" rx="2"/><rect x="120" y="70" width="34" height="5" rx="2"/><rect x="196" y="70" width="22" height="5" rx="2"/>
+                    <rect x="20" y="88" width="82" height="5" rx="2"/><rect x="120" y="88" width="26" height="5" rx="2"/><rect x="196" y="88" width="30" height="5" rx="2"/>
+                    <rect x="20" y="106" width="68" height="5" rx="2"/><rect x="120" y="106" width="32" height="5" rx="2"/><rect x="196" y="106" width="24" height="5" rx="2"/>
+                    <rect x="20" y="124" width="76" height="5" rx="2"/><rect x="120" y="124" width="28" height="5" rx="2"/><rect x="196" y="124" width="28" height="5" rx="2"/>
+                    <rect x="20" y="142" width="58" height="5" rx="2"/><rect x="120" y="142" width="36" height="5" rx="2"/><rect x="196" y="142" width="20" height="5" rx="2"/>
+                    <rect x="20" y="160" width="70" height="5" rx="2"/><rect x="120" y="160" width="30" height="5" rx="2"/><rect x="196" y="160" width="26" height="5" rx="2"/>
+                  </g>
+                  <g><circle cx="276" cy="54" r="4" fill="#4ec9a0"/><circle cx="276" cy="72" r="4" fill="#4ec9a0"/><circle cx="276" cy="90" r="4" fill="#e9a23b"/><circle cx="276" cy="108" r="4" fill="#4ec9a0"/><circle cx="276" cy="126" r="4" fill="#4ec9a0"/><circle cx="276" cy="144" r="4" fill="#ff3b30"/><circle cx="276" cy="162" r="4" fill="#4ec9a0"/></g>
+                </svg>
+              <div class="tile-cap"><b>PCS 保护定值</b></div>
+            </div>
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="2.4">
+                    <rect x="26" y="16" width="86" height="148" rx="3"/><rect x="120" y="16" width="86" height="148" rx="3"/><rect x="214" y="16" width="86" height="148" rx="3"/>
+                  </g>
+                  <g fill="#1c2430">
+                    <rect x="34" y="26" width="70" height="22" rx="2"/><rect x="34" y="54" width="70" height="22" rx="2"/><rect x="34" y="82" width="70" height="22" rx="2"/><rect x="34" y="110" width="70" height="22" rx="2"/><rect x="34" y="138" width="70" height="18" rx="2"/>
+                    <rect x="128" y="26" width="70" height="22" rx="2"/><rect x="128" y="54" width="70" height="22" rx="2"/><rect x="128" y="82" width="70" height="22" rx="2"/><rect x="128" y="110" width="70" height="22" rx="2"/><rect x="128" y="138" width="70" height="18" rx="2"/>
+                    <rect x="222" y="26" width="70" height="22" rx="2"/><rect x="222" y="54" width="70" height="22" rx="2"/><rect x="222" y="82" width="70" height="22" rx="2"/><rect x="222" y="110" width="70" height="22" rx="2"/><rect x="222" y="138" width="70" height="18" rx="2"/>
+                  </g>
+                  <g fill="#3687ff"><rect x="40" y="34" width="18" height="6" rx="2"/><rect x="134" y="62" width="18" height="6" rx="2"/><rect x="228" y="34" width="18" height="6" rx="2"/><rect x="40" y="118" width="18" height="6" rx="2"/></g>
+                  <g fill="#4ec9a0"><rect x="134" y="34" width="18" height="6" rx="2"/><rect x="228" y="90" width="18" height="6" rx="2"/></g>
+                  <g fill="#e9a23b"><rect x="228" y="118" width="18" height="6" rx="2"/></g>
+                  <g fill="#39424f"><rect x="40" y="62" width="30" height="5" rx="2"/><rect x="40" y="90" width="26" height="5" rx="2"/><rect x="134" y="90" width="30" height="5" rx="2"/><rect x="134" y="118" width="24" height="5" rx="2"/><rect x="228" y="62" width="28" height="5" rx="2"/></g>
+                </svg>
+              <div class="tile-cap"><b>PCS 柜内布置</b><span class="n">5×</span></div>
+            </div>
+            </div>
+            <div class="sec-h"><b>一次接线图</b><i>68</i><span class="sp"><span class="tbtn">看全部<svg class="ic"><use href="#i-arrow-right"/></svg></span></span></div>
+            <div class="wall">
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <g stroke="#ff3b30" stroke-width="2.6" fill="none">
+                    <path d="M28 26v28M28 76v40M28 138v18M28 156h264"/>
+                    <path d="M104 26v28M104 76v80M180 26v28M180 76v80M256 26v28M256 76v80"/>
+                  </g>
+                  <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="2"><rect x="19" y="54" width="18" height="22" rx="1"/><rect x="95" y="54" width="18" height="22" rx="1"/><rect x="171" y="54" width="18" height="22" rx="1"/><rect x="247" y="54" width="18" height="22" rx="1"/><circle cx="28" cy="127" r="11"/></g>
+                  <g stroke="#d8e2f1" stroke-width="2"><path d="M22 122l12 10M34 122l-12 10"/></g>
+                  <g fill="#5c6878"><rect x="44" y="58" width="30" height="5" rx="2"/><rect x="120" y="58" width="30" height="5" rx="2"/><rect x="196" y="58" width="30" height="5" rx="2"/></g>
+                </svg>
+              <div class="tile-cap"><b>单母线接线</b><span class="n">58×</span></div>
+            </div>
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <g stroke="#ff3b30" stroke-width="3" fill="none"><path d="M16 24h288M16 44h288"/></g>
+                  <g stroke="#ff3b30" stroke-width="2.4" fill="none"><path d="M70 44v22M70 96v18M170 24v42M170 96v18M270 44v22M270 96v18"/></g>
+                  <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="2"><rect x="61" y="66" width="18" height="30" rx="1"/><rect x="161" y="66" width="18" height="30" rx="1"/><rect x="261" y="66" width="18" height="30" rx="1"/></g>
+                  <g fill="none" stroke="#d8e2f1" stroke-width="2"><circle cx="70" cy="126" r="12"/><circle cx="70" cy="140" r="12"/><circle cx="170" cy="126" r="12"/><circle cx="170" cy="140" r="12"/><circle cx="270" cy="126" r="12"/><circle cx="270" cy="140" r="12"/></g>
+                  <g stroke="#ff3b30" stroke-width="2.4" fill="none"><path d="M70 152v14M170 152v14M270 152v14"/></g>
+                  <g fill="#5c6878"><rect x="88" y="74" width="30" height="5" rx="2"/><rect x="188" y="74" width="30" height="5" rx="2"/><rect x="14" y="10" width="44" height="5" rx="2"/></g>
+                </svg>
+              <div class="tile-cap"><b>双母线升压站接线</b><span class="n">21×</span></div>
+            </div>
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <rect x="12" y="14" width="296" height="152" rx="5" fill="none" stroke="#39424f" stroke-width="1.6" stroke-dasharray="6 4"/>
+                  <g stroke="#ff3b30" stroke-width="2.4" fill="none">
+                    <path d="M44 34v18M44 82v20M44 118h232M92 118v-16M164 118v-16M236 118v-16"/>
+                  </g>
+                  <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="2"><rect x="32" y="52" width="24" height="30" rx="2"/></g>
+                  <g stroke="#d8e2f1" stroke-width="1.8" fill="none"><path d="M38 60h12M38 68h12M38 76h12"/></g>
+                  <g fill="#1c2430" stroke="#d8e2f1" stroke-width="1.8">
+                    <rect x="74" y="72" width="36" height="30" rx="2"/><rect x="146" y="72" width="36" height="30" rx="2"/><rect x="218" y="72" width="36" height="30" rx="2"/>
+                  </g>
+                  <g fill="#4ec9a0"><rect x="80" y="80" width="24" height="5" rx="2"/><rect x="152" y="80" width="24" height="5" rx="2"/><rect x="224" y="80" width="24" height="5" rx="2"/></g>
+                  <g fill="#39424f"><rect x="80" y="90" width="16" height="4" rx="2"/><rect x="152" y="90" width="16" height="4" rx="2"/><rect x="224" y="90" width="16" height="4" rx="2"/><rect x="62" y="58" width="20" height="5" rx="2"/><rect x="26" y="136" width="70" height="5" rx="2"/><rect x="26" y="148" width="48" height="5" rx="2"/></g>
+                </svg>
+              <div class="tile-cap"><b>集装箱一次接线</b><span class="n">47×</span></div>
+            </div>
+            <div class="tile">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                  <rect width="320" height="180" fill="#0c0f14"/>
+                  <g stroke="#ff3b30" stroke-width="2.8" fill="none"><path d="M160 16v26"/></g>
+                  <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="2"><rect x="128" y="42" width="64" height="24" rx="2"/></g>
+                  <g stroke="#d8e2f1" stroke-width="1.8" fill="none"><path d="M138 50h14M138 58h14M168 48l-8 12h10l-8 12"/></g>
+                  <g stroke="#ff3b30" stroke-width="2.2" fill="none">
+                    <path d="M160 66v18M36 84h248M36 84v22M78 84v22M120 84v22M202 84v22M244 84v22M284 84v22"/>
+                  </g>
+                  <g fill="#1c2430" stroke="#d8e2f1" stroke-width="1.6">
+                    <rect x="22" y="106" width="28" height="52" rx="2"/><rect x="64" y="106" width="28" height="52" rx="2"/><rect x="106" y="106" width="28" height="52" rx="2"/>
+                    <rect x="188" y="106" width="28" height="52" rx="2"/><rect x="230" y="106" width="28" height="52" rx="2"/><rect x="270" y="106" width="28" height="52" rx="2"/>
+                  </g>
+                  <g stroke="#4ec9a0" stroke-width="1.8" fill="none">
+                    <path d="M28 118h16M28 128h16M28 138h16M70 118h16M70 128h16M70 138h16M112 118h16M112 128h16M112 138h16M194 118h16M194 128h16M194 138h16M236 118h16M236 128h16M236 138h16M276 118h16M276 128h16M276 138h16"/>
+                  </g>
+                </svg>
+              <div class="tile-cap"><b>直流侧汇流接线</b><span class="n">9×</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="shot-cap"><span class="t">页面库</span><span>1280 × 720 · 顶栏与编辑器相同（30px），其余是首页自己的布局：左栏 236、无面板卡、只有一条竖线（见第 06 节）</span></div>
+
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        一级分类回答的是<b>用户此刻的问题</b>。他打开产品不是在问「哪个站」——那个他知道；
+        他在问<b>「PCS 该怎么画」</b>，而答案是<b>已经画过的那几十张</b>。因此分类的主轴是
+        <b>这张图画的是什么</b>，而不是它属于哪一批活儿——后者会让他为了看一眼 PCS 先猜该翻哪一批。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>项目与模板是两种性质，不是两个标签。</b>一个是真交付给客户的图（改它要担责），
+        一个是拿来给客户挑的底（改它是在改公司的家底）。并排摆成两段时，
+        <b>「用过 340 次」与「上周刚交付」会出现在同一列里</b>，读者得自己分辨哪些是真图。
+        回收站是第三种性质（已删除）。<b>场景类型在这三者内部都成立</b>，所以它不与三者并排——
+        并排摆会让「PCS」这一段同时混着真图与模板。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>左栏不是一棵树。</b>此前是：三个大分类各带一个折叠三角，展开是同样的八个场景类型——
+        那棵树逼着<b>这八项被抄两遍</b>（项目底下一遍、模板底下一遍），还让一层半的结构付了整套树的
+        代价：三角列、缩进列、每行一个不表达任何东西的色块，以及「项目 418」与子项「全部 418」
+        <b>把同一个数写了两遍</b>。拆成两段之后这五样一起消失。两段的选中因此<b>画法不同</b>——
+        位置是实底、筛选是左边一条竖条：同一种画法会让它们读成并列的两个选项，而它们回答的是
+        两个问题。代价写在明处：<code>项目 / PCS</code> 不再是一条可读的路径，要做深链接得把两段
+        的值分别写进去。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        看一类场景的<b>全部</b>画法（真图加模板一起看）要点两处。补偿是主区卡片上那个
+        <b>官方</b>角标——在「项目」这一支里看到的都是真图，而模板那一支里的每一张都带角标，
+        两边都不需要再去分辨。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>不要卡片，图自己就是那个对象。</b>卡片是一个容器，而这一屏里<b>唯一有决定性的东西是图</b>——
+        再给它套一个盒、在盒下面留一块文字区，等于用两层 chrome 去托一张图。
+        现在名称与「用过多少次」<b>压在图的底边上</b>（一层渐变压住线条），省下的高度全给了图。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>只放有区分度的东西。</b>之前每张卡下面都写着 <code>1920 × 1080 · 2 小时前</code>——
+        同一类里尺寸几乎总是一样，四行一字不差，等于没写。换成<b>用过多少次</b>：
+        它正好回答用户此刻的问题——<b>哪个画法是大家在用的</b>。没被用过的就不写，
+        那一行的空缺本身也是信息。尺寸退到 hover 上，它只在你真要用时才要紧。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        「用过多少次」要资源服务<b>记一笔</b>：每次「就用这个」给来源加一次计数。
+        这是本稿唯一要求后端<b>写业务数据</b>的地方——别处它只管存取文件。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        卡头右端分<b>两组</b>：排序与视图开关是「怎么看」，新建是「做什么」，两组之间<b>只用间距</b>
+        分开、不画竖线——沿用顶栏那条规矩。「新建页面」是 split button，因为新建<b>必然有两条路</b>：
+        空白页面，或<b>从模板</b>——而后者才是这个产品的主路径，它不该藏在一个菜单的第二项里。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        卡片的单位是<b>页面</b>，仓库里既有的那个单位（<code>.page.json</code>）。
+        缩略图取它的激活场景渲染，因此<b>缩略图有唯一来源</b>，不是一张随手截的图。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        按画的是什么分，就没法按「哪一批活儿」连着看——同一批做出来的几张图在墙上是<b>散开</b>的。
+        眼下靠<b>最近打开</b>与搜索兜底；要不要再给一条「按批次看」的入口，留到有人真被这件事挡住时再说。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 ============ -->
+<section>
+  <h2><span class="num">02</span>给客户看</h2>
+  <p class="sub">
+    这面墙真正的用法是<b>当着客户翻</b>：「PCS 我们有这几种画法，您看哪个顺眼」。
+    所以要有一屏<b>没有任何编辑器 chrome</b>的全屏演示，左右翻页，选中了当场开始改。
+    屏幕此刻正对着客户，这一条决定了下面每个细节。
+  </p>
+
+  <div class="shot">
+    <div class="demo">
+      <div class="demo-stage">
+        <svg viewBox="0 0 1920 1080">
+          <rect width="1920" height="1080" fill="#0c0f14"/>
+          <!-- 顶栏 -->
+          <rect width="1920" height="72" fill="#141922"/>
+          <rect x="40" y="28" width="250" height="16" rx="8" fill="#c9d4e4"/>
+          <rect x="316" y="31" width="112" height="10" rx="5" fill="#4e5866"/>
+          <rect x="1560" y="31" width="150" height="10" rx="5" fill="#4e5866"/>
+          <rect x="1740" y="26" width="140" height="20" rx="10" fill="#1c2430"/>
+          <circle cx="1762" cy="36" r="5" fill="#4ec9a0"/>
+          <rect x="1776" y="32" width="86" height="8" rx="4" fill="#5c6878"/>
+
+          <!-- 左：PCS 单线图 -->
+          <rect x="40" y="104" width="620" height="712" rx="10" fill="#161c26"/>
+          <rect x="68" y="132" width="132" height="12" rx="6" fill="#7e8b9e"/>
+          <g stroke="#ff3b30" stroke-width="5" fill="none">
+            <path d="M350 180v70M350 330v80M350 490v70M350 640v60M180 700h340"/>
+          </g>
+          <g fill="#0c0f14" stroke="#d8e2f1" stroke-width="4">
+            <rect x="326" y="250" width="48" height="80" rx="3"/>
+            <rect x="290" y="410" width="120" height="80" rx="4"/>
+            <circle cx="350" cy="590" r="30"/>
+          </g>
+          <g stroke="#d8e2f1" stroke-width="4" fill="none">
+            <path d="M310 440h24M310 460h24M310 480h24"/>
+            <path d="M366 428l-24 42h30l-24 42"/>
+            <path d="M332 574l36 32M368 574l-36 32"/>
+          </g>
+          <g fill="#4e5866">
+            <rect x="430" y="278" width="120" height="10" rx="5"/><rect x="430" y="300" width="84" height="10" rx="5"/>
+            <rect x="430" y="440" width="120" height="10" rx="5"/><rect x="430" y="462" width="96" height="10" rx="5"/>
+            <rect x="430" y="580" width="110" height="10" rx="5"/>
+            <rect x="180" y="726" width="130" height="10" rx="5"/>
+          </g>
+          <g fill="#161c26"><rect x="68" y="756" width="564" height="34" rx="6"/></g>
+          <rect x="84" y="766" width="180" height="12" rx="6" fill="#4e5866"/>
+          <rect x="520" y="766" width="96" height="12" rx="6" fill="#3687ff"/>
+
+          <!-- 右上：四个 KPI -->
+          <g fill="#161c26">
+            <rect x="692" y="104" width="286" height="150" rx="10"/><rect x="1002" y="104" width="286" height="150" rx="10"/>
+            <rect x="1312" y="104" width="286" height="150" rx="10"/><rect x="1622" y="104" width="258" height="150" rx="10"/>
+          </g>
+          <g fill="#4e5866">
+            <rect x="724" y="136" width="96" height="11" rx="5"/><rect x="1034" y="136" width="86" height="11" rx="5"/>
+            <rect x="1344" y="136" width="104" height="11" rx="5"/><rect x="1654" y="136" width="78" height="11" rx="5"/>
+          </g>
+          <rect x="724" y="170" width="150" height="34" rx="5" fill="#3687ff"/>
+          <rect x="1034" y="170" width="120" height="34" rx="5" fill="#4ec9a0"/>
+          <rect x="1344" y="170" width="136" height="34" rx="5" fill="#e6edf7"/>
+          <rect x="1654" y="170" width="104" height="34" rx="5" fill="#e9a23b"/>
+          <g fill="#39424f">
+            <rect x="724" y="220" width="120" height="9" rx="4"/><rect x="1034" y="220" width="120" height="9" rx="4"/>
+            <rect x="1344" y="220" width="120" height="9" rx="4"/><rect x="1654" y="220" width="100" height="9" rx="4"/>
+          </g>
+
+          <!-- 右中：趋势 -->
+          <rect x="692" y="278" width="1188" height="300" rx="10" fill="#161c26"/>
+          <rect x="724" y="308" width="140" height="11" rx="5" fill="#7e8b9e"/>
+          <g stroke="#242c38" stroke-width="2"><path d="M724 400h1124M724 462h1124M724 524h1124"/></g>
+          <polyline points="724,512 830,468 936,486 1042,420 1148,444 1254,380 1360,404 1466,352 1572,386 1678,336 1848,362"
+                    fill="none" stroke="#3687ff" stroke-width="5"/>
+          <polyline points="724,540 830,514 936,526 1042,486 1148,502 1254,458 1360,478 1466,436 1572,462 1678,424 1848,444"
+                    fill="none" stroke="#4ec9a0" stroke-width="4" opacity=".85"/>
+          <g fill="#39424f"><rect x="724" y="552" width="60" height="8" rx="4"/><rect x="1240" y="552" width="60" height="8" rx="4"/><rect x="1788" y="552" width="60" height="8" rx="4"/></g>
+
+          <!-- 右下：状态表 -->
+          <rect x="692" y="602" width="1188" height="214" rx="10" fill="#161c26"/>
+          <rect x="724" y="630" width="112" height="11" rx="5" fill="#7e8b9e"/>
+          <g stroke="#242c38" stroke-width="2"><path d="M692 664h1188M692 712h1188M692 760h1188"/></g>
+          <g fill="#4e5866">
+            <rect x="724" y="682" width="180" height="10" rx="5"/><rect x="1000" y="682" width="120" height="10" rx="5"/><rect x="1300" y="682" width="150" height="10" rx="5"/>
+            <rect x="724" y="730" width="210" height="10" rx="5"/><rect x="1000" y="730" width="96" height="10" rx="5"/><rect x="1300" y="730" width="132" height="10" rx="5"/>
+            <rect x="724" y="778" width="164" height="10" rx="5"/><rect x="1000" y="778" width="140" height="10" rx="5"/><rect x="1300" y="778" width="118" height="10" rx="5"/>
+          </g>
+          <circle cx="1820" cy="687" r="7" fill="#4ec9a0"/>
+          <circle cx="1820" cy="735" r="7" fill="#e9a23b"/>
+          <circle cx="1820" cy="783" r="7" fill="#4ec9a0"/>
+
+          <!-- 底部条 -->
+          <rect x="40" y="840" width="1840" height="200" rx="10" fill="#161c26"/>
+          <rect x="72" y="868" width="120" height="11" rx="5" fill="#7e8b9e"/>
+          <g fill="#1c2430">
+            <rect x="72" y="900" width="280" height="110" rx="8"/><rect x="376" y="900" width="280" height="110" rx="8"/>
+            <rect x="680" y="900" width="280" height="110" rx="8"/><rect x="984" y="900" width="280" height="110" rx="8"/>
+            <rect x="1288" y="900" width="280" height="110" rx="8"/><rect x="1592" y="900" width="288" height="110" rx="8"/>
+          </g>
+          <g fill="#3687ff"><rect x="96" y="928" width="86" height="22" rx="4"/><rect x="400" y="928" width="72" height="22" rx="4"/><rect x="1008" y="928" width="80" height="22" rx="4"/><rect x="1616" y="928" width="68" height="22" rx="4"/></g>
+          <g fill="#4ec9a0"><rect x="704" y="928" width="78" height="22" rx="4"/></g>
+          <g fill="#e9a23b"><rect x="1312" y="928" width="64" height="22" rx="4"/></g>
+          <g fill="#39424f">
+            <rect x="96" y="968" width="150" height="9" rx="4"/><rect x="400" y="968" width="150" height="9" rx="4"/>
+            <rect x="704" y="968" width="150" height="9" rx="4"/><rect x="1008" y="968" width="150" height="9" rx="4"/>
+            <rect x="1312" y="968" width="150" height="9" rx="4"/><rect x="1616" y="968" width="150" height="9" rx="4"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="demo-bar">
+        <span class="nav"><svg class="ic"><use href="#i-arrow-left"/></svg></span>
+        <span class="who"><b>PCS 详情</b><span>方案 3 / 64</span></span>
+        <span class="nav" style="transform:rotate(180deg)"><svg class="ic"><use href="#i-arrow-left"/></svg></span>
+        <span class="divider"></span>
+        <span class="btn btn--primary btn--sm">就用这个</span>
+        <span class="nav"><svg class="ic"><use href="#i-x"/></svg></span>
+      </div>
+    </div>
+  </div>
+  <div class="shot-cap"><span class="t">全屏演示</span><span>整屏只有图与一条控制条；不出现分类、文件名与修改时间</span></div>
+  <div class="keys">
+    <span class="key"><kbd>←</kbd><kbd>→</kbd>翻同一类的下一张</span>
+    <span class="key"><kbd>Enter</kbd>就用这个</span>
+    <span class="key"><kbd>Esc</kbd>退回页面库</span>
+    <span class="key"><kbd>F</kbd>真全屏（投影仪）</span>
+  </div>
+
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>这一屏上不出现任何内部信息。</b>不画分类、不画修改时间、不画文件名——
+        它们都是<b>我们自己的记账</b>，而屏幕此刻正对着客户。翻页时只写「方案 3 / 64」，
+        因为客户此刻唯一要回答的问题是<b>哪一张顺眼</b>。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        因此<b>分类不是内部检索的方便，它是给客户的菜单</b>。「PCS 有 64 种画法」这句话
+        必须当着客户成立，所以分类要按<b>客户认得的设备</b>分（PCS、BMS、消防），
+        而不是按我们的内部结构分（组件、图层、模板版本）。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        演示的是<b>真实渲染而不是缩略图</b>——客户要凑近看数值与线宽。
+        因此这一屏要当场加载那份文档，第一张会有一个可见的加载过程；
+        补偿是翻页时<b>预取相邻两张</b>，客户按着方向键连翻时不再等。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 ============ -->
+<section>
+  <h2><span class="num">03</span>就用这个</h2>
+  <p class="sub">
+    演示屏上按下「就用这个」落到这里，墙上 hover 的那颗按钮也落到这里。它做的是<b>复制一份</b>：
+    客户指中的这张图成为你自己那一份的底，此后两边再无关系。客户就在旁边等着，所以这一步
+    <b>只问一个必须问的问题</b>——它叫什么。
+  </p>
+
+  <div class="shot">
+    <div class="dlg-wrap">
+      <div class="dlg">
+        <div class="dlg-h">
+          <b>以此新建页面</b>
+          <span class="x"><svg class="ic"><use href="#i-x"/></svg></span>
+        </div>
+        <div class="dlg-b">
+          <div class="dlg-hero">
+            <div class="thumb">
+              <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+                <rect width="320" height="180" fill="#0c0f14"/>
+                <rect x="0" y="0" width="320" height="22" fill="#141922"/>
+                <rect x="10" y="8" width="72" height="6" rx="3" fill="#7e8b9e"/>
+                <rect x="12" y="32" width="120" height="136" rx="4" fill="#161c26"/>
+                <g stroke="#d8e2f1" stroke-width="2" fill="none"><path d="M40 52v22M40 104v22"/><rect x="28" y="74" width="24" height="30" rx="2" fill="#0c0f14"/><path d="M34 82h12M34 90h12M34 98h12"/></g>
+                <g stroke="#ff3b30" stroke-width="2.4" fill="none"><path d="M40 126v26h80"/></g>
+                <g fill="#161c26"><rect x="142" y="32" width="80" height="44" rx="4"/><rect x="230" y="32" width="80" height="44" rx="4"/><rect x="142" y="86" width="168" height="82" rx="4"/></g>
+                <g fill="#3687ff"><rect x="152" y="46" width="32" height="12" rx="2"/></g>
+                <polyline points="152,148 186,132 220,138 254,116 288,124 302,110" fill="none" stroke="#3687ff" stroke-width="2.2"/>
+              </svg>
+            </div>
+            <div class="meta">
+              <b>PCS 详情</b>
+              <p>PCS · 1920 × 1080<br/>最近修改 2 小时前</p>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>页面名称</label>
+            <div class="input input--focus">PCS 详情 副本<span class="caret"></span></div>
+          </div>
+
+          <div class="two">
+            <div class="field">
+              <label>分类</label>
+              <div class="input input--select">PCS<svg class="ic ic-sm"><use href="#i-chevron-down"/></svg></div>
+            </div>
+            <div class="field">
+              <label>放进</label>
+              <div class="input input--select">项目<svg class="ic ic-sm"><use href="#i-chevron-down"/></svg></div>
+            </div>
+          </div>
+
+          <div class="manifest">
+            <div><b>1</b><span>页面</span></div>
+            <div><b>14</b><span>组件</span></div>
+            <div><b>32</b><span>符号</span></div>
+            <div><b>3</b><span>动画</span></div>
+          </div>
+
+          <div class="alert" style="margin-top:0">
+            <svg class="ic"><use href="#i-info"/></svg>
+            <div class="alert-d">
+              这张图用到的组件与符号<b>一并复制</b>；同名的<b>另存一份，不覆盖</b>——
+              覆盖会改掉别的页面，而那些多半已经交付。
+            </div>
+          </div>
+        </div>
+        <div class="dlg-f">
+          <span class="btn btn--ghost btn--sm">全屏看一遍</span>
+          <span class="sp">
+            <span class="btn btn--outline btn--sm">取消</span>
+            <span class="btn btn--primary btn--sm">创建并打开</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="shot-cap"><span class="t">以此新建页面</span><span>默认名是原名加「副本」，光标预选；分类沿用原图的，多数时候不用动</span></div>
+
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>同名组件另存一份，不覆盖。</b>覆盖看起来更「干净」，代价是改掉了<b>别的页面</b>——
+        而那些多半已经交付。多一份冗余是看得见的，改坏一张已交付的图是看不见的。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        复制是<b>深拷贝而不是引用</b>。引用式（模板更新自动回流）听起来更好，代价是交付出去那份图会在
+        某天早上自己变样——而这个产品的用户是把图交付给客户的实施工程师。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        复制几次之后会攒下 <code>PCS 主体</code>、<code>PCS 主体 2</code> 这样的组件。
+        这是<b>明知而选</b>的：清理是一次可撤销的手工动作，而被覆盖的交付图没有补救。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 ============ -->
+<section>
+  <h2><span class="num">04</span>场景类型从哪来</h2>
+  <p class="sub">
+    这一节是整套分类法的地基：<b>「这块场景属于 PCS」这句话存在哪儿</b>。三个候选，只有一个站得住。
+  </p>
+  <div class="tbl">
+    <div class="tr">
+      <div class="td-k">靠名字猜<span>Frame.name 含「PCS」</span></div>
+      <div class="td-v">
+        零改动，也<em>零可靠</em>。改个名字就掉出分类，而「PCS-1」「pcs详情」「储能变流器」指的是同一类。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">写进文档<span>给 Frame 加一个字段</span></div>
+      <div class="td-v">
+        要动 <code>ComposeDocument</code> 协议、校验与迁移。而分类是<b>「怎么看」不是「画了什么」</b>——
+        与网格设置不写进文档、工作区按偏好记忆是同一条判断。<em>否决</em>。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">资源服务上的标签<span>目录服务的一张表</span></div>
+      <div class="td-v">
+        <b>取这条。</b>标签挂在「哪个资源根的哪个 Frame id」上，住在后端目录里。协议不动、编辑器不动，
+        分类体系随时能改而不需要迁移任何一份文档；一块场景还能同时属于多类。
+      </div>
+    </div>
+  </div>
+
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        把一份页面导出到别处、或离线打开时，<b>标签不跟着走</b>——那边只剩文件名。
+        这是对的取舍：标签是这套协作产品的索引，不是那张图的一部分。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        必须有一类叫<b>「未分类」</b>并且默认显示（图里是 30 块）。新建、导入、DXF 转进来的场景一律先落在
+        这里；藏起来的话，用户会以为库里没有那块图，转头再画一遍。打标签的入口在场景的右键菜单上。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section>
+  <h2><span class="num">05</span>四种状态</h2>
+  <p class="sub">
+    首页的每一格数据都来自<b>网络</b>，所以这四种状态不是边角料，它们和正常态一样常见。
+  </p>
+
+  <div class="states">
+    <div>
+      <div class="tile" style="background:var(--control)"></div>
+      <div class="state-cap">加载中<span>骨架保持图的尺寸，列表不跳动</span></div>
+    </div>
+
+    <div>
+      <div class="tile">
+        <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+            <rect width="320" height="180" fill="#0c0f14"/>
+            <g fill="#161c26"><rect x="10" y="36" width="96" height="60" rx="4"/><rect x="114" y="36" width="96" height="60" rx="4"/><rect x="218" y="36" width="92" height="60" rx="4"/></g>
+            <g fill="#2a3340"><rect x="22" y="52" width="40" height="12" rx="2"/><rect x="126" y="52" width="34" height="12" rx="2"/></g>
+          </svg>
+        <div class="tile-veil" style="background:rgb(6 8 11 / 66%)">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--subtle)"><svg class="ic ic-sm"><use href="#i-loader"/></svg>正在复制 14 个组件…</div>
+        </div>
+        <div class="prog"><i></i></div>
+      </div>
+      <div class="state-cap">正在创建<span>图先出现，进度画在它自己身上</span></div>
+    </div>
+
+    <div>
+      <div class="tile">
+        <svg viewBox="0 0 320 180" preserveAspectRatio="none">
+            <rect width="320" height="180" fill="#0c0f14"/>
+            <g fill="#161c26"><rect x="10" y="36" width="96" height="60" rx="4"/><rect x="114" y="36" width="96" height="60" rx="4"/></g>
+          </svg>
+        <div class="tile-veil" style="background:rgb(6 8 11 / 80%);align-content:center">
+          <svg class="ic"><use href="#i-alert"/></svg>
+          <b style="font-size:11.5px;color:var(--destructive)">缩略图读取失败</b>
+          <span style="font-size:10.5px;color:var(--muted-foreground)">资源服务 503</span>
+          <span class="btn btn--outline btn--xs"><svg class="ic"><use href="#i-refresh"/></svg>重试</span>
+        </div>
+      </div>
+      <div class="state-cap">读取失败<span>坏的是缩略图，页面本身仍可打开</span></div>
+    </div>
+
+    <div>
+      <div class="tile" style="border-style:dashed;border-color:var(--input);display:grid;place-items:center;align-content:center;gap:7px;text-align:center;padding:14px">
+        <svg class="ic ic-lg" style="color:var(--muted-foreground)"><use href="#i-image"/></svg>
+        <b style="font-size:12px;color:var(--text-strong)">这一类还没有图</b>
+        <span class="btn btn--primary btn--xs">从模板起一张</span>
+      </div>
+      <div class="state-cap">空态<span>默认去处是模板，不是空白画布</span></div>
+    </div>
+  </div>
+
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">失败要分得开：<b>缩略图坏了</b>与<b>项目坏了</b>是两件事。缩略图是派生物，读不出来仍然能打开项目；
+      只有资源根本身读不出来才该拦住入口。两者用同一个红叉会让用户以为图丢了。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 ============ -->
+<section>
+  <h2><span class="num">06</span>与编辑器的关系</h2>
+  <p class="sub">
+    先说一个<b>被推翻的做法</b>：把编辑器的 chrome 逐条照抄过来（面板卡、6px 沟槽、30px 卡头、
+    280/288 栏宽）。它在纸上讲得通——切换时不动的东西最多——<b>做出来很丑</b>，
+    而且它正是上一轮「条条框框太多」的根因。
+  </p>
+
+  <div class="tbl">
+    <div class="tr">
+      <div class="td-k">为什么丑<span>密度是给谁用的</span></div>
+      <div class="td-v">
+        编辑器那套密度是为<b>同屏七八个面板抢空间</b>设计的：每块都要能停靠、折叠、拖走，
+        所以每块必须是一张<b>带边框的卡</b>，行 22px、沟槽 6px。而首页只有两块内容、都不可停靠——
+        照搬的结果是<b>两块内容画了四条边框</b>，每一条还在宣称一个首页根本没有的能力。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">保留<span>顶栏与 token</span></div>
+      <div class="td-v">
+        顶栏<b>一个像素不动</b>：30px、标志在最左、后面是打开的文件。颜色与字体也仍是
+        <code>ui-context</code> 的同一套。<b>切换时眼睛的锚点是顶栏</b>，不是栏宽——
+        那一行不动，两屏就是同一个应用。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">放弃<span>面板 chrome</span></div>
+      <div class="td-v">
+        不分卡、不留沟槽、不设面板头。左栏与主区之间<b>只有一条竖线</b>；整屏带边框的东西
+        <b>只剩图自己</b>。行高从 22 放到 26、字号从 12 放到 13——<em>浏览页不是工具</em>，
+        它一屏只做一件事，可以呼吸。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">代价<span>左边界会横移</span></div>
+      <div class="td-v">
+        左栏 <b>236</b> 而场景树是 <b>280</b>，切进编辑器时左边界横移 44px。
+        这是放弃照抄换来的账，写在明处。要抹平就把两边调成同一个数，
+        但那等于让浏览页去迁就工具的密度——<em>而那正是这一节推翻掉的做法</em>。
+      </div>
+    </div>
+  </div>
+
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>平滑不等于一样。</b>此前那条写的是「切换时不动的东西比动的多」，于是一路推到
+        逐条照抄——<b>那是把可度量的指标当成了目标</b>。真正要的是「这仍然是同一个应用」，
+        而承担这句话的是<b>顶栏与配色</b>，不是左栏宽度。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">推论</div>
+      <div class="alert-d">
+        既然首页不照抄，它的布局就<b>不受编辑器改动的牵连</b>：编辑器哪天把栏宽、卡头或沟槽调了，
+        首页一行不用改。反过来也一样。两边只在<b>顶栏与 token</b> 上有约定，而那两样都很稳。
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule" style="margin:26px 0 22px" />
+
+  <h2 style="font-size:14px"><span class="num">06.1</span>那颗标志</h2>
+  <p class="sub" style="margin-bottom:14px">
+顶栏是两边唯一共用的东西，而它上面还剩一处要拆：<code>EditorBrandMenu</code> 今天是「标志 + chevron」合起来的<b>一个</b>按钮，
+    点开是设置与命令面板。要让标志承担「回页面库」，得先把这两件事分开。
+  </p>
+
+  <div class="cols">
+    <div class="col">
+      <div class="col-h"><span class="tag" data-t="now">现状</span><b>整块是一个按钮</b></div>
+      <div class="col-b">
+        <div class="bar">
+          <span class="hit" data-box>
+            <svg class="brand-mark ic"><use href="#i-brand"/></svg>
+            <svg class="ic"><use href="#i-chevron-down"/></svg>
+          </span>
+          <span class="ftab" data-on><svg class="ic"><use href="#i-image"/></svg><span class="nm">PCS 详情</span></span>
+          <span class="ftab"><svg class="ic"><use href="#i-image"/></svg><span class="nm">一次接线图</span></span>
+        </div>
+        <div class="menu">
+          <div class="mi"><svg class="ic"><use href="#i-settings"/></svg>设置</div>
+          <div class="mi"><svg class="ic"><use href="#i-terminal"/></svg>命令面板<span class="kb">⌘K</span></div>
+        </div>
+        <div class="legend"><i></i>一个命中区，一个去处</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="col-h"><span class="tag" data-t="next">设计</span><b>拆成两个按钮</b></div>
+      <div class="col-b">
+        <div class="bar">
+          <span class="hit" data-box>
+            <svg class="brand-mark ic"><use href="#i-brand"/></svg>
+          </span>
+          <span class="hit" data-box style="margin-left:2px">
+            <svg class="ic"><use href="#i-chevron-down"/></svg>
+          </span>
+          <span class="ftab" data-on><svg class="ic"><use href="#i-image"/></svg><span class="nm">PCS 详情</span></span>
+          <span class="ftab"><svg class="ic"><use href="#i-image"/></svg><span class="nm">一次接线图</span></span>
+        </div>
+        <div class="tip">返回页面库</div>
+        <div class="menu" data-under="chev">
+          <div class="mi" data-on><svg class="ic"><use href="#i-arrow-left"/></svg>返回页面库</div>
+          <div class="sepm"></div>
+          <div class="mi"><svg class="ic"><use href="#i-settings"/></svg>设置</div>
+          <div class="mi"><svg class="ic"><use href="#i-terminal"/></svg>命令面板<span class="kb">⌘K</span></div>
+        </div>
+        <div class="legend"><i></i>两个命中区，两个去处</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-lightbulb"/></svg>
+    <div>
+      <div class="alert-t">判据</div>
+      <div class="alert-d">
+        <b>去处不同的两件事不共用一个按下区</b>。标志点下去就走，chevron 点下去开菜单；
+        标志带 tooltip 与 <code>aria-label</code>「返回页面库」，否则一个图标说不出自己去哪。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="derive">
+    <svg class="ic"><use href="#i-git"/></svg>
+    <div>
+      <div class="alert-t">沿用</div>
+      <div class="alert-d">
+        菜单里<b>保留一条「返回页面库」</b>——仓库既有那条「货架不得成为任何能力的唯一入口」：
+        标志是快捷入口，不该是唯一入口。
+      </div>
+    </div>
+  </div>
+  <div class="alert" data-kind="cost">
+    <svg class="ic"><use href="#i-scale"/></svg>
+    <div>
+      <div class="alert-t">代价</div>
+      <div class="alert-d">
+        30px 一行里两个命中区更窄。因此标志区<b>不缩小</b>（图形仍是 19px），chevron 自己占一格并与标志留
+        2px 间隙；另外<b>有未保存改动时点标志不直接走</b>，先问一次（保存并返回 / 丢弃 / 取消）。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 ============ -->
+<section>
+  <h2><span class="num">07</span>四条边界</h2>
+  <p class="sub">这三条决定了架构设计那一步能不能顺，先在设计稿里钉住。</p>
+  <div class="tbl">
+    <div class="tr">
+      <div class="td-k">首页不是一个工作区<span>route ≠ workspace</span></div>
+      <div class="td-v">
+        工作区是 Dockview 的一份布局加一组画布会话开关，而首页<b>没有画布</b>。
+        做成工作区会让 <code>fromJSON</code> 去恢复一个没有 Stage 的布局。首页与编辑器是<em>两条路由</em>，
+        编辑器整体挂载 / 卸载。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">模板不是新协议<span>= 一份只读的页面</span></div>
+      <div class="td-v">
+        模板与项目里的页面<b>逐字节同构</b>，差的只是<b>能不能写</b>——那是资源服务上的一个权限位，
+        不新增文件类型、不加 <code>kind</code>。<em>推论</em>：任何一张画得好的图都能一键「发布为模板」，
+        这件事因此不需要任何新功能；<b>左栏那三个分类也就只是三个池子</b>，不是三种数据。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">演示不是第三种渲染<span>复用 ComposePreview</span></div>
+      <div class="td-v">
+        全屏演示就是<b>已有的只读 Preview</b> 加一条控制条，不新写渲染器。
+        客户看到的每一个像素因此与交付出去的那一页<b>逐像素相同</b>——
+        另写一份的话，「演示时好好的、上了大屏不一样」这类问题永远查不清是谁的。
+      </div>
+    </div>
+    <div class="tr">
+      <div class="td-k">后端只在 Provider 后面<span>editor 一行不改</span></div>
+      <div class="td-v">
+        编辑器已经只认 <code>compose-ui/assets</code> 的 Provider 协议。后端要做的是
+        <b>这个协议的一个远程实现</b>加项目/模板/成员这一层目录服务。
+        <em>首页自己不读文档</em>——它只要卡片元数据与缩略图，不该把 5000 个 Entity 拉下来算一张图。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 ============ -->
+<section>
+  <h2><span class="num">08</span>留给架构设计的问题</h2>
+  <p class="sub">这些我没有在设计稿里替你决定，它们会实质改变后端形状。</p>
+  <div class="tbl">
+    <div class="tr tr--q">
+      <div class="td-n">Q1</div>
+      <div class="td-q">墙上那几百张缩略图谁来渲染？
+        <em>演示屏已经定了用真实 Preview，但墙上一屏就有二十来张。服务端跑一次无头渲染存成图片（首屏快、后端要跑一份 Compose 运行时），还是前端按文档现画（后端轻、一屏二十份文档拉不动）。这条决定后端形状。</em>
+      </div>
+    </div>
+    <div class="tr tr--q">
+      <div class="td-n">Q2</div>
+      <div class="td-q">场景的标签谁来打？
+        <em>几百张页面，靠人一张张标不现实。是导入时按名字与符号构成<b>自动建议</b>、人确认，还是先只让「未分类」堆着、用到谁标谁？自动建议要跑一次识别，那是另一条技术路线。</em>
+      </div>
+    </div>
+    <div class="tr tr--q">
+      <div class="td-n">Q3</div>
+      <div class="td-q">复制带着组件走，会攒出 73 份同样的 PCS 组件吗？
+        <em>每复制一次就带一份过去，同一个 PCS 主体会攒出几十份。共享组件库能去重，代价是引入页面之外的第二种资源归属，以及「库更新了，已交付的那张图要不要跟」——而按本稿的判断，已交付的图不该自己变样。</em>
+      </div>
+    </div>
+    <div class="tr tr--q">
+      <div class="td-n">Q4</div>
+      <div class="td-q">到客户那儿演示时网络是什么状况？
+        <em>客户现场常常没有外网。要不要支持把一批页面<b>带下来离线翻</b>？这会反过来决定资源粒度是文件级还是整根打包——而那正是协作与多端同步的同一个问题。</em>
+      </div>
+    </div>
+    <div class="tr tr--q">
+      <div class="td-n">Q5</div>
+      <div class="td-q">保存是显式还是自动？
+        <em>今天编辑器是显式保存，而列表上写着「最近修改」，用户会期待它准。自动保存要回答冲突、版本历史与离线。</em>
+      </div>
+    </div>
+    <div class="tr tr--q">
+      <div class="td-n">Q6</div>
+      <div class="td-q">交付物是什么？
+        <em>本稿只解决「在哪儿编辑」，没有回答「客户现场跑的是什么」——导出一份静态站点、发布到某个地址，还是由宿主应用直接读资源？发布流程会反过来影响页面的组织方式。</em>
+      </div>
+    </div>
+  </div>
+  </section>
+
+</div>
+</body>
+</html>

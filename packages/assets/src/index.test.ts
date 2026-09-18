@@ -86,4 +86,44 @@ describe('@compose-ui/assets', () => {
       capabilities: { ...source.capabilities, reference: false },
     })).toThrow(ComposeAssetError)
   })
+
+  it('OpenSpec: assets / 可选的直接资源 URL / 缺席时退回 Blob', () => {
+    // Provider 给不出 URL 时，resolver 上这个方法整个不存在——消费方一个 in 判断就分流完。
+    const resolver = createComposeAssetResolver(provider())
+    expect(resolver.resolveUrl).toBeUndefined()
+  })
+
+  it('OpenSpec: assets / 可选的直接资源 URL / URL 过期前重取', async () => {
+    const source: ComposeAssetProvider = {
+      ...provider(),
+      capabilities: { ...provider().capabilities, directUrl: true },
+      resolveUrl: async ({ assetKey }) => ({
+        url: `https://cdn.example.com/${assetKey}?sig=1`,
+        revision: '2',
+        mediaType: 'image/png',
+        expiresAt: 1_700_000_000_000,
+      }),
+    }
+    const resolver = createComposeAssetResolver(source)
+    const reference = {
+      providerId: 'library',
+      assetKey: 'symbol-1',
+      scope: 'persistent',
+    } as const
+    const resolved = await resolver.resolveUrl?.({ reference })
+    // 失效时刻必须交出来：不带它，消费方无从知道该什么时候重取，症状是图集体变成裂图。
+    expect(resolved?.expiresAt).toBe(1_700_000_000_000)
+    expect(resolved?.url).toContain('symbol-1')
+  })
+
+  it('OpenSpec: assets / 可选的直接资源 URL / 别的 Provider 的引用解析不到', async () => {
+    const source: ComposeAssetProvider = {
+      ...provider(),
+      resolveUrl: async () => ({ url: 'https://x', revision: '1', mediaType: 'image/png' }),
+    }
+    const resolver = createComposeAssetResolver(source)
+    await expect(resolver.resolveUrl?.({
+      reference: { providerId: 'other', assetKey: 'a', scope: 'persistent' },
+    })).rejects.toBeInstanceOf(ComposeAssetError)
+  })
 })

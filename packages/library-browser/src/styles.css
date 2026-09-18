@@ -1,0 +1,614 @@
+/*
+ * 页面库有**自己的布局语言**：不分卡、不留沟槽、不设面板头。
+ *
+ * 编辑器那套密度（每块一张卡、6px 沟槽、30px 卡头、22px 行）是给同屏七八个面板抢空间用的
+ * ——每块都要能停靠、折叠、拖走，所以每块必须是一张带边框的卡。页面库只有两块内容、都不可
+ * 停靠，照搬过来就是**两块内容画四条边框**，而每一条还在宣称一个首页根本没有的能力。
+ *
+ * 因此：左栏与主区之间只有**一条竖线**，整屏带边框的东西**只剩图自己**；行高与字号都放宽
+ * （26 / 13，编辑器那边是 22 / 12）——浏览页不是工具，一屏只做一件事，可以呼吸。
+ *
+ * 与编辑器共享的只有**顶栏与配色**：承担「这仍然是同一个应用」这句话的是那两样，不是左栏宽度。
+ */
+
+.compose-library {
+  --lib-ws: var(--compose-workspace-bg, #0a0c0f);
+  --lib-panel: var(--compose-panel-bg, #101216);
+  --lib-raised: var(--compose-surface-raised, #181b20);
+  --lib-sunken: var(--compose-surface-sunken, #15181d);
+  --lib-control: var(--compose-surface-control, #1d2025);
+  --lib-hover: var(--compose-surface-hover, #292e36);
+  --lib-border: var(--compose-border, #303640);
+  --lib-border-strong: var(--compose-border-strong, #414853);
+  --lib-text: var(--compose-text, #e6edf7);
+  --lib-text-strong: var(--compose-text-strong, #f4f7fb);
+  --lib-muted: var(--compose-text-muted, #8e98a8);
+  --lib-accent: var(--compose-accent, #3687ff);
+  --lib-focus: var(--compose-focus, #4d9cff);
+  /* 蓝底压深字：深色主题下白字在这个蓝上读不出来，见 components/styles.css 的映射。 */
+  --lib-on-accent: #101828;
+  /* 缩略图的底：它是一块屏幕，不是一张纸，因此比面板更深。 */
+  --lib-screen: #0c0f14;
+  --lib-radius-sm: 4px;
+  --lib-radius: 6px;
+  --lib-radius-lg: 8px;
+  --lib-radius-xl: 12px;
+  --lib-sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --lib-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--lib-panel);
+  color: var(--lib-text);
+  font: 400 13px/1.5 var(--lib-sans);
+}
+
+.compose-library *,
+.compose-library *::before,
+.compose-library *::after { box-sizing: border-box; }
+
+/*
+ * reset 走 `:where()`，否则它的 specificity（0,1,1：类 + 元素）会压过下面每一条组件类
+ * （0,1,0），症状是主按钮没有底色、`margin-left: auto` 不生效——两处都不报错，只是看起来
+ * 「样式没写」。这是本仓库已经吃过一次的亏（无层规则压过 `@layer components`）。
+ */
+.compose-library :where(button) {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.compose-library :focus-visible {
+  outline: 2px solid var(--lib-focus);
+  outline-offset: 1px;
+}
+
+.compose-library__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.compose-library__icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* ——— 左栏：两段，不是一棵树 ——— */
+
+.compose-library__rail {
+  width: 236px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  overflow-y: auto;
+  /* 整个左栏与主区之间**只有这一条线**。没有卡、没有沟槽、没有面板头。 */
+  border-right: 1px solid var(--lib-border);
+}
+
+.compose-library__rail-nav,
+.compose-library__rail-group { display: flex; flex-direction: column; }
+
+/* 「最近打开」横跨那三个去处，因此与它们隔开——用留白说这句话，不用线。 */
+.compose-library__loc-gap { height: 10px; flex: none; }
+
+.compose-library__loc {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 28px;
+  margin: 1px 0;
+  padding: 0 9px;
+  border-radius: var(--lib-radius);
+  color: var(--lib-text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.compose-library__loc .compose-library__icon { color: var(--lib-muted); }
+.compose-library__loc:hover { background: color-mix(in oklab, var(--lib-hover) 55%, transparent); }
+
+/* 去处是**导航**，选中画一块实底。 */
+.compose-library__loc[data-on] {
+  background: var(--lib-hover);
+  color: var(--lib-text-strong);
+  font-weight: 500;
+}
+
+.compose-library__loc[data-on] .compose-library__icon { color: var(--lib-accent); }
+.compose-library__loc[data-on] .compose-library__count { color: var(--lib-text-strong); }
+
+.compose-library__count {
+  margin-left: auto;
+  font: 400 11px/1 var(--lib-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--lib-muted);
+}
+
+/* 段头与筛选行共用 13px 左边——那 4px 的沟是给选中竖条留的，不是缩进。 */
+.compose-library__group-head {
+  display: flex;
+  align-items: baseline;
+  margin: 22px 0 3px;
+  padding: 0 9px 0 13px;
+  font-size: 11px;
+  color: var(--lib-muted);
+}
+
+/*
+ * 筛选行没有图标、没有色块：八个同性质的值不需要八个要学的记号，名字与计数已经够了。
+ * 选中画的是**左边一条竖条**而不是实底——它与去处回答的是两个不同的问题，同一种画法会让
+ * 两段读成并列的两个选项。
+ */
+.compose-library__filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 26px;
+  margin: 1px 0;
+  padding: 0 9px 0 13px;
+  border-radius: var(--lib-radius);
+  color: var(--lib-muted);
+  font-size: 13px;
+  text-align: left;
+}
+
+.compose-library__filter:hover { color: var(--lib-text); }
+
+.compose-library__filter[data-on] {
+  color: var(--lib-text);
+  font-weight: 500;
+}
+
+.compose-library__filter[data-on] .compose-library__count { color: var(--lib-text); }
+
+.compose-library__filter[data-on]::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lib-accent);
+}
+
+/* ——— 主区：没有面板头 ——— */
+
+.compose-library__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 0;
+  overflow: hidden;
+}
+
+/* 顶部那一行控件不是「面板头」：没有底色条、没有下边线，与内容同一条左边线。 */
+.compose-library__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex: none;
+}
+
+.compose-library__tools-spacer { flex: 1 1 auto; min-width: 6px; }
+.compose-library__tools-group { display: inline-flex; align-items: center; gap: 2px; }
+.compose-library__tools-group + .compose-library__tools-group { margin-left: 10px; }
+
+.compose-library__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  max-width: 420px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--lib-border-strong);
+  border-radius: var(--lib-radius);
+  background: var(--lib-panel);
+  color: var(--lib-muted);
+}
+
+.compose-library__search:focus-within { border-color: var(--lib-focus); }
+
+.compose-library__search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--lib-text);
+  font: 400 12px/1 var(--lib-sans);
+  outline: none;
+}
+
+.compose-library__search input::placeholder { color: var(--lib-muted); }
+
+.compose-library__select select {
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--lib-radius);
+  background: none;
+  color: var(--lib-muted);
+  font: 400 12px/1 var(--lib-sans);
+}
+
+.compose-library__select select:hover { background: var(--lib-hover); color: var(--lib-text-strong); }
+
+.compose-library__seg { display: inline-flex; gap: 2px; }
+
+.compose-library__seg button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--lib-radius);
+  color: var(--lib-muted);
+}
+
+.compose-library__seg button:hover { color: var(--lib-text); }
+.compose-library__seg button[data-on] { background: var(--lib-hover); color: var(--lib-text-strong); }
+
+.compose-library__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: var(--lib-radius);
+  background: var(--lib-control);
+  color: var(--lib-text);
+  font: 400 12px/1 var(--lib-sans);
+  white-space: nowrap;
+}
+
+.compose-library__button:hover { background: var(--lib-hover); color: var(--lib-text-strong); }
+
+.compose-library__button--primary {
+  background: var(--lib-accent);
+  color: var(--lib-on-accent);
+  font-weight: 500;
+}
+
+.compose-library__button--primary:hover {
+  background: color-mix(in oklab, var(--lib-accent) 88%, white);
+  color: var(--lib-on-accent);
+}
+
+.compose-library__button:disabled { opacity: 0.5; cursor: default; }
+
+.compose-library__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--lib-radius);
+  color: var(--lib-muted);
+  font-size: 12px;
+}
+
+.compose-library__link:hover { background: var(--lib-hover); color: var(--lib-text-strong); }
+
+.compose-library__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+
+.compose-library__state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 64px 0;
+  color: var(--lib-muted);
+  font-size: 13px;
+}
+
+.compose-library__more { display: flex; justify-content: center; padding: 18px 0 4px; }
+
+/* ——— 段头 ——— */
+
+.compose-library__section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 0 7px;
+}
+
+.compose-library__section + .compose-library__section .compose-library__section-head { margin-top: 18px; }
+.compose-library__section-head b { font-size: 12px; font-weight: 600; color: var(--lib-text-strong); }
+
+.compose-library__section-head i {
+  font: 400 10.5px/1 var(--lib-mono);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--lib-muted);
+}
+
+/* ——— 图墙：没有卡片容器，图自己就是那个对象 ——— */
+
+.compose-library__wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compose-library__scroll[data-view="list"] .compose-library__wall {
+  grid-template-columns: 1fr;
+}
+
+.compose-library__scroll[data-view="list"] .compose-library__tile {
+  aspect-ratio: auto;
+  height: 52px;
+}
+
+.compose-library__tile {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius);
+  background: var(--lib-screen);
+  overflow: hidden;
+}
+
+.compose-library__tile:hover,
+.compose-library__tile:focus-within { border-color: var(--lib-border-strong); }
+
+.compose-library__tile-image,
+.compose-library__tile-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  color: var(--lib-text);
+}
+
+/*
+ * 名称压在图的底边上：图是这一屏唯一有决定性的东西，文字让位给它。
+ * 渐变要**真的压住线条**——接线图是细红线，压不住时标题读不出来。
+ */
+.compose-library__tile-cap {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 26px 8px 7px;
+  background: linear-gradient(transparent, rgb(6 8 11 / 72%) 42%, rgb(6 8 11 / 97%));
+  pointer-events: none;
+}
+
+.compose-library__tile-cap b {
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lib-text-strong);
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgb(6 8 11 / 80%);
+  white-space: nowrap;
+}
+
+.compose-library__tile-uses {
+  margin-left: auto;
+  flex: none;
+  font: 400 10px/1 var(--lib-mono);
+  font-variant-numeric: tabular-nums;
+  color: rgb(230 237 247 / 58%);
+}
+
+/* hover 时标题让位给按钮：两层文字叠在同一块渐变上谁都读不清。 */
+.compose-library__tile:hover .compose-library__tile-cap,
+.compose-library__tile:focus-within .compose-library__tile-cap { display: none; }
+
+/*
+ * 静息时遮罩透明且不吃指针，但两颗按钮**仍在 Tab 序里**：用 `visibility: hidden` 会让它们
+ * 根本聚焦不到，而键盘用户没有 hover 这条路。聚焦任何一颗都会让整块图进入 `:focus-within`，
+ * 于是遮罩显形——与鼠标 hover 是同一条呈现。
+ */
+.compose-library__tile-veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  background: rgb(6 8 11 / 52%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease-out;
+}
+
+.compose-library__tile:hover .compose-library__tile-veil,
+.compose-library__tile:focus-within .compose-library__tile-veil {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.compose-library__tile-actions { display: flex; gap: 6px; }
+
+.compose-library__tile-dim {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  font: 400 10px/1 var(--lib-mono);
+  color: rgb(230 237 247 / 70%);
+}
+
+/* ——— 「就用这个」 ——— */
+
+.compose-library__scrim {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(6 8 11 / 60%);
+  z-index: 2;
+}
+
+.compose-library__dialog {
+  width: 520px;
+  max-width: calc(100% - 32px);
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius-xl);
+  background: var(--lib-panel);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 48%);
+  overflow: hidden;
+}
+
+.compose-library__dialog-head { padding: 14px 16px 0; }
+
+.compose-library__dialog-head b {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lib-text-strong);
+}
+
+.compose-library__dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.compose-library__dialog-hero {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.compose-library__dialog-thumb {
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius);
+  background: var(--lib-screen);
+  overflow: hidden;
+}
+
+.compose-library__dialog-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.compose-library__dialog-hero b { display: block; font-size: 13px; font-weight: 600; color: var(--lib-text-strong); }
+.compose-library__dialog-hero p { margin: 4px 0 0; font-size: 12px; line-height: 1.55; color: var(--lib-muted); }
+
+.compose-library__field { display: flex; flex-direction: column; gap: 5px; }
+.compose-library__field label { font-size: 12px; font-weight: 500; color: var(--lib-text); }
+
+.compose-library__field input {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--lib-border-strong);
+  border-radius: var(--lib-radius);
+  background: var(--lib-panel);
+  color: var(--lib-text);
+  font: 400 13px/1 var(--lib-sans);
+  outline: none;
+}
+
+.compose-library__field input:focus { border-color: var(--lib-focus); }
+.compose-library__error { margin: 0; color: var(--compose-danger, #ff9c9c); font-size: 12px; }
+
+.compose-library__dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--lib-border);
+  background: var(--lib-sunken);
+}
+
+/* ——— 全屏演示：屏幕正对着客户 ——— */
+
+.compose-library__demo {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  z-index: 3;
+}
+
+.compose-library__demo-stage {
+  width: 78%;
+  aspect-ratio: 16 / 9;
+  border-radius: 2px;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 70%);
+  overflow: hidden;
+}
+
+.compose-library__demo-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--lib-border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--lib-control) 92%, transparent);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 42%);
+  backdrop-filter: blur(8px);
+}
+
+.compose-library__demo-nav {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--lib-muted);
+}
+
+.compose-library__demo-nav svg { width: 15px; height: 15px; }
+.compose-library__demo-nav:hover { background: var(--lib-hover); color: var(--lib-text-strong); }
+
+.compose-library__demo-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 116px;
+  text-align: center;
+}
+
+.compose-library__demo-who b { font-size: 12.5px; font-weight: 600; color: var(--lib-text-strong); }
+
+.compose-library__demo-who span {
+  font: 400 10.5px/1 var(--lib-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--lib-muted);
+}
+
+.compose-library__demo-divider { width: 1px; height: 20px; background: var(--lib-border); }
+
+@media (prefers-reduced-motion: reduce) {
+  .compose-library__tile-veil { transition: none; }
+}
+
+@media (max-width: 860px) {
+  .compose-library__rail { display: none; }
+}

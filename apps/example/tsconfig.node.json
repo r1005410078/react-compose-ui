@@ -1,8 +1,8 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "tsBuildInfoFile": "../node_modules/.cache/tsconfig.app-node.tsbuildinfo",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsconfig.example-node.tsbuildinfo",
     "lib": ["ES2022"],
     "types": ["node"]
   },

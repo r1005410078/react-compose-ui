@@ -20,7 +20,9 @@ import type {
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ComposeLibraryPort } from '@compose-ui/library'
 import type { ComposeEditorController } from '../editor-controller'
+import type { ComposeEditorLibraryConfig } from './page-workspace-types'
 
 /**
  * 单一 Dockview 的替身。
@@ -285,14 +287,59 @@ function createProvider(overrides: Partial<ComposeAssetProvider> = {}): ComposeA
   }
 }
 
-function renderEditor(provider: ComposeAssetProvider, onActiveSessionChange = vi.fn()) {
+function renderEditor(
+  provider: ComposeAssetProvider,
+  onActiveSessionChange = vi.fn(),
+  library?: ComposeEditorLibraryConfig,
+) {
   render(
     <ComposeEditor
       assets={{ browser: { provider } }}
-      pages={{ onActiveSessionChange }}
+      pages={{ onActiveSessionChange, ...(library === undefined ? {} : { library }) }}
     />,
   )
   return { onActiveSessionChange }
+}
+
+/** 一个只实现读那三条的库端口替身；写的每一条都可以缺席。 */
+function createLibrary(overrides: Partial<ComposeLibraryPort> = {}): ComposeLibraryPort {
+  return {
+    id: 'test-library',
+    capabilities: {
+      create: false,
+      update: false,
+      trash: false,
+      purge: false,
+      thumbnail: true,
+      recents: true,
+    },
+    query: vi.fn(async () => ({
+      items: [],
+      nextCursor: null,
+      facets: { byCategory: [], byLocation: { project: 0, template: 0, trash: 0 } },
+    })),
+    get: vi.fn(async () => { throw new ComposeAssetError('not-found', 'x') }),
+    listCategories: vi.fn(async () => []),
+    putThumbnail: vi.fn(async () => undefined),
+    recordOpen: vi.fn(async () => undefined),
+    ...overrides,
+  }
+}
+
+/** 打开 Home 并改一笔，让它变脏。 */
+async function openAndDirty(onActiveSessionChange: ReturnType<typeof vi.fn>) {
+  fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+  await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
+  const session = lastSession(onActiveSessionChange)
+  act(() => session.runtime.dispatch({
+    id: 'configure',
+    type: BUILTIN_COMMAND_TYPES.setFrameSize,
+    payload: {
+      entityId: session.runtime.document.rootIds[0]!,
+      size: { width: 800, height: 600 },
+    },
+  }))
+  await screen.findByRole('img', { name: '有未保存改动' })
 }
 
 /**
@@ -1340,5 +1387,156 @@ describe('OpenSpec: editor-workspace-layout / 只读页面 JSON 标签', () => {
 
     await waitFor(() => { expect(assetTabs()).toHaveLength(1) })
     expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
+  })
+})
+
+describe('OpenSpec: page-library / 缩略图由编辑器在保存之后产出', () => {
+  it('保存成功之后异步上传缩略图', async () => {
+    const provider = createProvider()
+    const library = createLibrary()
+    const onActiveSessionChange = vi.fn()
+    renderEditor(provider, onActiveSessionChange, {
+      port: library,
+      renderThumbnail: vi.fn(async () => new Blob(['png'])),
+    })
+    await openAndDirty(onActiveSessionChange)
+
+    saveActiveDocument()
+    await waitFor(() => { expect(library.putThumbnail).toHaveBeenCalled() })
+    expect(vi.mocked(library.putThumbnail!).mock.calls[0]![0]).toMatchObject({ pageKey: 'Home.page.json' })
+  })
+
+  it('上传失败不影响保存', async () => {
+    const provider = createProvider()
+    const onDiagnostic = vi.fn()
+    const library = createLibrary({
+      putThumbnail: vi.fn(async () => { throw new ComposeAssetError('io', '存储挂了') }),
+    })
+    const onActiveSessionChange = vi.fn()
+    renderEditor(provider, onActiveSessionChange, {
+      port: library,
+      renderThumbnail: vi.fn(async () => new Blob(['png'])),
+      onDiagnostic,
+    })
+    await openAndDirty(onActiveSessionChange)
+
+    saveActiveDocument()
+    // 页面本体已落盘：脏点消失。让保存因为一张缩略图失败是不可接受的。
+    await waitFor(() => {
+      expect(screen.queryByRole('img', { name: '有未保存改动' })).not.toBeInTheDocument()
+    })
+    await waitFor(() => { expect(onDiagnostic).toHaveBeenCalled() })
+    expect(onDiagnostic.mock.calls[0]![0]).toMatchObject({ code: 'thumbnail-failed', pageKey: 'Home.page.json' })
+  })
+
+  it('宿主没接光栅化时一张也不传', async () => {
+    const provider = createProvider()
+    const library = createLibrary()
+    const onActiveSessionChange = vi.fn()
+    // renderThumbnail 缺席即不产出缩略图——图墙画占位，而不是让保存背上一件它做不到的事。
+    renderEditor(provider, onActiveSessionChange, { port: library })
+    await openAndDirty(onActiveSessionChange)
+
+    saveActiveDocument()
+    await waitFor(() => { expect(provider.writeFile).toHaveBeenCalled() })
+    expect(library.putThumbnail).not.toHaveBeenCalled()
+  })
+})
+
+describe('OpenSpec: page-library / 最近打开', () => {
+  it('打开页面时记一次', async () => {
+    const provider = createProvider()
+    const library = createLibrary()
+    renderEditor(provider, vi.fn(), { port: library })
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    await waitFor(() => { expect(library.recordOpen).toHaveBeenCalledWith({ pageKey: 'Home.page.json' }) })
+  })
+
+  it('记不上也照样打开', async () => {
+    const provider = createProvider()
+    const onDiagnostic = vi.fn()
+    const library = createLibrary({
+      recordOpen: vi.fn(async () => { throw new ComposeAssetError('io', '记不上') }),
+    })
+    renderEditor(provider, vi.fn(), { port: library, onDiagnostic })
+    fireEvent.click(screen.getByRole('button', { name: 'open-page' }))
+    // 「最近打开」记不上不是打不开页面的理由。
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
+    await waitFor(() => { expect(onDiagnostic).toHaveBeenCalled() })
+  })
+})
+
+/** 一条能被图墙画出来的记录。 */
+function libraryRecord(pageKey: string, title: string) {
+  return {
+    pageKey,
+    title,
+    kind: 'project' as const,
+    categories: [],
+    thumbnailUrl: null,
+    width: null,
+    height: null,
+    useCount: 0,
+    deletedAt: null,
+    createdAt: 0,
+    modifiedAt: 0,
+  }
+}
+
+describe('OpenSpec: editor-workspace-layout / 页面库是 body 的一种状态', () => {
+  it('接了端口就从页面库开始，而不是从一块空画布', async () => {
+    const provider = createProvider()
+    const library = createLibrary({
+      query: vi.fn(async () => ({
+        items: [libraryRecord('Home.page.json', 'Home')],
+        nextCursor: null,
+        facets: { byCategory: [], byLocation: { project: 1, template: 0, trash: 0 } },
+      })),
+    })
+    renderEditor(provider, vi.fn(), { port: library })
+    // 顶栏上的标志成为回库的门；页面库那一屏此刻就在 body 上。
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '打开 Home' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: '返回页面库' })).toBeInTheDocument()
+    // 那一屏没有画布，因而没有工作区。
+    expect(screen.queryByRole('radiogroup', { name: '工作区' })).toBeNull()
+    // 首页没有被自动打开：它才是入口，自动打开等于让用户越过那一屏。
+    expect(pageTabs()).toHaveLength(0)
+  })
+
+  it('从库里打开一页即离开库，点标志再回去', async () => {
+    const provider = createProvider()
+    const library = createLibrary({
+      query: vi.fn(async () => ({
+        items: [libraryRecord('Home.page.json', 'Home')],
+        nextCursor: null,
+        facets: { byCategory: [], byLocation: { project: 1, template: 0, trash: 0 } },
+      })),
+    })
+    renderEditor(provider, vi.fn(), { port: library })
+    fireEvent.click(await screen.findByRole('button', { name: '打开 Home' }))
+    await waitFor(() => { expect(pageTabs()).toHaveLength(1) })
+    // 离开库之后工作区切换器回来了，而标签条自始至终都在。
+    expect(screen.getByRole('radiogroup', { name: '工作区' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '返回页面库' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '打开 Home' })).toBeInTheDocument()
+    })
+    /*
+     * 标签一个都没关：它正是「我手上开着哪几张图」，去库里找下一张时最需要它——
+     * 这也正是标签条搬进顶栏的全部理由。
+     */
+    expect(pageTabs()).toHaveLength(1)
+    expect(screen.queryByRole('radiogroup', { name: '工作区' })).toBeNull()
+  })
+
+  it('没接端口时编辑器照旧是入口', async () => {
+    renderEditor(createProvider())
+    await waitFor(() => {
+      expect(screen.getByRole('radiogroup', { name: '工作区' })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: '返回页面库' })).toBeNull()
   })
 })
