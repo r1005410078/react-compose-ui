@@ -276,6 +276,9 @@ export function ComposePreviewDialog({
   const surface = useComposePreviewSurface({
     active: open,
     assetResolver,
+    // 进出全屏要重新取景一次；读的是 `fullscreenchange` 那一份事实，不是那颗按钮——
+    // 用户可以用 `Esc` 或浏览器自己的快捷键离开全屏。
+    fullscreen,
     initial: initialState,
     document: composeDocument,
     layoutRuntime,

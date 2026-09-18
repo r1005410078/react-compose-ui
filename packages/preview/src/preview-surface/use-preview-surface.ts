@@ -63,6 +63,17 @@ export interface ComposePreviewSurfaceOptions extends Pick<ComposePreviewProps,
    * @defaultValue 'target'
    */
   readonly framing?: ComposePreviewFraming
+  /**
+   * 宿主此刻在不在浏览器全屏里。
+   *
+   * @remarks
+   * 它**只**决定一件事：进出全屏要重新取景一次。判据与「从下拉换一块屏」逐字相同——可视区
+   * 整个换掉了，此前那个取景描述的是一块已经不存在的台面，而换掉它正是用户按那颗按钮的目的。
+   *
+   * 由宿主传入而不是本 Hook 自己听 `fullscreenchange`：「哪个元素进了全屏」是宿主的事
+   * （对话框壳），而本 Hook 连 DOM 都只摸一个台面 ref。
+   */
+  readonly fullscreen?: boolean
   /** 从另一个形态交接过来的状态；只作为初值，此后由本会话自己持有。 */
   readonly initial?: ComposePreviewHandoff
 }
@@ -166,6 +177,7 @@ export function useComposePreviewSurface({
   selectedFrameId,
   targetKind = 'scene',
   framing = 'target',
+  fullscreen = false,
   initial,
 }: ComposePreviewSurfaceOptions): ComposePreviewSurfaceValue {
   // 预览目标永远是一个场景：null 表示跟随宿主给出的激活场景，用户显式选过之后才固定。
@@ -298,10 +310,29 @@ export function useComposePreviewSurface({
    * 用滚轮和适应窗口摆出来的，窗口变化不该动它。
    */
   const stageKey = stageSize ? `${stageSize.width}x${stageSize.height}` : ''
+  /*
+   * 进出浏览器全屏**记下一次**「下次台面变了就取景」，而不是当帧就取景。
+   *
+   * `fullscreenchange` 早于 ResizeObserver 把新台面量出来，当帧取景会按**旧**尺寸算出同一个
+   * 比例——缺陷原样留着，而模态形态此后不为窗口变化重新取景，因此再也没有第二次机会。实测
+   * 两个方向都错：模态 95% 进全屏还是 95%（该 100%），退出还是 100%（该 95%）。
+   *
+   * 这不与「模态形态窗口变化不重新取景」冲突：那一条保护的是用户用滚轮和「适应窗口」摆出来
+   * 的取景，而进出全屏是用户的一次显式动作，不是窗口被拖了一下。
+   */
+  const [lastFullscreen, setLastFullscreen] = useState(fullscreen)
+  const [refitOnStageResize, setRefitOnStageResize] = useState(false)
+  if (lastFullscreen !== fullscreen) {
+    setLastFullscreen(fullscreen)
+    setRefitOnStageResize(true)
+  }
   const [lastStageKey, setLastStageKey] = useState(stageKey)
   if (lastStageKey !== stageKey) {
     setLastStageKey(stageKey)
-    if (framing === 'viewport') setPendingFit(true)
+    if (framing === 'viewport' || refitOnStageResize) {
+      setPendingFit(true)
+      setRefitOnStageResize(false)
+    }
   }
 
   // 换目标即回到该目标自身的尺寸：上一块场景的屏幕尺寸对这一块没有意义。

@@ -310,6 +310,58 @@ describe('ComposePreviewDialog', () => {
     finally { restore() }
   })
 
+  it('OpenSpec: compose-preview / 进出全屏预览重新取景 / 收到事件那一帧不按旧台面取景', () => {
+    const restore = stubStageBox(800, 600)
+    const originalFullscreen = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      'fullscreenElement',
+    )
+    const setFullscreenElement = (value: Element | null) => {
+      Object.defineProperty(Document.prototype, 'fullscreenElement', {
+        configurable: true,
+        get: () => value,
+      })
+      // 本文件模块级的 `document` 是 ComposeDocument 夹具，DOM 的那个要走 globalThis。
+      fireEvent(globalThis.document, new Event('fullscreenchange'))
+    }
+    try {
+      renderDialog()
+      const zoom = screen.getByTestId('compose-preview-dialog-zoom')
+      // 640 × 360 在 800 × 600 里放得下，取景上限是 100%。
+      expect(zoom).toHaveTextContent('100%')
+
+      /*
+       * 先手动放大一档，让**当前比例**与「按这个台面算出来的取景」不是同一个数——否则下面
+       * 那条断言在两种实现下都成立，是一条永远绿的假用例。
+       */
+      fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+      const zoomed = zoom.textContent
+      expect(zoomed).not.toBe('100%')
+
+      /*
+       * 判别性断言：`fullscreenchange` 早于新台面被量出来，因此这一帧**不取景**。当帧取景会
+       * 按旧的 800 × 600 算出 100%、把手动缩放冲掉，而真实缺陷正是「按旧尺寸算了一遍」——
+       * 它在真浏览器里表现为进了全屏比例纹丝不动。jsdom 没有 ResizeObserver，台面永远停在
+       * 挂载时那一次，因此这里读到的就是「有没有当帧取景」这件事本身。
+       */
+      setFullscreenElement(screen.getByRole('dialog', { name: 'Preview' }))
+      expect(zoom).toHaveTextContent(zoomed!)
+
+      // 退出同理：状态翻回去也不当帧取景。
+      setFullscreenElement(null)
+      expect(zoom).toHaveTextContent(zoomed!)
+    }
+    finally {
+      if (originalFullscreen) {
+        Object.defineProperty(Document.prototype, 'fullscreenElement', originalFullscreen)
+      }
+      else {
+        Reflect.deleteProperty(Document.prototype, 'fullscreenElement')
+      }
+      restore()
+    }
+  })
+
   it('OpenSpec: compose-preview / 拖动改屏幕尺寸与吸附 / 拖动吸附到清单里的分辨率', () => {
     const restore = stubPointerCapture()
     try {
