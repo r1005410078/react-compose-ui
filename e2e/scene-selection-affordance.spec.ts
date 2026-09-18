@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 场景体不再承担选中与拖动。
@@ -31,7 +32,7 @@ test('OpenSpec: stage-engine / 顶层容器体的命中收敛 / 已选中的场�
   await expect(output).toBeVisible()
 
   // 先经 command 点体把场景选中——这正是曾经让保护失效的那一步。
-  const before = (await output.boundingBox())!
+  const before = await stableBox(output)
   await page.keyboard.down('Meta')
   await page.mouse.click(before.x + INSIDE_SCENE.dx, before.y + INSIDE_SCENE.dy)
   await page.keyboard.up('Meta')
@@ -59,7 +60,7 @@ test('OpenSpec: stage-engine / 顶层容器体的命中收敛 / command 拖体�
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
 
-  const beforeCommandDrag = (await output.boundingBox())!
+  const beforeCommandDrag = await stableBox(output)
   await page.keyboard.down('Meta')
   await page.mouse.move(
     beforeCommandDrag.x + INSIDE_SCENE.dx,

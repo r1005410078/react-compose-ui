@@ -23,7 +23,17 @@ function shelfItems(editor: Locator) {
   return editor.getByRole('toolbar', { name: 'Stage 工具栏' }).locator('[data-toolbar-item]:not([hidden])')
 }
 
-function itemIds(editor: Locator) {
+/**
+ * 工具栏上此刻列在栏上的格 id。
+ *
+ * @remarks
+ * **先等货架量完再读**：溢出要先量一遍才知道哪几格放得下，量完之前每一格都带 `hidden`，
+ * 因此重排、重置与切换工作区之后有一帧一个都选不到。读在那一帧上时 `indexOf` 回 `-1`，
+ * 而 `not.toContain` 还会**假绿**——空数组当然不含任何东西，于是一条本该失败的断言照样绿。
+ * 等非空是这里唯一能把两种情形一起挡住的条件。
+ */
+async function itemIds(editor: Locator) {
+  await expect.poll(() => shelfItems(editor).count()).toBeGreaterThan(0)
   return shelfItems(editor).evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-toolbar-item')))
 }
 
@@ -124,7 +134,7 @@ test('OpenSpec: editor-workspace-layout / 平铺式默认画布工具栏 / 两�
 
 test('OpenSpec: editor-workspace-layout / 工具栏货架 / 页面里被收走的命令仍可用', async ({ page }) => {
   const { editor, stage } = await openEditor(page)
-  expect(await itemIds(editor)).not.toContain('CIRCLE')
+  await expect.poll(() => itemIds(editor)).not.toContain('CIRCLE')
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
@@ -153,7 +163,7 @@ test('OpenSpec: editor-workspace-layout / 工具栏货架 / 收走容器之后�
   const { editor, switcher } = await openEditor(page)
   await switcher.getByRole('radio', { name: '绘图' }).click()
   await expect(switcher.getByRole('radio', { name: '绘图' })).toHaveAttribute('aria-checked', 'true')
-  expect(await itemIds(editor)).not.toContain('draw-container')
+  await expect.poll(() => itemIds(editor)).not.toContain('draw-container')
 
   // 容器没有命令词，它的第二条入口是**动作目录**：命令面板搜得到，快捷键也还在。
   await editor.locator('[data-workspace-tab="compose-command"]').click()
@@ -198,7 +208,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 拖出即移除�
   await expect(source.locator('[data-shelf-available="RECTANGLE"]')).toBeVisible()
   await dialog.getByRole('button', { name: '完成' }).click()
 
-  expect(await itemIds(editor)).not.toContain('RECTANGLE')
+  await expect.poll(() => itemIds(editor)).not.toContain('RECTANGLE')
   // 改过货架点亮修改点：它与面板挪位是同一个信号。
   await expect(switcher.getByRole('radio', { name: '页面' }).getByRole('img', { name: '布局已改动' }))
     .toBeVisible()
@@ -215,7 +225,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 拖出即移除�
   // 重置把它拿回来，修改点熄灭。
   const again = await openToolbarDialog(editor)
   await again.getByRole('button', { name: '重置为默认' }).click()
-  expect(await itemIds(editor)).toContain('RECTANGLE')
+  await expect.poll(() => itemIds(editor)).toContain('RECTANGLE')
   await expect(switcher.getByRole('radio', { name: '页面' }).getByRole('img', { name: '布局已改动' }))
     .toHaveCount(0)
 })
@@ -299,7 +309,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 右键工具栏�
   await expect(menu.getByRole('menuitem', { name: '自定义工具栏…' })).toBeVisible()
 
   await menu.getByRole('menuitem', { name: '从工具栏移除' }).click()
-  expect(await itemIds(editor)).not.toContain('RECTANGLE')
+  await expect.poll(() => itemIds(editor)).not.toContain('RECTANGLE')
 
   // 收走的是入口不是能力：这条命令照样敲得动。
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -361,7 +371,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 右键收走容�
   // 容器只在**页面**货架上——绘图那条默认就不含它（3.6 断的正是这件事）。
   await toolbar.locator('[data-toolbar-item="draw-container"]').click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '从工具栏移除' }).click()
-  expect(await itemIds(editor)).not.toContain('draw-container')
+  await expect.poll(() => itemIds(editor)).not.toContain('draw-container')
 
   /*
    * 容器没有命令词，它的第二条入口是**动作目录**：默认键位 `F`，命令面板也搜得到。
@@ -379,7 +389,7 @@ test('OpenSpec: editor-workspace-layout / 自定义工具栏 / 右键收走容�
     .getByRole('menuitem', { name: '自定义工具栏…' })
     .click()
   await page.getByRole('dialog').getByRole('button', { name: '重置为默认' }).click()
-  expect(await itemIds(editor)).toContain('draw-container')
+  await expect.poll(() => itemIds(editor)).toContain('draw-container')
 })
 
 test('OpenSpec: editor-workspace-layout / 工具栏货架 / 宿主注入的目录项可上架并启动命令', async ({ page }) => {
@@ -422,14 +432,14 @@ test('OpenSpec: editor-workspace-layout / 货架编排的拖拽与键盘 / 拖�
    */
   await dragTo(page, arrange.locator('[data-shelf-id="ARROW"]'), arrange.locator('[data-shelf-id="select"]'), 'before')
   await dialog.getByRole('button', { name: '完成' }).click()
-  expect((await itemIds(editor)).indexOf('ARROW')).toBe(1)
+  await expect.poll(async () => (await itemIds(editor)).indexOf('ARROW')).toBe(1)
 
   // 切走再切回：货架住在偏好里、按工作区索引，不是一份会话状态。
   await switcher.getByRole('radio', { name: '绘图' }).click()
   await expect(switcher.getByRole('radio', { name: '绘图' })).toHaveAttribute('aria-checked', 'true')
   await switcher.getByRole('radio', { name: '页面' }).click()
   await expect(switcher.getByRole('radio', { name: '页面' })).toHaveAttribute('aria-checked', 'true')
-  expect((await itemIds(editor)).indexOf('ARROW')).toBe(1)
+  await expect.poll(async () => (await itemIds(editor)).indexOf('ARROW')).toBe(1)
 })
 
 test('OpenSpec: editor-preferences / 工作区管理 / 另存为带走改过的货架', async ({ page }) => {
@@ -439,7 +449,7 @@ test('OpenSpec: editor-preferences / 工作区管理 / 另存为带走改过的�
   // 先改一格，让页面工作区与它的基线不同。
   await toolbar.locator('[data-toolbar-item="ARROW"]').click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: '从工具栏移除' }).click()
-  expect(await itemIds(editor)).not.toContain('ARROW')
+  await expect.poll(() => itemIds(editor)).not.toContain('ARROW')
 
   await editor.getByRole('button', { name: '管理工作区' }).click()
   await editor.getByRole('menuitem', { name: '另存为工作区…' }).click()
@@ -451,7 +461,7 @@ test('OpenSpec: editor-preferences / 工作区管理 / 另存为带走改过的�
   const saved = switcher.getByRole('radio', { name: '接线现场' })
   await expect(saved).toHaveAttribute('aria-checked', 'true')
   // 另存为复制的是「此刻这个工作区的样子」，货架是其中一样。
-  expect(await itemIds(editor)).not.toContain('ARROW')
+  await expect.poll(() => itemIds(editor)).not.toContain('ARROW')
 
   // 回到来源工作区并重置它：新工作区是一份副本，不跟着源走。
   await switcher.getByRole('radio', { name: '页面' }).click()
@@ -460,11 +470,11 @@ test('OpenSpec: editor-preferences / 工作区管理 / 另存为带走改过的�
     .getByRole('menuitem', { name: '自定义工具栏…' })
     .click()
   await page.getByRole('dialog').getByRole('button', { name: '重置为默认' }).click()
-  expect(await itemIds(editor)).toContain('ARROW')
+  await expect.poll(() => itemIds(editor)).toContain('ARROW')
 
   await saved.click()
   await expect(saved).toHaveAttribute('aria-checked', 'true')
-  expect(await itemIds(editor)).not.toContain('ARROW')
+  await expect.poll(() => itemIds(editor)).not.toContain('ARROW')
 })
 
 test('OpenSpec: component-library / 自定义物料面板 / 右键隐藏、只看这一组与对话框', async ({ page }) => {

@@ -73,17 +73,27 @@ export async function selectChildInSceneTree(editor: Locator, parent: Locator, c
   await sceneTree.locator(`[data-tree-item-id="${childId}"]`).click()
 }
 
+/**
+ * 量一个元素的盒子，先等它真的有盒。
+ *
+ * @remarks
+ * `toBeVisible()` 与 `boundingBox()` 是**两趟往返**：首页文档打开那一步会换掉运行时并重建
+ * Stage，布局在首帧之后也还会再动一下，中间那一刻量出来是 `null`——下一行读 `.x` 就抛
+ * `TypeError`，而症状看起来像画布坏了。满载并行时尤其容易撞上，它是 e2e 尾巴上反复出现的
+ * 那一类红。
+ *
+ * 只轮询「有没有盒」而不轮询盒的值：值本来就允许在用例自己的操作之间变。
+ */
+export async function stableBox(locator: Locator) {
+  await expect.poll(() => locator.boundingBox()).not.toBeNull()
+  return (await locator.boundingBox())!
+}
+
 /** 通过新的画布工具流创建一个可供后续断言操作的 Container。 */
 export async function drawContainer(page: Page, editor: Locator) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
-  /*
-   * `toBeVisible()` 之后再 `boundingBox()` 是两趟往返：布局在首帧之后还会动一下，中间那一刻
-   * 量到的可能是 `null`。轮询到量得出来为止，否则症状是这条断言在满载时偶发地红，而看起来
-   * 像画布坏了。
-   */
-  await expect.poll(() => output.boundingBox()).not.toBeNull()
-  const outputBox = await output.boundingBox()
+  const outputBox = await stableBox(output)
 
   /*
    * 落点是屏幕像素，因为**下游用例也用屏幕像素**往这个容器里丢子级；换成场景框的比例会让容器
