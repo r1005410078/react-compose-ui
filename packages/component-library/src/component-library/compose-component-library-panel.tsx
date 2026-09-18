@@ -449,6 +449,33 @@ export function ComposeComponentLibraryPanel({
     ...(i18n?.locale === undefined ? {} : { locale: i18n.locale }),
   }).filter((section) => !dismissed.has(section.id))
 
+  /**
+   * 整块货架的文件夹段一个组件都没有。
+   *
+   * @remarks
+   * 这一档要**说一句话**，否则一个名字叫「符号库」、列着九个符号目录名、每个都写着 `(0)` 的
+   * 面板，第一次看就是「符号库是空的」——而那些文件夹里各有十几个 `.svg`。数字本身没算错：
+   * 这个面板是**货架**不是文件浏览器，它数的是已经导入成组件的那些。错的是没有任何东西解释
+   * 这件事，用户据此认定这条路不通。
+   *
+   * 只在**整块货架都空**时说，且只说一次：某一个文件夹是 0 而别的有货时，机制已经在屏幕上
+   * 演示过了，那个 0 自己说得清楚；九个段各写一遍则是同一句话说九遍。
+   *
+   * **文件夹段不止一个才说。**一行写着 `(0)` 说的是「这一格还没有东西」，用户读得懂；而九行
+   * 文件夹名全写着 `(0)` 说的是「这个面板是空的」，那句话是错的——文件就在那些文件夹里。
+   * 造成误读的是这块**看起来像目录树**的东西处处报零，不是零本身。这条同时挡住一处**说错话**：
+   * 只有一个「项目组件」段的页面货架里，下一步不是「去资源里导入 .svg」，而是在画布上提取组件。
+   *
+   * 搜索期间不说：那时的 0 是「没搜到」，不是「还没导入」，而这两句话的下一步完全不同。
+   */
+  const folderSections = sections.filter((section) => (
+    shelf.sections.find((candidate) => candidate.id === section.id)?.kind === 'folder'
+  ))
+  const shelfEmpty = catalog !== null
+    && query.trim() === ''
+    && folderSections.length > 1
+    && folderSections.every((section) => section.count === 0 && !section.missing)
+
   const isCollapsed = (id: string, fallback: boolean) => collapseOverrides.get(id) ?? fallback
   const toggleCollapsed = (id: string) => {
     const definitionDefault = sections.find((section) => section.id === id)?.collapsed ?? false
@@ -630,6 +657,13 @@ export function ComposeComponentLibraryPanel({
       </div>
       {error ? <p role="alert">{error}</p> : null}
       {store && !catalog && !error ? <p role="status">{zh ? '正在加载…' : 'Loading…'}</p> : null}
+      {shelfEmpty ? (
+        <p className="compose-component-library__empty" role="status">
+          {zh
+            ? '这些文件夹里的符号还没有导入成组件。在「资源」里右键一个 .svg，选「导入为组件」。'
+            : 'Nothing in these folders has been imported yet. Right-click a .svg in Assets and choose “Import as component”.'}
+        </p>
+      ) : null}
       {sections.map((section) => {
         // 搜索期间不受折叠限制：有命中的段一律展开，否则用户搜出来的东西藏在一行标题后面。
         const collapsed = query.trim() === ''

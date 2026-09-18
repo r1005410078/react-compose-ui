@@ -367,6 +367,18 @@
   outline: none;
 }
 
+/*
+ * 空态引导：与「找不到这个文件夹」同一族的次要文本，不加图标也不加按钮——它要说的只有一句
+ * 话，而下一步的入口（资源面板）就在同一个窗口里。
+ */
+.compose-component-library__empty {
+  margin: 0;
+  padding: 4px 0 8px;
+  color: var(--compose-text-muted, #8b95a8);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .compose-component-library__missing {
   display: flex;
   align-items: center;

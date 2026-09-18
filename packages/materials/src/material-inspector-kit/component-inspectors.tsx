@@ -1288,10 +1288,22 @@ export function createAppearanceInspector(
         v.title(zh ? '边框宽度' : 'Border width'),
         v.metadata({ propertyPanel: { editor: 'stroke-width' } }),
       ),
+      /*
+       * 叫「边框圆角」而不是「圆角」：几何分组里的 `cornerRadius` 也叫圆角，而两者作用在
+       * **不同的东西**上——这一个圆的是宿主盒（对空心曲线完全看不见），那一个圆的是形状本身。
+       * 两个同名字段只能靠「试一个、看形状变没变」来区分，而空心矩形改这一个是**完全没有
+       * 可见效果**的，用户会以为圆角这个功能坏了。
+       *
+       * 取「边框」这个前缀是因为它就坐在边框颜色与边框宽度旁边，且与字段名 `borderRadius`
+       * 对得上；几何那一个保留「圆角」——它才是用户想改形状时要找的那一个。
+       */
       borderRadius: v.pipe(
         v.number(),
         v.minValue(0),
-        v.title(zh ? '圆角' : 'Corner radius'),
+        v.title(zh ? '边框圆角' : 'Border radius'),
+        v.description(zh
+          ? '圆的是宿主盒；空心曲线没有可见的盒，改它看不出变化。形状本身的圆角在几何分组。'
+          : 'Rounds the host box; a hollow curve has no visible box. Shape corners live in Geometry.'),
         v.metadata({ propertyPanel: { editor: 'corner-radius' } }),
       ),
       opacity: v.pipe(
