@@ -972,10 +972,17 @@ export function ComposeEditor({
    * 页面库那一屏此刻盖在 body 上。
    *
    * @remarks
-   * 接了端口就**从库开始**：页面库是应用的入口，而编辑器不再是——打开产品先看到一块空画布，
-   * 而用户此刻的问题是「这东西该怎么画」。没接端口时这一档恒为关，编辑器照旧是入口。
+   * 接了端口默认就**从库开始**：页面库是应用的入口，而编辑器不再是——打开产品先看到一块空
+   * 画布，而用户此刻的问题是「这东西该怎么画」。没接端口时这一档恒为关，编辑器照旧是入口。
+   *
+   * 宿主可以用 `openOnStart: false` 让出入口而仍然接着库——「这个宿主有没有页面库」是能力，
+   * 「打开先看到哪一屏」是形态，两句话回答的不是同一个问题。它**只喂初值**：此后这份状态仍
+   * 然只有一个持有者，宿主中途把它改成 `false` 不会把用户从已经打开的库里拽走。
    */
-  const [libraryOpen, setLibraryOpen] = useState(pages?.library !== undefined)
+  const [libraryIsEntry] = useState(
+    pages?.library !== undefined && pages.library.openOnStart !== false,
+  )
+  const [libraryOpen, setLibraryOpen] = useState(libraryIsEntry)
   const libraryPort = pages?.library?.port
   const libraryRenderPage = pages?.library?.renderPage
   const openLibrary = useCallback(() => setLibraryOpen(true), [])
@@ -1042,8 +1049,14 @@ export function ComposeEditor({
     const catalog = pageWorkspace.catalog
     if (
       pages === undefined
-      // 接了页面库就从库开始：自动打开首页会让用户越过那一屏，而它才是入口。
-      || pages.library !== undefined
+      /*
+       * 从页面库起手就不自动打开首页：自动打开会让用户越过那一屏，而它才是入口。
+       *
+       * 判据是**这次起手在不在库里**（`libraryIsEntry`）而不是「接没接库」：`openOnStart: false`
+       * 的宿主接着库却从画布起手，按后者判会让它落在一块什么都没打开的空画布上。也不读
+       * `libraryOpen`——那是会变的，用户回一趟库再出来，首页就会在他背后被打开。
+       */
+      || libraryIsEntry
       || !workspaceReady
       || !catalog
       || catalog.homePageMissing
@@ -1070,7 +1083,7 @@ export function ComposeEditor({
       })
     })
     return () => { disposed = true }
-  }, [openPageDocument, pageWorkspace.catalog, pages, workspaceReady])
+  }, [libraryIsEntry, openPageDocument, pageWorkspace.catalog, pages, workspaceReady])
 
   const savePageDocument = useCallback(async (panelId: string, force?: boolean) => {
     const outcome = await pageWorkspace.savePage(panelId, force)

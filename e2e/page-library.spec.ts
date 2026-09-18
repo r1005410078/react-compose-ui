@@ -97,3 +97,23 @@ test('OpenSpec: library-browser / 演示屏上只有图、序号与一条控制�
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(library).toBeVisible()
 })
+
+/*
+ * 判别性在**两半都断**：只断「默认没落在库里」的用例，在一个根本没接上库的宿主上同样绿，
+ * 而那正是这次要改掉的形态；只断「库进得去」的用例，又分不出它是不是抢了入口。
+ */
+test('OpenSpec: library-browser / 接上页面库与让它成为入口是两件事 / 默认从画布起手而库仍可达', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+
+  // 起手在画布上：库那一屏不在，首页照常自动打开，工作区切换器照常渲染。
+  await expect(editor.locator('.compose-library')).toHaveCount(0)
+  await expect(editor.locator('[data-workspace-tab^="compose-page-document:"]').first()).toBeVisible()
+  await expect(editor.getByRole('radiogroup', { name: '工作区' })).toBeVisible()
+
+  // 而库仍然可达——收走的只是「先看到哪一屏」，不是那项能力。
+  await editor.locator('.compose-editor__top-bar')
+    .getByRole('button', { name: '返回页面库' })
+    .click()
+  await expect(editor.locator('.compose-library')).toBeVisible()
+})

@@ -273,13 +273,17 @@ export function StageDemoWorkspace() {
     () => new URLSearchParams(window.location.search).has('switch-demo'),
   )
   /**
-   * `?library`：把页面库那一屏接上，编辑器的入口因此变成它。
+   * `?library`：**起手就在页面库那一屏**。
    *
    * @remarks
-   * 走开关而不是默认打开，与上面两条同一条理由——默认开着会让**每一条**以「打开就在画布上」
+   * 页面库本身默认接上——「这个宿主有没有页面库」是能力，「打开先看到哪一屏」是形态，这个
+   * 开关自本次起只管后者（`ComposeEditorLibraryConfig.openOnStart`）。因此不带这个参数时
+   * 标志那扇门、应用菜单里的「返回页面库」与全屏演示都在，只是编辑器从画布起手。
+   *
+   * 默认不起手在库里，理由与上面两条同一条——默认落在库里会让**每一条**以「打开就在画布上」
    * 起手的既有端到端用例先经过一屏页面库。示例应用是集成示例，不是正式产品的形态决定。
    */
-  const [libraryDemo] = useState(
+  const [libraryOnStart] = useState(
     () => new URLSearchParams(window.location.search).has('library'),
   )
   /** `?symbols`：把 `apps/example/symbols/` 里那批储能一次接线图元件挂进资源浏览器，用来试 SVG 导入。 */
@@ -336,40 +340,36 @@ export function StageDemoWorkspace() {
    * 之间没有依赖关系，各写一份的症状是「两处对『什么算一个页面』的判断分家」。
    */
   const libraryPort = useMemo(
-    () => (libraryDemo
-      ? createProviderLibraryPort({
-          provider: assetProvider,
-          listPages: ({ provider, signal }) => listComposePageDescriptors({
-            provider,
-            ...(signal === undefined ? {} : { signal }),
-          }),
-        })
-      : undefined),
-    [assetProvider, libraryDemo],
+    () => createProviderLibraryPort({
+      provider: assetProvider,
+      listPages: ({ provider, signal }) => listComposePageDescriptors({
+        provider,
+        ...(signal === undefined ? {} : { signal }),
+      }),
+    }),
+    [assetProvider],
   )
   const pagesConfig = useMemo(
     () => ({
       store: pageStore,
       onActiveSessionChange: setActivePage,
-      ...(libraryPort === undefined
-        ? {}
-        : {
-            library: {
-              port: libraryPort,
-              // 演示的是**真实渲染**而不是缩略图：客户要凑近看数值与线宽。渲染器由宿主注入，
-              // 因为它就是既有的只读 Preview——`editor` 与 `preview` 是同一层的两个入口包。
-              renderPage: (record: ComposeLibraryRecord) => (
-                <LibraryPagePreview
-                  assetResolver={assetResolver}
-                  pageKey={record.pageKey}
-                  registry={registry}
-                  store={pageStore}
-                />
-              ),
-            },
-          }),
+      library: {
+        port: libraryPort,
+        // 接上库不等于让它抢走入口：默认从画布起手，`?library` 才起手在库里。
+        openOnStart: libraryOnStart,
+        // 演示的是**真实渲染**而不是缩略图：客户要凑近看数值与线宽。渲染器由宿主注入，
+        // 因为它就是既有的只读 Preview——`editor` 与 `preview` 是同一层的两个入口包。
+        renderPage: (record: ComposeLibraryRecord) => (
+          <LibraryPagePreview
+            assetResolver={assetResolver}
+            pageKey={record.pageKey}
+            registry={registry}
+            store={pageStore}
+          />
+        ),
+      },
     }),
-    [assetResolver, libraryPort, pageStore],
+    [assetResolver, libraryOnStart, libraryPort, pageStore],
   )
   const componentsConfig = useMemo(
     () => ({ store: componentStore, onActiveSessionChange: setActiveComponent }),

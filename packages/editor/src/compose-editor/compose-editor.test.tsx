@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeHistoryNavigationController } from '@compose-ui/history'
+import type { ComposeLibraryPort } from '@compose-ui/library'
 import { ComposePaintPicker } from '@compose-ui/components'
 import {
   ComposeUIProvider,
@@ -1417,5 +1418,61 @@ describe('ComposeEditor', () => {
     expect(screen.getByText('方向键')).toBeInTheDocument()
     expect(screen.getByText('微调 1 世界单位；Shift 为 10')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /方向键/ })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * 只读页面库端口的替身：必选的恰好是读的那三条。
+ *
+ * @remarks
+ * 这几条用例问的只有一件事——起手落在哪一屏，因此端口回空集就够了；返回空列表的库照样是
+ * 一个合法的库，而空列表与非空列表对这个问题给出同一个答案。
+ */
+function emptyLibraryPort(): ComposeLibraryPort {
+  return {
+    id: 'test-library',
+    capabilities: {
+      create: false,
+      update: false,
+      trash: false,
+      purge: false,
+      thumbnail: false,
+      recents: false,
+    },
+    query: async () => ({
+      items: [],
+      nextCursor: null,
+      facets: { byCategory: [], byLocation: { project: 0, template: 0, trash: 0 } },
+    }),
+    get: async () => { throw new Error('not found') },
+    listCategories: async () => [],
+  }
+}
+
+describe('页面库入口', () => {
+  const libraryScreen = () => document.querySelector('.compose-library')
+
+  it('OpenSpec: library-browser / 接上页面库与让它成为入口是两件事 / 缺席即入口', () => {
+    render(<ComposeEditor pages={{ library: { port: emptyLibraryPort() } }} />)
+    expect(libraryScreen()).not.toBeNull()
+  })
+
+  it('OpenSpec: library-browser / 接上页面库与让它成为入口是两件事 / 显式让出入口', () => {
+    render(<ComposeEditor pages={{ library: { port: emptyLibraryPort(), openOnStart: false } }} />)
+    // 起手在画布上，而库仍然可达——收走的只是「先看到哪一屏」，不是那项能力。
+    expect(libraryScreen()).toBeNull()
+    expect(screen.getByRole('button', { name: '返回页面库' })).toBeInTheDocument()
+  })
+
+  /*
+   * 判别性：它只喂初值。把 `openOnStart` 做成受控属性会让宿主的一次重渲染把已经进了库的用户
+   * 拽回画布，而屏幕上没有任何东西解释为什么。
+   */
+  it('OpenSpec: library-browser / 接上页面库与让它成为入口是两件事 / 它不是受控属性', () => {
+    const port = emptyLibraryPort()
+    const { rerender } = render(<ComposeEditor pages={{ library: { port } }} />)
+    expect(libraryScreen()).not.toBeNull()
+    rerender(<ComposeEditor pages={{ library: { port, openOnStart: false } }} />)
+    expect(libraryScreen()).not.toBeNull()
   })
 })

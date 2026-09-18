@@ -78,6 +78,23 @@ export interface ComposeEditorLibraryConfig {
    * ——一个按下去什么都不发生的按钮比没有更差。
    */
   readonly renderPage?: (record: ComposeLibraryRecord) => ReactNode
+  /**
+   * 编辑器是否从页面库那一屏起手。
+   *
+   * @remarks
+   * **缺席即 `true`**：页面库一旦接上就是应用入口，这是它的产品定位，因此既有宿主一个字节
+   * 不改、行为逐字不变。缺席值取 `true` 而不是 `false` 是有理由的——反过来会让每一个已经接上
+   * 库的宿主在升级之后静默换掉入口，而那个变化在屏幕上读起来像「页面库没了」。
+   *
+   * 给 `false` 表示「库可达但不抢入口」：标志那扇门、应用菜单里的「返回页面库」、图墙、全屏
+   * 演示与「就用这个」照旧都在，收走的只是打开编辑器先看到哪一屏。
+   *
+   * 它**只喂初值，不是受控属性**：当前在不在库里仍然只有一个持有者，把它从 `true` 改成
+   * `false` 不会把已经进了库的用户拽回画布。
+   *
+   * @defaultValue true
+   */
+  readonly openOnStart?: boolean
 }
 
 /** Editor 的页面系统集成配置。 @public */
