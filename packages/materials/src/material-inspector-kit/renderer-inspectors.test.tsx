@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { createDefaultCanvasSettings } from '@compose-ui/core'
 import type {
   ComposeEntity,
   EditorCommand,
@@ -8,6 +9,7 @@ import type { ComposeRendererInspectorBindingPort } from '@compose-ui/component-
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createComponentInstanceAnimationInspector,
+  createCurveRendererInspector,
   createTextRendererInspector,
 } from './renderer-inspectors'
 
@@ -410,5 +412,86 @@ describe('Component Instance Animation Inspector', () => {
       entityId: 'entity-a',
       props: { animation: null, animationTime: 250, hostTag: 'switch-3' },
     })
+  })
+})
+
+describe('Curve Renderer Inspector 的多作用对象写入', () => {
+  function curveEntity(id: string, props: JsonObject): ComposeEntity {
+    return {
+      id,
+      name: id,
+      components: {
+        Composition: { presetId: 'curve', baseComponentKeys: ['Lock'], capabilityIds: [] },
+        Lock: { locked: false },
+        Renderer: { type: 'curve', props },
+      },
+    }
+  }
+
+  function documentOf(entities: readonly ComposeEntity[]) {
+    return {
+      schemaVersion: 7 as const,
+      canvas: createDefaultCanvasSettings(),
+      rootIds: entities.map((item) => item.id),
+      entities: Object.fromEntries(entities.map((item) => [item.id, item])),
+    }
+  }
+
+  it('OpenSpec: compose-document / patch 合到各自的 props，不相干的字段不受影响', () => {
+    const Inspector = createCurveRendererInspector(() => 'command-id')
+    const a = curveEntity('a', { stroke: '#ffffff', strokeWidth: 2 })
+    const b = curveEntity('b', { stroke: '#ffffff', strokeWidth: 5 })
+    const dispatch = vi.fn<(command: EditorCommand) => unknown>()
+    render(
+      <Inspector
+        authoredProps={a.components.Renderer!.props as JsonObject}
+        dispatch={dispatch}
+        document={documentOf([a, b])}
+        entities={[a, b]}
+        entity={a}
+        props={a.components.Renderer!.props as JsonObject}
+        readOnly={false}
+        renderer={a.components.Renderer as never}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('线条粗细'), { target: { value: '3' } })
+    fireEvent.blur(screen.getByLabelText('线条粗细'))
+
+    const command = dispatch.mock.calls[0]?.[0]
+    expect(command?.type).toBe('transaction.batch')
+    const commands = (command?.payload as unknown as {
+      commands: readonly EditorCommand[]
+    }).commands
+    /*
+     * 判别性断言在 b 上：拿 a 的整份 props 去写全部目标时，b 的 stroke 与 strokeWidth 也会变成
+     * a 的值——而颜色那一项两条本来就相同，只有线宽读得出区别。
+     */
+    expect(commands.map((item) => (item.payload as unknown as { entityId: string }).entityId))
+      .toEqual(['a', 'b'])
+    for (const item of commands) {
+      expect((item.payload as unknown as { props: JsonObject }).props)
+        .toMatchObject({ strokeWidth: 3 })
+    }
+  })
+
+  it('OpenSpec: compose-document / 单个作用对象仍走原来那条单条命令', () => {
+    const Inspector = createCurveRendererInspector(() => 'command-id')
+    const a = curveEntity('a', { stroke: '#ffffff', strokeWidth: 2 })
+    const dispatch = vi.fn<(command: EditorCommand) => unknown>()
+    render(
+      <Inspector
+        authoredProps={a.components.Renderer!.props as JsonObject}
+        dispatch={dispatch}
+        document={documentOf([a])}
+        entity={a}
+        props={a.components.Renderer!.props as JsonObject}
+        readOnly={false}
+        renderer={a.components.Renderer as never}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('线条粗细'), { target: { value: '3' } })
+    fireEvent.blur(screen.getByLabelText('线条粗细'))
+    expect(dispatch.mock.calls[0]?.[0]?.type).toBe('entity.renderer.props.set')
   })
 })

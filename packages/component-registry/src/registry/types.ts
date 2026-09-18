@@ -266,6 +266,27 @@ export interface ComposeRendererInspectorProps extends ComposeEntityInspectorCon
   readonly propCategory?: ComposeRendererPropCategory
   /** Editor 注入的可选 Renderer Props 绑定端口。 */
   readonly propsBinding?: ComposeRendererInspectorBindingPort
+  /**
+   * 本次编辑的作用对象。
+   *
+   * @remarks
+   * **缺席即只有 `entity` 自己**，因此既有 Renderer Definition 一行不改——单选是这一组恰好
+   * 一个成员的退化情形，由构造保证而不是由各物料各判一次；与文字样式的四件事、时间线的
+   * 关键帧选区是同一条判断。
+   *
+   * 读与写分开：Inspector 取当前值一律以 `entity` 为代表，写入作用于整组。两者回答的是不同
+   * 的问题——屏幕上显示什么、这一下改了谁；取值不一致的字段由 `mixedPropNames` 说出来，
+   * MUST NOT 拿代表值冒充整批。
+   */
+  readonly entities?: readonly ComposeEntity[]
+  /**
+   * 作用对象之间取值不一致的 Prop 名称。
+   *
+   * @remarks
+   * 缺席即没有混合（单个作用对象恒是这一档）。Inspector 据此把对应字段交给属性面板的混合
+   * 呈现，而不是自己去比较——比较要读 authored props，那是宿主已经有的一份事实。
+   */
+  readonly mixedPropNames?: ReadonlySet<string>
 }
 
 /** 单个 ECS Component Inspector 的上下文。 @public */

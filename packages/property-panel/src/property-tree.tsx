@@ -99,6 +99,7 @@ interface PropertyTreeProps extends TreeSharedProps {
     title: string
     onVisibilityChange: (visible: boolean | undefined) => void
   }
+  mixedPaths?: readonly PropertyPath[]
 }
 
 interface PropertyNodeProps extends TreeSharedProps {
@@ -135,6 +136,16 @@ interface PropertyTreeView {
 
 const OBJECT_TYPES = new Set(['object', 'loose_object', 'strict_object', 'object_with_rest'])
 const TUPLE_TYPES = new Set(['tuple', 'loose_tuple', 'strict_tuple', 'tuple_with_rest'])
+/**
+ * 此刻不是单值的字段路径（点号连接）。
+ *
+ * @remarks
+ * 面板**不认识选区、文档或任何业务语义**——它只知道这个路径此刻不是单值，谁让它不单值是
+ * 宿主的事。用 Context 而不是逐层透传：字段行藏在对象、集合与自定义 renderer 的任意深度里，
+ * 而这份事实对整棵树是同一个。
+ */
+const MixedPathsContext = createContext<ReadonlySet<string>>(new Set())
+
 const RendererContext = createContext<readonly PropertyPanelRenderer[]>([])
 const TreeDepthContext = createContext(0)
 const ActionWidthContext = createContext(36)
@@ -208,6 +219,7 @@ export function PropertyTree({
   readOnly,
   renderers = [],
   commit,
+  mixedPaths,
 }: PropertyTreeProps) {
   const messages = usePropertyPanelMessages()
   const [activeBinding, setActiveBinding] = useState<{
@@ -263,7 +275,9 @@ export function PropertyTree({
     if (!section) return
     section.onVisibilityChange(sectionVisible)
   }, [section, sectionVisible])
+  const mixedKeys = new Set((mixedPaths ?? []).map((path) => path.join('.')))
   return (
+    <MixedPathsContext.Provider value={mixedKeys}>
     <RendererContext.Provider value={renderers}>
       <FieldAdornmentContext.Provider value={renderFieldAdornment}>
       <ActionWidthContext.Provider value={actionWidth}>
@@ -319,7 +333,32 @@ export function PropertyTree({
       </ActionWidthContext.Provider>
       </FieldAdornmentContext.Provider>
     </RendererContext.Provider>
+    </MixedPathsContext.Provider>
   )
+}
+
+/**
+ * 「多个值」标记。
+ *
+ * @remarks
+ * **不靠把值留空表达**：数字框留得空、色板与开关留不空，靠留空说这句话会在半数字段上说不
+ * 出口，而那一半会退化成「拿其中一个的值冒充整批」。因此它是一句写在标签旁的话，四种编辑器
+ * 上逐字相同；编辑器照常显示代表值，标记负责说出那不是全部。
+ */
+function MixedBadge({ label, path }: { readonly label: string; readonly path: PropertyPath }) {
+  const mixed = useContext(MixedPathsContext)
+  const messages = usePropertyPanelMessages()
+  if (!mixed.has(path.join('.'))) return null
+  return (
+    <span className="property-panel__mixed" title={messages.mixedHint(label)}>
+      {messages.mixed}
+    </span>
+  )
+}
+
+/** 这个路径此刻是不是混合值；字段行据此输出 `data-property-mixed`。 */
+function useIsMixedPath(path: PropertyPath): boolean {
+  return useContext(MixedPathsContext).has(path.join('.'))
 }
 
 function RowActionRail({
@@ -1862,6 +1901,7 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
   const info = inspectSchema(schema)
   const { showDescriptions } = useContext(ViewContext)
   const depth = useContext(TreeDepthContext)
+  const mixed = useIsMixedPath(path)
   const id = `property-${path.map(String).join('-')}`
   const runtime = info.base as RuntimeSchema
   const bindingTarget = useBuiltInBindingTarget(schema, path, label, value)
@@ -2012,12 +2052,14 @@ function PrimitiveField({ schema, value, label, path, readOnly, commit, nodeActi
       data-binding-state={getBindingTargetsEntryState(bindingTarget ? [bindingTarget] : [])}
       data-property-depth={depth}
       data-property-part="field"
+      data-property-mixed={mixed ? 'true' : undefined}
       data-property-nested={depth > 1 ? 'true' : undefined}
       data-property-path={path.join('.')}
       style={createFieldIndentStyle(depth)}
     >
       <label data-property-part="label" htmlFor={bound ? undefined : id}>
         <span>{label}</span>
+        <MixedBadge label={label} path={path} />
         <FieldAdornment
           label={label}
           metadata={info.metadata}

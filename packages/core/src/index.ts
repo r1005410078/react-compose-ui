@@ -227,6 +227,10 @@ export type {
   ComposePortsValidationIssue,
 } from './ports'
 export {
+  findComposeMixedRendererProps,
+  planComposeSetRendererProps,
+} from './renderer-props'
+export {
   getComposeStyleRef,
   planComposeApplyTextStyle,
   planComposeDetachTextStyle,

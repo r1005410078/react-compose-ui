@@ -364,6 +364,8 @@ export function ComposeRegistryRendererInspector({
   scriptScope,
   propsBinding,
   propCategory,
+  entities,
+  mixedPropNames,
 }: {
   readonly registry: ComposeEntityRegistry
   readonly entity: ComposeEntity
@@ -376,6 +378,10 @@ export function ComposeRegistryRendererInspector({
   readonly propCategory?: ComposeRendererPropCategory
   readonly nodeEditPort?: ComposeNodeEditPort
   readonly paintEditPort?: ComposePaintEditPort
+  /** 本次编辑的作用对象；缺席即 `[entity]`。 */
+  readonly entities?: readonly ComposeEntity[]
+  /** 作用对象之间取值不一致的 Prop 名称；缺席即没有混合。 */
+  readonly mixedPropNames?: ReadonlySet<string>
 }) {
   const renderer = getComposeRenderer(entity)
   if (!renderer) return null
@@ -413,6 +419,8 @@ export function ComposeRegistryRendererInspector({
         authoredProps={resolved.authoredProps}
         props={resolved.props}
         propsBinding={propsBinding}
+        entities={entities}
+        mixedPropNames={mixedPropNames}
         renderer={renderer}
       />
     </DefinitionErrorBoundary>

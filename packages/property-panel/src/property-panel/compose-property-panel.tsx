@@ -536,6 +536,18 @@ export interface ComposePropertyPanelProps<TSchema extends v.GenericSchema>
    * 不占用右侧动作栏的容量。省略该属性或返回 `null` 时字段行保持原样。
    */
   renderFieldAdornment?: PropertyPanelFieldAdornmentRenderer
+  /**
+   * 此刻不是单值的字段路径。
+   *
+   * @remarks
+   * 列出的字段带一个可读的「多个值」标记与 `data-property-mixed="true"`，并**照常可编辑**
+   * ——用户写入一个值的含义是「把这一批都设成它」。面板不认识选区、文档或任何业务语义，它
+   * 只知道这个路径此刻不是单值；谁让它不单值，是宿主的事。
+   *
+   * 标记 MUST NOT 只靠把值留空表达：数字框留得空、色板与开关留不空，靠留空说这句话会在半数
+   * 字段上说不出口，而那一半会退化成「拿其中一个的值冒充整批」。
+   */
+  mixedPaths?: readonly PropertyPath[]
   /** 完整候选 input 校验成功后调用的受控变更回调。 */
   onValueChange?: (
     value: v.InferInput<TSchema>,
@@ -1001,6 +1013,7 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
   renderers,
   binding,
   renderFieldAdornment,
+  mixedPaths,
   paintEditor: _paintEditor,
   colorEditor: _colorEditor,
   nodeEditor: _nodeEditor,
@@ -1065,6 +1078,7 @@ function EmbeddedComposePropertyPanel<TSchema extends v.GenericSchema>({
       binding={binding}
       renderFieldAdornment={renderFieldAdornment ?? section.renderFieldAdornment}
       commit={commit}
+      mixedPaths={mixedPaths}
       defaultValue={defaultValue}
       filter={root.filter}
       hasDefaultValue={hasValidDefault}
@@ -1094,6 +1108,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
   renderers,
   binding,
   renderFieldAdornment,
+  mixedPaths,
   paintEditor: _paintEditor,
   colorEditor: _colorEditor,
   nodeEditor: _nodeEditor,
@@ -1338,6 +1353,7 @@ function StandaloneComposePropertyPanel<TSchema extends v.GenericSchema>({
           binding={binding}
           renderFieldAdornment={renderFieldAdornment}
           commit={commit}
+          mixedPaths={mixedPaths}
           defaultValue={defaultValue}
           filter={filter}
           hasDefaultValue={hasValidDefault}

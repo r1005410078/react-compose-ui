@@ -94,6 +94,108 @@ function componentStore(): ComposeComponentStore {
 describe('ComposeComponentLibraryPanel', () => {
   afterEach(cleanup)
 
+  /** 一个没有任何组件、但有若干文件夹的目录：符号库第一次打开就是这一档。 */
+  function emptyStore(): ComposeComponentStore {
+    return {
+      ...componentStore(),
+      listComponents: vi.fn(async () => ({
+        components: [],
+        issues: [],
+        folders: [['Symbols'], ['Symbols', 'dianciganying']] as readonly (readonly string[])[],
+      })),
+    }
+  }
+
+  const symbolShelf: ComposeComponentShelf = {
+    title: '符号库',
+    sections: [
+      { kind: 'folder', id: 'symbols', folderPath: ['Symbols'], groupBy: 'subfolder' },
+      { kind: 'folder', id: 'nested', folderPath: ['Symbols', 'dianciganying'] },
+    ],
+  }
+
+  const EMPTY_HINT = /还没有导入成组件/
+
+  it('OpenSpec: component-library / 货架整块为空时说明原因 / 一个组件都没有就给引导', async () => {
+    const Panel = api.ComposeComponentLibraryPanel!
+    render(<Panel registry={registry} shelf={symbolShelf} store={emptyStore()} />)
+    await waitFor(() => {
+      expect(screen.getByText(EMPTY_HINT)).toBeInTheDocument()
+    })
+    // 只说一次：九个段各写一遍是同一句话说九遍。
+    expect(screen.getAllByText(EMPTY_HINT)).toHaveLength(1)
+  })
+
+  it('OpenSpec: component-library / 货架整块为空时说明原因 / 有一段有货就不出', async () => {
+    const Panel = api.ComposeComponentLibraryPanel!
+    /*
+     * 判别性夹具：组件落在 `Symbols/dianciganying` 下，因此**其中一段**有货、另一段仍是 0。
+     * 拿一份组件在根目录的 store 来测会让两段都是 0，得到的是上一条用例的结论。
+     */
+    const store: ComposeComponentStore = {
+      ...componentStore(),
+      listComponents: vi.fn(async () => ({
+        components: [{
+          entryId: 'transformer',
+          assetKey: 'transformer',
+          displayName: '变压器1',
+          componentId: 'transformer',
+          kind: 'base' as const,
+          revision: '1',
+          reference: {
+            kind: 'component' as const,
+            providerId: 'project',
+            assetKey: 'transformer',
+            scope: 'persistent' as const,
+          },
+          folderPath: ['Symbols', 'dianciganying'] as readonly string[],
+        }],
+        issues: [],
+        folders: [['Symbols'], ['Symbols', 'dianciganying']] as readonly (readonly string[])[],
+      })),
+    }
+    render(<Panel registry={registry} shelf={symbolShelf} store={store} />)
+    // 两段都列它：`Symbols` 段含后代，`dianciganying` 段是它自己那一层。
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: '添加主组件 变压器1' }).length)
+        .toBeGreaterThan(0)
+    })
+    expect(screen.queryByText(EMPTY_HINT)).toBeNull()
+  })
+
+  it('OpenSpec: component-library / 货架整块为空时说明原因 / 只有一个文件夹段时不出', async () => {
+    const Panel = api.ComposeComponentLibraryPanel!
+    /*
+     * 一行写着 `(0)` 说的是「这一格还没有东西」，用户读得懂；而这一档里下一步也不是「去资源
+     * 里导入 .svg」——页面货架的「项目组件」是从画布上提取出来的。
+     */
+    render(
+      <Panel
+        registry={registry}
+        shelf={{ sections: [
+          { kind: 'folder', id: 'components', folderPath: [] },
+          { kind: 'presets', id: 'basics' },
+        ] }}
+        store={emptyStore()}
+      />,
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /添加 容器/ })).toBeInTheDocument()
+    })
+    expect(screen.queryByText(EMPTY_HINT)).toBeNull()
+  })
+
+  it('OpenSpec: component-library / 货架整块为空时说明原因 / 搜索期间不出', async () => {
+    const Panel = api.ComposeComponentLibraryPanel!
+    render(<Panel registry={registry} shelf={symbolShelf} store={emptyStore()} />)
+    await waitFor(() => {
+      expect(screen.getByText(EMPTY_HINT)).toBeInTheDocument()
+    })
+    // 搜到 0 条与「还没导入」是两句话，下一步完全不同。
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '变压器' } })
+    expect(screen.queryByText(EMPTY_HINT)).toBeNull()
+  })
+
   it('OpenSpec: component-library / 混合组件目录 / 区分 Base 与 Variant', async () => {
     expect(api.ComposeComponentLibraryPanel).toBeTypeOf('function')
     const onCreateIntent = vi.fn()

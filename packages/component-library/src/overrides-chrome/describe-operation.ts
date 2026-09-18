@@ -5,7 +5,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   backgroundPaint: '背景填充',
   borderColor: '边框颜色',
   borderWidth: '边框宽度',
-  borderRadius: '圆角',
+  borderRadius: '边框圆角',
   opacity: '透明度',
   shadow: '阴影',
   width: '宽度',

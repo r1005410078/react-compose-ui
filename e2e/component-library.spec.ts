@@ -386,7 +386,7 @@ test('OpenSpec: align-component-variant-with-unity / 实例 Apply 写回主组�
   await firstRow.click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
   await expect(inspector.getByRole('toolbar', { name: '实例操作' })).toBeVisible()
-  const radius = inspector.getByRole('spinbutton', { name: '圆角' })
+  const radius = inspector.getByRole('spinbutton', { name: '边框圆角' })
   await radius.fill('24')
   await radius.press('Enter')
   await expect(radius).toHaveValue('24')
@@ -409,7 +409,7 @@ test('OpenSpec: align-component-variant-with-unity / 实例 Apply 写回主组�
   // 第二实例应已同步（无冲突覆盖）。
   await editor.locator('[data-workspace-tab]').filter({ hasText: 'Home' }).click()
   await sceneTree.getByRole('row', { name: /Apply Card/ }).nth(1).click()
-  await expect(inspector.getByRole('spinbutton', { name: '圆角' })).toHaveValue('24')
+  await expect(inspector.getByRole('spinbutton', { name: '边框圆角' })).toHaveValue('24')
 })
 
 
@@ -438,7 +438,7 @@ test('OpenSpec: align-component-variant-with-unity / 从实例创建变体并改
   const hostRow = sceneTree.getByRole('row', { name: /Rebind Card/ })
   await hostRow.click()
   const inspector = editor.locator('[data-workspace-panel="inspector"]')
-  const radius = inspector.getByRole('spinbutton', { name: '圆角' })
+  const radius = inspector.getByRole('spinbutton', { name: '边框圆角' })
   await radius.fill('16')
   await radius.press('Enter')
   await expect(inspector.getByText(/项本层覆盖/)).toBeVisible()

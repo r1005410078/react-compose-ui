@@ -8,6 +8,7 @@ import {
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import {
   BUILTIN_COMMAND_TYPES,
+  planComposeSetRendererProps,
   type EditorCommand,
   type JsonObject,
   type JsonValue,
@@ -35,11 +36,47 @@ export function createDefaultInspectorId() {
   return `material-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+/**
+ * 把这一次编辑落成命令。
+ *
+ * @remarks
+ * 调用方交回的是**这一条**算出来的完整 props（`{...authoredProps, 改动}`），作用对象只有它
+ * 自己时原样写下去，一个字节不变。
+ *
+ * 作用对象不止一个时**先把改动摘成 patch**，再由 `planComposeSetRendererProps` 合到各自的
+ * props 上——直接拿这一条的整份 props 去写全部目标，会把别人身上不相干的属性一起改掉
+ * （A 线宽 2、B 线宽 5，改个颜色 B 就变成 2 了），而这个错误在屏幕上看不见。
+ *
+ * 摘 patch 时**删除要单独报**：文字的可缺席字段关掉走的是 `delete`，而 patch 是合并，
+ * 表达不了「把这个键去掉」。
+ *
+ * 没有 `document` 时退回单条路径：规划要按各自的 props 合并，而那份事实只有文档里有。
+ */
 function dispatchProps(
   context: ComposeRendererInspectorProps,
   props: JsonObject,
   idFactory: InspectorIdFactory,
 ) {
+  const targets = context.entities ?? [context.entity]
+  if (targets.length > 1 && context.document) {
+    const base = context.authoredProps
+    const patch: Record<string, JsonValue> = {}
+    for (const [key, value] of Object.entries(props)) {
+      if (JSON.stringify(base[key] ?? null) !== JSON.stringify(value ?? null)) patch[key] = value
+    }
+    const removeKeys = Object.keys(base).filter((key) => !(key in props))
+    if (Object.keys(patch).length === 0 && removeKeys.length === 0) return
+    const command = planComposeSetRendererProps({
+      document: context.document,
+      entityIds: targets.map((entity) => entity.id),
+      patch,
+      removeKeys,
+      idFactory,
+      label: `Update ${targets.length} objects`,
+    })
+    if (command) context.dispatch(command)
+    return
+  }
   const command: EditorCommand = {
     id: idFactory(),
     type: BUILTIN_COMMAND_TYPES.setRendererProps,
@@ -52,6 +89,20 @@ function dispatchProps(
     },
   }
   context.dispatch(command)
+}
+
+/**
+ * 把作用对象之间取值不一致的 Prop 名换成属性面板认的路径。
+ *
+ * @remarks
+ * 顶层 prop 因此是一段长度为一的路径。宿主已经算好了这份事实，Inspector 只做转换——各物料
+ * 自己再比一遍要读 authored props，而那正是宿主手上的那一份。
+ */
+function mixedPaths(
+  context: ComposeRendererInspectorProps,
+): readonly (readonly string[])[] | undefined {
+  if (!context.mixedPropNames || context.mixedPropNames.size === 0) return undefined
+  return [...context.mixedPropNames].map((name) => [name])
 }
 
 function createPropsBinding(
@@ -280,6 +331,7 @@ export function createTextRendererInspector(idFactory: InspectorIdFactory) {
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context, visiblePropNames)}
+        mixedPaths={mixedPaths(context)}
         defaultValue={defaultValue}
         readOnly={context.readOnly}
         renderers={[TEXT_CONTENT_RENDERER]}
@@ -386,6 +438,7 @@ export function createCurveRendererInspector(idFactory: InspectorIdFactory) {
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} stroke`, `${context.entity.name} 描边`)}
         binding={createPropsBinding(context)}
+        mixedPaths={mixedPaths(context)}
         readOnly={context.readOnly}
         schema={schema}
         value={value}
@@ -436,6 +489,7 @@ export function createImageRendererInspector(idFactory: InspectorIdFactory) {
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context)}
+        mixedPaths={mixedPaths(context)}
         defaultValue={defaultValue}
         readOnly={context.readOnly}
         schema={schema}
@@ -508,6 +562,7 @@ export function createSvgRendererInspector(idFactory: InspectorIdFactory) {
       <ComposePropertyPanel
         aria-label={title(zh, `${context.entity.name} content`, `${context.entity.name} 内容`)}
         binding={createPropsBinding(context)}
+        mixedPaths={mixedPaths(context)}
         defaultValue={defaultValue}
         readOnly={context.readOnly}
         schema={schema}
@@ -611,6 +666,7 @@ export function createComponentInstanceAnimationInspector(idFactory: InspectorId
       <ComposePropertyPanel
         aria-label={panelLabel}
         binding={createPropsBinding(context, visiblePropNames)}
+        mixedPaths={mixedPaths(context)}
         readOnly={context.readOnly}
         schema={schema}
         value={value}
