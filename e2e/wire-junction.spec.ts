@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 导线接到导线：节点、断线与「接头不裂开」。
@@ -20,7 +21,7 @@ test('OpenSpec: stage-engine / 取点落在导线上即接入节点 / 接上之�
 
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   // 1) 一条水平导线。

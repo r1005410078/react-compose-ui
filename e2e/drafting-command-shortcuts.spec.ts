@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 绘图命令的单键快捷键。
@@ -20,7 +21,7 @@ test('OpenSpec: stage / 绘图命令的单键快捷键 / 按 R 画出一个矩�
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   // 先把焦点放到图面上——用户此刻的手在鼠标上，不在命令行。
@@ -68,7 +69,7 @@ test('OpenSpec: stage / 绘图命令的单键快捷键 / 按 L 与敲 LINE 是�
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
 
   await page.mouse.click(box.x + 200, box.y + 420)
   await page.keyboard.press('l')

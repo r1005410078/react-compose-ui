@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * `FLATTEN` 把选中的形状换成一条可编辑的 `path`。
@@ -17,7 +18,7 @@ test('OpenSpec: stage / 布尔运算的落地规划 / 拍平一个矩形之后�
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -80,7 +81,7 @@ test('OpenSpec: stage / 布尔运算的落地规划 / 并集把两个矩形合�
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -145,7 +146,7 @@ test('OpenSpec: compose-document / 曲线布尔运算按面分类求解 / 差集
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -198,7 +199,7 @@ test('OpenSpec: stage / 布尔运算的键盘入口 / 图面上按 ⌥⇧U 即�
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -250,7 +251,7 @@ test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 锁着的�
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -300,7 +301,7 @@ test('OpenSpec: stage / 布尔运算的八种拒绝各有一句话 / 交集为�
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })

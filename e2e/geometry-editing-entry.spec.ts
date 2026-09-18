@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 进入几何编辑那一刻的图面反馈。
@@ -53,7 +54,7 @@ test('OpenSpec: stage / Stage 十字光标 / 位置只来自本次跟踪开始�
   const surfaceLocator = stage.getByTestId('stage-surface')
   // `toBeVisible()` 之后再取 box 是两次往返：负载高时元素会在两次之间重新布局，第二次拿回 null。
   await expect.poll(() => surfaceLocator.boundingBox()).not.toBeNull()
-  const surface = (await surfaceLocator.boundingBox())!
+  const surface = await stableBox(surfaceLocator)
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   // 第一条命令留下一个「最后观测到的位置」。
@@ -88,7 +89,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 双击就地绘制十字线�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   await drawLine(page, at(60, 60), at(220, 180))

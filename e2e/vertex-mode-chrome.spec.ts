@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 顶点模式的光标与选中呈现。
@@ -34,7 +35,7 @@ test('OpenSpec: stage / Stage 十字光标 / 拖夹点期间十字线不断且�
   await expect(surface).toBeVisible()
   await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
 
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const lines = stage.locator('[data-stage-crosshair-line]')
@@ -86,7 +87,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 悬停期画线加框，拖�
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
 
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const lines = stage.locator('[data-stage-crosshair-line]')
@@ -131,7 +132,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / 悬停在夹点上改变它�
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
 
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
@@ -171,7 +172,7 @@ test('OpenSpec: stage / 曲线几何编辑会话 / Shift 累加退出会话并�
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
 
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
 

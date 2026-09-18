@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop } from './support/test-helpers'
+import { pointerDrop, stableBox } from './support/test-helpers'
 
 /**
  * 端口显现与导线端点的接线状态。
@@ -23,7 +23,7 @@ test('OpenSpec: stage / 端口在取点时按符号整组显现 / 取点时显�
   // 放一个矩形并给它一个端口（默认落在 Entity 局部原点，即矩形左上角）。
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 240,
@@ -67,7 +67,7 @@ test('OpenSpec: stage / 导线两端的接线状态画在图面上 / 失效不�
 
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 200,
@@ -117,7 +117,7 @@ test('OpenSpec: stage-engine / WIRE 命令与端口绑定 / 直角导线的拐�
 
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 200,

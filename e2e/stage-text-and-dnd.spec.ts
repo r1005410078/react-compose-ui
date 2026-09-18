@@ -812,7 +812,7 @@ test('OpenSpec: stage-engine / 拖拽换父级 / 从非原点场景拖回时落�
   await stage.press('Control+d')
   const inScene2 = stage.locator(`[data-entity-id="${sceneTwoId}"] .compose-stage__node.is-renderer`)
   await expect(inScene2).toHaveCount(2)
-  const sceneOneBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const sceneOneBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   const copyBox = (await inScene2.last().boundingBox())!
   const drop = { x: sceneOneBox.x + 300, y: sceneOneBox.y + 300 }
   await page.mouse.move(copyBox.x + copyBox.width / 2, copyBox.y + 1)

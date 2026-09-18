@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 曲线的命中一律按几何，不按包围盒。
@@ -32,7 +33,7 @@ test('OpenSpec: stage / 线状节点不以包围盒拦截指针 / 容差之外�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   await drawLine(page, at(120, 200), at(320, 200))
@@ -62,7 +63,7 @@ test('OpenSpec: stage-engine / 框选判定按几何 / 空角里的窗交框不�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   await drawLine(page, at(120, 120), at(320, 320))

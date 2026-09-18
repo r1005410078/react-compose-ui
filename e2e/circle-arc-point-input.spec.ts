@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 圆与弧的取点参数化。
@@ -18,7 +19,7 @@ async function openStage(page: Page) {
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   return {
     stage,
     commandInput: stage.getByRole('combobox', { name: '命令行' }),

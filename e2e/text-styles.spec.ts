@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { expandInspectorSection } from './support/test-helpers'
+import { expandInspectorSection, stableBox } from './support/test-helpers'
 
 /** 按内容在画布上点中一条文字：场景树里它们都叫 Text，按名字选不出来。 */
 async function selectText(editor: Locator, content: string) {
@@ -36,7 +36,7 @@ test('OpenSpec: compose-document / 共享文字样式 / 提取、应用、改一
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   await expect.poll(() => output.boundingBox()).not.toBeNull()
-  const box = (await output.boundingBox())!
+  const box = await stableBox(output)
 
   await writeText(page, editor, '电站总数', { x: box.x + 120, y: box.y + 120 })
   await writeText(page, editor, '今日充放电', { x: box.x + 120, y: box.y + 200 })
@@ -83,7 +83,7 @@ test('OpenSpec: compose-document / 共享文字样式 / 重命名、多选批量
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
   await expect.poll(() => output.boundingBox()).not.toBeNull()
-  const box = (await output.boundingBox())!
+  const box = await stableBox(output)
 
   await writeText(page, editor, '电站总数', { x: box.x + 120, y: box.y + 120 })
   await writeText(page, editor, '今日充放电', { x: box.x + 120, y: box.y + 200 })

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 自定义工作区的纵向流程。
@@ -97,7 +98,7 @@ test('OpenSpec: editor-workspace-layout / 切换不打断画布 / 命令会话�
   await commandInput.click()
   await commandInput.fill('LINE')
   await page.keyboard.press('Enter')
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   await page.mouse.click(surface.x + 200, surface.y + 200)
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(prompt).toContainText('指定下一点')

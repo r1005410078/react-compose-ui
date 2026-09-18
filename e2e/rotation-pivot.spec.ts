@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { enterAnimationEditing } from './support/test-helpers'
+import { enterAnimationEditing, stableBox } from './support/test-helpers'
 
 /**
  * 「画 → 动 → 脚本驱动」这条纵向流程的闭环用例。
@@ -21,7 +21,7 @@ test('OpenSpec: compose-document / 旋转基点 / 画线、设基点、刻角度
   await commandInput.fill('L')
   await commandInput.press('Enter')
   const surface = stage.getByTestId('stage-surface')
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   await page.mouse.click(box.x + 220, box.y + 220)
   await page.mouse.click(box.x + 420, box.y + 220)
   await commandInput.press('Escape')

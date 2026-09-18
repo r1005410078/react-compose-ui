@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * `LINE` 的参考点跟着文档走。
@@ -25,7 +26,7 @@ async function openStage(page: Page) {
      * 的面板浮在图面之上，检查会认为落点被拦住。每次重新量一次盒——布局在首帧之后还会动一下。
      */
     click: async (x: number, y: number) => {
-      const box = (await surface.boundingBox())!
+      const box = await stableBox(surface)
       await page.mouse.click(box.x + x, box.y + y)
     },
   }

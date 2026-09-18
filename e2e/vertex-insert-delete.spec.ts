@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 几何编辑会话内插入与删除顶点。
@@ -20,7 +21,7 @@ test('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 矩�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -110,7 +111,7 @@ test('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 没�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -140,7 +141,7 @@ test('OpenSpec: stage-engine / 几何编辑会话内插入与删除顶点 / 弧�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const prompt = stage.getByTestId('stage-drafting-command-prompt')

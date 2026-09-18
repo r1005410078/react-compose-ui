@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { pointerDrop } from './support/test-helpers'
+import { pointerDrop, stableBox } from './support/test-helpers'
 
 /**
  * 导线的分合：两条在一点相接即合并，段夹点上的 `Delete` 是剪断。
@@ -218,7 +218,7 @@ test('OpenSpec: stage / 导线在顶点模式里的 Delete / 点亮绑定端的�
 
   // 一个带端口的矩形：端口默认落在 Entity 局部原点，也就是矩形左上角。
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 240,

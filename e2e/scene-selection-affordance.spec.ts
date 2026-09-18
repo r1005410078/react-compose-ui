@@ -46,7 +46,7 @@ test('OpenSpec: stage-engine / 顶层容器体的命中收敛 / 已选中的场�
   await page.mouse.up()
 
   // 子级是相对坐标，场景被搬走时画面内部没有任何变化——因此断言必须落在场景自己的矩形上。
-  const after = (await output.boundingBox())!
+  const after = await stableBox(output)
   expect(after.x).toBeCloseTo(before.x, 0)
   expect(after.y).toBeCloseTo(before.y, 0)
 })
@@ -75,7 +75,7 @@ test('OpenSpec: stage-engine / 顶层容器体的命中收敛 / command 拖体�
   await page.mouse.up()
   await page.keyboard.up('Meta')
 
-  const afterCommandDrag = (await output.boundingBox())!
+  const afterCommandDrag = await stableBox(output)
   expect(afterCommandDrag.x).toBeGreaterThan(beforeCommandDrag.x + 60)
 
   // 标签是另一个入口，收敛不影响它。
@@ -86,7 +86,7 @@ test('OpenSpec: stage-engine / 顶层容器体的命中收敛 / command 拖体�
   await page.mouse.move(labelBox.x + 8, labelBox.y + labelBox.height / 2 + 100, { steps: 4 })
   await page.mouse.up()
 
-  const afterLabelDrag = (await output.boundingBox())!
+  const afterLabelDrag = await stableBox(output)
   expect(afterLabelDrag.y).toBeGreaterThan(afterCommandDrag.y + 60)
 })
 

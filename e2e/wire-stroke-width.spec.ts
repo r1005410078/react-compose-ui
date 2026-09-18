@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 导线与普通几何在颜色与线宽上都不同。
@@ -22,7 +23,7 @@ test('OpenSpec: basic-materials / 基础 Entity Presets / 导线比普通曲线�
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })

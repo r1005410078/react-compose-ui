@@ -6,6 +6,7 @@ import {
   pointerDrop,
   selectChildInSceneTree,
   selectContainer,
+  stableBox,
 } from './support/test-helpers'
 
 /** 从缺席态启用网格：`+` 菜单的第二项。 */
@@ -145,7 +146,7 @@ test('OpenSpec: stage / 网格容器的画布反馈 / 拖动全程跟手、兄�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await drawContainer(page, editor)
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
@@ -224,7 +225,7 @@ async function setupGrid(page: Page, drops: readonly { x: number; y: number }[])
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await drawContainer(page, editor)
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
 
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
@@ -375,7 +376,7 @@ test('OpenSpec: stage-engine / 网格容器内的拖动与缩放规划 / 缩放�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await drawContainer(page, editor)
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 容器' }),
     { x: outputBox.x + 120, y: outputBox.y + 160 })

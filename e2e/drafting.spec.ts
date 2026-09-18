@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { enterAnimationEditing } from './support/test-helpers'
+import { enterAnimationEditing, stableBox } from './support/test-helpers'
 
 test('OpenSpec: stage / 绘图能力恒开 / L↵ 画线、捕捉端点、画出的是普通 Entity', async ({ page }) => {
   await page.goto('/')
@@ -78,13 +78,13 @@ test('OpenSpec: stage-engine / 取点接管排在画布平移之下 / 命令进�
 
   // 中键平移：命令进行中仍然要能去看远处那个目标点，AutoCAD 同样如此。
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   await page.mouse.move(box.x + 300, box.y + 240)
   await page.mouse.down({ button: 'middle' })
   await page.mouse.move(box.x + 380, box.y + 300, { steps: 6 })
   await page.mouse.up({ button: 'middle' })
 
-  await expect.poll(async () => Math.round((await frame.boundingBox())!.x))
+  await expect.poll(async () => Math.round((await stableBox(frame)).x))
     .toBeGreaterThan(Math.round(before!.x))
   // 平移没有把命令吃掉。
   await expect(stage.getByTestId('stage-drafting-command-prompt')).toContainText('指定第一点')
@@ -105,7 +105,7 @@ const LINES: readonly (readonly [readonly [number, number], readonly [number, nu
 async function drawTwoLines(page: import('@playwright/test').Page, stage: import('@playwright/test').Locator) {
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   for (const [from, to] of LINES) {
     await commandInput.fill('L')
     await commandInput.press('Enter')
@@ -252,7 +252,7 @@ test('OpenSpec: stage / 绘图能力恒开 / 动画开关打开时仍能画线',
   await commandInput.press('Enter')
 
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   await page.mouse.click(at(240, 200).x, at(240, 200).y)
   await page.mouse.click(at(440, 200).x, at(440, 200).y)
@@ -284,7 +284,7 @@ test('OpenSpec: stage / 命令词汇表合并 / 命令行键入 UNDO 撤销上�
   await commandInput.press('Enter')
 
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   await page.mouse.click(at(240, 200).x, at(240, 200).y)
   await page.mouse.click(at(440, 200).x, at(440, 200).y)
@@ -369,7 +369,7 @@ test('OpenSpec: stage / Stage 十字光标 / 三形态与系统光标隐藏', as
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   // 1) 空闲：什么都不画，系统光标可见——页面编辑器的静息光标是箭头。

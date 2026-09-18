@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 多段线的四角联动圆角：选中即出手柄，拖一个四个角一起变。
@@ -18,7 +19,7 @@ test('OpenSpec: stage / 多段线的圆角手柄 / 选中即出，拖一个四�
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -67,7 +68,7 @@ test('OpenSpec: stage / 多段线的圆角手柄 / 只有矩形出手柄', async
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const handles = stage.locator('[data-testid^="stage-curve-corner-"]:not([data-testid*="hit"])')

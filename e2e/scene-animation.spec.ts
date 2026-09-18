@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { clickCurveStroke, emptyWorkspaceRect, openPageInspector, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
+import { clickCurveStroke, emptyWorkspaceRect, openPageInspector, enterAnimationEditing, exitAnimationEditing, stableBox } from './support/test-helpers'
 
 /** 在所有场景之外画一个容器，得到第二块场景并返回它的 Entity id。 */
 async function createSecondScene(page: Page, editor: Locator, minBlank?: number) {
@@ -185,7 +185,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画模式拖拽不�
   await clickCurveStroke(inScene2, { edge: 'bottom' })
   await stage.press('Control+d')
   await expect(inScene2).toHaveCount(2)
-  const sceneOneBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const sceneOneBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   const copyBox = (await inScene2.last().boundingBox())!
   // 抓**上边线**：矩形默认空心，盒内部不命中；副本被复制偏移推离了场景标题标签那一带。
   // 终点按同一个偏移落——挂载按对象落在哪里判定。
