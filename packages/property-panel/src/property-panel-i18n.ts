@@ -46,6 +46,8 @@ const translations = {
     recordValue: (label: string, key: string) => `${label} 值 ${key}`,
     unionBranch: (label: string) => `${label} 分支`,
     branch: (index: number) => `分支 ${index}`,
+    mixed: '多个值',
+    mixedHint: (label: string) => `${label}：选中的对象取值不同，写入会把它们统一成同一个值`,
     issues: {
       'unknown-target': '绑定目标已不存在',
       'missing-variable': '绑定变量已不存在',
@@ -98,6 +100,8 @@ const translations = {
     recordValue: (label: string, key: string) => `${label} value ${key}`,
     unionBranch: (label: string) => `${label} branch`,
     branch: (index: number) => `Branch ${index}`,
+    mixed: 'Mixed',
+    mixedHint: (label: string) => `${label}: the selected objects differ; writing sets them all to one value`,
     issues: {
       'unknown-target': 'The binding target no longer exists',
       'missing-variable': 'The bound variable no longer exists',
@@ -121,6 +125,7 @@ type DynamicKey =
   | 'remove'
   | 'moveUp'
   | 'moveDown'
+  | 'mixedHint'
 
 /** 读取 ComposePropertyPanel 内建 chrome 文案，并应用共享消息覆盖。 */
 export function usePropertyPanelMessages() {
@@ -195,6 +200,8 @@ export function usePropertyPanelMessages() {
       { label },
     ),
     branch: (index: number) => format('branch', current.branch(index), { index }),
+    mixed: format('mixed', current.mixed),
+    mixedHint: (label: string) => dynamic('mixedHint', label),
     issue: (code: keyof typeof current.issues) =>
       format(`issue.${code}`, current.issues[code]),
   }

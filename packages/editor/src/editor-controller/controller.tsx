@@ -2182,14 +2182,20 @@ export function useComposeEditorController({
     />
   ) : selectedIds.length > 1 ? (
     /*
-     * 多选下「页面配置」没有确定含义，且会让"点空白工作区"这个唯一入口变得不确定。逐字段编辑
-     * 同样没有，因此这里只有空态提示——**唯一的例外是文字样式**，「把这一批统一成同一个样式」
-     * 本来就是以整组为对象的操作。
+     * 多选下「页面配置」没有确定含义，且会让"点空白工作区"这个唯一入口变得不确定。
+     *
+     * 逐字段编辑**在这一批是同一种 Renderer 时有确定含义**：那时字段来自那一个物料自己的
+     * Inspector，写入是「把这一批都设成它」。混合类型才退回空态——那时同名 prop 不一定同义，
+     * 没有一份可用的标签与编辑器。文字样式那一段与 Renderer 是哪一种无关，照旧。
      */
     <MultiSelectionInspector
       dispatch={dispatch}
       document={document}
       idFactory={nextId}
+      layoutSnapshot={layoutState.status === 'ready' ? layoutState.snapshot : undefined}
+      nodeEditPort={nodeEditPort}
+      paintEditPort={paintEditPort}
+      registry={registry}
       selectedIds={selectedIds}
     />
   ) : (
