@@ -907,17 +907,26 @@ export function useStageDrafting(options: StageDraftingOptions) {
   }, [gridSettings, snapRadius, viewport.zoom])
 
   /**
-   * 不参与捕捉的**单个世界点**：被会话作用的那个夹点的**原**位置。
+   * 不参与捕捉的**单个世界点**：被会话作用的那个夹点的**原**位置，或者这一步的参考点。
    *
    * @remarks
-   * 它就在指针底下（拖动时）或就在用户刚按过的地方（点亮时），不排除的话落点会被吸回原处。
-   * 排除**只到这一个点**——做成整个 Entity 会把同对象的其他顶点与各段中点一起收走，而
-   * 「把这个角对到那个角上」正是最常做的事。
+   * 夹点那一档：它就在指针底下（拖动时）或就在用户刚按过的地方（点亮时），不排除的话落点会
+   * 被吸回原处。事实来源是 `gripTarget.origin`，也就是**文档**里那个顶点的位置：要挡的是它
+   * 出发的地方，不是它此刻跟着指针到的地方。
    *
-   * 事实来源是 `gripTarget.origin`，也就是**文档**里那个顶点的位置：要挡的是它出发的地方，
-   * 不是它此刻跟着指针到的地方。
+   * 参考点那一档是同一条判断的第二次应用：落点被吸回 `reference`，对每一条画几何的命令都
+   * 只能产出**退化**几何（零长的线段、零半径的圆），而那个结果一定会被当场拒掉——因此这处
+   * 排除不拿走任何用户够得着的结果。现场是 `CIRCLE`：圆心捕捉到一条已有线段的端点上之后，
+   * 6 像素的半径点被**那个端点**拽回圆心，命令行只说得出「这个形状是退化的」，用户读到的是
+   * 「我的半径太小了」。
+   *
+   * 排除**按位置**而不按 Entity 身份，上面那句话就是理由：把落点拽回去的是别的对象的端点，
+   * 按身份排除挡不住它。
+   *
+   * 两档共用一个槽位而不是并成一列：夹点会话的参考点就是它的原位置，两者同时有值时说的是
+   * 同一个点。
    */
-  const snapExcludedPoint = gripTarget?.origin ?? null
+  const snapExcludedPoint = gripTarget?.origin ?? reference ?? null
 
   /** 光标附近的捕捉命中；同时用于渲染标记与求解落点，两者因此不可能分叉。 */
   const excluded = snapExcludedIds ?? EMPTY_EXCLUSIONS
@@ -1356,7 +1365,23 @@ export function useStageDrafting(options: StageDraftingOptions) {
      * 此刻的值——那是呈现层的状态，不该进 `core` 的语法层。
      */
     const typed = Number(trimmed)
+    /*
+     * **单字段那一档不需要指针位置**：`radius` / `diameter` 的另一个分量是角度，而角度对结果
+     * 没有任何影响——圆是旋转对称的，半径点落在哪个方向上画出来都一样，那正是它被做成单字段
+     * 的理由。因此这里不存在「方向由鼠标定好」这个前提，落点由参考点与这个数完全确定，取正东
+     * 方向垫一个底就够了。
+     *
+     * 不垫的症状很具体：命令由命令行或工具栏按钮启动时指针从未进过图面，`livePointRef` 是空
+     * 的，于是提示写着「指定半径」、键入一个数却回「需要一个点」——屏幕上写着的那句话是对的
+     * 行为的反面，而键盘用户在这里没有第二条路。
+     *
+     * 两个数值字段的参数化不照此办理：那里另一个分量是真的由指针给的，没有指针就真的定不出
+     * 点，垫一个默认方向等于替用户猜一个他没说过的角度。
+     */
     const livePoint = livePointRef.current
+      ?? (fieldKind && isComposeSingleFieldKind(fieldKind) && reference
+        ? { x: reference.x + 1, y: reference.y }
+        : null)
     if (fieldKind && livePoint && Number.isFinite(typed) && BARE_NUMBER.test(trimmed)) {
       const point = applyComposeFieldOverride(
         fieldKind, livePoint, reference ?? undefined, activeField, typed,
