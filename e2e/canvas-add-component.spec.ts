@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 画布右键「添加组件」。
@@ -31,7 +32,7 @@ async function openAddMenu(page: Page, stage: Locator, at: { x: number, y: numbe
 
 test('OpenSpec: stage / 画布右键添加组件 / 落在右键那一下，实体名仍是英文', async ({ page }) => {
   const { editor, stage } = await openEditor(page)
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = { x: box.x + 420, y: box.y + 260 }
 
   const submenu = await openAddMenu(page, stage, at)
@@ -59,7 +60,7 @@ test('OpenSpec: stage / 画布右键添加组件 / 落在右键那一下，实�
 test('OpenSpec: stage / 画布右键添加组件 / 菜单树与物料面板同源', async ({ page }) => {
   const { editor, stage } = await openEditor(page)
   const panel = editor.locator('[data-workspace-panel="component-library"]')
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = { x: box.x + 420, y: box.y + 260 }
 
   // 页面工作区：工具栏上没有 CIRCLE，因此「圆」在面板上有，菜单里也该有。
@@ -87,7 +88,7 @@ test('OpenSpec: stage / 画布右键添加组件 / 菜单树与物料面板同�
  */
 test('OpenSpec: components / 共享右键菜单 / 字号与行高与编辑器 chrome 一致', async ({ page }) => {
   const { editor, stage } = await openEditor(page)
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   await page.mouse.click(box.x + 420, box.y + 260, { button: 'right' })
 
   const item = page.getByRole('menuitem', { name: '复制' })

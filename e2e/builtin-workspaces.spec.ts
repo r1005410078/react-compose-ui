@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 两个内建工作区：页面与绘图。
@@ -57,7 +58,7 @@ test('OpenSpec: editor-workspace-layout / 内建工作区 / 绘图的初始布�
   // 页面：十字光标是 AutoCAD 默认的 5%。长度已不再是工作区会话开关，它由编辑器偏好
   // `crosshairSize` 承载——切换工作区不再碰它，因此这里断的是「切过去之后还是一样长」。
   await startCommand(page, stage, 'LINE')
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   await page.mouse.move(surface.x + 300, surface.y + 240)
   await expect.poll(async () => await crosshairReach(page) > 0).toBe(true)
   const pageReach = await crosshairReach(page)

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 取点管线上的两处可达性。
@@ -40,7 +41,7 @@ test('OpenSpec: stage / 取点捕捉 / 圆心压在已有端点上仍画得出�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const strokes = stage.getByTestId('compose-material-curve-stroke')

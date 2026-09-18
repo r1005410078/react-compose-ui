@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clickCurveStroke, openPageInspector, pointerDrop, drawContainer, drawText, selectContainer, switchToDrawingWorkspace } from './support/test-helpers'
+import { clickCurveStroke, openPageInspector, pointerDrop, drawContainer, drawText, selectContainer, switchToDrawingWorkspace, stableBox } from './support/test-helpers'
 
 
 /**
@@ -1119,7 +1119,7 @@ test('OpenSpec: stage / 场景尺寸弹框 / 双击尺寸胶囊改尺寸并重�
   await expect(chip).toHaveText('1280 × 720')
   // 先等首次适配落地，否则量到的是适配前那一帧的场景宽度。
   await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
-  const fittedWidth = (await frame.boundingBox())!.width
+  const fittedWidth = (await stableBox(frame)).width
 
   await chip.dblclick()
   const dialog = page.getByTestId('stage-scene-size-dialog')
@@ -1131,7 +1131,7 @@ test('OpenSpec: stage / 场景尺寸弹框 / 双击尺寸胶囊改尺寸并重�
 
   await expect(chip).toHaveText('1920 × 1080')
   // 改完立刻重新适配：更宽的场景在屏幕上仍占据同一片可视区域，而不是溢出到画布外。
-  expect((await frame.boundingBox())!.width).toBeCloseTo(fittedWidth, 0)
+  expect((await stableBox(frame)).width).toBeCloseTo(fittedWidth, 0)
   const stageBox = await stage.boundingBox()
   const frameBox = await frame.boundingBox()
   expect(frameBox!.x + frameBox!.width).toBeLessThan(stageBox!.x + stageBox!.width)

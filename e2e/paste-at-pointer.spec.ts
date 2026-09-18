@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 粘贴落在指针处：整组副本的包围盒中心落到指针的世界坐标（再过网格吸附），来源不动。
@@ -12,7 +13,7 @@ async function drawRectangle(page: import('@playwright/test').Page) {
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   // 坐标按图面尺寸取比例：图面多大取决于窗口与面板布局，硬编码的像素会落到图面之外。
   const at = (fx: number, fy: number) => ({
     x: box.x + Math.round(box.width * fx),

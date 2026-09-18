@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop } from './support/test-helpers'
+import { pointerDrop, stableBox } from './support/test-helpers'
 
 /**
  * 端口捕捉的纵向流程。
@@ -22,7 +22,7 @@ test('OpenSpec: stage-engine / 端口捕捉 / 端口压过更近的曲线端点'
 
   // 1) 放一个矩形，给它一个端口。默认端口在 Entity 局部原点，也就是矩形的左上角。
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 260,

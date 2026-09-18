@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 接线点的形状不是作者的意图：改不了尺寸、进不了顶点模式，但照旧挪得动。
@@ -19,7 +20,7 @@ test('OpenSpec: basic-materials / junction Preset 是接线节点 / 接线点改
 
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
 
   // 一条水平导线，再从它的线身上接出第二条——那一下就产出接线点。

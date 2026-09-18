@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { pointerDrop, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
+import { pointerDrop, enterAnimationEditing, exitAnimationEditing, stableBox } from './support/test-helpers'
 
 /**
  * 从基础图形到嵌套组件动画的完整纵向流程。
@@ -90,7 +90,7 @@ test('OpenSpec: editor-workspace-layout / 项目组件与 Variant 纵向流程 /
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })
   const instances = stage.getByTestId('compose-component-instance-content')

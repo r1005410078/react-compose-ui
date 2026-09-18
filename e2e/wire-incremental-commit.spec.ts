@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 导线每点一下就落地。
@@ -26,7 +27,7 @@ async function openStage(page: Page, query = '?no-auto-fit') {
     prompt: stage.getByTestId('stage-drafting-command-prompt'),
     // 走 `page.mouse`：`locator.click` 的可操作性检查会认为浮在图面上的面板拦住了落点。
     click: async (x: number, y: number) => {
-      const box = (await surface.boundingBox())!
+      const box = await stableBox(surface)
       await page.mouse.click(box.x + x, box.y + y)
     },
   }
@@ -119,7 +120,7 @@ test('OpenSpec: stage / 会话把已落地的几何扩到同一个 Entity 上 / 
   const { stage, commandInput } = await openStage(page, '')
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const box = (await frame.boundingBox())!
+  const box = await stableBox(frame)
   const at = (x: number, y: number) => ({
     x: Math.round(box.x + x),
     y: Math.round(box.y + y),

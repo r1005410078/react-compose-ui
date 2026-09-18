@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { switchToDrawingWorkspace } from './support/test-helpers'
+import { switchToDrawingWorkspace, stableBox } from './support/test-helpers'
 
 /**
  * 弧与多段线的纵向流程。
@@ -19,7 +19,7 @@ test('OpenSpec: compose-document / 弧与多段线 / 画圆、闭合多段线、
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   // 圆：圆心 + 半径点。
@@ -70,7 +70,7 @@ test('OpenSpec: stage-engine / 连续取点命令的闭合关键字 / LINE 的 C
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const prompt = stage.getByTestId('stage-drafting-command-prompt')
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   await commandInput.fill('L')
@@ -98,7 +98,7 @@ test('OpenSpec: stage-engine / 绘图命令 / PLINE 攒成一个 Entity 且可�
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   const surface = stage.getByTestId('stage-surface')
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
   const strokes = stage.getByTestId('compose-material-curve-stroke')
 
@@ -136,7 +136,7 @@ test('OpenSpec: stage-engine / 特征点捕捉 / 圆心可捕捉', async ({ page
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   await commandInput.fill('C')
@@ -183,7 +183,7 @@ test('OpenSpec: basic-materials / 曲线按 viewBox 跟随盒伸缩 / 拖盒手�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const surfaceLocator = stage.getByTestId('stage-surface')
   await expect.poll(() => surfaceLocator.boundingBox()).not.toBeNull()
-  const surface = (await surfaceLocator.boundingBox())!
+  const surface = await stableBox(surfaceLocator)
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -272,7 +272,7 @@ test('OpenSpec: basic-materials / 物料统一 / 箭头与圆是曲线，填充�
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
   // `toBeVisible()` 之后再取 box 是两次往返：负载高时元素会在两次之间重新布局，第二次拿回 null。
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   const at = (dx: number, dy: number) => ({ x: frameBox.x + dx, y: frameBox.y + dy })
 
   const sceneTree = editor.getByRole('treegrid', { name: '场景树' })

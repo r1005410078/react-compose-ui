@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { expandInspectorSection, pointerDrop } from './support/test-helpers'
+import { expandInspectorSection, pointerDrop, stableBox } from './support/test-helpers'
 
 /**
  * 导线的纵向流程。
@@ -21,7 +21,7 @@ test('OpenSpec: compose-document / 符号导线 / 绑定端跟着符号走，符
 
   // 1) 放一个矩形并给它一个端口（默认落在 Entity 局部原点，即矩形左上角）。
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: frameBox.x + 240,
@@ -119,7 +119,7 @@ test('OpenSpec: stage-engine / LINE 取点落在端口上即绑定 / 跨父级�
 
   // 容器落在场景里，矩形落进容器——端口的父级因此是容器而不是场景。
   const frame = stage.getByTestId('stage-frame-boundary-frame-root')
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 容器' }), {
     x: frameBox.x + 160,

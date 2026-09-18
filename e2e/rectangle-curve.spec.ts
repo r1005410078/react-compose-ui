@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * `RECTANGLE` 产出闭合多段线曲线，双击即可改它的形状。
@@ -19,7 +20,7 @@ test('OpenSpec: stage / 矩形命令落地成可几何编辑的闭合曲线 / R 
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
@@ -86,7 +87,7 @@ test('OpenSpec: stage / 矩形命令落地成可几何编辑的闭合曲线 / �
    * null`。轮询到量得着为止。
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const at = (dx: number, dy: number) => ({ x: box.x + dx, y: box.y + dy })
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })

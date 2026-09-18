@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * `POLYGON` 的纵向流程。
@@ -16,7 +17,7 @@ async function openStage(page: Page) {
   // 命中与几何相关的断言必须在非 100% 缩放下做：`world = (屏幕 − 视口) / zoom`，zoom 恒为 1
   // 时漏乘 zoom 也看不出来。首次进入的自动取景已经把缩放压到 100% 以下。
   await expect(editor.locator('.compose-editor__canvas-zoom-value')).not.toHaveText('100%')
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   return {
     editor,
     stage,
@@ -229,7 +230,7 @@ test('OpenSpec: stage-engine / POLYGON 命令画正多边形 / 第一步点一�
   await click(350, 250)
 
   const box = (await stroke.boundingBox())!
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   // 中心落在第一下点的地方：包围盒的中心就是它。判别点在这里，而不是「进到了下一步」。
   // 容差放到半个网格步长之上：落点先在世界坐标里吸到网格，再按非 100% 的缩放投影回屏幕，
   // 中心离点击处最多差 zoom × 步长 / 2 像素，而这个数随图面尺寸（自动取景的缩放）变。

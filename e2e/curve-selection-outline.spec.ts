@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { drawContainer, pointerDrop } from './support/test-helpers'
+import { drawContainer, pointerDrop, stableBox } from './support/test-helpers'
 import type { Page } from '@playwright/test'
 
 /**
@@ -60,7 +60,7 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 选中曲线�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   await drawLine(page, at(100, 100), at(300, 300))
@@ -94,7 +94,7 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 指示器打�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   await drawLine(page, at(100, 100), at(300, 300))
@@ -121,7 +121,7 @@ test('OpenSpec: stage / 闭合曲线的选中呈现走盒那一套 / 只差闭�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   /** 连点四下的折线；`close` 为真时以 `C` 闭合，否则回车结束。 */
@@ -171,7 +171,7 @@ test('OpenSpec: stage / 受控工具模式与专属选区反馈 / 非曲线与�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const at = (dx: number, dy: number) => ({ x: surface.x + dx, y: surface.y + dy })
 
   await drawLine(page, at(100, 100), at(300, 300))
@@ -212,7 +212,7 @@ test('OpenSpec: stage / 选中的空心图形盒内部起手即移动 / 拖动�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const commandInput = stage.getByRole('combobox', { name: '命令行' })
   await expect(stage.getByTestId('stage-surface')).toBeVisible()
-  const s = (await stage.getByTestId('stage-surface').boundingBox())!
+  const s = await stableBox(stage.getByTestId('stage-surface'))
 
   await commandInput.click()
   await commandInput.fill('RECTANGLE')

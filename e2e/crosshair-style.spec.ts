@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import { stableBox } from './support/test-helpers'
 
 /**
  * 启动一条取点命令并把指针停在图面上：十字光标只在「正在取点」时绘制。
@@ -13,7 +14,7 @@ async function awaitPoint(page: Page) {
   await input.click()
   await input.fill('LINE')
   await page.keyboard.press('Enter')
-  const box = (await stage.getByTestId('stage-surface').boundingBox())!
+  const box = await stableBox(stage.getByTestId('stage-surface'))
   await page.mouse.move(box.x + 340, box.y + 260)
   return stage
 }
@@ -99,7 +100,7 @@ test('OpenSpec: editor-preferences / 十字光标样式是编辑器偏好 / 绘�
     Number(gradient.getAttribute('x2')) - Number(gradient.getAttribute('x1')),
     Number(gradient.getAttribute('y2')) - Number(gradient.getAttribute('y1')),
   ))
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   expect(reach).toBeCloseTo(Math.min(surface.width, surface.height) * 0.05, 0)
 
   await page.keyboard.press('Escape')
@@ -136,7 +137,7 @@ test('OpenSpec: stage / Stage 十字光标 / 剪刀徽标与拾取框同一支�
   await input.click()
   await input.fill('TRIM')
   await page.keyboard.press('Enter')
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   await page.mouse.move(surface.x + 340, surface.y + 260)
 
   const stroke = (selector: string) =>
@@ -194,7 +195,7 @@ test('OpenSpec: editor-preferences / 十字光标长度是编辑器偏好 / 数�
       const box = line.getBoundingClientRect()
       return Math.round(Math.max(box.width, box.height))
     })
-  const surface = (await stage.getByTestId('stage-surface').boundingBox())!
+  const surface = await stableBox(stage.getByTestId('stage-surface'))
   const shorterEdge = Math.min(surface.width, surface.height)
 
   // 默认是 AutoCAD 的 5%：只在光标附近画一小截。

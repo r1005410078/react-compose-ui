@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, selectChildInSceneTree, selectContainer, expandInspectorSection } from './support/test-helpers'
+import { pointerDrop, drawContainer, drawText, enableAutoLayout, selectAxisSizing, selectChildInSceneTree, selectContainer, expandInspectorSection, stableBox } from './support/test-helpers'
 
 test('OpenSpec: 自动布局显式启用 / 自由 Container 添加、移除并可撤销重做', async ({ page }) => {
   await page.goto('/')
@@ -519,7 +519,7 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 场景 Auto Layout 子
    * 量到的可能是 `null`，而症状是下一行读 `.x` 报 TypeError，看起来像用例写错了。
    */
   await expect.poll(() => frame.boundingBox()).not.toBeNull()
-  const frameBox = (await frame.boundingBox())!
+  const frameBox = await stableBox(frame)
 
   // 场景里画一个容器，作为 Auto Layout 采纳后的 flow 子级。拖拽绘制只剩容器与文字，
   // 制图几何一律由绘图命令产出，而空心曲线的盒中心点不中——那正是本条要点选的地方。

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { emptyWorkspaceRect, pointerDrop } from './support/test-helpers'
+import { emptyWorkspaceRect, pointerDrop, stableBox } from './support/test-helpers'
 
 /**
  * 在所有场景之外拖出一个矩形区域。
@@ -161,7 +161,7 @@ test('OpenSpec: basic-materials / 容器分轴溢出 Inspector / 场景也配得
   await expect(scene).toBeVisible()
 
   // 选中场景本体：场景体不承担点选，command 点体是既有入口。
-  const box = (await scene.boundingBox())!
+  const box = await stableBox(scene)
   await page.keyboard.down('Meta')
   await page.mouse.click(box.x + 40, box.y + 40)
   await page.keyboard.up('Meta')

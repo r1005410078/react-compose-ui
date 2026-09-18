@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { switchToDrawingWorkspace } from './support/test-helpers'
+import { switchToDrawingWorkspace, stableBox } from './support/test-helpers'
 
 /**
  * 角度约束：关 / 正交 / 极轴，三者互斥，默认极轴。
@@ -46,7 +46,7 @@ test('OpenSpec: stage / 角度约束的持有、切换与呈现 / 靠近射线�
    */
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
   await expect.poll(() => surface.boundingBox()).not.toBeNull()
-  const box = (await surface.boundingBox())!
+  const box = await stableBox(surface)
   const ray = stage.getByTestId('stage-drafting-tracking-ray')
 
   const commandInput = stage.getByRole('combobox', { name: '命令行' })

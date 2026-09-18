@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clickCurveStroke, pointerDrop, drawContainer, openPageInspector, enterAnimationEditing, exitAnimationEditing } from './support/test-helpers'
+import { clickCurveStroke, pointerDrop, drawContainer, openPageInspector, enterAnimationEditing, exitAnimationEditing, stableBox } from './support/test-helpers'
 
 test('OpenSpec: editor-workspace-layout / 动画模式 / 打点、拖播放头、画布采样与撤销', async ({ page }) => {
   await page.goto('/')
@@ -402,7 +402,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 动画进行中新增�
   await expect(animationPanel.getByRole('button', { name: '关键帧 200 ms：位置' })).toHaveCount(2)
 
   // 回归：真实指针拖入节点 C 也不崩，且已有轨道不受影响。
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox.x + 450,
@@ -429,7 +429,7 @@ test('OpenSpec: editor-workspace-layout / 动画模式 / 嵌套容器子级可�
 
   // 准备嵌套：容器 + 一个拖进容器的矩形子级。
   await drawContainer(page, editor)
-  const outputBox = (await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox())!
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
     x: outputBox.x + 200,
