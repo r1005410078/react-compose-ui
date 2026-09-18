@@ -379,6 +379,33 @@ describe('WorkspaceSwitcher', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
+  it('OpenSpec: editor-workspace-layout / 工作区管理 / 焦点在触发器上时 Escape 也关得掉菜单', () => {
+    renderTopBar({ workspace: workspaceHandle({ items, current: items[0]!, currentId: 'page' }) })
+    const trigger = screen.getByRole('button', { name: '管理工作区' })
+    fireEvent.click(trigger)
+    // 打开即把焦点送进菜单，不等动画帧——用户用鼠标点开、随手按 Escape 时它必须已经在里面。
+    expect(screen.getByRole('menuitem', { name: '另存为工作区…' })).toHaveFocus()
+
+    /*
+     * 判别性：把焦点**放回触发按钮**再按 Escape。那是这个 Pattern 的合法状态（`close()` 正是
+     * 把焦点还给它的），而按钮不在菜单元素里——处理器挂在菜单自己身上时这一下收不到，菜单
+     * 关不掉。只断「打开之后按 Escape 能关」在那个实现上同样会绿。
+     */
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'Escape' })
+    expect(screen.queryByRole('menu', { name: '管理工作区' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('OpenSpec: editor-workspace-layout / 工作区管理 / 焦点在菜单项上时 Escape 关闭并还回焦点', () => {
+    renderTopBar({ workspace: workspaceHandle({ items, current: items[0]!, currentId: 'page' }) })
+    const trigger = screen.getByRole('button', { name: '管理工作区' })
+    fireEvent.click(trigger)
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: '另存为工作区…' }), { key: 'Escape' })
+    expect(screen.queryByRole('menu', { name: '管理工作区' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
   it('OpenSpec: editor-workspace-layout / 工作区管理 / 自定义工作区的菜单项都可用', () => {
     const openDialog = vi.fn()
     const toggleCanvasOnly = vi.fn()

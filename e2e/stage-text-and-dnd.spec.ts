@@ -7,6 +7,7 @@ import {
   emptyWorkspaceRect,
   enableAutoLayout,
   expandInspectorSection,
+  stableBox,
   selectAxisSizing,
   selectChildInSceneTree,
   selectContainer,
@@ -25,12 +26,11 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
-  const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
+  const outputBox = await stableBox(output)
 
   // 点击（而不是拖拽）创建 Auto width 文字，光标应当直接落进去。
   await editor.getByRole('button', { name: '文字', exact: true }).click()
-  await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
+  await page.mouse.click(outputBox.x + 200, outputBox.y + 160)
 
   const editable = stage.getByTestId('compose-material-text-editable')
   await expect(editable).toBeFocused()
@@ -52,7 +52,7 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后直接输�
 
   // output 是 1280×720 的世界尺寸，远大于 Stage 视口；点击必须落在两者的交集内，
   // 否则事件根本不会送到 Stage。
-  await page.mouse.click(outputBox!.x + 420, outputBox!.y + 320)
+  await page.mouse.click(outputBox.x + 420, outputBox.y + 320)
   await expect(stage.getByTestId('compose-material-text-editable')).toHaveCount(0)
   await expect(stage.getByTestId('compose-material-text')).toContainText('Hello canvas')
 
@@ -71,11 +71,10 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 缩窄文字框时高度�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
-  const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
+  const outputBox = await stableBox(output)
 
   await editor.getByRole('button', { name: '文字', exact: true }).click()
-  await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
+  await page.mouse.click(outputBox.x + 200, outputBox.y + 160)
   await expect(stage.getByTestId('compose-material-text-editable')).toBeFocused()
   await page.keyboard.type('Hello canvas world')
   await page.keyboard.press('Escape')
@@ -114,11 +113,10 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 点击创建后未输入�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
-  const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
+  const outputBox = await stableBox(output)
 
   await editor.getByRole('button', { name: '文字', exact: true }).click()
-  await page.mouse.click(outputBox!.x + 200, outputBox!.y + 160)
+  await page.mouse.click(outputBox.x + 200, outputBox.y + 160)
   await expect(stage.getByTestId('compose-material-text-editable')).toHaveText('')
 
   await page.keyboard.press('Escape')
@@ -138,10 +136,9 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 双击改写后 Esc 提交
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
-  const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
+  const outputBox = await stableBox(output)
 
-  await drawText(page, editor, { x: outputBox!.x + 200, y: outputBox!.y + 160 })
+  await drawText(page, editor, { x: outputBox.x + 200, y: outputBox.y + 160 })
   const text = stage.getByTestId('compose-material-text')
   const original = (await text.textContent())!
 
@@ -168,10 +165,9 @@ test('OpenSpec: stage / 画布内原地文字编辑 / 空内容退出删除实�
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
-  const outputBox = await output.boundingBox()
-  expect(outputBox).not.toBeNull()
+  const outputBox = await stableBox(output)
 
-  await drawText(page, editor, { x: outputBox!.x + 200, y: outputBox!.y + 160 })
+  await drawText(page, editor, { x: outputBox.x + 200, y: outputBox.y + 160 })
   await expect(stage.getByTestId('compose-material-text')).toHaveCount(1)
 
   await stage.getByTestId('compose-material-text').dblclick()
@@ -201,12 +197,12 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
   expect(frameBox).not.toBeNull()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
-  const outputBox = await output.boundingBox()
+  const outputBox = await stableBox(output)
   // Stage 可视区约 600x600，而 output 是 1280x720：落点必须留在可视区内，
   // 否则 pointer 事件打不到画布上。容器占 output 的 48..696 x 64..424，这里放它上方。
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
-    x: outputBox!.x + 200,
-    y: outputBox!.y + 20,
+    x: outputBox.x + 200,
+    y: outputBox.y + 20,
   })
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   await expect(rectangle).toHaveCount(1)
@@ -223,8 +219,8 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 拖进容器成为其子�
   await page.mouse.down()
   // 容器右半部分在可视区之外，取一个既深入容器又仍可见的点。
   await page.mouse.move(
-    outputBox!.x + 300,
-    outputBox!.y + 250 + rectBox!.height / 2 - 1,
+    outputBox.x + 300,
+    outputBox.y + 250 + rectBox!.height / 2 - 1,
     { steps: 8 },
   )
   await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
@@ -253,10 +249,10 @@ test('OpenSpec: stage / 画布拖拽跨容器移动 / 贴边掠过不吸入', as
   await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
-    x: outputBox!.x + 200,
-    y: outputBox!.y + 20,
+    x: outputBox.x + 200,
+    y: outputBox.y + 20,
   })
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
@@ -282,14 +278,14 @@ test('OpenSpec: stage / Auto Layout 容器内原地重排 / 拖动只改顺序�
   await expect(frameBoundary).toBeVisible()
   // 可见之后布局还会动一下，中间那一刻量到的可能是 null：轮询到量得出来为止。
   await expect.poll(() => frameBoundary.boundingBox()).not.toBeNull()
-  const outputBox = await frameBoundary.boundingBox()
+  const outputBox = await stableBox(frameBoundary)
 
   // 1) 容器内放两个矩形，再启用 Auto Layout 把它们转成 Flow。
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -347,13 +343,13 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
    * 布局，第二次拿回 null。轮询到真的量得到为止。
    */
   await expect.poll(() => frameBoundary.boundingBox()).not.toBeNull()
-  const outputBox = await frameBoundary.boundingBox()
+  const outputBox = await stableBox(frameBoundary)
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -372,7 +368,7 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / 拖出容器�
   await selectChildInSceneTree(editor, frame, children.nth(0))
   await page.mouse.move(firstBox!.x + firstBox!.width / 2, firstBox!.y + 1)
   await page.mouse.down()
-  await page.mouse.move(outputBox!.x + 200, outputBox!.y + 20, { steps: 8 })
+  await page.mouse.move(outputBox.x + 200, outputBox.y + 20, { steps: 8 })
   await expect(stage.getByTestId('stage-drop-container')).toHaveCount(1)
   await page.mouse.up()
 
@@ -390,10 +386,10 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Alt 强制吸入贴
   await drawContainer(page, editor)
   const frameBox = await stage.getByTestId('stage-container').boundingBox()
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
-    x: outputBox!.x + 200,
-    y: outputBox!.y + 20,
+    x: outputBox.x + 200,
+    y: outputBox.y + 20,
   })
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
@@ -429,10 +425,10 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Space 锁定原父�
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
   await pointerDrop(page, editor.getByRole('button', { name: '添加 矩形' }), {
-    x: outputBox!.x + 200,
-    y: outputBox!.y + 20,
+    x: outputBox.x + 200,
+    y: outputBox.y + 20,
   })
   const rectangle = stage.locator('.compose-stage__scene > .compose-stage__node > .compose-stage__node.is-renderer')
   const rectBox = await rectangle.boundingBox()
@@ -442,8 +438,8 @@ test('OpenSpec: stage-engine / 拖拽修饰键结构意图 / Space 锁定原父�
   await page.mouse.move(rectBox!.x + rectBox!.width / 2, rectBox!.y + rectBox!.height - 1)
   await page.mouse.down()
   await page.mouse.move(
-    outputBox!.x + 300,
-    outputBox!.y + 250 + rectBox!.height / 2 - 1,
+    outputBox.x + 300,
+    outputBox.y + 250 + rectBox!.height / 2 - 1,
     { steps: 8 },
   )
   await expect(stage.getByTestId('stage-drop-container')).toBeVisible()
@@ -467,13 +463,13 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 兄弟随拖动实时�
   await expect(frameBoundary).toBeVisible()
   // 可见之后布局还会动一下，中间那一刻量到的可能是 null：轮询到量得出来为止。
   await expect.poll(() => frameBoundary.boundingBox()).not.toBeNull()
-  const outputBox = await frameBoundary.boundingBox()
+  const outputBox = await stableBox(frameBoundary)
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -539,13 +535,13 @@ test('OpenSpec: stage / resize 手势实时布局反馈 / 拖容器手柄时子�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -594,12 +590,12 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -610,7 +606,7 @@ test('OpenSpec: stage-engine / ECS 外部拖入 / 拖入已启用 Auto Layout �
 
   // 向已启用 Auto Layout 的容器拖入新 Panel：应作为 Flow 子级排在兄弟旁边，
   // 而不是以 Absolute 落在指针位置。
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 400, y: outputBox!.y + 300 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 400, y: outputBox.y + 300 })
   await expect(children).toHaveCount(2)
   const secondBox = await children.nth(1).boundingBox()
   expect(Math.round(secondBox!.y)).toBe(Math.round(firstBox!.y))
@@ -630,14 +626,14 @@ test('OpenSpec: stage-engine / Auto Layout 容器内原地重排 / wrap 容器�
   const editor = page.getByRole('region', { name: 'Compose editor' })
   const stage = editor.getByRole('application', { name: 'Stage' })
   await expect(stage.getByTestId('stage-frame-boundary-frame-root')).toBeVisible()
-  const outputBox = await stage.getByTestId('stage-frame-boundary-frame-root').boundingBox()
+  const outputBox = await stableBox(stage.getByTestId('stage-frame-boundary-frame-root'))
 
   await drawContainer(page, editor)
   await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
   const rectangleButton = editor.getByRole('button', { name: '添加 矩形' })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 120, y: outputBox!.y + 160 })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 320, y: outputBox!.y + 160 })
-  await pointerDrop(page, rectangleButton, { x: outputBox!.x + 500, y: outputBox!.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 120, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 320, y: outputBox.y + 160 })
+  await pointerDrop(page, rectangleButton, { x: outputBox.x + 500, y: outputBox.y + 160 })
 
   const frame = stage.getByTestId('stage-container')
   const children = frame.locator(':scope > .compose-stage__node.is-renderer')
@@ -840,7 +836,7 @@ test('OpenSpec: materials / Text 内容测量 / 中文 Hug 文字量出来的宽
   const stage = editor.getByRole('application', { name: 'Stage' })
   const output = stage.getByTestId('stage-frame-boundary-frame-root')
   await expect(output).toBeVisible()
-  const outputBox = (await output.boundingBox())!
+  const outputBox = await stableBox(output)
 
   await editor.getByRole('button', { name: '文字', exact: true }).click()
   await page.mouse.click(outputBox.x + 200, outputBox.y + 160)

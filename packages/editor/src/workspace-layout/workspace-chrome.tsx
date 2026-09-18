@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useComposeI18nContext } from '@compose-ui/ui-context'
 import { EditorBrandMenu } from './editor-brand-menu'
@@ -188,6 +188,18 @@ export function WorkspaceMenu({ order }: { order?: number }) {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [open])
 
+  /*
+   * 菜单一进 DOM 就把焦点送进去，**在提交那一帧同步做**而不是等下一个动画帧。
+   *
+   * 等帧的症状是一个看不见的空窗：菜单已经画出来了，焦点还停在触发按钮上，而这一帧可以迟
+   * 很久——刚打开编辑器时 Dockview 正在量尺寸、Stage 正在渲染。用鼠标点开菜单、随手按
+   * `Escape` 的用户在那个空窗里按下去什么都不会发生。
+   */
+  useLayoutEffect(() => {
+    if (!open) return
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+  }, [open])
+
   const close = () => {
     setOpen(false)
     triggerRef.current?.focus()
@@ -196,7 +208,15 @@ export function WorkspaceMenu({ order }: { order?: number }) {
     setOpen(false)
     action()
   }
+  /*
+   * 键盘处理挂在**包着触发器与菜单的那个 anchor** 上而不是菜单自己身上：焦点可以合法地停在
+   * 触发按钮上（鼠标点开的那一刻就是），而按钮不在菜单元素里，挂在菜单上的处理器收不到它的
+   * 按键——`Escape` 于是关不掉菜单。上面那条同步移焦已经把大部分空窗堵掉了，但「焦点在触发
+   * 器上」本来就是这个 Pattern 的合法状态（`close()` 正是把焦点还给它的），因此收在两边都
+   * 够得着的地方才是对的。
+   */
   const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!open) return
     if (event.key === 'Escape') {
       event.preventDefault()
       close()
@@ -214,7 +234,7 @@ export function WorkspaceMenu({ order }: { order?: number }) {
   const disabledLabel = (label: string) => (injected ? `${label}（${t.builtin}）` : label)
 
   return (
-    <div className="compose-editor__workspace-menu-anchor" style={{ order }}>
+    <div className="compose-editor__workspace-menu-anchor" style={{ order }} onKeyDown={onMenuKeyDown}>
       <button
         aria-controls={menuId}
         aria-expanded={open}
@@ -224,12 +244,7 @@ export function WorkspaceMenu({ order }: { order?: number }) {
         ref={triggerRef}
         title={t.menu}
         type="button"
-        onClick={() => {
-          setOpen((value) => !value)
-          window.requestAnimationFrame(() => {
-            menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
-          })
-        }}
+        onClick={() => setOpen((value) => !value)}
       >
         <ChevronIcon />
       </button>
@@ -240,7 +255,6 @@ export function WorkspaceMenu({ order }: { order?: number }) {
           id={menuId}
           ref={menuRef}
           role="menu"
-          onKeyDown={onMenuKeyDown}
         >
           <button role="menuitem" type="button" onClick={() => choose(() => workspace.openDialog('saveAs'))}>
             {t.saveAs}
