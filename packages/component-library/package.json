@@ -1,9 +1,13 @@
 {
   "name": "@compose-ui/component-library",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "sideEffects": ["**/*.css"],
-  "files": ["dist"],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +18,9 @@
     },
     "./styles.css": "./dist/styles.css"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch --emptyOutDir false",

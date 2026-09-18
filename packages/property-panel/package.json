@@ -1,9 +1,13 @@
 {
   "name": "@compose-ui/property-panel",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
-  "sideEffects": ["**/*.css"],
-  "files": ["dist"],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
