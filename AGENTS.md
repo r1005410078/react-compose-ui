@@ -1681,6 +1681,14 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   它**目前只有一个消费者**。`components` 那条准入规则「已经被至少两个第一方包复用」挡的是
   **提前抽象**，而本 Pattern 抽取时确有两个消费者；消费者减少不追溯地让当初的抽取变成错误，
   也不是把它搬回 `stage` 的理由。
+- `native/qt/` 是 Qt 侧的工具链与验收目录（CMake 项目、Qt 安装脚本、`qml-grab` 截图工具与对照
+  夹具），**不是** Bun workspace 成员、不进 Turbo，任何 `@compose-ui/*` 包都不得依赖它；它与 JS 侧
+  **只以文件交换**（夹具文档、`.qml` 与 PNG）。未安装 Qt 的机器上 `lint`/`typecheck`/`test`/`build`
+  必须照常通过。Qt 版本只写在 `native/qt/qt-version.json` 一处，本机与 CI 走同一个安装脚本。
+  像素对比是**预览与 Qt 两个来源**之间的比较，容差只在 `scripts/qt/compare-render.ts` 定义一处；
+  预览截图由 `e2e/qt-reference.spec.ts` 经示例应用的 `?qt-reference` 现截，示例应用因此不认识任何
+  夹具——文档由用例在页面加载前注入，字体由用例经路由提供（两边加载同一个字体文件，否则第一张
+  文字截图的差异与转换毫无关系）。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。

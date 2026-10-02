@@ -16,6 +16,11 @@ export default tseslint.config(
       // worktree 嵌套在仓库内，且 ESLint 会遍历点目录。不排除的话
       // `eslint .` 会把另一个分支的完整副本再检查一遍。
       '.worktree/**',
+      // Qt 安装目录自带 Qt 的 JS 文件，CMake 构建目录里有名为 *.ts 的依赖清单——都不是本仓库
+      // 的源码。native/qt 只以文件与 JS 侧交换，装没装 Qt 不得影响 lint 的结论。
+      'native/qt/.qt/**',
+      'native/qt/build/**',
+      'native/qt/out/**',
     ],
   },
   js.configs.recommended,

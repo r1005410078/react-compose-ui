@@ -20,10 +20,12 @@
   `qtwebsockets` 等到脚本阶段再加。
 - **`native/qt/` 在 JS 构建之外**：CMake 项目进 Turbo 会让每一个只改 TS 的提交都去找 Qt。它与
   JS 侧唯一的接口是**文件**（夹具 `.qml` 与 PNG），因此不需要任何包依赖。
-- **渲染后端固定为 `offscreen` 平台 + Mesa llvmpipe 的 OpenGL**：`software` 后端走 QPainter，
-  与真机上的 GL 场景图不是同一条光栅化路径，黄金图会对不上真机；真 GPU 在 CI 上不可得。
-  llvmpipe 是确定性的软件 GL 实现，至少保证「CI 与开发机的 Linux 容器给出同一张图」。
-  macOS 开发机上的截图**只供人工查看，不作为验收依据**——字体与光栅化都不同。
+- **验收渲染环境固定为 xvfb + `xcb` 平台 + Mesa llvmpipe 的 OpenGL**（`LIBGL_ALWAYS_SOFTWARE=1`、
+  `QSG_RHI_BACKEND=opengl`）：`software` 后端走 QPainter，与真机上的 GL 场景图不是同一条光栅化
+  路径，黄金图会对不上真机；真 GPU 在 CI 上不可得。llvmpipe 是确定性的软件 GL 实现。
+  不用 Linux 上的 `offscreen` 平台：它的 GL 支持依赖 GLX 与一个 X 连接，有 X 就不如直接走 `xcb`
+  这条与桌面真机相同的路径。`qml-grab` 本身不强制平台，环境由 workflow 固定；本机脚本缺省
+  `offscreen`，macOS 上的截图**只供人工查看，不作为验收依据**——字体与光栅化都可能不同。
 - **截图时机**：等 `QQuickWindow::frameSwapped` 之后再 `grabWindow`，而不是 `show()` 之后立刻抓。
   后者抓到的可能是还没渲染的首帧，症状是偶发的全黑或全透明 PNG。
 - **对比用 `pixelmatch` + `pngjs`**（dev 依赖，只在 `scripts/qt/` 用）：Playwright 自带的

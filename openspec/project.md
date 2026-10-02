@@ -14,6 +14,7 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - Dockview 7 编辑器工作区、Tailwind CSS 4、Shadcn source primitives、Valibot 1.4 Schema 属性面板、Monaco Editor
 - TanStack React Virtual 与内部 Pointer Events 场景树交互
 - Vitest、Testing Library 与 Playwright Chromium
+- Qt 6.8 LTS（`native/qt/`，CMake 构建、aqtinstall 安装）：QML 渲染的验收工具链，不在 Bun workspace 与 Turbo 之内
 
 ## Project Conventions
 
@@ -185,6 +186,10 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 不得仅为使 CI 通过而更新黄金文件、扩大差异阈值或遮罩稳定内容。
 - 参考设计图属于设计输入，不得直接视为测试黄金文件；黄金文件必须由确定的测试场景生成。
 - 当前仓库已经启用视觉黄金文件、独立更新命令和 CI 比较门禁。
+- Qt 渲染验收是**两个来源**之间的比较而不是对黄金文件：同一份夹具（`native/qt/fixtures/`）由
+  `e2e/qt-reference.spec.ts` 截预览、由 `qml-grab` 截 Qt，`scripts/qt/compare-render.ts` 在唯一一处
+  定义的容差内比较。预览截图每次现截、不提交，因此预览的正当视觉改动不会让 Qt 一侧的对照过期。
+  验收渲染环境固定为 xvfb + xcb + Mesa llvmpipe；本机运行 `bun run test:qt`（先 `bun run qt:install`）。
 
 #### 完成门禁
 
@@ -270,6 +275,10 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   Vitest、Testing Library、Playwright、Turbo；示例应用单独使用 ECharts，属性面板公共包不依赖
   ECharts。
 - 浏览器运行时：操作日志包默认使用 IndexedDB，失败时降级为进程内存；不依赖服务器数据库。
-- CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium。
+- Qt 工具链：Qt 6.8 LTS（版本只写在 `native/qt/qt-version.json`）经 aqtinstall 安装到被忽略的
+  `native/qt/.qt/`；像素对比使用 `pixelmatch` 与 `pngjs`（仅 `scripts/qt/` 使用的开发依赖）。夹具字体
+  为随附的 DejaVu Sans（Bitstream Vera 派生许可，见 `native/qt/fixtures/fonts/`）。Qt 开源版为
+  LGPLv3，分发到设备之前需要确定合规方式或商业授权。
+- CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium；`qt` job 在 `verify` 之后运行 Qt 验收链路。
 - 发布：Changesets 经 GitHub Actions Release 工作流发布到 npm registry（带 provenance）。
 - 当前运行时不依赖数据库、远端服务或第三方业务 API。

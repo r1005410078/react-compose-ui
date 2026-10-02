@@ -61,7 +61,11 @@ exportComposeSceneToQml(input: {
 
 - `font.pixelSize`（**不用 pointSize**，后者随 DPI 变）、`font.family`、`font.weight`（数值直传，
   关键字映射到 Qt 的 100–900）、`font.letterSpacing`。
-- `lineHeight` 缺席 → 引擎默认行高；有值（px）→ `lineHeightMode: Text.FixedHeight`。
+- `lineHeight` 缺席 → 引擎默认行高；有值（px）→ `lineHeightMode: Text.FixedHeight`，**并补
+  `topPadding: (lineHeight − FontMetrics.height) / 2`**。CSS 把多出来的行距上下各分一半（半行距），
+  Qt 的 `FixedHeight` 全放在下面；不补的症状是整行字比预览高几个像素。底座阶段实测
+  （DejaVu Sans 28px、行高 40）：不补时差异 1.017%、墨迹整体上移 4px，补上后 0.247%，水平方向
+  逐像素一致。
 - 盒子写死为快照里的宽高：Hug 宽度 → `wrapMode: Text.NoWrap`；固定宽度 → `Text.WrapAnywhere`，
   对应 Preview 的 `overflow-wrap: anywhere`（中文每个字都是断点）。
 - `textAlign` → `horizontalAlignment`（含 `Justify`），`verticalAlign` → `verticalAlignment`。

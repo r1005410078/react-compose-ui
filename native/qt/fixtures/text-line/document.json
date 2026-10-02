@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "label"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "label": {
+      "id": "label",
+      "name": "label",
+      "components": {
+        "Composition": {
+          "presetId": "text",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 24,
+            "y": 40
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 272,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "text",
+          "props": {
+            "text": "Hello Qt 123",
+            "color": "#f8fafc",
+            "fontFamily": "DejaVu Sans",
+            "fontSize": 28,
+            "fontWeight": 400,
+            "letterSpacing": 0,
+            "textAlign": "left",
+            "verticalAlign": "top",
+            "textCase": "original",
+            "textDecoration": "none",
+            "lineHeight": 40
+          }
+        }
+      }
+    }
+  }
+}
