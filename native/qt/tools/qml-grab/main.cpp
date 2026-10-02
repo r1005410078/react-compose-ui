@@ -1,15 +1,19 @@
 // qml-grab：加载一份 .qml，等首帧真正交换之后截取窗口并写出 PNG。
 //
-// 用法：qml-grab <input.qml> <output.png> [--delay-ms N] [--timeout-ms N]
+// 用法：qml-grab <input.qml> <output.png> [--delay-ms N] [--timeout-ms N] [--font 文件]...
 //
 // 截图时机：等 QQuickWindow::frameSwapped 之后再 grabWindow，而不是 show() 之后立刻抓——
 // 后者抓到的可能是还没渲染的首帧，症状是偶发的全黑或全透明 PNG。`--delay-ms` 给由定时器
 // 驱动内容的夹具（页面脚本）留出时间，在首帧之后再等这么久。
 //
+// `--font` 把字体文件注册进应用字体库：导出的 QML 只写字族名（字体不随产物打包），对照夹具的
+// 字体由这里提供，与预览一侧加载的是同一个文件。
+//
 // 渲染平台不在这里强制：验收环境由调用方用环境变量固定（见 native/qt/scripts/grab.sh），
 // 这里只负责「首帧之后截图」这一件事。
 #include <QCommandLineParser>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlEngine>
@@ -53,13 +57,17 @@ int main(int argc, char *argv[]) {
   QCommandLineOption timeoutOption(QStringLiteral("timeout-ms"),
                                    QStringLiteral("等待首帧的超时毫秒数"),
                                    QStringLiteral("ms"), QStringLiteral("10000"));
+  QCommandLineOption fontOption(QStringLiteral("font"),
+                                QStringLiteral("加载前注册的字体文件，可重复"),
+                                QStringLiteral("file"));
   parser.addOption(delayOption);
   parser.addOption(timeoutOption);
+  parser.addOption(fontOption);
   parser.process(app);
 
   const QStringList positional = parser.positionalArguments();
   if (positional.size() != 2) {
-    std::fprintf(stderr, "用法：qml-grab <input.qml> <output.png> [--delay-ms N] [--timeout-ms N]\n");
+    std::fprintf(stderr, "用法：qml-grab <input.qml> <output.png> [--delay-ms N] [--timeout-ms N] [--font 文件]...\n");
     return UsageError;
   }
   bool delayOk = false;
@@ -69,6 +77,13 @@ int main(int argc, char *argv[]) {
   if (!delayOk || delayMs < 0 || !timeoutOk || timeoutMs <= 0) {
     std::fprintf(stderr, "--delay-ms 必须是非负整数，--timeout-ms 必须是正整数\n");
     return UsageError;
+  }
+
+  for (const QString &font : parser.values(fontOption)) {
+    if (QFontDatabase::addApplicationFont(font) < 0) {
+      std::fprintf(stderr, "无法加载字体 %s\n", qPrintable(font));
+      return UsageError;
+    }
   }
 
   const QString inputPath = QFileInfo(positional.at(0)).absoluteFilePath();

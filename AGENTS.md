@@ -1531,6 +1531,19 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   少一层修饰是可见的降级。
   **导入之后打开组件文档而不是顺手放一个实例**：下一步是改这个符号（改色、挂端口、打动画），
   而那要在组件文档里做；把它摆到图上是另一件事，组件库的拖放入口已经做了。
+- `@compose-ui/qml-export` 是无 React、无 DOM 的 QML 导出包，**只依赖 `core`**，不求解布局、不读写
+  文件，产物是 QML 文本、诊断与字族清单。**导出的是求解之后的结果**：输入是布局 Runtime 交出的
+  「已解算文档 + 快照」，每个对象按快照绝对定位，MUST NOT 把 Auto Layout 翻译成 Qt 的布局类型——
+  两套布局算法在 gap、Hug 与换行上的差异会变成无从查起的像素偏差。**判据是照搬预览而不是照搬
+  命中**：曲线按预览同一个 `viewBox` → 盒仿射映射（非等比盒里是椭圆弧），**不走**
+  `projectComposeCurveToBox`（那是命中与捕捉的折线近似）；边框是压在子级之上的覆盖层；线帽、斜接、
+  填充规则显式写出 SVG 的缺省值（Qt 的缺省值三样都不同）；Qt 的虚线以线宽为单位。文字的半行距
+  **按垂直对齐分三种补偿**（顶下移 `floor(L/2)`、居中不补、底上移 `ceil(L/2)`，L 照搬 Blink 的
+  取整）——Qt 的 `FixedHeight` 把字贴在行顶且最后一行不带行距，一律按顶对齐补的症状是居中与底对齐
+  的字低几个像素，且只在某些字号上出现。组件实例第一期是占位：实例准备管线（覆盖、采样、根尺寸
+  对齐、内容缩放、翻转、嵌套 Yoga）住在 `materials` 内部，为导出复制一份就是两处实现，先提取再共用。
+  验收夹具的预览截图与导出 QML MUST 来自**同一个**布局 Runtime（示例应用 `?qt-reference` 把它同时
+  交给 `ComposePreview` 与导出器），各自求解会让两边的 Hug 文字量出不同的盒。
 - `@compose-ui/interaction-kernel` 是**零运行时依赖**的交互内核包：插件契约、按优先级排序的
   注册表、同时至多一个会话的仲裁器。连 `core` 都不依赖——内核逻辑不认识文档，只有类型签名
   通过 `InteractionKernelProfile` 认识。「内核不认识文档」这条边界由**包依赖**承载而不是命名
@@ -1700,7 +1713,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`commands`、`interaction-kernel`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`commands`、`interaction-kernel`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`、`qml-export`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`、`canvas-kit`，
    提供跨包协议、Context、无业务语义的交互组件与无限画布底座。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、

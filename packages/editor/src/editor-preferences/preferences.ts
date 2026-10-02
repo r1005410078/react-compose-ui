@@ -25,6 +25,7 @@ import type { ComposeComponentShelf } from '@compose-ui/component-library'
 export type ComposeEditorShortcutAction =
   | 'editor.settings'
   | 'document.save'
+  | 'document.exportQml'
   | 'document.toggleAnimationMode'
   | 'stage.temporaryPan'
   | 'stage.selectTool'
@@ -183,6 +184,7 @@ export type ComposeEditorShortcutScope = 'editor' | 'stage' | 'history'
 export const COMPOSE_EDITOR_SHORTCUT_ACTIONS = [
   'editor.settings',
   'document.save',
+  'document.exportQml',
   'document.toggleAnimationMode',
   'stage.temporaryPan',
   'stage.selectTool',
@@ -224,6 +226,7 @@ export const COMPOSE_EDITOR_SHORTCUT_SCOPES: Readonly<
 > = {
   'editor.settings': 'editor',
   'document.save': 'editor',
+  'document.exportQml': 'editor',
   'document.toggleAnimationMode': 'editor',
   'stage.temporaryPan': 'stage',
   'stage.selectTool': 'stage',
@@ -296,6 +299,8 @@ export function createDefaultComposeEditorPreferences(): ComposeEditorPreference
        * 用户也没法在键位页里改。它进目录之后这里就是它默认键位的唯一来源。
        */
       'document.save': [{ code: 'KeyS', primary: true }],
+      // 导出是低频的一次性动作，不占键位：命令面板与应用菜单两条入口够用。
+      'document.exportQml': [],
       // 模式切换默认不绑键：它有工具栏行尾那个常驻控件，进目录只是为了让键盘够得着。
       'document.toggleAnimationMode': [],
       'edit.createComponent': [],

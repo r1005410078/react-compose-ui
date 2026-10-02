@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 构建 qml-grab（增量），把 native/qt/fixtures/*/expected.qml 逐份截图到 native/qt/out/qt/。
+# 构建 qml-grab（增量），把导出器为每份夹具产出的 native/qt/out/export/*.qml 逐份截图到
+# native/qt/out/qt/。导出结果由 e2e/qt-reference.spec.ts 写出，先跑它。
 #
 # 渲染平台：未设置 QT_QPA_PLATFORM 时用 offscreen，方便本机直接跑。CI 的验收环境在 workflow 里
 # 固定为 xvfb + xcb + Mesa llvmpipe（见 .github/workflows/ci.yml 的 qt job），这里不替调用方决定。
@@ -15,10 +16,21 @@ export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
 OUT="$QT_DIR/out/qt"
 mkdir -p "$OUT"
 
+# 导出的 QML 只写字族名，夹具字体在这里注册——与预览一侧经路由加载的是同一个文件。
+fonts=()
+for font in "$QT_DIR"/fixtures/fonts/*.ttf; do fonts+=(--font "$font"); done
+
+shopt -s nullglob
+exported=("$QT_DIR"/out/export/*.qml)
+if [[ ${#exported[@]} -eq 0 ]]; then
+  echo "没有找到导出结果 $QT_DIR/out/export/*.qml，先运行 e2e/qt-reference.spec.ts" >&2
+  exit 1
+fi
+
 status=0
-for qml in "$QT_DIR"/fixtures/*/expected.qml; do
-  name="$(basename "$(dirname "$qml")")"
-  if "$QT_DIR/build/tools/qml-grab/qml-grab" "$qml" "$OUT/$name.png"; then
+for qml in "${exported[@]}"; do
+  name="$(basename "$qml" .qml)"
+  if "$QT_DIR/build/tools/qml-grab/qml-grab" "$qml" "$OUT/$name.png" "${fonts[@]}"; then
     echo "✓ $name"
   else
     echo "✗ $name（qml-grab 退出码 $?）" >&2

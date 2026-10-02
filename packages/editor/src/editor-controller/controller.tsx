@@ -1998,6 +1998,7 @@ export function useComposeEditorController({
     createComponent: componentStore ? () => { requestCreateComponent() } : undefined,
     idFactory: nextId,
     layoutSnapshot: layoutState.status === 'ready' ? layoutState.snapshot : null,
+    layoutDocument: layoutState.status === 'ready' ? layoutState.document : null,
     redo: runtime.redo,
     selectedIds,
     setSelectedIds,

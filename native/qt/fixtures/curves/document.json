@@ -1,0 +1,555 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "arc",
+            "disc",
+            "panel",
+            "dashed",
+            "dotted"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "arc": {
+      "id": "arc",
+      "name": "arc",
+      "components": {
+        "Composition": {
+          "presetId": "curve",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 16
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 160,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 50,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#22d3ee",
+            "strokeWidth": 2,
+            "strokeLinecap": "butt",
+            "strokeDasharray": "none",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "arc",
+          "center": {
+            "x": 50,
+            "y": 50
+          },
+          "radius": 50,
+          "startAngle": 180,
+          "sweep": 180
+        }
+      }
+    },
+    "disc": {
+      "id": "disc",
+      "name": "disc",
+      "components": {
+        "Composition": {
+          "presetId": "circle",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 200,
+            "y": 16
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 60,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 60,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#a855f7"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#f8fafc",
+            "strokeWidth": 2,
+            "strokeLinecap": "round",
+            "strokeDasharray": "none",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "arc",
+          "center": {
+            "x": 30,
+            "y": 30
+          },
+          "radius": 30,
+          "startAngle": 0,
+          "sweep": 360
+        }
+      }
+    },
+    "panel": {
+      "id": "panel",
+      "name": "panel",
+      "components": {
+        "Composition": {
+          "presetId": "rect",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 90
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 120,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 70,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#1e3a8a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#60a5fa",
+            "strokeWidth": 2,
+            "strokeLinecap": "round",
+            "strokeDasharray": "none",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "polyline",
+          "closed": true,
+          "cornerRadius": 12,
+          "vertices": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 120,
+              "y": 0
+            },
+            {
+              "x": 120,
+              "y": 70
+            },
+            {
+              "x": 0,
+              "y": 70
+            }
+          ]
+        }
+      }
+    },
+    "dashed": {
+      "id": "dashed",
+      "name": "dashed",
+      "components": {
+        "Composition": {
+          "presetId": "curve",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 170,
+            "y": 90
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 120,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 30,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#facc15",
+            "strokeWidth": 2,
+            "strokeLinecap": "butt",
+            "strokeDasharray": "8 4",
+            "markerStart": "arrow",
+            "markerEnd": "arrow"
+          }
+        },
+        "Curve": {
+          "kind": "line",
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 120,
+            "y": 30
+          }
+        }
+      }
+    },
+    "dotted": {
+      "id": "dotted",
+      "name": "dotted",
+      "components": {
+        "Composition": {
+          "presetId": "curve",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 160,
+            "y": 140
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 140,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#4ade80",
+            "strokeWidth": 3,
+            "strokeLinecap": "round",
+            "strokeDasharray": "1 4",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "polyline",
+          "closed": false,
+          "vertices": [
+            {
+              "x": 0,
+              "y": 40
+            },
+            {
+              "x": 70,
+              "y": 0
+            },
+            {
+              "x": 140,
+              "y": 40
+            }
+          ]
+        }
+      }
+    }
+  }
+}

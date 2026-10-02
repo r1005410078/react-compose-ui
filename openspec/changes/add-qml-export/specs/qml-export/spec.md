@@ -28,15 +28,17 @@
 
 ### Requirement: 场景、容器与 Group 映射
 
-导出 MUST 把目标 Frame 映射为尺寸等于 `Frame.size` 的根 `Item`；带 `Appearance` 的容器与盒物料
-MUST 映射为 `Rectangle`，写出底色、边框颜色与宽度、圆角与不透明度；`Clip` 存在且裁剪时 MUST 写出
-`clip: true`，缺席时 MUST NOT 裁剪；Group MUST 映射为不绘制任何内容的 `Item`。子级 MUST 按
-`Hierarchy` 顺序声明以保持层序。
+导出 MUST 把目标 Frame 映射为尺寸等于 `Frame.size` 的根对象且不写它在工作区上的位置；带底色的
+容器与盒物料 MUST 映射为 `Rectangle`，写出底色、圆角与不透明度；边框 MUST 作为压在子级**之上**的
+独立覆盖层导出（与预览的边框层同一层序）；`Clip` 存在且裁剪时 MUST 写出 `clip: true`，缺席时
+MUST NOT 裁剪；Group MUST 映射为不绘制任何内容的 `Item`；隐藏的对象 MUST NOT 导出。子级 MUST 按
+预览渲染的子级顺序声明以保持层序。
 
 #### Scenario: 带圆角描边的容器
 
 - **WHEN** 导出一个底色 `#1e293b`、边框 `#334155` 宽 1、圆角 8 的容器
-- **THEN** QML 中对应 `Rectangle` 的 `color`、`border.color`、`border.width`、`radius` 分别等于这些值
+- **THEN** QML 中对应 `Rectangle` 的 `color` 与 `radius` 等于底色与圆角
+- **AND** 边框以 `border.color`、`border.width` 写在排在全部子级之后的覆盖层上
 
 #### Scenario: 未声明 Clip 的场景
 
@@ -45,15 +47,17 @@ MUST 映射为 `Rectangle`，写出底色、边框颜色与宽度、圆角与不
 
 ### Requirement: 曲线映射
 
-带 `Curve` 的 Entity MUST 映射为 `Shape` 与 `ShapePath`，几何 MUST 经 `projectComposeCurveToBox`
-投影到盒坐标，带 `cornerRadius` 的多段线 MUST 经 `composePolylineOutline` 展开，填充 MUST 读
-`getComposeCurveFill`。`fillRule: 'evenodd'` MUST 映射为奇偶填充，缺席 MUST 映射为非零填充。
-虚线长度与偏移 MUST 换算为以线宽为单位；端点箭头 MUST 以额外的填充路径绘出。
+带 `Curve` 的 Entity MUST 映射为 `Shape` 与 `ShapePath`，几何 MUST 按预览同一个 `viewBox` 到盒的
+逐轴仿射映射到盒坐标（因此非等比盒里的弧是两个半径各自缩放的椭圆弧），带 `cornerRadius` 的
+多段线 MUST 经 `composePolylineOutline` 展开，填充 MUST 读 `getComposeCurveFill`。
+`fillRule: 'evenodd'` MUST 映射为奇偶填充，缺席 MUST 显式映射为非零填充；线帽与斜接 MUST 显式
+写出 SVG 的缺省值；虚线长度与偏移 MUST 换算为以线宽为单位；端点箭头 MUST 以额外的填充路径绘出。
 
 #### Scenario: 非等比盒中的弧
 
 - **WHEN** 一段弧所在盒被非等比拉伸
-- **THEN** 导出的路径与 `projectComposeCurveToBox` 给出的折线一致
+- **THEN** 导出的 `PathArc` 的 `radiusX` 与 `radiusY` 分别按两个轴的比例缩放
+- **AND** 像素对比与预览一致
 
 #### Scenario: 虚线换算
 
@@ -72,19 +76,22 @@ MUST 映射为 `Rectangle`，写出底色、边框颜色与宽度、圆角与不
 
 ### Requirement: 文字映射
 
-文字 MUST 映射为 `Text`，字号 MUST 使用 `font.pixelSize`；盒子 MUST 写死为快照尺寸；Hug 宽度的文字
-MUST 不换行，固定宽度的文字 MUST 允许在任意字符处换行；`lineHeight` 有值时 MUST 使用固定行高，
-缺席时 MUST 使用引擎默认行高。水平与垂直对齐 MUST 按文字属性映射。
+文字 MUST 映射为纯文本 `Text`，字号 MUST 使用 `font.pixelSize`；盒子 MUST 写死为快照尺寸；换行
+MUST 照搬预览的规则（先在词边界、放不下再在任意字符处断开）。`lineHeight` 有值时 MUST 使用固定
+行高，并 MUST 按垂直对齐补偿 CSS 的半行距（顶对齐下移上半份、底对齐上移下半份、居中不补，
+取整方式与 Blink 一致）；缺席时 MUST 使用引擎默认行高。水平与垂直对齐 MUST 按文字属性映射。
 
 #### Scenario: Hug 文字
 
 - **WHEN** 导出一段宽度为 Hug 的文字
-- **THEN** 对应 `Text` 的宽高等于快照里的测量结果且 `wrapMode` 为不换行
+- **THEN** 对应 `Text` 的宽高等于快照里的测量结果，盒子正好装得下它因此不会被断开
 
-#### Scenario: 固定宽度的中文段落
+#### Scenario: 固定行高的三种垂直对齐
 
-- **WHEN** 导出一段固定宽度、行高 24px 的中文文字
-- **THEN** `wrapMode` 允许任意字符换行，`lineHeightMode` 为固定高度且 `lineHeight` 为 24
+- **WHEN** 导出行高 24px、分别为顶、居中、底对齐的三段文字
+- **THEN** 三段的 `lineHeightMode` 都是固定高度、`lineHeight` 为 24
+- **AND** 顶对齐整块下移上半份半行距，底对齐上移下半份，居中不移
+- **AND** 像素对比中三段文字的墨迹位置与预览一致
 
 ### Requirement: 旋转与基点
 
@@ -96,22 +103,23 @@ MUST 不换行，固定宽度的文字 MUST 允许在任意字符处换行；`li
 - **WHEN** 一个 100 × 40 的矩形旋转 30 度且基点为 `{x: 0, y: 0.5}`
 - **THEN** 导出的 `Rotation` 原点为 `(0, 20)`、角度为 30
 
-### Requirement: 组件实例内联展开
+### Requirement: 组件实例第一期导出为占位
 
-组件实例 MUST 以其已解算的嵌套文档内联展开为一棵子树，坐标相对实例盒。宿主未提供某个实例的
-嵌套解算结果时，该实例 MUST 导出为同尺寸的占位矩形并产出诊断。
+第一期组件实例 MUST 导出为同尺寸的占位并产出包含该实例 Entity ID 的诊断。内联展开需要实例覆盖、
+动画采样、根尺寸对齐、内容缩放与翻转之后的嵌套解算结果，那条管线目前住在物料包内部；在它被提取
+成可复用的入口之前，导出器 MUST NOT 自行复制一份。
 
-#### Scenario: 缺少嵌套解算结果
+#### Scenario: 场景中有组件实例
 
-- **WHEN** 输入中缺少某个组件实例的嵌套文档
-- **THEN** 该位置导出同尺寸占位矩形
-- **AND** 诊断中包含该实例的 Entity ID
+- **WHEN** 导出一个含组件实例的场景
+- **THEN** 实例位置导出同尺寸占位
+- **AND** 诊断中包含该实例的 Entity ID，场景中其余对象照常导出
 
 ### Requirement: 不支持内容的降级
 
-无法表达的内容 MUST 降级导出并产出诊断，MUST NOT 静默丢弃元素：渐变取中位色标的纯色；阴影
-忽略；图片、SVG、图表与未知 Renderer 导出为同尺寸占位矩形；动画按静态姿态导出；被绑定的
-Renderer prop 写入文档中的当前值。
+无法表达的内容 MUST 降级导出并产出诊断，MUST NOT 静默丢弃元素：渐变取最靠近中点的色标的纯色；
+阴影忽略；图片、SVG、图表、组件实例与未知 Renderer 导出为同尺寸占位；动画按静态姿态导出；被绑定
+的 Renderer prop 写入文档中的当前值；字体栈只写第一个字族。
 
 #### Scenario: 渐变背景
 
@@ -142,8 +150,9 @@ MUST 写入原始 Entity ID；数值 MUST 使用核心的几何数值格式化�
 ### Requirement: 编辑器导出入口
 
 编辑器 MUST 提供「导出为 QML」动作，可从命令面板与应用菜单触发。该动作 MUST 导出当前激活场景，
-MUST 使用与 Preview 相同的文字测量端口对当前（含未保存改动的）文档求解，并以 `.qml` 文件交付
-结果，同时向用户呈现诊断。
+MUST 读编辑器布局 Runtime 交出的「已解算文档 + 快照」（即画布正在渲染的那一对，因此含未保存的
+改动），并以 `.qml` 文件交付结果，同时向用户呈现按类聚合的诊断与产物需要的字族。布局尚未求解完
+时该动作 MUST 列出但不可用并说明原因。
 
 #### Scenario: 导出含未保存改动的场景
 
@@ -157,10 +166,27 @@ MUST 使用与 Preview 相同的文字测量端口对当前（含未保存改动
 
 ### Requirement: 基础图形的像素验收
 
-仓库 MUST 为每类基础图形（容器、矩形、直线、弧与整圆、多段线与圆角、路径与带洞路径、文字、旋转、
-组件实例）各提供一份夹具，其导出 QML 的截图 MUST 与 Preview 截图在 `qt-runtime` 声明的容差内一致。
+仓库 MUST 为每类基础图形（容器与嵌套 Auto Layout、描边圆角、直线、弧与整圆、多段线与圆角、虚线与
+点线、端点箭头、路径与带洞路径、文字及其对齐与字重、旋转与基点）提供夹具，其导出 QML 的截图 MUST
+与 Preview 截图在 `qt-runtime` 声明的容差内一致。预览一侧与导出一侧 MUST 读同一个布局 Runtime 的
+结果。
 
 #### Scenario: CI 验收
 
 - **WHEN** CI 运行 Qt job
 - **THEN** 每份基础图形夹具的导出结果都通过像素对比
+
+### Requirement: 导出入口拒绝非法输入
+
+要导出的场景不是文档的根 Frame，或布局快照里没有它的盒子时，导出 MUST 抛出可判别的
+`ComposeQmlExportError` 并说明原因，MUST NOT 产出一份不完整的 QML。
+
+#### Scenario: 场景不是根 Frame
+
+- **WHEN** 以一个非根场景的 Entity ID 调用导出
+- **THEN** 抛出 `ComposeQmlExportError`，说明它不是文档的根场景
+
+#### Scenario: 快照缺少场景
+
+- **WHEN** 布局快照里没有目标场景的盒子
+- **THEN** 抛出 `ComposeQmlExportError`，说明布局快照缺少该场景

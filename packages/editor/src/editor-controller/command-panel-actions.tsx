@@ -22,6 +22,8 @@ type ActionContextInput = Omit<
   | 'canSaveDocument'
   | 'toggleAnimationMode'
   | 'animationTimelineMissing'
+  | 'exportQml'
+  | 'qmlExportPending'
 >
 
 interface CommandPanelWithActionsProps {
@@ -49,6 +51,10 @@ interface CommandPanelWithActionsProps {
   readonly onToggleAnimationMode?: () => void
   /** 当前布局里没有时间线：「动画编辑」列出但不可用。 */
   readonly animationTimelineMissing?: boolean
+  /** 导出当前激活场景为 QML；缺省时目录整条省略。 */
+  readonly onExportQml?: () => void
+  /** 布局尚未求解完：「导出为 QML」列出但不可用。 */
+  readonly qmlExportPending?: boolean
 }
 
 /**
@@ -68,6 +74,8 @@ export function CommandPanelWithActions({
   canSaveDocument,
   onToggleAnimationMode,
   animationTimelineMissing,
+  onExportQml,
+  qmlExportPending,
 }: CommandPanelWithActionsProps) {
   const i18n = useComposeI18nContext()
   const locale = i18n?.locale ?? 'zh-CN'
@@ -84,6 +92,8 @@ export function CommandPanelWithActions({
       canSaveDocument,
       toggleAnimationMode: onToggleAnimationMode,
       animationTimelineMissing,
+      exportQml: onExportQml,
+      qmlExportPending,
     }),
     [
       actionContext,
@@ -91,9 +101,11 @@ export function CommandPanelWithActions({
       canSaveDocument,
       formatMessage,
       locale,
+      onExportQml,
       onOpenSettings,
       onSaveDocument,
       onToggleAnimationMode,
+      qmlExportPending,
       resolvedShortcuts,
     ],
   )

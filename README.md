@@ -362,7 +362,8 @@ const controller = useComposeEditorController({
 
 ## 包边界
 
-- Headless：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`，不依赖 React/DOM。
+- Headless：`core`、`assets`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、
+  `qml-export`，不依赖 React/DOM。
 - Shared UI/Protocol：`ui-context`、`components`、`component-registry`。
 - Domain Widgets：`stage`、`scene-tree`、`asset-browser`、`history`、`property-panel`、
   `operation-log`、`command-panel`、`component-library`、`materials`。
@@ -430,6 +431,13 @@ ViewModel），而绑定是页面级平坦命名空间，按场景切分会让�
 页面配置面板按场景逐行提供动画文件的绑定/快捷创建与播放控制变量绑定，预览支持脚本播放控制
 第一阶段——`playing` 布尔绑定按上升沿从头播放、`currentTime` 数值绑定由脚本完全接管
 时间轴。事件回调（onComplete/onLoop）、播放速度与多动画混合仍未实现。
+
+**Qt / QML 渲染出口**：编辑器的「导出为 QML」把激活场景导出成 Qt Quick 能直接加载的 `.qml`
+（`@compose-ui/qml-export`）。导出的是布局求解之后的结果——每个对象绝对定位，几何与外观照搬
+预览的渲染规则，并与预览逐像素比较验收（`native/qt/`，`bun run qt:install` 后 `bun run test:qt`）。
+第一期覆盖静态基础图形：场景、容器、Group、曲线（线 / 弧 / 多段线 / 路径、虚线、箭头、填充）、
+文字与旋转；页面脚本与数据绑定、动画、图片、图表与组件实例降级为静态值或同尺寸占位并逐项给出
+诊断。Qt 一侧的播放器程序尚未开始。
 
 ## License
 

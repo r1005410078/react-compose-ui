@@ -277,7 +277,8 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
 - 浏览器运行时：操作日志包默认使用 IndexedDB，失败时降级为进程内存；不依赖服务器数据库。
 - Qt 工具链：Qt 6.8 LTS（版本只写在 `native/qt/qt-version.json`）经 aqtinstall 安装到被忽略的
   `native/qt/.qt/`；像素对比使用 `pixelmatch` 与 `pngjs`（仅 `scripts/qt/` 使用的开发依赖）。夹具字体
-  为随附的 DejaVu Sans（Bitstream Vera 派生许可，见 `native/qt/fixtures/fonts/`）。Qt 开源版为
+  为随附的 DejaVu Sans 常规与粗体（Bitstream Vera 派生许可，见 `native/qt/fixtures/fonts/`）；粗体
+  必须有自己的文件，缺了它两边各自合成粗体，合成方式并不相同。Qt 开源版为
   LGPLv3，分发到设备之前需要确定合规方式或商业授权。
 - CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium；`qt` job 在 `verify` 之后运行 Qt 验收链路。
 - 发布：Changesets 经 GitHub Actions Release 工作流发布到 npm registry（带 provenance）。

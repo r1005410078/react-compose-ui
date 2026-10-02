@@ -52,6 +52,7 @@ import {
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import { resolveTargetFrameId } from '@compose-ui/stage-engine'
+import { downloadTextFile, exportActiveSceneAsQml } from '../qml'
 
 /** 解析动画作用域时不看选区：内联 `[]` 每次渲染都是新引用，会破坏 memo。 */
 const NO_SELECTION: readonly string[] = []
@@ -2647,6 +2648,27 @@ export function ComposeEditor({
   const saveActiveDocument = useCallback(() => {
     void activeDocumentChrome?.save?.()
   }, [activeDocumentChrome])
+  /*
+   * 导出读控制器交出的「已解算文档 + 快照」：画布正在画的那一对，因此含未保存的改动、文字盒
+   * 也是同一个测量端口量出来的。资源标签没有场景可导，整条省略；布局没求完时列出但不可用。
+   */
+  const layoutDocument = actionContext?.layoutDocument ?? null
+  const layoutSnapshot = actionContext?.layoutSnapshot ?? null
+  const qmlExportPending = layoutDocument === null || layoutSnapshot === null
+  const exportQml = useCallback(() => {
+    if (layoutDocument === null || layoutSnapshot === null) return
+    const outcome = exportActiveSceneAsQml({
+      layoutDocument,
+      layoutSnapshot,
+      activeFrameId: pageActiveFrameId,
+      messages: editorMessages.qml,
+    })
+    if (outcome.ok) downloadTextFile(outcome.fileName, outcome.qml)
+    setPageNotice(outcome.notice)
+  }, [editorMessages.qml, layoutDocument, layoutSnapshot, pageActiveFrameId])
+  const exportQmlAction = actionContext === undefined || activeWorkspaceSession?.kind === 'asset'
+    ? undefined
+    : exportQml
   // 读会话状态而不是那个 ref：ref 只在事件里才作数，而这个回调是当作 prop 交出去的。
   const animationActive = animationMode.active
   const toggleAnimationMode = useCallback(() => {
@@ -2690,12 +2712,16 @@ export function ComposeEditor({
         ? undefined
         : () => { setAnimationEditing(!animationModeRef.current.active) },
       animationTimelineMissing: !timelinePanelPresent,
+      exportQml: exportQmlAction,
+      qmlExportPending,
     })
   }, [
     actionContext,
     activeDocumentChrome,
     canSaveActiveDocument,
+    exportQmlAction,
     hostI18n?.formatMessage,
+    qmlExportPending,
     resolvedPreferences.locale,
     resolvedPreferences.shortcuts,
     setAnimationEditing,
@@ -2879,6 +2905,8 @@ export function ComposeEditor({
             canSaveDocument: canSaveActiveDocument,
             onToggleAnimationMode: canSaveActiveDocument ? toggleAnimationMode : undefined,
             animationTimelineMissing: !timelinePanelPresent,
+            onExportQml: exportQmlAction,
+            qmlExportPending,
           }),
       assetBrowserPanel: slots?.assetBrowser !== undefined
         ? slots.assetBrowser
@@ -2914,6 +2942,7 @@ export function ComposeEditor({
       exitEntryLayerTo: componentEntry.exitTo,
       libraryOpen: libraryOpen && libraryPort !== undefined,
       ...(libraryPort === undefined ? {} : { openLibrary }),
+      ...(exportQmlAction === undefined ? {} : { exportQml: exportQmlAction, qmlExportPending }),
       stageHostPanelId,
       registerDocumentSave,
       setDocumentDirty,
