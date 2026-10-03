@@ -87,6 +87,23 @@ jobs:
           QSG_RHI_BACKEND: opengl
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: xvfb-run -a -s "-screen 0 1280x1024x24" native/qt/scripts/grab-fixtures.sh
+      # 截图必须是确定的：同一份 QML 连截十次逐字节一致，否则容差兜的是随机噪声而不是两套光栅化的差异。
+      - name: Grab determinism
+        env:
+          QT_QPA_PLATFORM: xcb
+          QSG_RHI_BACKEND: opengl
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          fonts=(); for f in native/qt/fixtures/fonts/*.ttf; do fonts+=(--font "$f"); done
+          for name in text-styles instances; do
+            for i in $(seq 10); do
+              xvfb-run -a -s "-screen 0 1280x1024x24" native/qt/build/tools/qml-grab/qml-grab \
+                "native/qt/out/export/$name.qml" "$RUNNER_TEMP/$name-$i.png" "${fonts[@]}"
+            done
+            count=$(sha256sum "$RUNNER_TEMP/$name"-*.png | cut -d' ' -f1 | sort -u | wc -l)
+            echo "$name: $count distinct hash(es) over 10 grabs"
+            test "$count" -eq 1
+          done
       - name: Compare with preview
         run: bun scripts/qt/compare-render.ts
       - name: Upload Qt comparison output
