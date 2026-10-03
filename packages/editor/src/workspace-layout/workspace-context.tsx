@@ -99,6 +99,15 @@ export interface WorkspaceContent {
    */
   openLibrary?: () => void
   /**
+   * 把当前激活场景导出为 `.qml`；应用菜单里那一条走它，与命令面板是同一个回调。
+   *
+   * @remarks
+   * 缺席即没有可导出的文档（资源标签、页面库那一屏），菜单整条省略。
+   */
+  exportQml?: () => void
+  /** 布局尚未求解完：菜单项列出但不可用。 */
+  qmlExportPending?: boolean
+  /**
    * 自定义物料面板对话框要用的两份目录：当前可见的基础 Preset，与资源里存在的文件夹路径。
    *
    * @remarks

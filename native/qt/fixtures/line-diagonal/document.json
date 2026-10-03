@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "line"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "line": {
+      "id": "line",
+      "name": "line",
+      "components": {
+        "Composition": {
+          "presetId": "curve",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 40,
+            "y": 30
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 240,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 140,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#f97316",
+            "strokeWidth": 3,
+            "strokeLinecap": "butt",
+            "strokeDasharray": "none",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "line",
+          "start": {
+            "x": 0,
+            "y": 0
+          },
+          "end": {
+            "x": 240,
+            "y": 140
+          }
+        }
+      }
+    }
+  }
+}

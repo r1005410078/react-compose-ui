@@ -42,6 +42,7 @@ export default defineConfig({
         '@compose-ui/library-browser',
         '@compose-ui/pages',
         '@compose-ui/property-panel',
+        '@compose-ui/qml-export',
         '@compose-ui/scene-tree',
         '@compose-ui/script-runtime',
         '@compose-ui/stage',

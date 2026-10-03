@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "count",
+            "bar"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "count": {
+      "id": "count",
+      "name": "count",
+      "components": {
+        "Composition": {
+          "presetId": "text",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Bindings"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 30
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 288,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "text",
+          "props": {
+            "text": "0",
+            "color": "#e2e8f0",
+            "fontFamily": "DejaVu Sans",
+            "fontSize": 24,
+            "fontWeight": 400,
+            "letterSpacing": 0,
+            "textAlign": "left",
+            "verticalAlign": "middle",
+            "textCase": "original",
+            "textDecoration": "none",
+            "lineHeight": 32
+          }
+        },
+        "Bindings": {
+          "version": 1,
+          "rendererProps": {
+            "fields": {
+              "text": {
+                "scope": "page",
+                "exportName": "label"
+              },
+              "color": {
+                "scope": "page",
+                "exportName": "tone"
+              }
+            }
+          }
+        }
+      }
+    },
+    "bar": {
+      "id": "bar",
+      "name": "bar",
+      "components": {
+        "Composition": {
+          "presetId": "curve",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve",
+            "Bindings"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 150
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 288,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 30,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#ef4444",
+            "strokeWidth": 8,
+            "strokeLinecap": "butt",
+            "strokeDasharray": "none",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "line",
+          "start": {
+            "x": 0,
+            "y": 15
+          },
+          "end": {
+            "x": 288,
+            "y": 15
+          }
+        },
+        "Bindings": {
+          "version": 1,
+          "rendererProps": {
+            "fields": {
+              "stroke": {
+                "scope": "page",
+                "exportName": "tone"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

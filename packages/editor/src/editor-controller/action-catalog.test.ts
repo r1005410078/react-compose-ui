@@ -448,6 +448,26 @@ describe('OpenSpec: editor-preferences / 文档级动作进入目录', () => {
     expect(toggleAnimationMode).not.toHaveBeenCalled()
   })
 
+  it('OpenSpec: qml-export / 编辑器导出入口 / 宿主未接时整条省略，接上后列出且可执行', () => {
+    expect(byId(createComposeEditorActions(context()))).not.toContain('document.exportQml')
+    const exportQml = vi.fn()
+    const action = createComposeEditorActions(context({ exportQml }))
+      .find((item) => item.id === 'document.exportQml')
+    expect(action).toMatchObject({ title: '导出为 QML', disabledReason: undefined })
+    action?.run()
+    expect(exportQml).toHaveBeenCalledOnce()
+  })
+
+  it('OpenSpec: qml-export / 编辑器导出入口 / 布局未求解完时列出但不可用', () => {
+    // 导出的是求解结果；此刻按下去什么都不会发生，不说明原因就与敲错字无法区分。
+    const exportQml = vi.fn()
+    const action = createComposeEditorActions(context({ exportQml, qmlExportPending: true }))
+      .find((item) => item.id === 'document.exportQml')
+    expect(action?.disabledReason).toBe('自动布局仍在加载')
+    action?.run()
+    expect(exportQml).not.toHaveBeenCalled()
+  })
+
   it('保存默认绑 Cmd/Ctrl+S，模式切换默认不绑键', () => {
     /*
      * 这一条钉的是「删掉标签条上那颗保存按钮」的前提：键位从硬接改成读键位表之后，默认值
@@ -456,5 +476,6 @@ describe('OpenSpec: editor-preferences / 文档级动作进入目录', () => {
     const shortcuts = createDefaultComposeEditorPreferences().shortcuts
     expect(shortcuts['document.save']).toEqual([{ code: 'KeyS', primary: true }])
     expect(shortcuts['document.toggleAnimationMode']).toEqual([])
+    expect(shortcuts['document.exportQml']).toEqual([])
   })
 })

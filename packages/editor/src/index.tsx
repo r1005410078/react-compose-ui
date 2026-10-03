@@ -13,6 +13,11 @@ export {
   type ComposeEditorSlots,
 } from './compose-editor'
 export {
+  createComposeQmlScriptCompiler,
+  type ComposeEditorQmlInstanceResolver,
+  type ComposeEditorQmlScriptCompiler,
+} from './qml'
+export {
   useComposeEditorController,
   useComposeStageViewport,
   type ComposeEditorCommandRewrite,

@@ -98,6 +98,15 @@ export interface ComposeEditorActionContext {
   readonly selectedIds: readonly string[]
   /** 已就绪的布局快照；为 null 时依赖几何的结构动作不可用。 */
   readonly layoutSnapshot: ComposeLayoutSnapshot | null
+  /**
+   * 与 {@link ComposeEditorActionContext.layoutSnapshot} 成对的**已解算**文档。
+   *
+   * @remarks
+   * `document` 是送去求解的那一份；导线端点与填充跟随是在求解里写回几何的，需要「画出来的
+   * 那一份」的消费者（QML 导出）必须读这里。布局未就绪时为 `null`。可选是为了不破坏自己实现
+   * 控制器接口的宿主。
+   */
+  readonly layoutDocument?: ComposeDocument | null
   /** 是否存在可撤销的事务。 */
   readonly canUndo: boolean
   /** 是否存在可重做的事务。 */
@@ -161,6 +170,10 @@ export interface ComposeEditorActionContext {
   readonly toggleAnimationMode?: () => void
   /** 当前布局里没有时间线面板：动作列出但不可用，并说明原因——动画编辑只有在时间线在时才谈得上。 */
   readonly animationTimelineMissing?: boolean
+  /** 把当前激活场景导出为 `.qml`；宿主未接文档会话时目录整条省略。 */
+  readonly exportQml?: () => void
+  /** 布局还没求解完：导出要的是求解结果，此刻列出但不可用。 */
+  readonly qmlExportPending?: boolean
   /** 工作区动作；未接入工作区时（纯插槽宿主）目录整条省略。 */
   readonly workspace?: ComposeEditorWorkspaceActions
   /** 打开“创建组件”命名流程；未配置 Component Store 时目录整条省略。 */
@@ -461,6 +474,10 @@ export function createComposeEditorActionHandlers(
       (context.canSaveDocument ?? false) ? undefined : 'noDocument',
       () => { context.saveDocument?.() },
     ),
+    'document.exportQml': handler(
+      context.qmlExportPending ? 'layoutPending' : undefined,
+      () => { context.exportQml?.() },
+    ),
     'document.toggleAnimationMode': handler(
       context.animationTimelineMissing ? 'noTimeline' : undefined,
       () => { context.toggleAnimationMode?.() },
@@ -509,6 +526,7 @@ const CATALOG_ORDER: readonly ComposeEditorActionId[] = [
   'history.redo',
   'editor.settings',
   'document.save',
+  'document.exportQml',
   'document.toggleAnimationMode',
   'workspace.next',
   'workspace.previous',
@@ -625,6 +643,7 @@ export function createComposeEditorCatalog(
     .filter((id) => (
       (id !== 'editor.settings' || context.openSettings !== undefined)
       && (id !== 'document.save' || context.saveDocument !== undefined)
+      && (id !== 'document.exportQml' || context.exportQml !== undefined)
       && (id !== 'document.toggleAnimationMode' || context.toggleAnimationMode !== undefined)
       && (id !== 'edit.createComponent' || context.createComponent !== undefined)
       && (!WORKSPACE_ACTION_IDS.has(id) || context.workspace !== undefined)

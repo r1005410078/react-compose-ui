@@ -32,3 +32,8 @@ apps/storybook/storybook-static
 *.sln
 *.sw?
 .playwright-cli/
+
+# Qt 工具链与 CMake 构建产物（native/qt）
+native/qt/.qt/
+native/qt/build/
+native/qt/out/

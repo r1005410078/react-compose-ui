@@ -1,0 +1,488 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "row",
+            "tilted"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "row": {
+      "id": "row",
+      "name": "row",
+      "components": {
+        "Composition": {
+          "presetId": "container",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Clip",
+            "Appearance",
+            "Layout"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 16
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 288,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 80,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        "Clip": {
+          "enabled": true
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#1e293b"
+          },
+          "borderColor": "#f59e0b",
+          "borderWidth": 3,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Layout": {
+          "type": "flex",
+          "flexDirection": "row",
+          "flexWrap": "nowrap",
+          "alignContent": "flex-start",
+          "justifyContent": "flex-start",
+          "alignItems": "stretch",
+          "padding": {
+            "top": 8,
+            "right": 8,
+            "bottom": 8,
+            "left": 8
+          },
+          "rowGap": 0,
+          "columnGap": 12
+        }
+      }
+    },
+    "a": {
+      "id": "a",
+      "name": "a",
+      "components": {
+        "Composition": {
+          "presetId": "container",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Clip",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "flow",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 60,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": []
+        },
+        "Clip": {
+          "enabled": true,
+          "horizontal": "clip",
+          "vertical": "clip"
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#ef4444"
+          },
+          "borderColor": "#3b4250",
+          "borderWidth": 0,
+          "borderRadius": 6,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "b": {
+      "id": "b",
+      "name": "b",
+      "components": {
+        "Composition": {
+          "presetId": "container",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Clip",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "flow",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 80,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": []
+        },
+        "Clip": {
+          "enabled": true,
+          "horizontal": "clip",
+          "vertical": "clip"
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#22c55e"
+          },
+          "borderColor": "#3b4250",
+          "borderWidth": 0,
+          "borderRadius": 6,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "c": {
+      "id": "c",
+      "name": "c",
+      "components": {
+        "Composition": {
+          "presetId": "container",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Clip",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "flow",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 100,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": []
+        },
+        "Clip": {
+          "enabled": true,
+          "horizontal": "clip",
+          "vertical": "clip"
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#3b82f6"
+          },
+          "borderColor": "#3b4250",
+          "borderWidth": 0,
+          "borderRadius": 6,
+          "opacity": 0.5,
+          "shadow": null
+        }
+      }
+    },
+    "tilted": {
+      "id": "tilted",
+      "name": "tilted",
+      "components": {
+        "Composition": {
+          "presetId": "container",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Clip",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 20,
+          "pivot": {
+            "x": 0,
+            "y": 0.5
+          }
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 120,
+            "y": 120
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 120,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": []
+        },
+        "Clip": {
+          "enabled": true,
+          "horizontal": "clip",
+          "vertical": "clip"
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#14b8a6"
+          },
+          "borderColor": "#3b4250",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    }
+  }
+}

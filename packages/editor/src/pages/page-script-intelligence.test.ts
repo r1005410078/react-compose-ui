@@ -1,8 +1,10 @@
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import {
+  COMPOSE_PAGE_SETUP_PORTABLE_SCRIPT_INTELLIGENCE,
   COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE,
   findComposePageSetupParameterOffset,
+  findNonPortableGlobals,
 } from './page-script-intelligence'
 
 function applyInsertions(source: string) {
@@ -150,5 +152,33 @@ describe('OpenSpec: editor-workspace-layout / 页面 Setup JavaScript 智能编�
     expect(setupType).toContain('num: ComposeState<number>')
     expect(setupType).toContain('onAdd: () => void')
     service.dispose()
+  })
+})
+
+describe('OpenSpec: qml-page-script / 编辑器可移植模式', () => {
+  const source = [
+    'export function setup(ctx) {',
+    '  const title = ctx.state(document.title)',
+    '  const config = { window: 1 }',
+    '  const label = "use window here" // document in a comment',
+    '  const owner = config.window',
+    '  setTimeout(() => {}, 10)',
+    '  return { title, label, owner, copy: structuredClone(config) }',
+    '}',
+  ].join('\n')
+
+  it('可移植模式把对不可移植全局的自由引用标为错误', () => {
+    const diagnostics = COMPOSE_PAGE_SETUP_PORTABLE_SCRIPT_INTELLIGENCE.getSourceDiagnostics!(source)
+    expect(diagnostics.map((item) => [source.slice(item.offset, item.offset + item.length), item.severity]))
+      .toEqual([['document', 'error'], ['structuredClone', 'error']])
+  })
+
+  it('对象键、属性访问、字符串、注释与本地声明不算；补齐过的全局（setTimeout）不算', () => {
+    expect(findNonPortableGlobals('const window = 1\nwindow.x = 2').map((item) => item.name)).toEqual([])
+    expect(findNonPortableGlobals(source).map((item) => item.name)).toEqual(['document', 'structuredClone'])
+  })
+
+  it('默认模式与现状一致：不标不可移植的全局', () => {
+    expect(COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE.getSourceDiagnostics!(source)).toEqual([])
   })
 })

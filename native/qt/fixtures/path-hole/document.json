@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "ring"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "ring": {
+      "id": "ring",
+      "name": "ring",
+      "components": {
+        "Composition": {
+          "presetId": "curve",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer",
+            "Curve"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 100,
+            "y": 40
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 120,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 120,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#f43f5e"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "curve",
+          "props": {
+            "stroke": "#fda4af",
+            "strokeWidth": 2,
+            "strokeLinecap": "round",
+            "strokeDasharray": "none",
+            "markerStart": "none",
+            "markerEnd": "none"
+          }
+        },
+        "Curve": {
+          "kind": "path",
+          "fillRule": "evenodd",
+          "subpaths": [
+            {
+              "start": {
+                "x": 0,
+                "y": 0
+              },
+              "closed": true,
+              "segments": [
+                {
+                  "c1": {
+                    "x": 40,
+                    "y": 0
+                  },
+                  "c2": {
+                    "x": 80,
+                    "y": 0
+                  },
+                  "to": {
+                    "x": 120,
+                    "y": 0
+                  }
+                },
+                {
+                  "c1": {
+                    "x": 120,
+                    "y": 40
+                  },
+                  "c2": {
+                    "x": 120,
+                    "y": 80
+                  },
+                  "to": {
+                    "x": 120,
+                    "y": 120
+                  }
+                },
+                {
+                  "c1": {
+                    "x": 80,
+                    "y": 120
+                  },
+                  "c2": {
+                    "x": 40,
+                    "y": 120
+                  },
+                  "to": {
+                    "x": 0,
+                    "y": 120
+                  }
+                },
+                {
+                  "c1": {
+                    "x": 0,
+                    "y": 80
+                  },
+                  "c2": {
+                    "x": 0,
+                    "y": 40
+                  },
+                  "to": {
+                    "x": 0,
+                    "y": 0
+                  }
+                }
+              ]
+            },
+            {
+              "start": {
+                "x": 30,
+                "y": 30
+              },
+              "closed": true,
+              "segments": [
+                {
+                  "c1": {
+                    "x": 50,
+                    "y": 30
+                  },
+                  "c2": {
+                    "x": 70,
+                    "y": 30
+                  },
+                  "to": {
+                    "x": 90,
+                    "y": 30
+                  }
+                },
+                {
+                  "c1": {
+                    "x": 90,
+                    "y": 50
+                  },
+                  "c2": {
+                    "x": 90,
+                    "y": 70
+                  },
+                  "to": {
+                    "x": 90,
+                    "y": 90
+                  }
+                },
+                {
+                  "c1": {
+                    "x": 70,
+                    "y": 90
+                  },
+                  "c2": {
+                    "x": 50,
+                    "y": 90
+                  },
+                  "to": {
+                    "x": 30,
+                    "y": 90
+                  }
+                },
+                {
+                  "c1": {
+                    "x": 30,
+                    "y": 70
+                  },
+                  "c2": {
+                    "x": 30,
+                    "y": 50
+                  },
+                  "to": {
+                    "x": 30,
+                    "y": 30
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

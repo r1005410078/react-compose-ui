@@ -13,11 +13,12 @@ import {
   ComposeEditor,
   useComposeEditorController,
 } from '@compose-ui/editor'
-import type { ComposeEditorTransactionEvent, ComposeToolbarItem } from '@compose-ui/editor'
+import type { ComposeEditorQmlInstanceResolver, ComposeEditorTransactionEvent, ComposeToolbarItem } from '@compose-ui/editor'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import { createComposeComponentStore } from '@compose-ui/component-library'
 import {
   createComposeBasicMaterials,
+  solveComposeComponentInstances,
 } from '@compose-ui/materials'
 import {
   ComposeOperationLogPanel,
@@ -31,7 +32,8 @@ import type {
   ComposeEditorActiveComponentSession,
   ComposeEditorActivePage,
 } from '@compose-ui/editor'
-import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
+import { createComposeQmlScriptCompiler, useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
+import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url'
 import {
   createComposeNavigationSession,
   createComposePageLoader,
@@ -106,6 +108,9 @@ const actionButtonRenderer = {
  * 这正是宿主该做的事。此前这里自己注册了一个 `echarts-bar`，而示例应用不是产品能力。
  */
 const chartMaterials = createComposeChartMaterials()
+// 「导出为 QML」降级页面 setup 用的编译器；wasm 作为独立资源，只在第一次导出时加载。
+const QML_SCRIPT_COMPILER = createComposeQmlScriptCompiler({ wasmURL: esbuildWasmUrl })
+
 const basicMaterials = createComposeBasicMaterials({
   extensions: {
     renderers: [...chartMaterials.renderers, actionButtonRenderer],
@@ -413,6 +418,11 @@ export function StageDemoWorkspace() {
     // 每次打开预览都把会话对齐到正在编辑的页面：从首页起步会让用户看到的不是自己刚改的那页。
     if (previewOpen) navigationSession.reset(activePage?.pageKey ?? null)
   }, [activePage?.pageKey, navigationSession, previewOpen])
+  // 「导出为 QML」逐个求解组件实例：与画布同一个 Registry 与资源解析器，量出来的盒才一致。
+  const qmlInstances = useCallback<ComposeEditorQmlInstanceResolver>(
+    (input) => solveComposeComponentInstances({ ...input, registry, assetResolver }),
+    [assetResolver],
+  )
 
   /*
    * 浏览器返回键退出整屏。进入时 push 一条记录，退出时按来源分流：返回键触发的那次
@@ -459,6 +469,8 @@ export function StageDemoWorkspace() {
         controller={controller}
         components={componentsConfig}
         pages={pagesConfig}
+        qmlInstances={qmlInstances}
+        qmlScriptCompiler={QML_SCRIPT_COMPILER}
         onScenePreview={(frameId) => {
           setPreviewFrameId(frameId)
           setPreviewOpen(true)

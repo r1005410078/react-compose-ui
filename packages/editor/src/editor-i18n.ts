@@ -15,6 +15,7 @@ const messages = {
     settings: '设置',
     appMenu: '应用菜单',
     backToLibrary: '返回页面库',
+    exportQml: '导出为 QML',
     commandPanel: '命令面板',
     user: '用户',
     close: '关闭设置',
@@ -282,6 +283,15 @@ const messages = {
         + '用免费的 ODA File Converter（Windows / macOS / Linux，支持批量）把 .dwg 转成 .dxf，'
         + '再右键选择「导入为页面」。',
     },
+    qml: {
+      exporting: '正在导出 QML…',
+      exported: '已导出 QML',
+      exportPartial: '已导出 QML，部分内容做了降级',
+      exportFailed: 'QML 导出失败',
+      fontsNeeded: '目标机需要安装字体',
+      scriptSkipped: '页面脚本没有随导出：宿主未提供脚本编译器。',
+      scriptCompileFailed: '页面脚本编译失败',
+    },
     svg: {
       importAsComponent: '导入为组件',
       importPartial: '部分内容未能完整导入',
@@ -366,6 +376,7 @@ const messages = {
     settings: 'Settings',
     appMenu: 'Application menu',
     backToLibrary: 'Back to page library',
+    exportQml: 'Export as QML',
     commandPanel: 'Command panel',
     user: 'User',
     close: 'Close settings',
@@ -627,6 +638,15 @@ const messages = {
         + 'Convert the file to .dxf with the free ODA File Converter '
         + '(Windows / macOS / Linux, batch supported), then right-click and choose "Import as page".',
     },
+    qml: {
+      exporting: 'Exporting as QML…',
+      exported: 'Exported as QML',
+      exportPartial: 'Exported as QML; some content was simplified',
+      exportFailed: 'Failed to export QML',
+      fontsNeeded: 'Fonts required on the target machine',
+      scriptSkipped: 'The page script was not exported: the host did not provide a script compiler.',
+      scriptCompileFailed: 'Failed to compile the page script',
+    },
     svg: {
       importAsComponent: 'Import as component',
       importPartial: 'Some content could not be fully imported',
@@ -716,6 +736,7 @@ const actionLabels: Record<
   'zh-CN': {
     'editor.settings': '打开设置',
     'document.save': '保存文档',
+    'document.exportQml': '导出为 QML',
     'document.toggleAnimationMode': '动画编辑',
     'stage.temporaryPan': '临时平移',
     'stage.selectTool': '选择工具',
@@ -754,6 +775,7 @@ const actionLabels: Record<
   'en-US': {
     'editor.settings': 'Open settings',
     'document.save': 'Save document',
+    'document.exportQml': 'Export as QML',
     'document.toggleAnimationMode': 'Animate',
     'stage.temporaryPan': 'Temporary pan',
     'stage.selectTool': 'Select tool',
@@ -927,6 +949,7 @@ export function getEditorMessages(
     settings: format('settings', current.settings),
     appMenu: format('appMenu', current.appMenu),
     backToLibrary: format('backToLibrary', current.backToLibrary),
+    exportQml: format('exportQml', current.exportQml),
     commandPanel: format('commandPanel', current.commandPanel),
     user: format('user', current.user),
     close: format('close', current.close),
@@ -1138,6 +1161,9 @@ export function getEditorMessages(
     svg: Object.fromEntries(
       Object.entries(current.svg).map(([key, fallback]) => [key, format(`svg.${key}`, fallback)]),
     ) as Record<keyof typeof current.svg, string>,
+    qml: Object.fromEntries(
+      Object.entries(current.qml).map(([key, fallback]) => [key, format(`qml.${key}`, fallback)]),
+    ) as Record<keyof typeof current.qml, string>,
     pages: {
       createPage: format('pages.createPage', current.pages.createPage),
       createPageTitle: format('pages.createPageTitle', current.pages.createPageTitle),

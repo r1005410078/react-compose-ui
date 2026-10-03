@@ -1375,6 +1375,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Loader 包，只能依赖 `core` 与 `assets`；不得依赖 Registry、Stage、Preview、Editor 或 UI 包。
   `ctx.navigate` / `ctx.navigateBack` 是宿主注入端口的**转发**，本包不实现导航；未注入时调用
   只产生 diagnostic 而不抛出，setup 同步执行期间的调用同样被忽略。
+  本包另出一份**可移植产物**（包根常量 `COMPOSE_PORTABLE_RUNTIME_SOURCE`，供 Qt 的 V4 引擎；构建期由
+  vite 插件打出，Vitest 用同一个插件——跨包只许从包根导入，所以不开文件子路径）：同一份
+  `scope` + `reactivity` 源码降级到 `COMPOSE_PORTABLE_SCRIPT_TARGET`（ES2016——V4 不认 `async`/`await`、
+  对象展开与类字段），`queueMicrotask` 与 `flatMap` 由构建期注入补齐。Qt 侧 MUST NOT 另写 state /
+  computed / effect。「降到哪一版」「补齐哪些全局」（`COMPOSE_PORTABLE_GLOBALS`）与「Qt 里没有哪些
+  浏览器全局」（`COMPOSE_PORTABLE_UNAVAILABLE_GLOBALS`）只在这里定义一处，构建期、导出期与编辑器的
+  可移植模式都读它。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`、`assets`、`pages`、
   `script-runtime` 与既有领域组件，通过公开协议组合页面脚本工作流。
 - `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
@@ -1531,6 +1538,40 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   少一层修饰是可见的降级。
   **导入之后打开组件文档而不是顺手放一个实例**：下一步是改这个符号（改色、挂端口、打动画），
   而那要在组件文档里做；把它摆到图上是另一件事，组件库的拖放入口已经做了。
+- `@compose-ui/qml-export` 是无 React、无 DOM 的 QML 导出包，**只依赖 `core`**，不求解布局、不读写
+  文件，产物是 QML 文本、诊断与字族清单。**导出的是求解之后的结果**：输入是布局 Runtime 交出的
+  「已解算文档 + 快照」，每个对象按快照绝对定位，MUST NOT 把 Auto Layout 翻译成 Qt 的布局类型——
+  两套布局算法在 gap、Hug 与换行上的差异会变成无从查起的像素偏差。**判据是照搬预览而不是照搬
+  命中**：曲线按预览同一个 `viewBox` → 盒仿射映射（非等比盒里是椭圆弧），**不走**
+  `projectComposeCurveToBox`（那是命中与捕捉的折线近似）；边框是压在子级之上的覆盖层；线帽、斜接、
+  填充规则显式写出 SVG 的缺省值（Qt 的缺省值三样都不同）；Qt 的虚线以线宽为单位。文字的半行距
+  **按垂直对齐分三种补偿**（顶下移 `floor(L/2)`、居中不补、底上移 `ceil(L/2)`，L 照搬 Blink 的
+  取整）——Qt 的 `FixedHeight` 把字贴在行顶且最后一行不带行距，一律按顶对齐补的症状是居中与底对齐
+  的字低几个像素，且只在某些字号上出现。验收的预览截图以 `--font-render-hinting=none` 启动
+  Chromium：Linux 上的 Chromium 缺省把字形落在整像素上，一行累积出两三个像素，而 Qt 在两个平台上都
+  按亚像素排字、与 macOS 的 Chromium 一致——偏的是参考图那一侧，不是导出。
+  **组件实例内联展开，准备管线只有一份**：`materials` 的 `prepareComposeComponentInstance`
+  （快照 → 覆盖 → 采样 → 根锚原点 → 按盒对齐根尺寸）同时被实例渲染器与导出侧调用，
+  `solveComposeComponentInstances` 在它之上逐实例跑嵌套 Yoga（与预览同一个测量端口工厂与 Registry），
+  结果按复合地址（`外层/内层`）交给导出器。判据是**预览与导出不得各有一份准备逻辑**——各写一份的
+  症状是「预览里对、导出的不对」而两边都不报错。`qml-export` 只依赖 `core`、`editor` 不依赖
+  `materials`，因此编辑器经宿主注入的 `qmlInstances` 拿到求解函数；缺席时实例导出为占位并报
+  `instance.unresolved`。实例内部对象的 QML `id` 带实例前缀（`e_外层__内层`）——同一组件放八次，
+  内部对象各有八份。
+  验收夹具的预览截图与导出 QML MUST 来自**同一个**布局 Runtime（示例应用 `?qt-reference` 把它同时
+  交给 `ComposePreview` 与导出器），各自求解会让两边的 Hug 文字量出不同的盒。
+  **页面脚本：同一份源码、同一份响应式实现。**带 setup 的导出产物是一个自包含目录（打成 zip）：
+  `Scene.qml`、导出期降级的 `page.setup.mjs` 与随产物走的 `ComposeRuntime/`（`ComposePage.qml`、
+  `globals.mjs`、`qmldir` 住本包 `src/runtime/`，`script-runtime.mjs` 取自可移植产物）——不部署到
+  import path，也就没有需要校验的副本。V4 的全局对象只读，`setTimeout`/`fetch`/`WebSocket` 挂不上去：
+  降级编译时用 esbuild 的 `inject` 把脚本里的自由引用改写成对 `globals.mjs` 的导入，作者源码不变；
+  `globals.mjs` 的导出与 `COMPOSE_PORTABLE_GLOBALS` 必须一致（编辑器用例断言）。被绑定的 prop 写成
+  `page.x_名 === undefined ? <本对象静态值> : page.<换算>(page.x_名)`，**回退写在每个绑定里而不是属性
+  初值**——同一导出被两个静态值不同的对象绑定时，初值只能取其一。只动态化不牵动几何的文字与颜色；
+  组件实例内部的绑定静态（嵌套文档没有脚本作用域）。编译器（esbuild-wasm）由宿主经
+  `qmlScriptCompiler` 注入：编辑器是库构建，wasm 打进来会被内联进首屏。脚本夹具的参考图是写进
+  `expected.json` 的文档（预览不跑脚本），Qt 跑真脚本；它们的文字盒一律固定尺寸，两份文档各自求解
+  也给出同一组盒。
 - `@compose-ui/interaction-kernel` 是**零运行时依赖**的交互内核包：插件契约、按优先级排序的
   注册表、同时至多一个会话的仲裁器。连 `core` 都不依赖——内核逻辑不认识文档，只有类型签名
   通过 `InteractionKernelProfile` 认识。「内核不认识文档」这条边界由**包依赖**承载而不是命名
@@ -1681,6 +1722,14 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   它**目前只有一个消费者**。`components` 那条准入规则「已经被至少两个第一方包复用」挡的是
   **提前抽象**，而本 Pattern 抽取时确有两个消费者；消费者减少不追溯地让当初的抽取变成错误，
   也不是把它搬回 `stage` 的理由。
+- `native/qt/` 是 Qt 侧的工具链与验收目录（CMake 项目、Qt 安装脚本、`qml-grab` 截图工具与对照
+  夹具），**不是** Bun workspace 成员、不进 Turbo，任何 `@compose-ui/*` 包都不得依赖它；它与 JS 侧
+  **只以文件交换**（夹具文档、`.qml` 与 PNG）。未安装 Qt 的机器上 `lint`/`typecheck`/`test`/`build`
+  必须照常通过。Qt 版本只写在 `native/qt/qt-version.json` 一处，本机与 CI 走同一个安装脚本。
+  像素对比是**预览与 Qt 两个来源**之间的比较，容差只在 `scripts/qt/compare-render.ts` 定义一处；
+  预览截图由 `e2e/qt-reference.spec.ts` 经示例应用的 `?qt-reference` 现截，示例应用因此不认识任何
+  夹具——文档由用例在页面加载前注入，字体由用例经路由提供（两边加载同一个字体文件，否则第一张
+  文字截图的差异与转换毫无关系）。
 - `editor` 与 `preview` 必须通过公开协议共享文档状态，禁止彼此引用内部源码。
 - 跨包导入必须使用 `@compose-ui/*` 公开入口，禁止使用 `../../packages/.../src`。
 - React、ReactDOM 和 JSX runtime 必须保持为 peer dependency/外置依赖，避免宿主加载多份 React。
@@ -1692,7 +1741,7 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
 第一方代码按职责分为以下五层；依赖只能从较高层指向较低层，现有“架构边界”中的包级约束
 比本节的通用分类优先：
 
-1. **Headless Domain / Protocol**：`core`、`assets`、`commands`、`interaction-kernel`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`，不得依赖 React 或 DOM。
+1. **Headless Domain / Protocol**：`core`、`assets`、`commands`、`interaction-kernel`、`pages`、`script-runtime`、`layout-engine`、`stage-engine`、`animation`、`qml-export`，不得依赖 React 或 DOM。
 2. **Shared UI Foundation**：`ui-context`、`component-registry`、`components`、`canvas-kit`，
    提供跨包协议、Context、无业务语义的交互组件与无限画布底座。
 3. **Domain Components / Widgets**：`stage`、`scene-tree`、`asset-browser`、`history`、

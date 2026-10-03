@@ -36,10 +36,11 @@ function BrandMark() {
  * **三条都有**：只给「返回页面库」上图标会让它的文字比下面两条多缩进一个图标宽，而屏幕上
  * 没有任何东西解释那个台阶。一支向左的箭头说的是「回去」，另两条沿用各自领域的通行记号。
  */
-function BrandMenuIcon({ kind }: { kind: 'back' | 'settings' | 'command' }) {
+function BrandMenuIcon({ kind }: { kind: 'back' | 'export' | 'settings' | 'command' }) {
   return (
     <svg aria-hidden="true" className="compose-editor__brand-menu-icon" viewBox="0 0 24 24">
       {kind === 'back' ? <path d="m12 19-7-7 7-7M19 12H5" /> : null}
+      {kind === 'export' ? <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></> : null}
       {kind === 'settings'
         ? <><path d="M20 7h-9M14 17H5" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></>
         : null}
@@ -84,9 +85,11 @@ export function EditorBrandMenu() {
   const i18n = useComposeI18nContext()
   const messages = getEditorMessages(i18n?.locale ?? 'zh-CN', i18n?.formatMessage)
   const {
+    exportQml,
     libraryOpen,
     openCommandPanel,
     openLibrary,
+    qmlExportPending,
     setSettingsButton,
     settingsOpen,
     settingsPanelId,
@@ -203,6 +206,21 @@ export function EditorBrandMenu() {
                 {messages.backToLibrary}
               </button>
               {/* 它是一个去处，下面两条是应用设置——分隔线说的就是这件事。 */}
+              <div className="compose-editor__brand-menu-sep" role="separator" />
+            </>
+          )}
+          {exportQml === undefined ? null : (
+            <>
+              {/* 对当前文档做的事——与上面的去处、下面的应用设置是三类，各自隔开。 */}
+              <button
+                aria-disabled={qmlExportPending === true ? 'true' : undefined}
+                role="menuitem"
+                type="button"
+                onClick={() => { if (qmlExportPending !== true) choose(exportQml) }}
+              >
+                <BrandMenuIcon kind="export" />
+                {messages.exportQml}
+              </button>
               <div className="compose-editor__brand-menu-sep" role="separator" />
             </>
           )}

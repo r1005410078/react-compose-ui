@@ -1,0 +1,2 @@
+module ComposeRuntime
+ComposePage 1.0 ComposePage.qml

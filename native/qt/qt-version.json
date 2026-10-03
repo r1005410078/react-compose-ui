@@ -1,0 +1,11 @@
+{
+  "version": "6.8.3",
+  "aqtinstall": "3.3.0",
+  "arch": {
+    "mac": "clang_64",
+    "linux": "linux_gcc_64"
+  },
+  "modules": [
+    "qtwebsockets"
+  ]
+}

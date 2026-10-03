@@ -5,6 +5,7 @@ import '@compose-ui/chart-materials/styles.css'
 import '@compose-ui/operation-log/styles.css'
 import '@compose-ui/property-panel/styles.css'
 import './App.css'
+import { QtReferencePreview } from './QtReferencePreview'
 import { StageDemoWorkspace } from './StageDemo'
 
 const hostMessageOverrides = {
@@ -14,6 +15,15 @@ const hostMessageOverrides = {
 function App() {
   const search = new URLSearchParams(window.location.search)
   const demonstrateMessageOverrides = search.has('message-overrides')
+
+  // Qt 像素对比的预览一侧：不挂编辑器，只渲染注入的夹具文档。
+  if (search.has('qt-reference')) {
+    return (
+      <ComposeUIProvider>
+        <QtReferencePreview />
+      </ComposeUIProvider>
+    )
+  }
 
   return (
     <ComposeUIProvider
