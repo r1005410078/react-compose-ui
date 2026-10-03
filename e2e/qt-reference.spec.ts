@@ -26,6 +26,13 @@ const fixtureNames = readdirSync(FIXTURES_DIR, { withFileTypes: true })
   .map((entry) => entry.name)
   .sort()
 
+/*
+ * Linux 上的无头 Chromium 缺省把字形落在整像素上（字宽取整），一行文字累积出两三个像素；Qt 在
+ * Linux 与 macOS 上都按亚像素排字，与 macOS 的 Chromium 一致。偏的是参考图这一侧，因此在这里关掉
+ * hinting，而不是去改导出。该开关只在 Linux 无头模式生效，macOS 上无副作用。
+ */
+test.use({ launchOptions: { args: ['--font-render-hinting=none'] } })
+
 test.describe('Qt 对照夹具的预览截图', () => {
   for (const name of fixtureNames) {
     test(`夹具 ${name} 在预览中渲染并写出参考截图`, async ({ page }) => {
