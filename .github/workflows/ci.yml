@@ -86,19 +86,14 @@ jobs:
           QT_QPA_PLATFORM: xcb
           QSG_RHI_BACKEND: opengl
           LIBGL_ALWAYS_SOFTWARE: '1'
-          # 文字边缘每次差几个色阶（实测最大 4/255，图形逐像素一致）；llvmpipe 单线程无效，
-          # 怀疑是多线程渲染循环里字形缓存的上传次序，改用单线程渲染循环。
-          QSG_RENDER_LOOP: basic
         run: xvfb-run -a -s "-screen 0 1280x1024x24" native/qt/scripts/grab-fixtures.sh
-      # 截图必须是确定的：同一份 QML 连截十次画面逐像素一致，否则容差兜的是随机噪声而不是两套光栅化的差异。
+      # 截图必须足够确定：同一份 QML 连截十次，差异必须远低于像素对比的逐像素阈值，否则容差兜的是
+      # 随机噪声而不是两套光栅化的差异。判据与它的实测来源写在 check-determinism.ts。
       - name: Grab determinism
         env:
           QT_QPA_PLATFORM: xcb
           QSG_RHI_BACKEND: opengl
           LIBGL_ALWAYS_SOFTWARE: '1'
-          # 文字边缘每次差几个色阶（实测最大 4/255，图形逐像素一致）；llvmpipe 单线程无效，
-          # 怀疑是多线程渲染循环里字形缓存的上传次序，改用单线程渲染循环。
-          QSG_RENDER_LOOP: basic
         run: |
           fonts=(); for f in native/qt/fixtures/fonts/*.ttf; do fonts+=(--font "$f"); done
           mkdir -p native/qt/out/determinism
