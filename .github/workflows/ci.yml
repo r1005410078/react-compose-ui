@@ -27,8 +27,9 @@ jobs:
         run: bun run typecheck
       - name: Unit tests
         run: bun run test
+      # 只构建示例应用及其依赖：验收只需要它，全量构建会被不相干的包（如 Storybook）拖垮。
       - name: Build
-        run: bun run build
+        run: bunx turbo run build --filter=@compose-ui/example...
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
       - name: End-to-end test
@@ -71,8 +72,9 @@ jobs:
           key: qt-${{ runner.os }}-${{ hashFiles('native/qt/qt-version.json', 'native/qt/scripts/install-qt.sh') }}
       - name: Install Qt
         run: native/qt/scripts/install-qt.sh
+      # 只构建示例应用及其依赖：验收只需要它，全量构建会被不相干的包（如 Storybook）拖垮。
       - name: Build
-        run: bun run build
+        run: bunx turbo run build --filter=@compose-ui/example...
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
       - name: Preview reference screenshots and QML export
