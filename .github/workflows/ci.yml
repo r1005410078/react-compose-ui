@@ -40,18 +40,13 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
-      - name: Upload Qt reference screenshots
-        uses: actions/upload-artifact@v5
-        with:
-          name: qt-reference
-          path: native/qt/out/reference/
-          retention-days: 7
 
-  # Qt 验收链路：预览一侧的参考截图由 verify 的端到端用例写出，这里截 Qt 一侧并比较。
+  # Qt 验收链路：预览一侧截参考图并导出 QML，Qt 一侧截导出结果，再比较。
+  # 不依赖 verify：Qt 验收与单元测试互不相关，挂在它后面的话，任何一条不相干的单测失败都会让
+  # 这条链路永远跑不到（曾经就是这样）。代价是这里自己再构建一次。
   # 渲染环境固定为 xvfb + xcb + Mesa llvmpipe：软件 GL 是确定性的，而且与真机走的是同一条
   # 场景图光栅化路径（QPainter 的 software 后端不是）。
   qt:
-    needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -76,11 +71,12 @@ jobs:
           key: qt-${{ runner.os }}-${{ hashFiles('native/qt/qt-version.json', 'native/qt/scripts/install-qt.sh') }}
       - name: Install Qt
         run: native/qt/scripts/install-qt.sh
-      - name: Download Qt reference screenshots
-        uses: actions/download-artifact@v5
-        with:
-          name: qt-reference
-          path: native/qt/out/reference/
+      - name: Build
+        run: bun run build
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Preview reference screenshots and QML export
+        run: bunx playwright test e2e/qt-reference.spec.ts
       - name: Grab Qt screenshots
         env:
           QT_QPA_PLATFORM: xcb

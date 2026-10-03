@@ -60,8 +60,9 @@
 ## 4. CI
 
 - [ ] 4.1 `ci.yml` 新增 `qt` job：缓存 Qt、构建 `qml-grab`、下载 Preview 截图 artifact、对比
-      - 已写入 workflow（`verify` 上传 `qt-reference` artifact，`qt` job 在 xvfb 下截图并比较）；
-        待首次在 GitHub Actions 上实跑通过后勾选。
+      - Red：首次实跑（PR #1）`qt` job 被跳过——它 `needs: verify`，而 `verify` 挂在 `main` 上早已
+        存在的 `asset-browser` Monaco 用例超时（`main` 最近 5 次 CI 都挂在同一处）。
+      - 改为独立 job：自己构建、自己跑 `qt-reference` 截参考图与导出 QML；待实跑通过后勾选。
 - [ ] 4.2 失败时上传两边截图与差异图
       - 已写入 workflow（`qt-comparison` artifact）；随 4.1 一起验证。
 
