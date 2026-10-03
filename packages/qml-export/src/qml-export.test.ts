@@ -9,6 +9,7 @@ import {
 } from '@compose-ui/core'
 import { describe, expect, it } from 'vitest'
 import { ComposeQmlExportError, exportComposeSceneToQml } from './qml-export'
+import type { ComposeQmlInstanceContent } from './qml-export-types'
 
 const FRAME_ID = 'scene'
 
@@ -371,7 +372,9 @@ describe('OpenSpec: qml-export / 不支持内容的降级', () => {
     }))
     expect(block(block(qml, 'objectName: "chart"'), 'border.width: 1')).toContain('width: 120')
     expect(diagnostics.filter((item) => item.code === 'renderer.placeholder').map((item) => item.entityId))
-      .toEqual(['chart', 'instance'])
+      .toEqual(['chart'])
+    expect(diagnostics.filter((item) => item.code === 'instance.unresolved').map((item) => item.entityId))
+      .toEqual(['instance'])
     expect(qml).toContain('objectName: "plain"')
   })
 
@@ -419,5 +422,110 @@ describe('OpenSpec: qml-export / 导出入口拒绝非法输入', () => {
       snapshot: { ...input.snapshot, boxes: {} },
       frameId: FRAME_ID,
     })).toThrow(/布局快照/)
+  })
+})
+
+/** 一份单根组件文档的求解结果：根 80×40，里面一块红色的 `rect`，可选再嵌一个实例 `inner`。 */
+function instanceContent(
+  overrides: Partial<ComposeQmlInstanceContent> = {},
+  withInner = false,
+): ComposeQmlInstanceContent {
+  const rect = entity('rect', { Appearance: { backgroundPaint: { kind: 'solid', color: '#ef4444' } } })
+  const inner = entity('inner', { Renderer: { type: 'component-instance', props: {} } }, 'component-instance')
+  const childIds = withInner ? ['rect', 'inner'] : ['rect']
+  const root = createComposeFrameEntity({ id: 'root', childIds, size: { width: 80, height: 40 } })
+  return {
+    document: {
+      schemaVersion: 7,
+      canvas: createDefaultCanvasSettings(),
+      rootIds: ['root'],
+      entities: Object.fromEntries([root, rect, inner].map((item) => [item.id, item])),
+    },
+    snapshot: {
+      revision: 1,
+      diagnostics: [],
+      boxes: { root: box(0, 0, 80, 40), rect: box(10, 5, 20, 10), inner: box(40, 0, 40, 40) },
+    },
+    contentFit: 'layout',
+    rootSize: { width: 80, height: 40 },
+    contentScale: { x: 1, y: 1 },
+    flipScale: { x: 1, y: 1 },
+    ...overrides,
+  }
+}
+
+function instanceEntity(id: string) {
+  return entity(id, { Renderer: { type: 'component-instance', props: {} } }, 'component-instance')
+}
+
+describe('OpenSpec: qml-export / 组件实例按嵌套求解结果内联展开', () => {
+  it('同一组件的两个实例：内部对象 id 互不相同，objectName 是复合地址', () => {
+    const input = scene([instanceEntity('a'), instanceEntity('b')], {
+      a: box(0, 0, 80, 40),
+      b: box(100, 0, 80, 40),
+    })
+    const { qml, diagnostics } = exportComposeSceneToQml({
+      ...input,
+      frameId: FRAME_ID,
+      instances: new Map([['a', instanceContent()], ['b', instanceContent()]]),
+    })
+    expect(qml).toContain('id: e_a__rect')
+    expect(qml).toContain('id: e_b__rect')
+    expect(block(qml, 'objectName: "a/rect"')).toContain('x: 10')
+    expect(qml).toContain('objectName: "b/rect"')
+    expect(diagnostics.filter((item) => item.code === 'instance.unresolved')).toEqual([])
+  })
+
+  it('翻转绕盒中心镜像，scale 按根自然尺寸摆放并以原点缩放', () => {
+    const input = scene([instanceEntity('a')], { a: box(0, 0, 160, 20) })
+    const { qml } = exportComposeSceneToQml({
+      ...input,
+      frameId: FRAME_ID,
+      instances: new Map([['a', instanceContent({
+        contentFit: 'scale',
+        contentScale: { x: 2, y: 0.5 },
+        flipScale: { x: -1, y: 1 },
+      })]]),
+    })
+    const flip = block(qml, 'origin.x: 80')
+    expect(flip).toContain('origin.y: 10')
+    expect(flip).toContain('xScale: -1')
+    expect(flip).toContain('yScale: 1')
+    const scale = block(qml, 'xScale: 2')
+    expect(scale).toContain('yScale: 0.5')
+    expect(scale).not.toContain('origin.')
+    expect(qml.indexOf('xScale: -1')).toBeLessThan(qml.indexOf('xScale: 2'))
+  })
+
+  it('嵌套实例按「外层/内层」取得求解结果并同样展开', () => {
+    const input = scene([instanceEntity('outer')], { outer: box(0, 0, 80, 40) })
+    const { qml, diagnostics } = exportComposeSceneToQml({
+      ...input,
+      frameId: FRAME_ID,
+      instances: new Map([
+        ['outer', instanceContent({}, true)],
+        ['outer/inner', instanceContent()],
+      ]),
+    })
+    expect(qml).toContain('objectName: "outer/inner/rect"')
+    expect(qml).toContain('id: e_outer__inner__rect')
+    expect(diagnostics.filter((item) => item.code === 'instance.unresolved')).toEqual([])
+  })
+
+  it('缺少求解结果的实例导出为同尺寸占位并给出带地址的诊断，其余照常展开', () => {
+    const input = scene([instanceEntity('a'), instanceEntity('b')], {
+      a: box(0, 0, 80, 40),
+      b: box(100, 0, 60, 30),
+    })
+    const { qml, diagnostics } = exportComposeSceneToQml({
+      ...input,
+      frameId: FRAME_ID,
+      instances: new Map([['a', instanceContent()]]),
+    })
+    expect(qml).toContain('objectName: "a/rect"')
+    expect(qml).not.toContain('objectName: "b/rect"')
+    expect(block(block(qml, 'objectName: "b"'), 'border.width: 1')).toContain('width: 60')
+    const unresolved = diagnostics.filter((item) => item.code === 'instance.unresolved')
+    expect(unresolved).toEqual([expect.objectContaining({ entityId: 'b', message: expect.stringContaining('b') })])
   })
 })

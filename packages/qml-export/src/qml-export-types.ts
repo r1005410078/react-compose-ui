@@ -22,8 +22,10 @@ export type ComposeQmlExportDiagnosticCode =
   | 'overflow.axis-mixed'
   /** 带圆角的裁剪容器在 Qt 中按矩形裁剪子级。 */
   | 'overflow.rounded-clip'
-  /** 图片、SVG、图表、组件实例与未知 Renderer 导出为同尺寸占位。 */
+  /** 图片、SVG、图表与未知 Renderer 导出为同尺寸占位。 */
   | 'renderer.placeholder'
+  /** 组件实例没有对应的嵌套求解结果（未提供或准备失败），导出为同尺寸占位。 */
+  | 'instance.unresolved'
   /** 字体栈里只有第一个字族被写进 QML。 */
   | 'text.font-stack'
   /** 被数据绑定的 Renderer 属性按文档中的当前值静态导出。 */
@@ -34,7 +36,12 @@ export type ComposeQmlExportDiagnosticCode =
 /** 一条导出诊断。 @public */
 export interface ComposeQmlExportDiagnostic {
   readonly code: ComposeQmlExportDiagnosticCode
-  /** 诊断针对的 Entity；用于在编辑器里定位对象。 */
+  /**
+   * 诊断针对的 Entity；用于在编辑器里定位对象。
+   *
+   * @remarks
+   * 组件实例内部的对象写复合地址（`实例ID/内部ID`），与编辑器下钻选中的寻址相同。
+   */
   readonly entityId: string
   /** 面向用户的说明（中文）。 */
   readonly message: string
@@ -54,6 +61,39 @@ export interface ComposeQmlExportInput {
   readonly snapshot: ComposeLayoutSnapshot
   /** 要导出的场景（根 Frame）。 */
   readonly frameId: string
+  /**
+   * 组件实例的嵌套求解结果，按实例的复合地址索引。
+   *
+   * @remarks
+   * 顶层实例的地址就是它自己的 id，嵌套实例是 `外层/内层`。本包不依赖物料包与布局引擎，
+   * 因此实例的准备（覆盖、采样、根尺寸对齐）与嵌套求解都由调用方完成——预览走的是同一份
+   * 准备管线（`@compose-ui/materials` 的 `prepareComposeComponentInstance`）。缺某个地址时
+   * 该实例导出为同尺寸占位并给出 `instance.unresolved` 诊断。
+   */
+  readonly instances?: ReadonlyMap<string, ComposeQmlInstanceContent>
+}
+
+/**
+ * 一个组件实例的嵌套求解结果。
+ *
+ * @remarks
+ * 字段与预览的实例渲染器一一对应：嵌套文档按自身快照绝对定位，外层先绕实例盒中心翻转，
+ * `scale` 时再按根的自然尺寸摆放、以原点为基准整体缩放。
+ *
+ * @public
+ */
+export interface ComposeQmlInstanceContent {
+  /** 准备好并已解算的嵌套文档（单根）。 */
+  readonly document: ComposeDocument
+  /** 与 {@link ComposeQmlInstanceContent.document} 成对的布局快照。 */
+  readonly snapshot: ComposeLayoutSnapshot
+  readonly contentFit: 'layout' | 'scale'
+  /** 组件根的自然尺寸；`scale` 时内容按它摆放。 */
+  readonly rootSize: { readonly width: number; readonly height: number } | null
+  /** `scale` 时的两轴比值。 */
+  readonly contentScale: { readonly x: number; readonly y: number }
+  /** 翻转的两轴 ±1，绕实例盒中心作用。 */
+  readonly flipScale: { readonly x: number; readonly y: number }
 }
 
 /** {@link exportComposeSceneToQml} 的结果。 @public */
