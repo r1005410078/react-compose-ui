@@ -67,15 +67,33 @@ Text { text: page.temperature }
   读同一份定义，避免「编辑器说能用、Qt 上没有」。
 - `qtwebsockets` 加入 `native/qt/qt-version.json` 的模块清单。
 
-### 语法支持：先 spike 再定
+### 语法支持：需要降级编译（spike 结论）
 
-V4 引擎对 ES2017 之后语法（尤其 `async` / `await`、可选链、`??`）的支持程度需要实测。第一项任务
-是在 Qt 6.8 中跑通：import 可移植运行时、`async` 函数、`Promise`、`Timer` 驱动 state 刷新 QML
-文本整条链路。
+Qt 6.8.3 的 V4 逐项实测（每项单独一个模块，避免一处语法错误挡住其余）：
 
-- 若全部支持：导出时原样拷贝 setup。
-- 若有缺口：导出时在编辑器内用 `esbuild-wasm` 把 setup 降级编译到引擎支持的目标；**源码仍只有
-  一份**，编译只发生在导出这一步。这会引入一个新依赖，届时在本文件中补充决策并重新评审。
+| 支持 | 不支持（解析失败） | 不支持（运行期缺 API） |
+| --- | --- | --- |
+| ES 模块 `import`/`export`、箭头函数与默认参数、数组解构与展开、模板字符串、生成器、`Promise`、`Map`/`Set`/`WeakMap`/`WeakSet`、`Symbol`、`Proxy`/`Reflect`、`**`、可选链 `?.`、`??`、数字分隔符 | `async`/`await`、对象展开与对象剩余解构、类字段与私有字段、`catch` 省略绑定、`??=` 等逻辑赋值、`BigInt` | `queueMicrotask`、`setTimeout`、`structuredClone`、`globalThis`、`WeakRef`、`Array.prototype.flat`/`flatMap`、`Object.fromEntries`、`String.prototype.replaceAll` |
+
+`@compose-ui/script-runtime` 自己就用了 `async`/`await`、对象展开、`flatMap` 与 `queueMicrotask`，
+作者的 setup 写 `async` 方法拉数据更是常态，因此**降级编译是必需的**，不是兜底。
+
+验证过的链路：用 `esbuild --target=es2016` 把 `scope` + `reactivity` 打成一个 ES 模块（`async` 被降成
+生成器，V4 支持生成器），前置两行补齐（`queueMicrotask` 用 `Promise.resolve().then`——V4 的 `then`
+是微任务语义；`Array.prototype.flatMap`），同样降级的 setup 里写 `async tick()`、`computed`、`effect`；
+QML `Timer` 每 50ms 调一次 `tick`，导出订阅把值写进 `property`，`Text` 跟着刷新——初值
+`0 / count 0 / effect saw 0`，三次之后 `3 / count 3 / effect saw 3`，诊断为空。
+
+决策：
+
+- **源码仍只有一份**，降级只发生在构建与导出两处，作者不为 Qt 改写任何东西。
+- **运行时**在 `script-runtime` 的包构建期产出可移植模块（目标 ES2016 + 上述前置补齐），不需要新
+  依赖——构建工具链里已有能降级的编译器。
+- **作者的 setup** 在导出那一刻于浏览器内降级，需要一个能在浏览器里跑的编译器，这是本变更唯一的
+  新运行期依赖，**待评审**：候选是 `esbuild-wasm`（与构建期同一个编译器、降级语义一致；wasm 约
+  10 MB，只在点「导出」时动态加载，不进编辑器首屏）。
+- 不能降级的（`BigInt`）在可移植模式下标错；缺的运行期 API 由「全局对象补齐」与前置补齐覆盖，
+  `structuredClone` / `WeakRef` 不补，写进可移植 API 声明的「不可用」清单。
 
 ### 编辑器可移植模式
 
@@ -102,5 +120,5 @@ V4 引擎对 ES2017 之后语法（尤其 `async` / `await`、可选链、`??`�
 
 ## 待解决问题
 
-- V4 语法支持 spike 的结论（决定是否引入导出期降级编译）。
+- 作者 setup 的浏览器内降级编译器选型（候选 `esbuild-wasm`），待评审。
 - 动画 `playing` / `currentTime` 绑定在 Qt 侧的实现，留给动画导出变更。

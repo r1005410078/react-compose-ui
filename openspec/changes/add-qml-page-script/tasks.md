@@ -2,10 +2,14 @@
 
 ## 0. Spike（先做，结论回写 design.md）
 
-- [ ] 0.1 Qt 6.8 中：QML `import` ES 模块、`Promise`、`async`/`await`、可选链、`??`
-- [ ] 0.2 手工打包 `reactivity` + `scope`，在 V4 中创建作用域
-- [ ] 0.3 `Timer` 驱动 state → QML 文本刷新整条链路
-- [ ] 0.4 结论写入 design.md「语法支持」一节；若需降级编译，补充依赖决策并重新评审
+- [x] 0.1 Qt 6.8 中：QML `import` ES 模块、`Promise`、`async`/`await`、可选链、`??`
+      - 逐项结果见 design.md「语法支持」：`async`/`await`、对象展开、类字段等解析失败；可选链与 `??` 支持。
+- [x] 0.2 手工打包 `reactivity` + `scope`，在 V4 中创建作用域
+      - `esbuild --target=es2016` + 两行前置补齐（`queueMicrotask`、`flatMap`）后可用。
+- [x] 0.3 `Timer` 驱动 state → QML 文本刷新整条链路
+      - 三次 `tick` 后 `3 / count 3 / effect saw 3`，诊断为空。
+- [x] 0.4 结论写入 design.md「语法支持」一节；若需降级编译，补充依赖决策并重新评审
+      - 需要降级编译；浏览器内编译器（候选 `esbuild-wasm`）待评审。
 
 ## 1. 可移植运行时产物
 
