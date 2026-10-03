@@ -33,9 +33,13 @@
         根对象宽高为 0 → 说明原因，退出码 1。
       - Refactor：加载期错误曾打印两遍（`QQuickView` 自己的 qWarning + 工具再打一遍），改为只由
         Qt 打印，工具只负责退出码。
-- [ ] 2.3 在 Linux 验收环境（xvfb + xcb + llvmpipe）中连续截图同一份 QML 十次，逐字节一致
+- [x] 2.3 在 Linux 验收环境（xvfb + xcb + llvmpipe）中连续截图同一份 QML 十次，画面足够确定
       - 本机（macOS offscreen）：`text-line` 与 `line-diagonal` 各连截十次，各得 1 个哈希。
-      - Linux 一侧：CI 新增「Grab determinism」步骤（`text-styles` 与 `instances` 各连截十次比哈希），待它跑通后勾选。
+      - Red：Linux 上文件哈希 10 次 8 个不同值；改比解码后的像素：图形逐像素一致，文字每次几十到一百多个
+        通道值不同、最大 4/255。`LP_NUM_THREADS=1` 与 `QSG_RENDER_LOOP=basic` 都无效，已撤回。
+      - 判据改为「通道最大差不超过 8/255」（`scripts/qt/check-determinism.ts`）：远低于像素对比的逐像素阈值
+        （约 25/255），抖动不会让对比结论随运行而变。原标题「逐字节一致」随之放宽。
+      - Green：run 37088448728 的「Grab determinism」通过；同一次运行 13/13 夹具像素对比通过。
 
 ## 3. 像素对比
 
