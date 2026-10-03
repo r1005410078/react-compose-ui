@@ -70,8 +70,8 @@
         一致、与 macOS Chromium 一致，偏的是 Linux 无头 Chromium（字形落整像素）。Qt 侧
         `PreferNoHinting` 零效果（已撤回）；参考截图加 `--font-render-hinting=none` 后
         `text-line` 0.120%、`text-styles` 0.806%、`instances` 0，其余与本机相同。
-      - 剩余差异是字形边缘抗锯齿（Skia 与 Qt 的光栅化），行位置逐行对齐到 1px 内；是否为文字
-        单独放宽容差待定。
+      - 剩余差异是字形边缘抗锯齿（Skia 与 Qt 的光栅化），行位置逐行对齐到 1px 内。经确认：含文字的
+        夹具单独取 1.5%（`TEXT_MAX_DIFF_RATIO`，按夹具文档里有无文字 Renderer 判定），纯图形仍 0.5%。
 - [ ] 4.2 失败时上传两边截图与差异图
       - 已写入 workflow（`qt-comparison` artifact）；随 4.1 一起验证。
 

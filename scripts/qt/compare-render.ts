@@ -21,10 +21,34 @@ import { PNG } from 'pngjs'
  *   不一样」。
  * 实测（底座阶段四份夹具，macOS offscreen）：三份图形夹具差异为 0，文字 0.247%；而文字
  * 漏掉半行距补偿时是 1.017%——整行字高了 4px。上限取 0.5%：对实测留约两倍余量，同时把那类
- * 「整体错位几个像素」的映射错误挡在门外。Linux 验收环境的数字以 CI 实测为准再回来收紧。
+ * 「整体错位几个像素」的映射错误挡在门外。
+ *
+ * 含文字的夹具另有一个上限 TEXT_MAX_DIFF_RATIO：Linux 验收环境（参考图已关掉 Chromium 的 hinting）
+ * 实测 `text-styles` 0.806%、`text-line` 0.120%，逐行墨迹的位置对齐到 1px 以内，剩下的是 Skia 与
+ * Qt 光栅化字形边缘的差别——它与「映射对不对」无关，只与字形的笔画总长成正比。取 1.5%：对实测
+ * 留约两倍余量，仍挡得住整行错位（那一档在同一夹具上是 2.9%）。纯图形夹具不放宽，图形的回归
+ * 照样按 0.5% 抓。
  */
 const PIXEL_THRESHOLD = 0.1
 const MAX_DIFF_RATIO = 0.005
+const TEXT_MAX_DIFF_RATIO = 0.015
+
+/** 文档（含组件实例快照里嵌套的文档）里有没有文字 Renderer。 */
+function containsText(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsText)
+  if (value === null || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  const renderer = record.Renderer as { readonly type?: unknown } | undefined
+  if (renderer?.type === 'text') return true
+  return Object.values(record).some(containsText)
+}
+
+/** 夹具的容差：读夹具自己的文档判断，而不是维护一份夹具名单——加新夹具时名单会漏。 */
+function maxDiffRatio(fixturesDir: string, name: string): number {
+  const path = join(fixturesDir, name, 'document.json')
+  if (!existsSync(path)) return MAX_DIFF_RATIO
+  return containsText(JSON.parse(readFileSync(path, 'utf8'))) ? TEXT_MAX_DIFF_RATIO : MAX_DIFF_RATIO
+}
 
 interface ComparisonResult {
   readonly name: string
@@ -36,7 +60,13 @@ function readPng(path: string): PNG {
   return PNG.sync.read(readFileSync(path))
 }
 
-function compare(name: string, referencePath: string, actualPath: string, diffDir: string): ComparisonResult {
+function compare(
+  name: string,
+  referencePath: string,
+  actualPath: string,
+  diffDir: string,
+  limit: number,
+): ComparisonResult {
   if (!existsSync(actualPath)) {
     return { name, status: 'fail', detail: `Qt 一侧缺少截图 ${actualPath}` }
   }
@@ -56,14 +86,14 @@ function compare(name: string, referencePath: string, actualPath: string, diffDi
   })
   const ratio = different / (width * height)
   const detail = `差异像素 ${different}（${(ratio * 100).toFixed(3)}%）`
-  if (ratio <= MAX_DIFF_RATIO) return { name, status: 'pass', detail }
+  if (ratio <= limit) return { name, status: 'pass', detail }
   mkdirSync(diffDir, { recursive: true })
   const diffPath = join(diffDir, `${name}.png`)
   writeFileSync(diffPath, PNG.sync.write(diff))
   return {
     name,
     status: 'fail',
-    detail: `${detail} 超出容差 ${(MAX_DIFF_RATIO * 100).toFixed(1)}%，差异图 ${diffPath}`,
+    detail: `${detail} 超出容差 ${(limit * 100).toFixed(1)}%，差异图 ${diffPath}`,
   }
 }
 
@@ -72,11 +102,13 @@ const { values } = parseArgs({
     reference: { type: 'string', default: 'native/qt/out/reference' },
     actual: { type: 'string', default: 'native/qt/out/qt' },
     diff: { type: 'string', default: 'native/qt/out/diff' },
+    fixtures: { type: 'string', default: 'native/qt/fixtures' },
   },
 })
 const referenceDir = resolve(values.reference)
 const actualDir = resolve(values.actual)
 const diffDir = resolve(values.diff)
+const fixturesDir = resolve(values.fixtures)
 
 const references = existsSync(referenceDir)
   ? readdirSync(referenceDir).filter((file) => file.endsWith('.png')).sort()
@@ -91,6 +123,7 @@ const results = references.map((file) => compare(
   join(referenceDir, file),
   join(actualDir, file),
   diffDir,
+  maxDiffRatio(fixturesDir, basename(file, '.png')),
 ))
 for (const result of results) {
   console.log(`${result.status === 'pass' ? '✓' : '✗'} ${result.name}  ${result.detail}`)
