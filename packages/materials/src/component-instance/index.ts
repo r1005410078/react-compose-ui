@@ -9,3 +9,7 @@ export {
   type ComposeComponentInstancePrepareFailure,
   type ComposePreparedComponentInstance,
 } from './prepare'
+export {
+  solveComposeComponentInstances,
+  type ComposeSolvedComponentInstance,
+} from './solve'

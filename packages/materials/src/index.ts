@@ -69,6 +69,8 @@ export {
   prepareComposeComponentInstance,
   type ComposeComponentInstancePrepareFailure,
   type ComposePreparedComponentInstance,
+  solveComposeComponentInstances,
+  type ComposeSolvedComponentInstance,
 } from './component-instance'
 export type {
   ComposeBasicContainerOptions,

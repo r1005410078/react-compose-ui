@@ -44,9 +44,14 @@ prepareComposeComponentInstance(input: {
 
 ### 求解与导出输入
 
-- 编辑器侧：遍历场景里的实例（含嵌套实例里的实例），对每个调用准备函数，再用
-  `resolveComposeDocumentLayout(document, adapter)` 求解。适配器与预览同一个工厂、同一个 registry。
-  导出因此变成异步：动作先给「正在导出」的提示，完成后下载。
+- 遍历与求解住 `materials`（`solveComposeComponentInstances`）：遍历场景里会被渲染的实例（含嵌套
+  实例里的实例），对每个调用准备函数，再用 `resolveComposeDocumentLayout(document, adapter)` 求解。
+  适配器与预览同一个工厂、同一个 registry。它不放进编辑器：`?qt-reference` 的验收页同样要走这条
+  路径，而编辑器**不依赖** `materials`（物料由宿主注入）——因此编辑器经新 prop `qmlInstances`
+  拿到它，宿主绑定好 Registry 与资源解析器传进来；缺席时实例导出为占位。
+- 导出因此变成异步：动作先给「正在导出」的提示并在完成前不可用，完成后下载。
+- 准备函数的深度参数可选（缺省为祖先链长度）：渲染器的深度来自 Context，与祖先链由同一个
+  Provider 推进，但既有用例会单独设深度。
 - 导出器输入新增 `instances?: ReadonlyMap<string, ComposeQmlInstanceContent>`，键为复合地址
   （顶层实例就是它自己的 id，嵌套的是 `外层/内层`）。缺失某个键时该实例走占位兜底。
 
@@ -62,6 +67,8 @@ Item  (实例盒，x/y/w/h、旋转、透明度——与其他实体同一套)
 
 - QML `id` 加上实例前缀（`e_<实例>__<内部>`），`objectName` 写复合地址——同一个组件放八次，内部
   对象各有八份，id 必须互不相同。
+- 实例本身是叶子，导出时本来就 `clip: true`，因此图中最外一层裁剪 Item 与实例盒合并。
+- 缺结果的实例报新诊断码 `instance.unresolved`，与 `renderer.placeholder`（这种内容不支持）分开。
 
 ## 风险 / 权衡
 

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { exportActiveSceneAsQml } from './export-active-scene'
 
 const messages = {
+  exporting: '正在导出 QML…',
   exported: '已导出 QML',
   exportPartial: '已导出 QML，部分内容做了降级',
   exportFailed: 'QML 导出失败',
@@ -36,8 +37,8 @@ function input(children: ComposeDocument['entities'] = {}, activeFrameId: string
 }
 
 describe('OpenSpec: qml-export / 编辑器导出入口', () => {
-  it('导出激活场景，文件名取场景名并去掉文件系统不接受的字符', () => {
-    const outcome = exportActiveSceneAsQml(input())
+  it('导出激活场景，文件名取场景名并去掉文件系统不接受的字符', async () => {
+    const outcome = await exportActiveSceneAsQml(input())
     expect(outcome.ok).toBe(true)
     if (!outcome.ok) return
     expect(outcome.fileName).toBe('主屏总览.qml')
@@ -45,12 +46,12 @@ describe('OpenSpec: qml-export / 编辑器导出入口', () => {
     expect(outcome.notice).toBe('已导出 QML：主屏总览.qml。')
   })
 
-  it('没有记录激活场景时退回第一块根场景（与预览默认目标同一个回退）', () => {
-    const outcome = exportActiveSceneAsQml(input({}, null))
+  it('没有记录激活场景时退回第一块根场景（与预览默认目标同一个回退）', async () => {
+    const outcome = await exportActiveSceneAsQml(input({}, null))
     expect(outcome.ok && outcome.qml).toContain('objectName: "a"')
   })
 
-  it('导出时有降级：文件照常交付，提示按类聚合并列出要装的字体', () => {
+  it('导出时有降级：文件照常交付，提示按类聚合并列出要装的字体', async () => {
     const frame = createComposeFrameEntity({ id: 'x', childIds: [], size: { width: 1, height: 1 } })
     const chart = (id: string) => ({
       ...frame,
@@ -72,20 +73,56 @@ describe('OpenSpec: qml-export / 编辑器导出入口', () => {
         Renderer: { type: 'text', props: { text: 'Hi', fontFamily: 'DejaVu Sans' } },
       },
     }
-    const outcome = exportActiveSceneAsQml(input({ c1: chart('c1'), c2: chart('c2'), label }))
+    const outcome = await exportActiveSceneAsQml(input({ c1: chart('c1'), c2: chart('c2'), label }))
     expect(outcome.ok).toBe(true)
     expect(outcome.notice).toContain('已导出 QML，部分内容做了降级（主屏总览.qml）')
     expect(outcome.notice).toContain('（共 2 处）')
     expect(outcome.notice).toContain('目标机需要安装字体：DejaVu Sans')
   })
 
-  it('激活场景不在文档根里时给出带原因的失败提示，而不是抛出', () => {
+  it('激活场景不在文档根里时给出带原因的失败提示，而不是抛出', async () => {
     const empty = input()
-    const outcome = exportActiveSceneAsQml({
+    const outcome = await exportActiveSceneAsQml({
       ...empty,
       layoutDocument: { ...empty.layoutDocument, rootIds: [] },
     })
     expect(outcome.ok).toBe(false)
     expect(outcome.notice).toBe('QML 导出失败：「b」不是文档的根场景')
+  })
+
+  it('实例经宿主注入的求解交给导出器：以激活场景为起点，结果按复合地址展开', async () => {
+    const frame = createComposeFrameEntity({ id: 'x', childIds: [], size: { width: 1, height: 1 } })
+    const instance = {
+      ...frame,
+      id: 'inst',
+      components: { ...frame.components, Renderer: { type: 'component-instance', props: {} } },
+    }
+    const nestedRoot = createComposeFrameEntity({ id: 'root', childIds: [], size: { width: 40, height: 20 } })
+    const roots: string[] = []
+    const outcome = await exportActiveSceneAsQml({
+      ...input({ inst: instance }),
+      resolveInstances: async ({ rootId }) => {
+        roots.push(rootId)
+        return new Map([['inst', {
+          document: {
+            schemaVersion: 7,
+            canvas: createDefaultCanvasSettings(),
+            rootIds: ['root'],
+            entities: { root: nestedRoot },
+          },
+          snapshot: {
+            revision: 1,
+            diagnostics: [],
+            boxes: { root: { x: 0, y: 0, width: 40, height: 20, positioning: 'absolute' } },
+          },
+          contentFit: 'layout',
+          rootSize: { width: 40, height: 20 },
+          contentScale: { x: 1, y: 1 },
+          flipScale: { x: 1, y: 1 },
+        }]])
+      },
+    })
+    expect(roots).toEqual(['b'])
+    expect(outcome.ok && outcome.qml).toContain('objectName: "inst/root"')
   })
 })

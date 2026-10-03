@@ -24,16 +24,24 @@
 
 ## 3. 编辑器
 
-- [ ] 3.1 逐实例准备与求解（递归、去重），异步导出与进行中提示
-- [ ] 3.2 组件测试与 e2e：导出含实例的场景
+- [x] 3.1 逐实例准备与求解（递归），异步导出与进行中提示
+      - 求解住 `materials/component-instance/solve.ts`，编辑器经 `qmlInstances` 注入（编辑器不依赖
+        `materials`）；`solve.test.ts` 覆盖嵌套地址与跳过隐藏实例。
+      - 去重未做：PERF 注释写明「按组件引用 + 覆盖 + 盒尺寸去重」为后续优化。
+- [x] 3.2 组件测试与 e2e：导出含实例的场景
+      - `export-active-scene.test.ts` 断言以激活场景为起点调用注入的求解；`e2e/qml-export.spec.ts`
+        新增「导出含实例的场景」：复合地址 objectName 与实例内的 Shape（不注入求解时两条都不成立）。
 
 ## 4. 验收
 
-- [ ] 4.1 实例夹具（覆盖、`contentFit: scale`、翻转、嵌套一层），`?qt-reference` 走同一条求解路径
-- [ ] 4.2 像素对比通过
+- [x] 4.1 实例夹具（覆盖、`contentFit: scale`、翻转、嵌套一层），`?qt-reference` 走同一条求解路径
+      - `native/qt/fixtures/instances`：同组件两个实例（其一覆盖色块颜色）、`scale` + `flip: x`、
+        组件内嵌实例。人工核对两侧截图：覆盖、镜像、缩放、嵌套均出现。
+- [x] 4.2 像素对比通过
+      - 本机（macOS offscreen）`instances` 差异像素 0；Linux 待 CI。
 
 ## 5. 文档与验证
 
-- [ ] 5.1 `AGENTS.md`：准备管线的归属与「预览与导出共用」的判据
+- [x] 5.1 `AGENTS.md`：准备管线的归属与「预览与导出共用」的判据
 - [ ] 5.2 `bun run lint` / `typecheck` / `test` / `build` / `test:e2e`
 - [ ] 5.3 `npx openspec validate add-qml-instance-export --strict`

@@ -284,6 +284,7 @@ const messages = {
         + '再右键选择「导入为页面」。',
     },
     qml: {
+      exporting: '正在导出 QML…',
       exported: '已导出 QML',
       exportPartial: '已导出 QML，部分内容做了降级',
       exportFailed: 'QML 导出失败',
@@ -636,6 +637,7 @@ const messages = {
         + '(Windows / macOS / Linux, batch supported), then right-click and choose "Import as page".',
     },
     qml: {
+      exporting: 'Exporting as QML…',
       exported: 'Exported as QML',
       exportPartial: 'Exported as QML; some content was simplified',
       exportFailed: 'Failed to export QML',

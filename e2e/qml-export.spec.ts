@@ -45,3 +45,28 @@ test('OpenSpec: qml-export / 编辑器导出入口 / 导出含未保存改动的
   // 矩形是四顶点闭合多段线：起点加四段（含回到起点的那一段）。
   expect(after.qml.match(/PathLine \{/g)).toHaveLength(4)
 })
+
+test('OpenSpec: qml-export / 编辑器导出时逐实例准备与求解 / 导出含实例的场景', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await editor.locator('[data-workspace-tab="compose-component-library-panel"]').click()
+  await editor.getByRole('button', { name: '添加 容器' }).click()
+  await editor.getByRole('button', { name: '添加 矩形' }).click()
+  await editor.locator('[data-workspace-tab="compose-scene-content-panel"]').click()
+  const source = editor.getByRole('treegrid', { name: '场景树' }).getByRole('row', { name: /Container/ })
+  await source.click()
+  await source.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '创建组件…' }).click()
+  const dialog = page.getByRole('dialog', { name: '创建组件' })
+  await dialog.getByLabel('组件名称').fill('符号')
+  await dialog.getByRole('button', { name: '创建' }).click()
+  await expect(editor.getByTestId('compose-component-instance-content')).toBeVisible()
+
+  const { qml } = await exportFromAppMenu(page)
+  // 实例内部的对象按复合地址写 objectName，矩形在实例里展开成形状而不是占位。
+  expect(qml).toMatch(/objectName: "[^"/]+\/[^"]+"/)
+  expect(qml).toContain('Shape {')
+  const notice = editor.getByRole('status').filter({ hasText: '已导出 QML' })
+  await expect(notice).toBeVisible()
+  await expect(notice).not.toContainText('没有可用的嵌套求解结果')
+})

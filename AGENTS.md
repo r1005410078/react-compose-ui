@@ -1540,8 +1540,16 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   填充规则显式写出 SVG 的缺省值（Qt 的缺省值三样都不同）；Qt 的虚线以线宽为单位。文字的半行距
   **按垂直对齐分三种补偿**（顶下移 `floor(L/2)`、居中不补、底上移 `ceil(L/2)`，L 照搬 Blink 的
   取整）——Qt 的 `FixedHeight` 把字贴在行顶且最后一行不带行距，一律按顶对齐补的症状是居中与底对齐
-  的字低几个像素，且只在某些字号上出现。组件实例第一期是占位：实例准备管线（覆盖、采样、根尺寸
-  对齐、内容缩放、翻转、嵌套 Yoga）住在 `materials` 内部，为导出复制一份就是两处实现，先提取再共用。
+  的字低几个像素，且只在某些字号上出现。文字一律 `PreferNoHinting`：Linux 上 FreeType 的 hinting
+  把字宽取整，一行累积出一两个像素，而预览按亚像素累加（macOS 忽略该项）。
+  **组件实例内联展开，准备管线只有一份**：`materials` 的 `prepareComposeComponentInstance`
+  （快照 → 覆盖 → 采样 → 根锚原点 → 按盒对齐根尺寸）同时被实例渲染器与导出侧调用，
+  `solveComposeComponentInstances` 在它之上逐实例跑嵌套 Yoga（与预览同一个测量端口工厂与 Registry），
+  结果按复合地址（`外层/内层`）交给导出器。判据是**预览与导出不得各有一份准备逻辑**——各写一份的
+  症状是「预览里对、导出的不对」而两边都不报错。`qml-export` 只依赖 `core`、`editor` 不依赖
+  `materials`，因此编辑器经宿主注入的 `qmlInstances` 拿到求解函数；缺席时实例导出为占位并报
+  `instance.unresolved`。实例内部对象的 QML `id` 带实例前缀（`e_外层__内层`）——同一组件放八次，
+  内部对象各有八份。
   验收夹具的预览截图与导出 QML MUST 来自**同一个**布局 Runtime（示例应用 `?qt-reference` 把它同时
   交给 `ComposePreview` 与导出器），各自求解会让两边的 Hug 文字量出不同的盒。
 - `@compose-ui/interaction-kernel` 是**零运行时依赖**的交互内核包：插件契约、按优先级排序的

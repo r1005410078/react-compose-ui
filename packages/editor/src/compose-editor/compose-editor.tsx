@@ -52,7 +52,11 @@ import {
 } from '@compose-ui/components'
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import { resolveTargetFrameId } from '@compose-ui/stage-engine'
-import { downloadTextFile, exportActiveSceneAsQml } from '../qml'
+import {
+  downloadTextFile,
+  exportActiveSceneAsQml,
+  type ComposeEditorQmlInstanceResolver,
+} from '../qml'
 
 /** 解析动画作用域时不看选区：内联 `[]` 每次渲染都是新引用，会破坏 memo。 */
 const NO_SELECTION: readonly string[] = []
@@ -265,6 +269,14 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
    */
   toolbarItems?: readonly ComposeToolbarItem[]
   /**
+   * 「导出为 QML」时逐个求解组件实例；省略时实例导出为同尺寸占位。
+   *
+   * @remarks
+   * 实例的准备管线住在物料包，编辑器不依赖它，因此由宿主注入——`@compose-ui/materials` 的
+   * `solveComposeComponentInstances` 绑定好与画布同一个 Registry 与资源解析器即可。
+   */
+  qmlInstances?: ComposeEditorQmlInstanceResolver
+  /**
    * 请求以某个场景为目标打开预览。
    *
    * @remarks
@@ -410,6 +422,7 @@ export function ComposeEditor({
   components,
   workspaces,
   toolbarItems,
+  qmlInstances,
   onScenePreview,
   preferences,
   defaultPreferences,
@@ -2654,18 +2667,29 @@ export function ComposeEditor({
    */
   const layoutDocument = actionContext?.layoutDocument ?? null
   const layoutSnapshot = actionContext?.layoutSnapshot ?? null
-  const qmlExportPending = layoutDocument === null || layoutSnapshot === null
+  /*
+   * 实例逐个求解是异步的：导出期间给出进行中的提示，并把动作标成不可用——连按两下会并发两次
+   * 导出、下载两份文件。
+   */
+  const [qmlExporting, setQmlExporting] = useState(false)
+  const qmlExportPending = layoutDocument === null || layoutSnapshot === null || qmlExporting
   const exportQml = useCallback(() => {
-    if (layoutDocument === null || layoutSnapshot === null) return
-    const outcome = exportActiveSceneAsQml({
+    if (layoutDocument === null || layoutSnapshot === null || qmlExporting) return
+    setQmlExporting(true)
+    setPageNotice(editorMessages.qml.exporting)
+    void exportActiveSceneAsQml({
       layoutDocument,
       layoutSnapshot,
       activeFrameId: pageActiveFrameId,
+      resolveInstances: qmlInstances,
       messages: editorMessages.qml,
+    }).then((outcome) => {
+      if (outcome.ok) downloadTextFile(outcome.fileName, outcome.qml)
+      setPageNotice(outcome.notice)
+    }).finally(() => {
+      setQmlExporting(false)
     })
-    if (outcome.ok) downloadTextFile(outcome.fileName, outcome.qml)
-    setPageNotice(outcome.notice)
-  }, [editorMessages.qml, layoutDocument, layoutSnapshot, pageActiveFrameId])
+  }, [editorMessages.qml, layoutDocument, layoutSnapshot, pageActiveFrameId, qmlExporting, qmlInstances])
   const exportQmlAction = actionContext === undefined || activeWorkspaceSession?.kind === 'asset'
     ? undefined
     : exportQml

@@ -1,0 +1,1765 @@
+{
+  "schemaVersion": 7,
+  "canvas": {
+    "grid": {
+      "stepX": 4,
+      "stepY": 4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "primaryLineEvery": 4,
+      "snapEnabled": true
+    },
+    "smartSnap": {
+      "nodes": true,
+      "guides": true
+    }
+  },
+  "rootIds": [
+    "scene"
+  ],
+  "entities": {
+    "scene": {
+      "id": "scene",
+      "name": "scene",
+      "components": {
+        "Composition": {
+          "presetId": "frame",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Hierarchy",
+            "Frame",
+            "Appearance"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 320,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 200,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Hierarchy": {
+          "childIds": [
+            "plain",
+            "twin",
+            "scaled",
+            "nested"
+          ]
+        },
+        "Frame": {
+          "size": {
+            "width": 320,
+            "height": 200
+          },
+          "guides": []
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "#0f172a"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        }
+      }
+    },
+    "plain": {
+      "id": "plain",
+      "name": "plain",
+      "components": {
+        "Composition": {
+          "presetId": "rectangle",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 16
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 80,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "component-instance",
+          "props": {
+            "reference": {
+              "kind": "component",
+              "providerId": "fixture",
+              "assetKey": "Badge",
+              "scope": "persistent"
+            },
+            "resolvedSnapshot": {
+              "componentId": "Badge",
+              "kind": "base",
+              "revision": "1",
+              "document": {
+                "schemaVersion": 7,
+                "canvas": {
+                  "grid": {
+                    "stepX": 4,
+                    "stepY": 4,
+                    "offsetX": 0,
+                    "offsetY": 0,
+                    "primaryLineEvery": 4,
+                    "snapEnabled": true
+                  },
+                  "smartSnap": {
+                    "nodes": true,
+                    "guides": true
+                  }
+                },
+                "rootIds": [
+                  "root"
+                ],
+                "entities": {
+                  "root": {
+                    "id": "root",
+                    "name": "root",
+                    "components": {
+                      "Composition": {
+                        "presetId": "frame",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Frame",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 0,
+                          "y": 0
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 80,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 40,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": [
+                          "swatch",
+                          "arrow"
+                        ]
+                      },
+                      "Frame": {
+                        "size": {
+                          "width": 80,
+                          "height": 40
+                        },
+                        "guides": []
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#1e293b"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "swatch": {
+                    "id": "swatch",
+                    "name": "swatch",
+                    "components": {
+                      "Composition": {
+                        "presetId": "container",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Clip",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 6,
+                          "y": 6
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 28,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 28,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": []
+                      },
+                      "Clip": {
+                        "enabled": true,
+                        "horizontal": "clip",
+                        "vertical": "clip"
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#ef4444"
+                        },
+                        "borderColor": "#3b4250",
+                        "borderWidth": 0,
+                        "borderRadius": 4,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "arrow": {
+                    "id": "arrow",
+                    "name": "arrow",
+                    "components": {
+                      "Composition": {
+                        "presetId": "curve",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Appearance",
+                          "Renderer",
+                          "Curve"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 42,
+                          "y": 8
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 32,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 24,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#facc15"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      },
+                      "Renderer": {
+                        "type": "curve",
+                        "props": {
+                          "stroke": "#facc15",
+                          "strokeWidth": 2,
+                          "strokeLinecap": "round",
+                          "strokeDasharray": "none",
+                          "markerStart": "none",
+                          "markerEnd": "none"
+                        }
+                      },
+                      "Curve": {
+                        "kind": "polyline",
+                        "closed": true,
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 32,
+                            "y": 12
+                          },
+                          {
+                            "x": 0,
+                            "y": 24
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "appliedLineage": [
+                {
+                  "reference": {
+                    "kind": "component",
+                    "providerId": "fixture",
+                    "assetKey": "Badge",
+                    "scope": "persistent"
+                  },
+                  "componentId": "Badge",
+                  "kind": "base",
+                  "revision": "1"
+                }
+              ]
+            },
+            "instanceOverrides": {
+              "operations": []
+            }
+          }
+        }
+      }
+    },
+    "twin": {
+      "id": "twin",
+      "name": "twin",
+      "components": {
+        "Composition": {
+          "presetId": "rectangle",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 112,
+            "y": 16
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 80,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 40,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "component-instance",
+          "props": {
+            "reference": {
+              "kind": "component",
+              "providerId": "fixture",
+              "assetKey": "Badge",
+              "scope": "persistent"
+            },
+            "resolvedSnapshot": {
+              "componentId": "Badge",
+              "kind": "base",
+              "revision": "1",
+              "document": {
+                "schemaVersion": 7,
+                "canvas": {
+                  "grid": {
+                    "stepX": 4,
+                    "stepY": 4,
+                    "offsetX": 0,
+                    "offsetY": 0,
+                    "primaryLineEvery": 4,
+                    "snapEnabled": true
+                  },
+                  "smartSnap": {
+                    "nodes": true,
+                    "guides": true
+                  }
+                },
+                "rootIds": [
+                  "root"
+                ],
+                "entities": {
+                  "root": {
+                    "id": "root",
+                    "name": "root",
+                    "components": {
+                      "Composition": {
+                        "presetId": "frame",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Frame",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 0,
+                          "y": 0
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 80,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 40,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": [
+                          "swatch",
+                          "arrow"
+                        ]
+                      },
+                      "Frame": {
+                        "size": {
+                          "width": 80,
+                          "height": 40
+                        },
+                        "guides": []
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#1e293b"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "swatch": {
+                    "id": "swatch",
+                    "name": "swatch",
+                    "components": {
+                      "Composition": {
+                        "presetId": "container",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Clip",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 6,
+                          "y": 6
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 28,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 28,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": []
+                      },
+                      "Clip": {
+                        "enabled": true,
+                        "horizontal": "clip",
+                        "vertical": "clip"
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#ef4444"
+                        },
+                        "borderColor": "#3b4250",
+                        "borderWidth": 0,
+                        "borderRadius": 4,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "arrow": {
+                    "id": "arrow",
+                    "name": "arrow",
+                    "components": {
+                      "Composition": {
+                        "presetId": "curve",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Appearance",
+                          "Renderer",
+                          "Curve"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 42,
+                          "y": 8
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 32,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 24,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#facc15"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      },
+                      "Renderer": {
+                        "type": "curve",
+                        "props": {
+                          "stroke": "#facc15",
+                          "strokeWidth": 2,
+                          "strokeLinecap": "round",
+                          "strokeDasharray": "none",
+                          "markerStart": "none",
+                          "markerEnd": "none"
+                        }
+                      },
+                      "Curve": {
+                        "kind": "polyline",
+                        "closed": true,
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 32,
+                            "y": 12
+                          },
+                          {
+                            "x": 0,
+                            "y": 24
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "appliedLineage": [
+                {
+                  "reference": {
+                    "kind": "component",
+                    "providerId": "fixture",
+                    "assetKey": "Badge",
+                    "scope": "persistent"
+                  },
+                  "componentId": "Badge",
+                  "kind": "base",
+                  "revision": "1"
+                }
+              ]
+            },
+            "instanceOverrides": {
+              "operations": [
+                {
+                  "id": "swatch-color",
+                  "kind": "set-field",
+                  "entityId": "swatch",
+                  "componentKey": "Appearance",
+                  "fieldPath": [
+                    "backgroundPaint"
+                  ],
+                  "value": {
+                    "kind": "solid",
+                    "color": "#22c55e"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "scaled": {
+      "id": "scaled",
+      "name": "scaled",
+      "components": {
+        "Composition": {
+          "presetId": "rectangle",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 16,
+            "y": 80
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 160,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 30,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "component-instance",
+          "props": {
+            "reference": {
+              "kind": "component",
+              "providerId": "fixture",
+              "assetKey": "Badge",
+              "scope": "persistent"
+            },
+            "resolvedSnapshot": {
+              "componentId": "Badge",
+              "kind": "base",
+              "revision": "1",
+              "document": {
+                "schemaVersion": 7,
+                "canvas": {
+                  "grid": {
+                    "stepX": 4,
+                    "stepY": 4,
+                    "offsetX": 0,
+                    "offsetY": 0,
+                    "primaryLineEvery": 4,
+                    "snapEnabled": true
+                  },
+                  "smartSnap": {
+                    "nodes": true,
+                    "guides": true
+                  }
+                },
+                "rootIds": [
+                  "root"
+                ],
+                "entities": {
+                  "root": {
+                    "id": "root",
+                    "name": "root",
+                    "components": {
+                      "Composition": {
+                        "presetId": "frame",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Frame",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 0,
+                          "y": 0
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 80,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 40,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": [
+                          "swatch",
+                          "arrow"
+                        ]
+                      },
+                      "Frame": {
+                        "size": {
+                          "width": 80,
+                          "height": 40
+                        },
+                        "guides": []
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#1e293b"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "swatch": {
+                    "id": "swatch",
+                    "name": "swatch",
+                    "components": {
+                      "Composition": {
+                        "presetId": "container",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Clip",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 6,
+                          "y": 6
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 28,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 28,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": []
+                      },
+                      "Clip": {
+                        "enabled": true,
+                        "horizontal": "clip",
+                        "vertical": "clip"
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#ef4444"
+                        },
+                        "borderColor": "#3b4250",
+                        "borderWidth": 0,
+                        "borderRadius": 4,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "arrow": {
+                    "id": "arrow",
+                    "name": "arrow",
+                    "components": {
+                      "Composition": {
+                        "presetId": "curve",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Appearance",
+                          "Renderer",
+                          "Curve"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 42,
+                          "y": 8
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 32,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 24,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#facc15"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      },
+                      "Renderer": {
+                        "type": "curve",
+                        "props": {
+                          "stroke": "#facc15",
+                          "strokeWidth": 2,
+                          "strokeLinecap": "round",
+                          "strokeDasharray": "none",
+                          "markerStart": "none",
+                          "markerEnd": "none"
+                        }
+                      },
+                      "Curve": {
+                        "kind": "polyline",
+                        "closed": true,
+                        "vertices": [
+                          {
+                            "x": 0,
+                            "y": 0
+                          },
+                          {
+                            "x": 32,
+                            "y": 12
+                          },
+                          {
+                            "x": 0,
+                            "y": 24
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "appliedLineage": [
+                {
+                  "reference": {
+                    "kind": "component",
+                    "providerId": "fixture",
+                    "assetKey": "Badge",
+                    "scope": "persistent"
+                  },
+                  "componentId": "Badge",
+                  "kind": "base",
+                  "revision": "1"
+                }
+              ]
+            },
+            "instanceOverrides": {
+              "operations": []
+            },
+            "contentFit": "scale",
+            "flip": "x"
+          }
+        }
+      }
+    },
+    "nested": {
+      "id": "nested",
+      "name": "nested",
+      "components": {
+        "Composition": {
+          "presetId": "rectangle",
+          "baseComponentKeys": [
+            "Transform",
+            "LayoutItem",
+            "Visibility",
+            "Lock",
+            "Appearance",
+            "Renderer"
+          ],
+          "capabilityIds": []
+        },
+        "Transform": {
+          "rotation": 0
+        },
+        "LayoutItem": {
+          "positioning": "absolute",
+          "offset": {
+            "x": 184,
+            "y": 120
+          },
+          "width": {
+            "mode": "fixed",
+            "value": 120,
+            "min": 1,
+            "max": null
+          },
+          "height": {
+            "mode": "fixed",
+            "value": 64,
+            "min": 1,
+            "max": null
+          },
+          "margin": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "alignSelf": "auto"
+        },
+        "Visibility": {
+          "visible": true
+        },
+        "Lock": {
+          "locked": false
+        },
+        "Appearance": {
+          "backgroundPaint": {
+            "kind": "solid",
+            "color": "transparent"
+          },
+          "borderColor": "transparent",
+          "borderWidth": 0,
+          "borderRadius": 0,
+          "opacity": 1,
+          "shadow": null
+        },
+        "Renderer": {
+          "type": "component-instance",
+          "props": {
+            "reference": {
+              "kind": "component",
+              "providerId": "fixture",
+              "assetKey": "Card",
+              "scope": "persistent"
+            },
+            "resolvedSnapshot": {
+              "componentId": "Card",
+              "kind": "base",
+              "revision": "1",
+              "document": {
+                "schemaVersion": 7,
+                "canvas": {
+                  "grid": {
+                    "stepX": 4,
+                    "stepY": 4,
+                    "offsetX": 0,
+                    "offsetY": 0,
+                    "primaryLineEvery": 4,
+                    "snapEnabled": true
+                  },
+                  "smartSnap": {
+                    "nodes": true,
+                    "guides": true
+                  }
+                },
+                "rootIds": [
+                  "root"
+                ],
+                "entities": {
+                  "root": {
+                    "id": "root",
+                    "name": "root",
+                    "components": {
+                      "Composition": {
+                        "presetId": "frame",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Hierarchy",
+                          "Frame",
+                          "Appearance"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 0,
+                          "y": 0
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 120,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 64,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Hierarchy": {
+                        "childIds": [
+                          "inner"
+                        ]
+                      },
+                      "Frame": {
+                        "size": {
+                          "width": 120,
+                          "height": 64
+                        },
+                        "guides": []
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "#334155"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      }
+                    }
+                  },
+                  "inner": {
+                    "id": "inner",
+                    "name": "inner",
+                    "components": {
+                      "Composition": {
+                        "presetId": "rectangle",
+                        "baseComponentKeys": [
+                          "Transform",
+                          "LayoutItem",
+                          "Visibility",
+                          "Lock",
+                          "Appearance",
+                          "Renderer"
+                        ],
+                        "capabilityIds": []
+                      },
+                      "Transform": {
+                        "rotation": 0
+                      },
+                      "LayoutItem": {
+                        "positioning": "absolute",
+                        "offset": {
+                          "x": 20,
+                          "y": 12
+                        },
+                        "width": {
+                          "mode": "fixed",
+                          "value": 80,
+                          "min": 1,
+                          "max": null
+                        },
+                        "height": {
+                          "mode": "fixed",
+                          "value": 40,
+                          "min": 1,
+                          "max": null
+                        },
+                        "margin": {
+                          "top": 0,
+                          "right": 0,
+                          "bottom": 0,
+                          "left": 0
+                        },
+                        "alignSelf": "auto"
+                      },
+                      "Visibility": {
+                        "visible": true
+                      },
+                      "Lock": {
+                        "locked": false
+                      },
+                      "Appearance": {
+                        "backgroundPaint": {
+                          "kind": "solid",
+                          "color": "transparent"
+                        },
+                        "borderColor": "transparent",
+                        "borderWidth": 0,
+                        "borderRadius": 0,
+                        "opacity": 1,
+                        "shadow": null
+                      },
+                      "Renderer": {
+                        "type": "component-instance",
+                        "props": {
+                          "reference": {
+                            "kind": "component",
+                            "providerId": "fixture",
+                            "assetKey": "Badge",
+                            "scope": "persistent"
+                          },
+                          "resolvedSnapshot": {
+                            "componentId": "Badge",
+                            "kind": "base",
+                            "revision": "1",
+                            "document": {
+                              "schemaVersion": 7,
+                              "canvas": {
+                                "grid": {
+                                  "stepX": 4,
+                                  "stepY": 4,
+                                  "offsetX": 0,
+                                  "offsetY": 0,
+                                  "primaryLineEvery": 4,
+                                  "snapEnabled": true
+                                },
+                                "smartSnap": {
+                                  "nodes": true,
+                                  "guides": true
+                                }
+                              },
+                              "rootIds": [
+                                "root"
+                              ],
+                              "entities": {
+                                "root": {
+                                  "id": "root",
+                                  "name": "root",
+                                  "components": {
+                                    "Composition": {
+                                      "presetId": "frame",
+                                      "baseComponentKeys": [
+                                        "Transform",
+                                        "LayoutItem",
+                                        "Visibility",
+                                        "Lock",
+                                        "Hierarchy",
+                                        "Frame",
+                                        "Appearance"
+                                      ],
+                                      "capabilityIds": []
+                                    },
+                                    "Transform": {
+                                      "rotation": 0
+                                    },
+                                    "LayoutItem": {
+                                      "positioning": "absolute",
+                                      "offset": {
+                                        "x": 0,
+                                        "y": 0
+                                      },
+                                      "width": {
+                                        "mode": "fixed",
+                                        "value": 80,
+                                        "min": 1,
+                                        "max": null
+                                      },
+                                      "height": {
+                                        "mode": "fixed",
+                                        "value": 40,
+                                        "min": 1,
+                                        "max": null
+                                      },
+                                      "margin": {
+                                        "top": 0,
+                                        "right": 0,
+                                        "bottom": 0,
+                                        "left": 0
+                                      },
+                                      "alignSelf": "auto"
+                                    },
+                                    "Visibility": {
+                                      "visible": true
+                                    },
+                                    "Lock": {
+                                      "locked": false
+                                    },
+                                    "Hierarchy": {
+                                      "childIds": [
+                                        "swatch",
+                                        "arrow"
+                                      ]
+                                    },
+                                    "Frame": {
+                                      "size": {
+                                        "width": 80,
+                                        "height": 40
+                                      },
+                                      "guides": []
+                                    },
+                                    "Appearance": {
+                                      "backgroundPaint": {
+                                        "kind": "solid",
+                                        "color": "#1e293b"
+                                      },
+                                      "borderColor": "transparent",
+                                      "borderWidth": 0,
+                                      "borderRadius": 0,
+                                      "opacity": 1,
+                                      "shadow": null
+                                    }
+                                  }
+                                },
+                                "swatch": {
+                                  "id": "swatch",
+                                  "name": "swatch",
+                                  "components": {
+                                    "Composition": {
+                                      "presetId": "container",
+                                      "baseComponentKeys": [
+                                        "Transform",
+                                        "LayoutItem",
+                                        "Visibility",
+                                        "Lock",
+                                        "Hierarchy",
+                                        "Clip",
+                                        "Appearance"
+                                      ],
+                                      "capabilityIds": []
+                                    },
+                                    "Transform": {
+                                      "rotation": 0
+                                    },
+                                    "LayoutItem": {
+                                      "positioning": "absolute",
+                                      "offset": {
+                                        "x": 6,
+                                        "y": 6
+                                      },
+                                      "width": {
+                                        "mode": "fixed",
+                                        "value": 28,
+                                        "min": 1,
+                                        "max": null
+                                      },
+                                      "height": {
+                                        "mode": "fixed",
+                                        "value": 28,
+                                        "min": 1,
+                                        "max": null
+                                      },
+                                      "margin": {
+                                        "top": 0,
+                                        "right": 0,
+                                        "bottom": 0,
+                                        "left": 0
+                                      },
+                                      "alignSelf": "auto"
+                                    },
+                                    "Visibility": {
+                                      "visible": true
+                                    },
+                                    "Lock": {
+                                      "locked": false
+                                    },
+                                    "Hierarchy": {
+                                      "childIds": []
+                                    },
+                                    "Clip": {
+                                      "enabled": true,
+                                      "horizontal": "clip",
+                                      "vertical": "clip"
+                                    },
+                                    "Appearance": {
+                                      "backgroundPaint": {
+                                        "kind": "solid",
+                                        "color": "#ef4444"
+                                      },
+                                      "borderColor": "#3b4250",
+                                      "borderWidth": 0,
+                                      "borderRadius": 4,
+                                      "opacity": 1,
+                                      "shadow": null
+                                    }
+                                  }
+                                },
+                                "arrow": {
+                                  "id": "arrow",
+                                  "name": "arrow",
+                                  "components": {
+                                    "Composition": {
+                                      "presetId": "curve",
+                                      "baseComponentKeys": [
+                                        "Transform",
+                                        "LayoutItem",
+                                        "Visibility",
+                                        "Lock",
+                                        "Appearance",
+                                        "Renderer",
+                                        "Curve"
+                                      ],
+                                      "capabilityIds": []
+                                    },
+                                    "Transform": {
+                                      "rotation": 0
+                                    },
+                                    "LayoutItem": {
+                                      "positioning": "absolute",
+                                      "offset": {
+                                        "x": 42,
+                                        "y": 8
+                                      },
+                                      "width": {
+                                        "mode": "fixed",
+                                        "value": 32,
+                                        "min": 1,
+                                        "max": null
+                                      },
+                                      "height": {
+                                        "mode": "fixed",
+                                        "value": 24,
+                                        "min": 1,
+                                        "max": null
+                                      },
+                                      "margin": {
+                                        "top": 0,
+                                        "right": 0,
+                                        "bottom": 0,
+                                        "left": 0
+                                      },
+                                      "alignSelf": "auto"
+                                    },
+                                    "Visibility": {
+                                      "visible": true
+                                    },
+                                    "Lock": {
+                                      "locked": false
+                                    },
+                                    "Appearance": {
+                                      "backgroundPaint": {
+                                        "kind": "solid",
+                                        "color": "#facc15"
+                                      },
+                                      "borderColor": "transparent",
+                                      "borderWidth": 0,
+                                      "borderRadius": 0,
+                                      "opacity": 1,
+                                      "shadow": null
+                                    },
+                                    "Renderer": {
+                                      "type": "curve",
+                                      "props": {
+                                        "stroke": "#facc15",
+                                        "strokeWidth": 2,
+                                        "strokeLinecap": "round",
+                                        "strokeDasharray": "none",
+                                        "markerStart": "none",
+                                        "markerEnd": "none"
+                                      }
+                                    },
+                                    "Curve": {
+                                      "kind": "polyline",
+                                      "closed": true,
+                                      "vertices": [
+                                        {
+                                          "x": 0,
+                                          "y": 0
+                                        },
+                                        {
+                                          "x": 32,
+                                          "y": 12
+                                        },
+                                        {
+                                          "x": 0,
+                                          "y": 24
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "appliedLineage": [
+                              {
+                                "reference": {
+                                  "kind": "component",
+                                  "providerId": "fixture",
+                                  "assetKey": "Badge",
+                                  "scope": "persistent"
+                                },
+                                "componentId": "Badge",
+                                "kind": "base",
+                                "revision": "1"
+                              }
+                            ]
+                          },
+                          "instanceOverrides": {
+                            "operations": []
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "appliedLineage": [
+                {
+                  "reference": {
+                    "kind": "component",
+                    "providerId": "fixture",
+                    "assetKey": "Card",
+                    "scope": "persistent"
+                  },
+                  "componentId": "Card",
+                  "kind": "base",
+                  "revision": "1"
+                }
+              ]
+            },
+            "instanceOverrides": {
+              "operations": []
+            }
+          }
+        }
+      }
+    }
+  }
+}

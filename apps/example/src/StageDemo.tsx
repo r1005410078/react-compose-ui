@@ -13,11 +13,12 @@ import {
   ComposeEditor,
   useComposeEditorController,
 } from '@compose-ui/editor'
-import type { ComposeEditorTransactionEvent, ComposeToolbarItem } from '@compose-ui/editor'
+import type { ComposeEditorQmlInstanceResolver, ComposeEditorTransactionEvent, ComposeToolbarItem } from '@compose-ui/editor'
 import { createComposeAssetResolver } from '@compose-ui/assets'
 import { createComposeComponentStore } from '@compose-ui/component-library'
 import {
   createComposeBasicMaterials,
+  solveComposeComponentInstances,
 } from '@compose-ui/materials'
 import {
   ComposeOperationLogPanel,
@@ -413,6 +414,11 @@ export function StageDemoWorkspace() {
     // 每次打开预览都把会话对齐到正在编辑的页面：从首页起步会让用户看到的不是自己刚改的那页。
     if (previewOpen) navigationSession.reset(activePage?.pageKey ?? null)
   }, [activePage?.pageKey, navigationSession, previewOpen])
+  // 「导出为 QML」逐个求解组件实例：与画布同一个 Registry 与资源解析器，量出来的盒才一致。
+  const qmlInstances = useCallback<ComposeEditorQmlInstanceResolver>(
+    (input) => solveComposeComponentInstances({ ...input, registry, assetResolver }),
+    [assetResolver],
+  )
 
   /*
    * 浏览器返回键退出整屏。进入时 push 一条记录，退出时按来源分流：返回键触发的那次
@@ -459,6 +465,7 @@ export function StageDemoWorkspace() {
         controller={controller}
         components={componentsConfig}
         pages={pagesConfig}
+        qmlInstances={qmlInstances}
         onScenePreview={(frameId) => {
           setPreviewFrameId(frameId)
           setPreviewOpen(true)

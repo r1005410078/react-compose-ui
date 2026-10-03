@@ -12,6 +12,7 @@ export {
   type ComposeEditorProps,
   type ComposeEditorSlots,
 } from './compose-editor'
+export type { ComposeEditorQmlInstanceResolver } from './qml'
 export {
   useComposeEditorController,
   useComposeStageViewport,

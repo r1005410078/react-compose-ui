@@ -1,6 +1,6 @@
 import { getComposeFrame, type ComposeDocument } from '@compose-ui/core'
 import { createComposeLayoutRuntime } from '@compose-ui/layout-engine'
-import { createComposeBasicMaterials } from '@compose-ui/materials'
+import { createComposeBasicMaterials, solveComposeComponentInstances } from '@compose-ui/materials'
 import { ComposePreview } from '@compose-ui/preview'
 import { exportComposeSceneToQml, type ComposeQmlExportResult } from '@compose-ui/qml-export'
 import { useEffect, useState, useSyncExternalStore } from 'react'
@@ -40,11 +40,23 @@ export function QtReferencePreview() {
   useEffect(() => {
     const frameId = document?.rootIds[0]
     if (!frameId || state?.status !== 'ready' || state.sourceDocument !== document) return
-    window.__COMPOSE_QT_EXPORT__ = exportComposeSceneToQml({
+    let cancelled = false
+    // 实例走编辑器导出同一条路径：同一个 Registry 逐个准备并求解嵌套文档。
+    void solveComposeComponentInstances({
       document: state.document,
       snapshot: state.snapshot,
-      frameId,
+      rootId: frameId,
+      registry,
+    }).then((instances) => {
+      if (cancelled) return
+      window.__COMPOSE_QT_EXPORT__ = exportComposeSceneToQml({
+        document: state.document,
+        snapshot: state.snapshot,
+        frameId,
+        instances,
+      })
     })
+    return () => { cancelled = true }
   }, [document, state])
 
   if (document === undefined || runtime === null) {
