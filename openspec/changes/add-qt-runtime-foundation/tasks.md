@@ -35,7 +35,7 @@
         Qt 打印，工具只负责退出码。
 - [ ] 2.3 在 Linux 验收环境（xvfb + xcb + llvmpipe）中连续截图同一份 QML 十次，逐字节一致
       - 本机（macOS offscreen）：`text-line` 与 `line-diagonal` 各连截十次，各得 1 个哈希。
-      - Linux 一侧待 CI 首次实跑确认。
+      - Linux 一侧：CI 新增「Grab determinism」步骤（`text-styles` 与 `instances` 各连截十次比哈希），待它跑通后勾选。
 
 ## 3. 像素对比
 
@@ -59,7 +59,7 @@
 
 ## 4. CI
 
-- [ ] 4.1 `ci.yml` 新增 `qt` job：缓存 Qt、构建 `qml-grab`、下载 Preview 截图 artifact、对比
+- [x] 4.1 `ci.yml` 新增 `qt` job：缓存 Qt、构建 `qml-grab`、下载 Preview 截图 artifact、对比
       - Red：首次实跑（PR #1）`qt` job 被跳过——它 `needs: verify`，而 `verify` 挂在 `main` 上早已
         存在的 `asset-browser` Monaco 用例超时（`main` 最近 5 次 CI 都挂在同一处）。
       - 改为独立 job：自己构建、自己跑 `qt-reference` 截参考图与导出 QML；待实跑通过后勾选。
@@ -72,8 +72,9 @@
         `text-line` 0.120%、`text-styles` 0.806%、`instances` 0，其余与本机相同。
       - 剩余差异是字形边缘抗锯齿（Skia 与 Qt 的光栅化），行位置逐行对齐到 1px 内。经确认：含文字的
         夹具单独取 1.5%（`TEXT_MAX_DIFF_RATIO`，按夹具文档里有无文字 Renderer 判定），纯图形仍 0.5%。
-- [ ] 4.2 失败时上传两边截图与差异图
-      - 已写入 workflow（`qt-comparison` artifact）；随 4.1 一起验证。
+      - Green：run 37085732499 的 `qt` job 通过，9/9 夹具（含 `instances`）。
+- [x] 4.2 失败时上传两边截图与差异图
+      - 已验证：`text-styles` 超差那两次运行都上传了 `qt-comparison`，内含参考图、Qt 截图、差异图与导出的 QML。
 
 ## 5. 文档与验证
 

@@ -38,10 +38,11 @@
       - `native/qt/fixtures/instances`：同组件两个实例（其一覆盖色块颜色）、`scale` + `flip: x`、
         组件内嵌实例。人工核对两侧截图：覆盖、镜像、缩放、嵌套均出现。
 - [x] 4.2 像素对比通过
-      - 本机（macOS offscreen）`instances` 差异像素 0；Linux 待 CI。
+      - 本机（macOS offscreen）与 Linux CI 上 `instances` 差异像素都是 0。
 
 ## 5. 文档与验证
 
 - [x] 5.1 `AGENTS.md`：准备管线的归属与「预览与导出共用」的判据
-- [ ] 5.2 `bun run lint` / `typecheck` / `test` / `build` / `test:e2e`
-- [ ] 5.3 `npx openspec validate add-qml-instance-export --strict`
+- [x] 5.2 `bun run lint` / `typecheck` / `test` / `build` / `test:e2e`
+      - 全部通过；`test:e2e` 392 passed。
+- [x] 5.3 `npx openspec validate add-qml-instance-export --strict`

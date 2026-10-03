@@ -49,7 +49,8 @@
 - [x] 4.3 Qt 一侧改为截导出结果，删除底座阶段的手写对照 `.qml`；`qml-grab` 新增 `--font`
       - Green command/result：`native/qt/scripts/grab-fixtures.sh` + `bun scripts/qt/compare-render.ts`，
         八份全部通过（0 / 0 / 0.002% / 0.117% / 0 / 0 / 0.028% / 0.467%，macOS offscreen）。
-- [ ] 4.4 Linux 验收环境（CI `qt` job）上八份夹具通过——待 CI 首次实跑
+- [x] 4.4 Linux 验收环境（CI `qt` job）上八份夹具通过
+      - run 37085732499 通过（加上 `instances` 共 9 份）；文字差异的来源与处理记录在 `add-qt-runtime-foundation` 任务 4.1。
 
 ## 5. 文档与验证
 
