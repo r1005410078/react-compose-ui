@@ -119,6 +119,11 @@ export function textObjects(
       ...(fontFamily ? [['font.family', qmlString(fontFamily)] as const] : []),
       // 像素字号，不用 pointSize：后者随屏幕 DPI 变。
       ['font.pixelSize', qmlNumber(fontSize)],
+      /*
+       * 不 hint：预览（Chromium）按亚像素累加字宽，Linux 上 Qt 缺省的 FreeType hinting 把每个字宽
+       * 取整，一行累积出一两个像素，换行位置也可能跟着变。macOS 忽略这一项。
+       */
+      ['font.hintingPreference', 'Font.PreferNoHinting'],
       ...(weight !== null && weight !== 400 ? [['font.weight', qmlNumber(weight)] as const] : []),
       ...(typeof props.letterSpacing === 'number' && props.letterSpacing !== 0
         ? [['font.letterSpacing', qmlNumber(props.letterSpacing)] as const]
