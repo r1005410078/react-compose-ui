@@ -5,5 +5,7 @@
     "mac": "clang_64",
     "linux": "linux_gcc_64"
   },
-  "modules": []
+  "modules": [
+    "qtwebsockets"
+  ]
 }

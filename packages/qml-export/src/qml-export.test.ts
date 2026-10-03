@@ -529,3 +529,82 @@ describe('OpenSpec: qml-export / 组件实例按嵌套求解结果内联展开',
     expect(unresolved).toEqual([expect.objectContaining({ entityId: 'b', message: expect.stringContaining('b') })])
   })
 })
+
+const PAGE_SCRIPT = { setupModule: 'export function setup() { return {} }\n', runtimeModule: '// runtime\n' }
+
+function bindings(fields: Record<string, string>): JsonObject {
+  return {
+    version: 1,
+    rendererProps: {
+      fields: Object.fromEntries(Object.entries(fields).map(([prop, exportName]) => [prop, { scope: 'page', exportName }])),
+    },
+  }
+}
+
+describe('OpenSpec: qml-page-script / 导出值桥接为 QML 属性', () => {
+  const label = entity('label', {
+    Renderer: { type: 'text', props: { text: '23.5', color: '#22c55e', fontSize: 16 } },
+    Bindings: bindings({ text: 'temperature', color: 'alarmColor', fontSize: 'size' }),
+  }, 'text')
+  const wire = entity('wire', {
+    Renderer: { type: 'curve', props: { stroke: '#ff3b30cc', strokeWidth: 2, markerEnd: 'arrow' } },
+    Curve: { kind: 'line', start: { x: 0, y: 0 }, end: { x: 40, y: 0 } },
+    Bindings: bindings({ stroke: 'alarmColor' }),
+  }, 'curve')
+  const input = scene([label, wire], { label: box(0, 0, 100, 20), wire: box(0, 40, 40, 1) })
+
+  it('被绑定的导出名生成 page 属性，对象以带静态回退的表达式绑定', () => {
+    const { qml, files } = exportComposeSceneToQml({ ...input, frameId: FRAME_ID, pageScript: PAGE_SCRIPT })
+    expect(qml).toMatch(/^import "ComposeRuntime"$/m)
+    expect(qml).toMatch(/^import "page.setup.mjs" as PageSetup$/m)
+    const page = block(qml, 'id: page')
+    expect(page).toContain('setup: PageSetup.setup')
+    expect(page).toContain('property var x_temperature: undefined')
+    expect(page).toContain('property var x_alarmColor: undefined')
+    expect(page).toContain('"alarmColor":{"property":"x_alarmColor","kinds":["color"]}')
+    expect(qml).toContain('text: page.x_temperature === undefined ? "23.5" : page.text(page.x_temperature)')
+    expect(qml).toContain('color: page.x_alarmColor === undefined ? "#22c55e" : page.color(page.x_alarmColor)')
+    // 描边与箭头填充跟同一个绑定；静态回退写的是 Qt 的 #aarrggbb。
+    expect(qml.match(/page\.x_alarmColor === undefined \? "#ccff3b30" : page\.color\(page\.x_alarmColor\)/g)).toHaveLength(2)
+    expect(files.map((file) => file.path)).toEqual([
+      'Scene.qml',
+      'page.setup.mjs',
+      'ComposeRuntime/qmldir',
+      'ComposeRuntime/ComposePage.qml',
+      'ComposeRuntime/globals.mjs',
+      'ComposeRuntime/script-runtime.mjs',
+    ])
+    expect(files[1]!.content).toBe(PAGE_SCRIPT.setupModule)
+    expect(files[5]!.content).toBe(PAGE_SCRIPT.runtimeModule)
+  })
+
+  it('不能动态化的绑定（字号）按静态值导出并给出诊断', () => {
+    const { qml, diagnostics } = exportComposeSceneToQml({ ...input, frameId: FRAME_ID, pageScript: PAGE_SCRIPT })
+    expect(qml).not.toContain('x_size')
+    expect(diagnostics.filter((item) => item.code === 'binding.static-value')).toEqual([
+      expect.objectContaining({ entityId: 'label', message: expect.stringContaining('fontSize') }),
+    ])
+  })
+
+  it('页面没有 setup：没有 page 对象与运行时，产物只有场景文件', () => {
+    const { qml, files, diagnostics } = exportComposeSceneToQml({ ...input, frameId: FRAME_ID })
+    expect(qml).not.toContain('ComposePage')
+    expect(qml).not.toContain('page.')
+    expect(files).toEqual([{ path: 'Scene.qml', content: qml }])
+    expect(diagnostics.filter((item) => item.code === 'binding.static-value').map((item) => item.entityId))
+      .toEqual(['label', 'wire'])
+  })
+
+  it('组件实例内部的绑定不动态化：嵌套文档没有脚本作用域', () => {
+    const content = instanceContent()
+    const rect = content.document.entities.rect!
+    const boundRect = { ...rect, components: { ...rect.components, Bindings: bindings({ text: 'temperature' }) } }
+    const { qml } = exportComposeSceneToQml({
+      ...scene([instanceEntity('a')], { a: box(0, 0, 80, 40) }),
+      frameId: FRAME_ID,
+      pageScript: PAGE_SCRIPT,
+      instances: new Map([['a', { ...content, document: { ...content.document, entities: { ...content.document.entities, rect: boundRect } } }]]),
+    })
+    expect(qml).not.toContain('x_temperature')
+  })
+})

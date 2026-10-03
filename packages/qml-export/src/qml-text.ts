@@ -1,5 +1,6 @@
 import type { JsonObject } from '@compose-ui/core'
 import { qmlColor, qmlNumber, qmlString, type QmlObject } from './qml-writer'
+import { STATIC_VALUE, type QmlBoundValue } from './qml-binding'
 
 /** 预览的文字缺省字号（`--compose-material-text-font-size`）。 */
 const DEFAULT_FONT_SIZE = 24
@@ -92,6 +93,7 @@ export function textObjects(
   id: string,
   props: JsonObject,
   size: { readonly width: number; readonly height: number },
+  bound: QmlBoundValue = STATIC_VALUE,
 ): { readonly objects: readonly QmlObject[]; readonly fontFamily: string | null } {
   const text = typeof props.text === 'string' || typeof props.text === 'number' ? String(props.text) : 'Text'
   const fontSize = typeof props.fontSize === 'number' ? props.fontSize : DEFAULT_FONT_SIZE
@@ -112,10 +114,10 @@ export function textObjects(
       ['y', halfLeadingOffset(lineHeight, metricsId, props.verticalAlign)],
       ['width', qmlNumber(size.width)],
       ['height', qmlNumber(size.height)],
-      ['text', qmlString(text)],
+      ['text', bound('text', 'text', qmlString(text))],
       // 文档里的 text 是纯文本；不写的话 Qt 会按内容猜测是不是富文本。
       ['textFormat', 'Text.PlainText'],
-      ['color', qmlColor(typeof props.color === 'string' ? props.color : '#ffffff')],
+      ['color', bound('color', 'color', qmlColor(typeof props.color === 'string' ? props.color : '#ffffff'))],
       ...(fontFamily ? [['font.family', qmlString(fontFamily)] as const] : []),
       // 像素字号，不用 pointSize：后者随屏幕 DPI 变。
       ['font.pixelSize', qmlNumber(fontSize)],

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { strFromU8, unzipSync } from 'fflate'
 import type { Page } from '@playwright/test'
 import { stableBox } from './support/test-helpers'
 
@@ -15,7 +16,12 @@ async function exportFromAppMenu(page: Page) {
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('menuitem', { name: '导出为 QML' }).click()
   const download = await downloadPromise
-  return { name: download.suggestedFilename(), qml: readFileSync(await download.path(), 'utf8') }
+  const name = download.suggestedFilename()
+  const bytes = readFileSync(await download.path())
+  // 页面带 setup 时产物是一个目录，打成 zip；示例首页就带脚本。
+  if (!name.endsWith('.zip')) return { name, qml: bytes.toString('utf8'), files: ['Scene.qml'] }
+  const unzipped = unzipSync(new Uint8Array(bytes))
+  return { name, qml: strFromU8(unzipped['Scene.qml']!), files: Object.keys(unzipped).sort(), unzipped }
 }
 
 test('OpenSpec: qml-export / 编辑器导出入口 / 导出含未保存改动的场景', async ({ page }) => {
@@ -26,7 +32,7 @@ test('OpenSpec: qml-export / 编辑器导出入口 / 导出含未保存改动的
   await expect(surface).toBeVisible()
 
   const before = await exportFromAppMenu(page)
-  expect(before.name).toMatch(/\.qml$/)
+  expect(before.name).toMatch(/\.(qml|zip)$/)
   expect(before.qml).toMatch(/^import QtQuick$/m)
   expect(before.qml).not.toContain('Shape {')
   await expect(editor.getByRole('status').filter({ hasText: '已导出 QML' })).toBeVisible()
@@ -70,3 +76,26 @@ test('OpenSpec: qml-export / 编辑器导出时逐实例准备与求解 / 导出
   await expect(notice).toBeVisible()
   await expect(notice).not.toContainText('没有可用的嵌套求解结果')
 })
+
+test('OpenSpec: qml-page-script / 多文件导出产物 / 导出带脚本的场景', async ({ page }) => {
+  await page.goto('/?no-auto-fit')
+  const editor = page.getByRole('region', { name: 'Compose editor' })
+  await expect(editor.getByRole('application', { name: 'Stage' }).getByTestId('stage-surface')).toBeVisible()
+
+  const exported = await exportFromAppMenu(page)
+  // 示例首页带 setup：交付 zip，里面是场景、降级后的 setup 与随产物走的运行时目录。
+  expect(exported.name).toMatch(/\.zip$/)
+  expect(exported.files).toEqual([
+    'ComposeRuntime/ComposePage.qml',
+    'ComposeRuntime/globals.mjs',
+    'ComposeRuntime/qmldir',
+    'ComposeRuntime/script-runtime.mjs',
+    'Scene.qml',
+    'page.setup.mjs',
+  ])
+  expect(exported.qml).toMatch(/^import "page.setup.mjs" as PageSetup$/m)
+  const setup = strFromU8(exported.unzipped!['page.setup.mjs']!)
+  expect(setup).toMatch(/export\s*\{[^}]*\bsetup\b/)
+  expect(setup).not.toMatch(/\basync\s+(function|\w+\s*\(|\()/)
+})
+

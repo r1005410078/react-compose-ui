@@ -289,6 +289,8 @@ const messages = {
       exportPartial: '已导出 QML，部分内容做了降级',
       exportFailed: 'QML 导出失败',
       fontsNeeded: '目标机需要安装字体',
+      scriptSkipped: '页面脚本没有随导出：宿主未提供脚本编译器。',
+      scriptCompileFailed: '页面脚本编译失败',
     },
     svg: {
       importAsComponent: '导入为组件',
@@ -642,6 +644,8 @@ const messages = {
       exportPartial: 'Exported as QML; some content was simplified',
       exportFailed: 'Failed to export QML',
       fontsNeeded: 'Fonts required on the target machine',
+      scriptSkipped: 'The page script was not exported: the host did not provide a script compiler.',
+      scriptCompileFailed: 'Failed to compile the page script',
     },
     svg: {
       importAsComponent: 'Import as component',

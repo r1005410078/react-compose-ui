@@ -4,6 +4,7 @@ import {
   type ComposeDocument,
   type ComposeLayoutSnapshot,
 } from '@compose-ui/core'
+import { strFromU8, unzipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { exportActiveSceneAsQml } from './export-active-scene'
 
@@ -13,6 +14,8 @@ const messages = {
   exportPartial: '已导出 QML，部分内容做了降级',
   exportFailed: 'QML 导出失败',
   fontsNeeded: '目标机需要安装字体',
+  scriptSkipped: '页面脚本没有随导出：宿主未提供脚本编译器。',
+  scriptCompileFailed: '页面脚本编译失败',
 }
 
 function input(children: ComposeDocument['entities'] = {}, activeFrameId: string | null = 'b') {
@@ -42,13 +45,13 @@ describe('OpenSpec: qml-export / 编辑器导出入口', () => {
     expect(outcome.ok).toBe(true)
     if (!outcome.ok) return
     expect(outcome.fileName).toBe('主屏总览.qml')
-    expect(outcome.qml).toContain('objectName: "b"')
+    expect(outcome.content).toContain('objectName: "b"')
     expect(outcome.notice).toBe('已导出 QML：主屏总览.qml。')
   })
 
   it('没有记录激活场景时退回第一块根场景（与预览默认目标同一个回退）', async () => {
     const outcome = await exportActiveSceneAsQml(input({}, null))
-    expect(outcome.ok && outcome.qml).toContain('objectName: "a"')
+    expect(outcome.ok && outcome.content).toContain('objectName: "a"')
   })
 
   it('导出时有降级：文件照常交付，提示按类聚合并列出要装的字体', async () => {
@@ -123,6 +126,47 @@ describe('OpenSpec: qml-export / 编辑器导出入口', () => {
       },
     })
     expect(roots).toEqual(['b'])
-    expect(outcome.ok && outcome.qml).toContain('objectName: "inst/root"')
+    expect(outcome.ok && outcome.content).toContain('objectName: "inst/root"')
+  })
+
+  it('页面有 setup：降级后的脚本与运行时一起打成 zip', async () => {
+    const outcome = await exportActiveSceneAsQml({
+      ...input(),
+      loadSetupSource: async () => 'export function setup() { return {} }',
+      scriptCompiler: { compile: async (source) => `// lowered\n${source}` },
+    })
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    expect(outcome.fileName).toBe('主屏总览.zip')
+    expect(outcome.content).toBeInstanceOf(Uint8Array)
+    const unzipped = unzipSync(outcome.content as Uint8Array)
+    expect(Object.keys(unzipped).sort()).toEqual([
+      'ComposeRuntime/ComposePage.qml',
+      'ComposeRuntime/globals.mjs',
+      'ComposeRuntime/qmldir',
+      'ComposeRuntime/script-runtime.mjs',
+      'Scene.qml',
+      'page.setup.mjs',
+    ])
+    expect(strFromU8(unzipped['page.setup.mjs']!)).toBe('// lowered\nexport function setup() { return {} }')
+    expect(strFromU8(unzipped['ComposeRuntime/script-runtime.mjs']!)).toContain('createComposePageScriptScope')
+  })
+
+  it('有 setup 而宿主没给编译器：交付静态场景并说明脚本没有随导出', async () => {
+    const outcome = await exportActiveSceneAsQml({
+      ...input(),
+      loadSetupSource: async () => 'export function setup() { return {} }',
+    })
+    expect(outcome.ok && outcome.fileName).toBe('主屏总览.qml')
+    expect(outcome.notice).toContain('页面脚本没有随导出')
+  })
+
+  it('setup 编译失败：不交付文件，提示带编译器的说明', async () => {
+    const outcome = await exportActiveSceneAsQml({
+      ...input(),
+      loadSetupSource: async () => 'export function setup( {',
+      scriptCompiler: { compile: async () => { throw new Error('page.setup.js:1:24: Unexpected "{"') } },
+    })
+    expect(outcome).toEqual({ ok: false, notice: '页面脚本编译失败：page.setup.js:1:24: Unexpected "{"' })
   })
 })

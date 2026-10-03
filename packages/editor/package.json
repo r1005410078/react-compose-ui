@@ -55,6 +55,8 @@
     "@compose-ui/svg-import": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "dockview-react": "^7.0.2",
+    "esbuild-wasm": "0.28.1",
+    "fflate": "^0.8.3",
     "valibot": "^1.4.0"
   },
   "peerDependencies": {

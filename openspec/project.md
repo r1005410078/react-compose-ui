@@ -279,7 +279,12 @@ React Compose UI 是一组可嵌入现有 React 项目的低代码 UI 组件，�
   `native/qt/.qt/`；像素对比使用 `pixelmatch` 与 `pngjs`（仅 `scripts/qt/` 使用的开发依赖）。夹具字体
   为随附的 DejaVu Sans 常规与粗体（Bitstream Vera 派生许可，见 `native/qt/fixtures/fonts/`）；粗体
   必须有自己的文件，缺了它两边各自合成粗体，合成方式并不相同。Qt 开源版为
-  LGPLv3，分发到设备之前需要确定合规方式或商业授权。
-- CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium；`qt` job 在 `verify` 之后运行 Qt 验收链路。
+  LGPLv3，分发到设备之前需要确定合规方式或商业授权。Qt 模块清单含 `qtwebsockets`（页面脚本的
+  `WebSocket` 补齐）。
+- 页面脚本导出到 Qt：`esbuild` 0.28.1（`script-runtime` 的构建期开发依赖，产出可移植运行时）与
+  `esbuild-wasm` 0.28.1（编辑器在导出时降级作者的 setup；约 10 MB 的 wasm 由宿主给出地址、按需加载），
+  两者版本锁死以保证降级语义一致；`fflate` 把多文件产物打成 zip。
+- CI：GitHub Actions `ubuntu-24.04` 与 Playwright Chromium；`qt` job 独立于 `verify` 运行 Qt 验收链路
+  （参考图关掉 Chromium 的字体 hinting；截图确定性判据为通道最大差不超过 8/255）。
 - 发布：Changesets 经 GitHub Actions Release 工作流发布到 npm registry（带 provenance）。
 - 当前运行时不依赖数据库、远端服务或第三方业务 API。

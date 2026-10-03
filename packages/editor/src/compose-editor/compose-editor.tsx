@@ -53,9 +53,10 @@ import {
 import type { ComposePaintImageLibrary } from '@compose-ui/components'
 import { resolveTargetFrameId } from '@compose-ui/stage-engine'
 import {
-  downloadTextFile,
+  downloadFile,
   exportActiveSceneAsQml,
   type ComposeEditorQmlInstanceResolver,
+  type ComposeEditorQmlScriptCompiler,
 } from '../qml'
 
 /** 解析动画作用域时不看选区：内联 `[]` 每次渲染都是新引用，会破坏 memo。 */
@@ -176,6 +177,7 @@ import {
 import { usePageWorkspace } from '../pages'
 import type { ComposeEditorPagesConfig } from '../pages'
 import {
+  COMPOSE_PAGE_SETUP_PORTABLE_SCRIPT_INTELLIGENCE,
   COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE,
   isComposePageSetupScriptName,
 } from '../pages/page-script-intelligence'
@@ -276,6 +278,26 @@ export interface ComposeEditorProps extends Omit<HTMLAttributes<HTMLElement>, 'c
    * `solveComposeComponentInstances` 绑定好与画布同一个 Registry 与资源解析器即可。
    */
   qmlInstances?: ComposeEditorQmlInstanceResolver
+  /**
+   * 「导出为 QML」时把页面 setup 降级成 Qt 能运行的模块；省略时脚本不随导出，绑定按静态值导出。
+   *
+   * @remarks
+   * 编译器是一个约 10 MB 的 wasm，编辑器是库构建，打进来会被内联进首屏，因此由宿主注入。
+   * `createComposeQmlScriptCompiler({ wasmURL })` 是默认实现，宿主给出 `esbuild.wasm` 的地址即可；
+   * 它只在第一次导出时加载。
+   */
+  qmlScriptCompiler?: ComposeEditorQmlScriptCompiler
+  /**
+   * 可移植模式：页面脚本要导出到 Qt 运行时，编辑时就把 Qt 里不存在的浏览器全局（`document`、
+   * `window`、`structuredClone`……）标为错误。
+   *
+   * @remarks
+   * 默认关闭：多数宿主只在浏览器里运行脚本，不该被收窄。清单来自 `@compose-ui/script-runtime` 的
+   * `COMPOSE_PORTABLE_UNAVAILABLE_GLOBALS`，与导出时注入的可移植全局读同一份定义。
+   *
+   * @defaultValue false
+   */
+  portableScripts?: boolean
   /**
    * 请求以某个场景为目标打开预览。
    *
@@ -423,6 +445,8 @@ export function ComposeEditor({
   workspaces,
   toolbarItems,
   qmlInstances,
+  qmlScriptCompiler,
+  portableScripts = false,
   onScenePreview,
   preferences,
   defaultPreferences,
@@ -865,7 +889,7 @@ export function ComposeEditor({
     if (!provider || entry.kind !== 'file') return
     const readOnly = options?.readOnly === true
     const scriptIntelligence = options?.setupScript === true
-      ? COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE
+      ? (portableScripts ? COMPOSE_PAGE_SETUP_PORTABLE_SCRIPT_INTELLIGENCE : COMPOSE_PAGE_SETUP_SCRIPT_INTELLIGENCE)
       : undefined
     const panelId = createAssetDocumentPanelId(provider.id, entry.assetKey ?? entry.id, { readOnly })
     if (documentsRef.current.has(panelId)) {
@@ -892,6 +916,7 @@ export function ComposeEditor({
     setActiveDocumentPanelId(panelId)
   }, [
     assets?.browser?.provider,
+    portableScripts,
     replaceDocuments,
     updateDocument,
   ])
@@ -2672,6 +2697,13 @@ export function ComposeEditor({
    * 导出、下载两份文件。
    */
   const [qmlExporting, setQmlExporting] = useState(false)
+  // 读的是已保存的脚本资源：脚本在资源编辑器里改、保存之后才生效，与预览加载 setup 是同一份。
+  const setupReference = activePageSession?.page.setupScript
+  const loadSetupSource = useCallback(async () => {
+    if (!setupReference || !resolvedAssetResolver) return null
+    const resolved = await resolvedAssetResolver.resolve({ reference: setupReference })
+    return resolved.blob.text()
+  }, [resolvedAssetResolver, setupReference])
   const qmlExportPending = layoutDocument === null || layoutSnapshot === null || qmlExporting
   const exportQml = useCallback(() => {
     if (layoutDocument === null || layoutSnapshot === null || qmlExporting) return
@@ -2682,14 +2714,16 @@ export function ComposeEditor({
       layoutSnapshot,
       activeFrameId: pageActiveFrameId,
       resolveInstances: qmlInstances,
+      loadSetupSource,
+      scriptCompiler: qmlScriptCompiler,
       messages: editorMessages.qml,
     }).then((outcome) => {
-      if (outcome.ok) downloadTextFile(outcome.fileName, outcome.qml)
+      if (outcome.ok) downloadFile(outcome.fileName, outcome.content)
       setPageNotice(outcome.notice)
     }).finally(() => {
       setQmlExporting(false)
     })
-  }, [editorMessages.qml, layoutDocument, layoutSnapshot, pageActiveFrameId, qmlExporting, qmlInstances])
+  }, [editorMessages.qml, layoutDocument, layoutSnapshot, loadSetupSource, pageActiveFrameId, qmlExporting, qmlInstances, qmlScriptCompiler])
   const exportQmlAction = actionContext === undefined || activeWorkspaceSession?.kind === 'asset'
     ? undefined
     : exportQml

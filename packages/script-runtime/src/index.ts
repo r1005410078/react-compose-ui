@@ -12,6 +12,14 @@ export { createComposePageScriptScope } from './scope'
 export type { CreateComposePageScriptScopeOptions } from './scope'
 export { COMPOSE_PAGE_SCRIPT_TYPE_DECLARATIONS } from './type-declarations'
 export {
+  COMPOSE_PORTABLE_GLOBALS,
+  COMPOSE_PORTABLE_SCRIPT_TARGET,
+  COMPOSE_PORTABLE_UNAVAILABLE_GLOBALS,
+  composePortableGlobalsShim,
+  type ComposePortableGlobal,
+} from './portable/portable'
+export { COMPOSE_PORTABLE_RUNTIME_SOURCE } from './portable/portable-runtime'
+export {
   ComposeScriptLoadError,
   createComposeJavaScriptModuleLoader,
   loadComposePageScriptScope,

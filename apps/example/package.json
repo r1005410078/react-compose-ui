@@ -26,8 +26,10 @@
     "@compose-ui/preview": "workspace:*",
     "@compose-ui/property-panel": "workspace:*",
     "@compose-ui/qml-export": "workspace:*",
+    "@compose-ui/script-runtime": "workspace:*",
     "@compose-ui/ui-context": "workspace:*",
     "echarts": "^6.1.0",
+    "esbuild-wasm": "0.28.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "valibot": "^1.4.0"

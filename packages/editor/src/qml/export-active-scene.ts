@@ -2,9 +2,13 @@ import type { ComposeDocument, ComposeLayoutSnapshot } from '@compose-ui/core'
 import {
   exportComposeSceneToQml,
   type ComposeQmlExportDiagnostic,
+  type ComposeQmlExportFile,
   type ComposeQmlInstanceContent,
 } from '@compose-ui/qml-export'
+import { COMPOSE_PORTABLE_RUNTIME_SOURCE } from '@compose-ui/script-runtime'
 import { resolveTargetFrameId } from '@compose-ui/stage-engine'
+import { strToU8, zipSync } from 'fflate'
+import type { ComposeEditorQmlScriptCompiler } from './compile-setup'
 
 /** 导出提示用到的文案；由编辑器的 i18n 注入。 @internal */
 export interface QmlExportMessages {
@@ -13,6 +17,10 @@ export interface QmlExportMessages {
   readonly exportPartial: string
   readonly exportFailed: string
   readonly fontsNeeded: string
+  /** 页面有 setup 但宿主没有注入编译器，脚本没有随导出。 */
+  readonly scriptSkipped: string
+  /** 页面 setup 降级编译失败。 */
+  readonly scriptCompileFailed: string
 }
 
 /**
@@ -33,7 +41,15 @@ export type ComposeEditorQmlInstanceResolver = (input: {
 
 /** 一次导出的结果：要交给用户的文件与一行提示。 @internal */
 export type QmlExportOutcome =
-  | { readonly ok: true; readonly fileName: string; readonly qml: string; readonly notice: string }
+  | {
+      readonly ok: true
+      /** 只有场景文件时是 `.qml`，带页面脚本时是整个产物目录的 `.zip`。 */
+      readonly fileName: string
+      readonly content: string | Uint8Array
+      /** 产物文件清单（zip 里的内容），供测试与宿主检查。 */
+      readonly files: readonly ComposeQmlExportFile[]
+      readonly notice: string
+    }
   | { readonly ok: false; readonly notice: string }
 
 /**
@@ -56,9 +72,9 @@ function summarizeDiagnostics(diagnostics: readonly ComposeQmlExportDiagnostic[]
 }
 
 /** 文件名取场景名；去掉文件系统不接受的字符，空了就退回场景 id。 */
-function qmlFileName(document: ComposeDocument, frameId: string) {
+function sceneFileStem(document: ComposeDocument, frameId: string) {
   const name = (document.entities[frameId]?.name ?? '').replace(/[\\/:*?"<>|]/g, '').trim()
-  return `${name || frameId}.qml`
+  return name || frameId
 }
 
 /**
@@ -80,6 +96,9 @@ export async function exportActiveSceneAsQml(input: {
   readonly layoutSnapshot: ComposeLayoutSnapshot
   readonly activeFrameId: string | null
   readonly resolveInstances?: ComposeEditorQmlInstanceResolver
+  /** 读当前页面 setup 的源码；没有 setup 的页面返回 `null`。 */
+  readonly loadSetupSource?: () => Promise<string | null>
+  readonly scriptCompiler?: ComposeEditorQmlScriptCompiler
   readonly messages: QmlExportMessages
 }): Promise<QmlExportOutcome> {
   const { layoutDocument, layoutSnapshot, messages } = input
@@ -91,15 +110,46 @@ export async function exportActiveSceneAsQml(input: {
       snapshot: layoutSnapshot,
       rootId: frameId,
     })
-    const result = exportComposeSceneToQml({ document: layoutDocument, snapshot: layoutSnapshot, frameId, instances })
-    const fileName = qmlFileName(layoutDocument, frameId)
+    const setupSource = await input.loadSetupSource?.() ?? null
+    let pageScript: { readonly setupModule: string; readonly runtimeModule: string } | undefined
+    let scriptNotice = ''
+    if (setupSource !== null && input.scriptCompiler) {
+      let setupModule: string
+      try {
+        setupModule = await input.scriptCompiler.compile(setupSource)
+      }
+      catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        return { ok: false, notice: `${messages.scriptCompileFailed}：${reason}` }
+      }
+      pageScript = { setupModule, runtimeModule: COMPOSE_PORTABLE_RUNTIME_SOURCE }
+    }
+    else if (setupSource !== null) {
+      // 有脚本而宿主没给编译器：照样交付静态场景，但要说出来——否则用户在 Qt 里看到一张不动的图，
+      // 不知道是脚本没跑还是脚本没导出。
+      scriptNotice = ` ${messages.scriptSkipped}`
+    }
+    const result = exportComposeSceneToQml({
+      document: layoutDocument,
+      snapshot: layoutSnapshot,
+      frameId,
+      instances,
+      pageScript,
+    })
+    const stem = sceneFileStem(layoutDocument, frameId)
+    // 只有场景一个文件时照旧下载 .qml；带脚本时产物是一个目录（setup 与 ComposeRuntime/），打成 zip。
+    const archive = result.files.length > 1
+    const fileName = archive ? `${stem}.zip` : `${stem}.qml`
+    const content = archive
+      ? zipSync(Object.fromEntries(result.files.map((file) => [file.path, strToU8(file.content)])))
+      : result.qml
     const fonts = result.fontFamilies.length > 0
       ? ` ${messages.fontsNeeded}：${result.fontFamilies.join('、')}。`
       : ''
     const notice = result.diagnostics.length > 0
-      ? `${messages.exportPartial}（${fileName}）：${summarizeDiagnostics(result.diagnostics)}${fonts}`
-      : `${messages.exported}：${fileName}。${fonts}`
-    return { ok: true, fileName, qml: result.qml, notice: notice.trim() }
+      ? `${messages.exportPartial}（${fileName}）：${summarizeDiagnostics(result.diagnostics)}${fonts}${scriptNotice}`
+      : `${messages.exported}：${fileName}。${fonts}${scriptNotice}`
+    return { ok: true, fileName, content, files: result.files, notice: notice.trim() }
   }
   catch (error) {
     return {
@@ -110,13 +160,16 @@ export async function exportActiveSceneAsQml(input: {
 }
 
 /**
- * 让浏览器把一段文本存成文件。
+ * 让浏览器把一段文本或二进制内容存成文件。
  *
  * @remarks
  * Blob URL 在点击之后立即释放：下载由浏览器接管，URL 留着只会泄漏。
  */
-export function downloadTextFile(fileName: string, text: string, ownerDocument: Document = document) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
+export function downloadFile(fileName: string, content: string | Uint8Array, ownerDocument: Document = document) {
+  const blob = typeof content === 'string'
+    ? new Blob([content], { type: 'text/plain;charset=utf-8' })
+    : new Blob([content as Uint8Array<ArrayBuffer>], { type: 'application/zip' })
+  const url = URL.createObjectURL(blob)
   const anchor = ownerDocument.createElement('a')
   anchor.href = url
   anchor.download = fileName

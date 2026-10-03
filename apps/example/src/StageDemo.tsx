@@ -32,7 +32,8 @@ import type {
   ComposeEditorActiveComponentSession,
   ComposeEditorActivePage,
 } from '@compose-ui/editor'
-import { useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
+import { createComposeQmlScriptCompiler, useComposePageCatalog, useNodeEditorPort } from '@compose-ui/editor'
+import esbuildWasmUrl from 'esbuild-wasm/esbuild.wasm?url'
 import {
   createComposeNavigationSession,
   createComposePageLoader,
@@ -107,6 +108,9 @@ const actionButtonRenderer = {
  * 这正是宿主该做的事。此前这里自己注册了一个 `echarts-bar`，而示例应用不是产品能力。
  */
 const chartMaterials = createComposeChartMaterials()
+// 「导出为 QML」降级页面 setup 用的编译器；wasm 作为独立资源，只在第一次导出时加载。
+const QML_SCRIPT_COMPILER = createComposeQmlScriptCompiler({ wasmURL: esbuildWasmUrl })
+
 const basicMaterials = createComposeBasicMaterials({
   extensions: {
     renderers: [...chartMaterials.renderers, actionButtonRenderer],
@@ -466,6 +470,7 @@ export function StageDemoWorkspace() {
         components={componentsConfig}
         pages={pagesConfig}
         qmlInstances={qmlInstances}
+        qmlScriptCompiler={QML_SCRIPT_COMPILER}
         onScenePreview={(frameId) => {
           setPreviewFrameId(frameId)
           setPreviewOpen(true)

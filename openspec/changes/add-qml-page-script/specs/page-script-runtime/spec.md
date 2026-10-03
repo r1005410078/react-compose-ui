@@ -18,10 +18,10 @@
 
 ### Requirement: 可移植脚本 API 声明
 
-`@compose-ui/script-runtime` MUST 公开一份可移植全局对象清单及其类型声明，内容 MUST 与 Qt 运行时
-实际注入的全局一致；声明中 MUST 写明 `fetch` 子集与浏览器行为的差异。
+`@compose-ui/script-runtime` MUST 公开可移植全局对象清单与不可移植浏览器全局清单，可移植清单 MUST 与
+Qt 运行时实际补齐的全局一致；文档中 MUST 写明 `fetch` 子集与浏览器行为的差异。
 
 #### Scenario: 清单与注入一致
 
 - **WHEN** 运行可移植 API 一致性校验
-- **THEN** 类型声明中的每个全局都在 Qt 运行时注入清单中，反之亦然
+- **THEN** 可移植清单中的每个全局都在 Qt 运行时补齐清单中，反之亦然

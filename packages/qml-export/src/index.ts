@@ -9,14 +9,19 @@
  * Qt 的布局类型。几何与外观照搬预览的渲染规则，验收方式是与预览逐像素比较
  * （见仓库的 `native/qt/`）。
  *
- * 覆盖静态基础图形（场景、容器、Group、曲线、文字、旋转）与组件实例的内联展开（嵌套求解
- * 结果由调用方提供）；脚本绑定、动画、图片等降级为静态值或占位，并逐项给出诊断。
+ * 覆盖静态基础图形（场景、容器、Group、曲线、文字、旋转）、组件实例的内联展开（嵌套求解
+ * 结果由调用方提供）与页面脚本：提供降级后的 setup 时，被绑定的文字与颜色导出为对 `page` 对象
+ * 的 QML 绑定，产物自带 `ComposeRuntime/` 运行时目录。动画、图片等降级为静态值或占位，并逐项
+ * 给出诊断。
  *
  * @packageDocumentation
  */
 export { ComposeQmlExportError, exportComposeSceneToQml } from './qml-export'
+export { COMPOSE_QML_RUNTIME_GLOBALS } from './qml-runtime'
 export type {
   ComposeQmlExportDiagnostic,
+  ComposeQmlExportFile,
+  ComposeQmlPageScript,
   ComposeQmlExportDiagnosticCode,
   ComposeQmlExportInput,
   ComposeQmlExportResult,

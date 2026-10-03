@@ -101,7 +101,7 @@ jobs:
           for name in text-styles instances; do
             for i in $(seq 10); do
               xvfb-run -a -s "-screen 0 1280x1024x24" native/qt/build/tools/qml-grab/qml-grab \
-                "native/qt/out/export/$name.qml" "native/qt/out/determinism/$name-$i.png" "${fonts[@]}"
+                "native/qt/out/export/$name/Scene.qml" "native/qt/out/determinism/$name-$i.png" "${fonts[@]}"
             done
             echo "== $name"
             bun scripts/qt/check-determinism.ts native/qt/out/determinism/$name-*.png || status=1

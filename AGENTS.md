@@ -1375,6 +1375,13 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   Loader 包，只能依赖 `core` 与 `assets`；不得依赖 Registry、Stage、Preview、Editor 或 UI 包。
   `ctx.navigate` / `ctx.navigateBack` 是宿主注入端口的**转发**，本包不实现导航；未注入时调用
   只产生 diagnostic 而不抛出，setup 同步执行期间的调用同样被忽略。
+  本包另出一份**可移植产物**（包根常量 `COMPOSE_PORTABLE_RUNTIME_SOURCE`，供 Qt 的 V4 引擎；构建期由
+  vite 插件打出，Vitest 用同一个插件——跨包只许从包根导入，所以不开文件子路径）：同一份
+  `scope` + `reactivity` 源码降级到 `COMPOSE_PORTABLE_SCRIPT_TARGET`（ES2016——V4 不认 `async`/`await`、
+  对象展开与类字段），`queueMicrotask` 与 `flatMap` 由构建期注入补齐。Qt 侧 MUST NOT 另写 state /
+  computed / effect。「降到哪一版」「补齐哪些全局」（`COMPOSE_PORTABLE_GLOBALS`）与「Qt 里没有哪些
+  浏览器全局」（`COMPOSE_PORTABLE_UNAVAILABLE_GLOBALS`）只在这里定义一处，构建期、导出期与编辑器的
+  可移植模式都读它。
 - `@compose-ui/editor` 是可嵌入的 React 编辑器入口，可以依赖 `core`、`assets`、`pages`、
   `script-runtime` 与既有领域组件，通过公开协议组合页面脚本工作流。
 - `@compose-ui/components` 是跨第一方包复用的 React 交互组件层，可依赖 `ui-context`，
@@ -1553,6 +1560,18 @@ React Compose UI 是一个可嵌入现有 React 项目的低代码 UI 编辑器�
   内部对象各有八份。
   验收夹具的预览截图与导出 QML MUST 来自**同一个**布局 Runtime（示例应用 `?qt-reference` 把它同时
   交给 `ComposePreview` 与导出器），各自求解会让两边的 Hug 文字量出不同的盒。
+  **页面脚本：同一份源码、同一份响应式实现。**带 setup 的导出产物是一个自包含目录（打成 zip）：
+  `Scene.qml`、导出期降级的 `page.setup.mjs` 与随产物走的 `ComposeRuntime/`（`ComposePage.qml`、
+  `globals.mjs`、`qmldir` 住本包 `src/runtime/`，`script-runtime.mjs` 取自可移植产物）——不部署到
+  import path，也就没有需要校验的副本。V4 的全局对象只读，`setTimeout`/`fetch`/`WebSocket` 挂不上去：
+  降级编译时用 esbuild 的 `inject` 把脚本里的自由引用改写成对 `globals.mjs` 的导入，作者源码不变；
+  `globals.mjs` 的导出与 `COMPOSE_PORTABLE_GLOBALS` 必须一致（编辑器用例断言）。被绑定的 prop 写成
+  `page.x_名 === undefined ? <本对象静态值> : page.<换算>(page.x_名)`，**回退写在每个绑定里而不是属性
+  初值**——同一导出被两个静态值不同的对象绑定时，初值只能取其一。只动态化不牵动几何的文字与颜色；
+  组件实例内部的绑定静态（嵌套文档没有脚本作用域）。编译器（esbuild-wasm）由宿主经
+  `qmlScriptCompiler` 注入：编辑器是库构建，wasm 打进来会被内联进首屏。脚本夹具的参考图是写进
+  `expected.json` 的文档（预览不跑脚本），Qt 跑真脚本；它们的文字盒一律固定尺寸，两份文档各自求解
+  也给出同一组盒。
 - `@compose-ui/interaction-kernel` 是**零运行时依赖**的交互内核包：插件契约、按优先级排序的
   注册表、同时至多一个会话的仲裁器。连 `core` 都不依赖——内核逻辑不认识文档，只有类型签名
   通过 `InteractionKernelProfile` 认识。「内核不认识文档」这条边界由**包依赖**承载而不是命名

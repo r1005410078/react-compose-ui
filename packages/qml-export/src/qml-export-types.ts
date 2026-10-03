@@ -71,6 +71,34 @@ export interface ComposeQmlExportInput {
    * 该实例导出为同尺寸占位并给出 `instance.unresolved` 诊断。
    */
   readonly instances?: ReadonlyMap<string, ComposeQmlInstanceContent>
+  /**
+   * 页面 setup 脚本；提供时导出 `page` 对象与动态绑定，产物变成多文件。
+   *
+   * @remarks
+   * 两段都是**已经可在 V4 中运行**的 ES 模块文本：本包不编译、不打包，只把它们放进产物。
+   * 降级编译由调用方完成（目标与全局清单见 `@compose-ui/script-runtime` 的
+   * `COMPOSE_PORTABLE_SCRIPT_TARGET` / `COMPOSE_PORTABLE_GLOBALS`），setup 对全局的引用须已改写为
+   * 对 `./ComposeRuntime/globals.mjs` 的导入。缺席时绑定按静态值导出，与没有脚本的页面相同。
+   */
+  readonly pageScript?: ComposeQmlPageScript
+}
+
+/**
+ * 导出产物里的页面脚本两段。
+ *
+ * @public
+ */
+export interface ComposeQmlPageScript {
+  /** 降级后的页面 setup 模块，导出名为 `setup` 的函数；写到 `page.setup.mjs`。 */
+  readonly setupModule: string
+  /** `@compose-ui/script-runtime` 的 `COMPOSE_PORTABLE_RUNTIME_SOURCE`；写到 `ComposeRuntime/script-runtime.mjs`。 */
+  readonly runtimeModule: string
+}
+
+/** 产物中的一个文件；路径相对产物根目录、用 `/` 分隔。 @public */
+export interface ComposeQmlExportFile {
+  readonly path: string
+  readonly content: string
 }
 
 /**
@@ -98,8 +126,13 @@ export interface ComposeQmlInstanceContent {
 
 /** {@link exportComposeSceneToQml} 的结果。 @public */
 export interface ComposeQmlExportResult {
-  /** 完整的 `.qml` 文本；同一输入逐字节相同。 */
+  /** 场景的 `.qml` 文本；同一输入逐字节相同。 */
   readonly qml: string
+  /**
+   * 完整产物。没有页面脚本时只有场景本身（`Scene.qml`）；有脚本时还有 setup 模块与
+   * `ComposeRuntime/` 运行时目录——产物自包含，`qml Scene.qml` 即可运行，不需要配置 import path。
+   */
+  readonly files: readonly ComposeQmlExportFile[]
   readonly diagnostics: readonly ComposeQmlExportDiagnostic[]
   /**
    * 产物用到的字族，按首次出现排序。

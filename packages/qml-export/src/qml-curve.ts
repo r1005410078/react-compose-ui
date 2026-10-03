@@ -9,6 +9,7 @@ import {
   type JsonObject,
 } from '@compose-ui/core'
 import { qmlColor, qmlNumber, type QmlObject } from './qml-writer'
+import { STATIC_VALUE, type QmlBoundValue } from './qml-binding'
 
 interface Point {
   readonly x: number
@@ -247,12 +248,14 @@ const CAP_STYLE = {
  * @param props - Renderer props（描边、线帽、虚线、箭头）
  * @param fill - `getComposeCurveFill` 的结果；`null` 即空心
  * @param size - 盒尺寸
+ * @param bound - 被绑定 prop 的表达式；缺省一律静态
  */
 export function curveShape(
   curve: ComposeCurve,
   props: JsonObject,
   fill: string | null,
   size: { readonly width: number; readonly height: number },
+  bound: QmlBoundValue = STATIC_VALUE,
 ): QmlObject {
   const mapping = boxMapping(curve, size)
   const stroke = typeof props.stroke === 'string' ? props.stroke : '#d8e2f1'
@@ -266,7 +269,7 @@ export function curveShape(
   const strokeProperties: (readonly [string, string])[] = strokeWidth === 0
     // SVG 的线宽 0 什么都不画；Qt 的线宽 0 是一像素的 cosmetic 线。
     ? [['strokeColor', qmlColor('transparent')]]
-    : [['strokeColor', qmlColor(stroke)], ['strokeWidth', qmlNumber(strokeWidth)]]
+    : [['strokeColor', bound('stroke', 'color', qmlColor(stroke))], ['strokeWidth', qmlNumber(strokeWidth)]]
   // Qt 的 dashPattern 与 dashOffset 以**线宽**为单位，SVG 是绝对长度；预览的图案本身又是线宽的
   // 倍数（`8 4` → 4w 2w，`1 4` → 0 2w），换算之后正好是与线宽无关的常数。
   const dash = strokeWidth > 0 && (props.strokeDasharray === '8 4' || dotted)
@@ -313,7 +316,8 @@ export function curveShape(
   for (const [a, b, c] of arrows) {
     paths.push(obj('ShapePath', [
       ['strokeColor', qmlColor('transparent')],
-      ['fillColor', qmlColor(stroke)],
+      // 箭头是描边色的实心三角，跟着同一个绑定走。
+      ['fillColor', bound('stroke', 'color', qmlColor(stroke))],
       ['startX', qmlNumber(a!.x)],
       ['startY', qmlNumber(a!.y)],
     ], [pathLine(b!), pathLine(c!), pathLine(a!)]))

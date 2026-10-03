@@ -15,43 +15,62 @@
 
 ## 决策
 
-### 运行时结构
+### 运行时结构：随产物一起走
 
 ```
-产物目录/
-├── Scene.qml            导出器生成：图形 + page 对象 + 绑定
-└── page.setup.mjs       页面 setup 源码，原样拷贝
-
-native/qt/runtime/ComposeRuntime/   （QML 模块，部署时放在 import path 上）
-├── qmldir
-├── ComposePage.qml      加载 setup、建作用域、订阅并写回 page 属性
-├── globals.mjs          setTimeout / setInterval / fetch / WebSocket 补齐
-└── script-runtime.mjs   由 @compose-ui/script-runtime 构建产出，不手改
+<场景>.zip
+├── Scene.qml                     导出器生成：图形 + page 对象 + 绑定
+├── page.setup.mjs                作者的 setup，导出期降级、全局改写为 import
+└── ComposeRuntime/               QML 模块（目录 import，含 qmldir）
+    ├── qmldir
+    ├── ComposePage.qml           加载 setup、建作用域、校验类型并写回 page 属性
+    ├── globals.mjs               定时器、queueMicrotask、fetch 子集、WebSocket
+    └── script-runtime.mjs        @compose-ui/script-runtime 的可移植构建产物
 ```
 
-- `script-runtime.mjs` 由 JS 构建产出后**复制**进 `native/qt/runtime/`，不在 Qt 侧维护源码。
-  仓库里用一个校验任务比较两者哈希，防止有人直接改了复制品。
+- **运行时随产物一起交付**，不部署到 Qt 的 import path。原设计是在 `native/qt/runtime/` 维护一份
+  副本、用哈希校验防止手改；改成随产物走之后，副本与那项校验都不存在了——`ComposePage.qml`、
+  `globals.mjs`、`qmldir` 是 `qml-export` 包里的真实文件（以 `?raw` 读入），`script-runtime.mjs`
+  直接取自 `script-runtime` 构建期产出、从包根导出的常量 `COMPOSE_PORTABLE_RUNTIME_SOURCE`（跨包只许从
+  包根导入，单开文件子路径会绕开那条边界）。产物自包含，
+  `qml Scene.qml` 即可运行；代价是每份产物多约 20 KB。
+- `qml-export` 只依赖 `core`：它不编译、不打包，调用方交来**已经可在 V4 中运行**的 setup 与运行时
+  两段文本，它把它们放进文件列表。
+- 全局名的清单只有一份（`COMPOSE_PORTABLE_GLOBALS`），`globals.mjs` 实际导出的名字由
+  `qml-export` 从源码读出（`COMPOSE_QML_RUNTIME_GLOBALS`），编辑器的用例断言两者相同——不一致的
+  症状是编译器往脚本里注入了运行时没有的 import，Qt 上整个 setup 模块加载失败。
 
-### `page` 对象：静态生成而不是动态映射
+### `page` 对象：静态生成，每个绑定自带回退
 
-导出器从 `Bindings` 静态收集全部被引用的导出名，生成：
+导出器从 `Bindings` 静态收集被引用的导出名，生成：
 
 ```qml
+import "ComposeRuntime"
+import "page.setup.mjs" as PageSetup
+
 ComposePage {
-  id: page
-  source: "page.setup.mjs"
-  property var temperature: 23.5     // 初值 = 文档中该 prop 的静态值
-  property var alarmColor: "#ff3b30"
+    id: page
+    setup: PageSetup.setup
+    bindings: ({"temperature":{"property":"x_temperature","kinds":["text"]}})
+    property var x_temperature: undefined
 }
-Text { text: page.temperature }
+Text { text: page.x_temperature === undefined ? "23.5" : page.text(page.x_temperature) }
 ```
 
 - 不用 `QQmlPropertyMap`：那需要 C++，第一期要保持「`qml` 工具直接能跑」。导出名在导出时就是
   已知的，静态生成还让产物可读、可 diff。
-- 属性初值写文档里的静态值：脚本还没跑完、或跑失败时，画面与静态导出一致，而不是一片空白。
-- `ComposePage` 订阅作用域快照，只把**被生成过属性**的导出写回；脚本多导出的成员被忽略。
-- 导出缺失或类型不符时**不写回**，属性停在静态值，并发对应诊断（`binding-missing-export` /
-  `binding-type-mismatch`）。
+- 属性名一律加 `x_` 前缀：导出名是作者起的，可能撞上 `ComposePage` 自己的成员，也可能不是合法
+  的 QML 属性名。原始导出名留在 `bindings` 里。
+- **属性初值是 `undefined`，回退写在每个绑定表达式里**，而不是给属性一个初值：同一个导出名可能
+  被两个对象绑定、而两者在文档里的静态值不同，属性初值只能取其一。写在表达式里之后，「脚本还没
+  跑完 / 导出缺失 / 类型不符」三种情形下每个对象都显示它**自己**的静态值。
+- 能动态化的只有不牵动几何的两类：文字（`text`）与颜色（文字的 `color`、曲线的 `stroke` 及箭头
+  填充）。线宽、字号改变箭头、虚线或文字度量，它们的几何在导出时就算死了，仍按静态值导出并报
+  `binding.static-value`。组件实例内部的绑定同样静态：嵌套文档没有脚本作用域（预览也不向内传）。
+- `ComposePage` 订阅被绑定的每个导出，校验类型后写回；缺失与类型不符分别报
+  `script.binding-missing-export` / `script.binding-type-mismatch`，属性回到 `undefined`。setup 本身
+  失败时（抛错、没返回对象），各绑定的「导出缺失」只是它的后果，不再逐个报。
+- 颜色在运行时换算成 Qt 的 `#aarrggbb`，与导出器写静态值的 `qmlColor` 同一条规则。
 - 方法导出通过 `page.call(name, ...args)` 调用，供将来的交互使用；本变更不生成任何调用点。
 
 ### 全局对象补齐
@@ -63,8 +82,14 @@ Text { text: page.temperature }
 | `WebSocket`                             | 包装 `QtWebSockets` 的 `WebSocket`    | 对齐 `onopen`/`onmessage`/`onclose`/`send`/`close`                     |
 | `console`                               | 引擎自带                              | —                                                                      |
 
-- 补齐的全局在 setup 执行**之前**注入；同一份清单同时生成编辑器可移植模式用的类型声明，二者
-  读同一份定义，避免「编辑器说能用、Qt 上没有」。
+- V4 的全局对象只读，这些名字**挂不上去**。因此降级编译时用 esbuild 的 `inject` 把脚本里对它们的
+  自由引用改写成 `import { … } from "./ComposeRuntime/globals.mjs"`，作者源码不变；`globals.mjs` 的
+  定时器与 WebSocket 都挂在当前 `ComposePage` 上，页面销毁时一并停掉。
+- `fetch` 的相对路径相对**场景文件所在目录**解析，与浏览器里相对页面地址解析对应；不处理的话
+  `XMLHttpRequest` 会相对调用方模块（`ComposeRuntime/`）解析。
+- WebSocket 连接失败时 QtWebSockets 先报 Closed 再报 Error，而浏览器是 error 与 close(1006) 各一次；
+  垫片把 Closed 推迟一拍，保证 close 只发一次。
+- 同一份清单同时生成编辑器可移植模式用的类型声明，避免「编辑器说能用、Qt 上没有」。
 - `qtwebsockets` 加入 `native/qt/qt-version.json` 的模块清单。
 
 ### 语法支持：需要降级编译（spike 结论）
@@ -89,9 +114,10 @@ QML `Timer` 每 50ms 调一次 `tick`，导出订阅把值写进 `property`，`T
 - **源码仍只有一份**，降级只发生在构建与导出两处，作者不为 Qt 改写任何东西。
 - **运行时**在 `script-runtime` 的包构建期产出可移植模块（目标 ES2016 + 上述前置补齐），不需要新
   依赖——构建工具链里已有能降级的编译器。
-- **作者的 setup** 在导出那一刻于浏览器内降级，需要一个能在浏览器里跑的编译器，这是本变更唯一的
-  新运行期依赖，**待评审**：候选是 `esbuild-wasm`（与构建期同一个编译器、降级语义一致；wasm 约
-  10 MB，只在点「导出」时动态加载，不进编辑器首屏）。
+- **作者的 setup** 在导出那一刻于浏览器内降级，用 `esbuild-wasm`（已评审通过）：与构建期同一个
+  编译器、同一个版本（0.28.1，两处锁死），降级语义一致。wasm 约 10 MB，编辑器是库构建，打进来会
+  被内联成 base64 进首屏，因此编译器由宿主注入（`qmlScriptCompiler`），宿主给出 wasm 的 URL，
+  只在第一次导出时加载。宿主没注入时交付静态场景并说明脚本没有随导出。
 - 不能降级的（`BigInt`）在可移植模式下标错；缺的运行期 API 由「全局对象补齐」与前置补齐覆盖，
   `structuredClone` / `WeakRef` 不补，写进可移植 API 声明的「不可用」清单。
 
@@ -120,5 +146,4 @@ QML `Timer` 每 50ms 调一次 `tick`，导出订阅把值写进 `property`，`T
 
 ## 待解决问题
 
-- 作者 setup 的浏览器内降级编译器选型（候选 `esbuild-wasm`），待评审。
 - 动画 `playing` / `currentTime` 绑定在 Qt 侧的实现，留给动画导出变更。

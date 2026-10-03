@@ -16,15 +16,20 @@ import {
   type ComposePaint,
   type ComposeResolvedLayoutBox,
 } from '@compose-ui/core'
+import { STATIC_VALUE, type QmlBindingKind, type QmlBoundValue } from './qml-binding'
 import { curveShape } from './qml-curve'
 import type {
   ComposeQmlExportDiagnostic,
+  ComposeQmlExportFile,
   ComposeQmlExportInput,
   ComposeQmlExportResult,
   ComposeQmlInstanceContent,
 } from './qml-export-types'
 import { textObjects } from './qml-text'
 import { qmlColor, qmlNumber, qmlString, writeQmlDocument, type QmlObject } from './qml-writer'
+import composePageQml from './runtime/ComposePage.qml?raw'
+import globalsModule from './runtime/globals.mjs?raw'
+import qmldir from './runtime/qmldir?raw'
 
 /** 导出入口拒绝输入时抛出：要导出的场景不存在、不是根 Frame 或没有布局结果。 @public */
 export class ComposeQmlExportError extends Error {
@@ -80,11 +85,25 @@ function isTransparent(color: string) {
   return color === 'transparent' || /^#[0-9a-fA-F]{6}00$/.test(color)
 }
 
+/**
+ * 页面脚本的导出状态：被绑定的导出名 → `page` 上的属性。
+ *
+ * @remarks
+ * 属性名一律加 `x_` 前缀：导出名是作者起的，可能撞上 `ComposePage` 自己的成员（`setup`、`text`、
+ * `call`……），也可能根本不是合法的 QML 属性名（大写开头、含 `-`）。原始导出名留在 `bindings`
+ * 映射里，运行时按它去作用域取值。
+ */
+interface PageScriptState {
+  readonly properties: Map<string, { readonly property: string; readonly kinds: Set<QmlBindingKind> }>
+  readonly usedNames: Set<string>
+}
+
 interface ExportContext {
   readonly input: ComposeQmlExportInput
   readonly allocateId: (entityId: string) => string
   readonly diagnostics: ComposeQmlExportDiagnostic[]
   readonly fontFamilies: string[]
+  readonly script: PageScriptState | null
 }
 
 /**
@@ -102,6 +121,59 @@ interface ExportScope {
 
 function scopedAddress(scope: ExportScope, entityId: string) {
   return scope.prefix ? `${scope.prefix}/${entityId}` : entityId
+}
+
+/** 实体上 Renderer prop 的绑定：prop 名 → 导出名。 */
+function rendererPropBindings(entity: ComposeEntity): ReadonlyMap<string, string> {
+  const bindings = entity.components.Bindings as {
+    readonly rendererProps?: { readonly fields?: Readonly<Record<string, { readonly exportName?: unknown }>> }
+  } | undefined
+  const fields = bindings?.rendererProps?.fields ?? {}
+  return new Map(Object.entries(fields).flatMap(([prop, reference]) => (
+    typeof reference?.exportName === 'string' ? [[prop, reference.exportName] as const] : []
+  )))
+}
+
+function pageProperty(script: PageScriptState, exportName: string, kind: QmlBindingKind): string {
+  const existing = script.properties.get(exportName)
+  if (existing) {
+    existing.kinds.add(kind)
+    return existing.property
+  }
+  const base = `x_${exportName.replace(/[^A-Za-z0-9_]/g, '_')}`
+  let property = base
+  for (let suffix = 2; script.usedNames.has(property); suffix += 1) property = `${base}_${suffix}`
+  script.usedNames.add(property)
+  script.properties.set(exportName, { property, kinds: new Set([kind]) })
+  return property
+}
+
+/**
+ * 一个实体的绑定解析器，同时记下哪些绑定被动态化了。
+ *
+ * @remarks
+ * 绑定只在**页面一级**生效：组件实例的嵌套文档没有脚本作用域（预览的实例渲染器也不向内传），
+ * 那里的绑定照旧按静态值导出。绑定表达式自带本对象的静态回退——脚本还没跑完、导出缺失或类型
+ * 不符时，`page` 上的属性是 `undefined`，每个对象显示它**自己**在文档里的静态值；同一个导出名被
+ * 两个对象绑定、而两者静态值不同时，这一点靠属性初值做不到。
+ */
+function bindingResolver(
+  context: ExportContext,
+  scope: ExportScope,
+  entity: ComposeEntity,
+  dynamic: Set<string>,
+): QmlBoundValue {
+  const script = context.script
+  if (!script || scope.prefix !== '') return STATIC_VALUE
+  const bindings = rendererPropBindings(entity)
+  if (bindings.size === 0) return STATIC_VALUE
+  return (prop, kind, staticExpression) => {
+    const exportName = bindings.get(prop)
+    if (exportName === undefined) return staticExpression
+    dynamic.add(prop)
+    const property = `page.${pageProperty(script, exportName, kind)}`
+    return `${property} === undefined ? ${staticExpression} : page.${kind}(${property})`
+  }
 }
 
 function report(context: ExportContext, diagnostic: ComposeQmlExportDiagnostic) {
@@ -134,10 +206,11 @@ function rendererContent(
   address: string,
   qmlId: string,
   box: ComposeResolvedLayoutBox,
+  bound: QmlBoundValue,
 ): readonly QmlObject[] {
   const curve = getComposeCurve(entity)
   const renderer = getComposeRenderer(entity)
-  if (curve) return [curveShape(curve, renderer?.props ?? {}, getComposeCurveFill(entity), box)]
+  if (curve) return [curveShape(curve, renderer?.props ?? {}, getComposeCurveFill(entity), box, bound)]
   if (!renderer || APPEARANCE_ONLY_RENDERERS.has(renderer.type)) return []
   if (renderer.type === COMPONENT_INSTANCE_RENDERER) {
     const content = context.input.instances?.get(address)
@@ -153,7 +226,7 @@ function rendererContent(
     return [placeholder(box)]
   }
   if (renderer.type === 'text') {
-    const text = textObjects(qmlId, renderer.props, box)
+    const text = textObjects(qmlId, renderer.props, box, bound)
     if (text.fontFamily && !context.fontFamilies.includes(text.fontFamily)) {
       context.fontFamilies.push(text.fontFamily)
     }
@@ -174,9 +247,13 @@ function rendererContent(
   return [placeholder(box)]
 }
 
-function reportStaticBehaviour(context: ExportContext, entity: ComposeEntity, address: string) {
-  const bindings = entity.components.Bindings as { readonly rendererProps?: { readonly fields?: object } } | undefined
-  const fields = Object.keys(bindings?.rendererProps?.fields ?? {})
+function reportStaticBehaviour(
+  context: ExportContext,
+  entity: ComposeEntity,
+  address: string,
+  dynamic: ReadonlySet<string>,
+) {
+  const fields = [...rendererPropBindings(entity).keys()].filter((prop) => !dynamic.has(prop))
   if (fields.length > 0) {
     report(context, {
       code: 'binding.static-value',
@@ -285,7 +362,6 @@ function exportEntity(
   const curve = getComposeCurve(entity)
   const hierarchy = getComposeHierarchy(entity)
   const appearance = resolveComposeAppearance(entity)
-  reportStaticBehaviour(context, entity, address)
 
   // 曲线的盒不是它的形状：预览不为它画任何背景，填充由形状自己画。
   const paint = curve ? { color: 'transparent', degraded: null } : paintColor(appearance.backgroundPaint)
@@ -364,7 +440,11 @@ function exportEntity(
       : []),
   ]
 
-  const children: QmlObject[] = [...rendererContent(context, entity, address, qmlId, box)]
+  const dynamic = new Set<string>()
+  const children: QmlObject[] = [
+    ...rendererContent(context, entity, address, qmlId, box, bindingResolver(context, scope, entity, dynamic)),
+  ]
+  reportStaticBehaviour(context, entity, address, dynamic)
   for (const childId of childIds) {
     const child = exportEntity(context, scope, childId, false)
     if (child) children.push(child)
@@ -385,6 +465,33 @@ function exportEntity(
   }
 
   return { type: hasBackground ? 'Rectangle' : 'Item', properties, children }
+}
+
+/** 产物里场景文件的路径。 */
+const SCENE_FILE = 'Scene.qml'
+
+/**
+ * 页面脚本的宿主对象：`ComposePage { id: page; … }`，排在根的第一个子级。
+ *
+ * @remarks
+ * 每个被绑定的导出名一条 `property var`，**不给初值**——回退由各绑定表达式自己带（见
+ * {@link bindingResolver}）。`bindings` 把原始导出名映射到属性名与目标类型，运行时据此取值、校验
+ * 类型并写回。
+ */
+function pageObject(script: PageScriptState): QmlObject {
+  const bindings = Object.fromEntries([...script.properties].map(([exportName, { property, kinds }]) => (
+    [exportName, { property, kinds: [...kinds] }]
+  )))
+  return {
+    type: 'ComposePage',
+    properties: [
+      ['id', 'page'],
+      ['setup', 'PageSetup.setup'],
+      ['bindings', `(${JSON.stringify(bindings)})`],
+      ...[...script.properties.values()].map(({ property }) => [`property var ${property}`, 'undefined'] as const),
+    ],
+    children: [],
+  }
 }
 
 /**
@@ -416,12 +523,32 @@ export function exportComposeSceneToQml(input: ComposeQmlExportInput): ComposeQm
     allocateId: createIdAllocator(),
     diagnostics: [],
     fontFamilies: [],
+    script: input.pageScript ? { properties: new Map(), usedNames: new Set() } : null,
   }
-  const root = exportEntity(context, { document, snapshot, prefix: '' }, frameId, true)
+  const exported = exportEntity(context, { document, snapshot, prefix: '' }, frameId, true)
+  const root = exported && context.script
+    ? { ...exported, children: [pageObject(context.script), ...exported.children] }
+    : exported
   const usesShapes = (object: QmlObject): boolean => object.type === 'Shape' || object.children.some(usesShapes)
-  const imports = root && usesShapes(root) ? ['QtQuick', 'QtQuick.Shapes'] : ['QtQuick']
+  const imports = [
+    'QtQuick',
+    ...(root && usesShapes(root) ? ['QtQuick.Shapes'] : []),
+    ...(context.script ? ['"ComposeRuntime"', '"page.setup.mjs" as PageSetup'] : []),
+  ]
+  const qml = root ? writeQmlDocument(root, imports) : ''
+  const files: ComposeQmlExportFile[] = [{ path: SCENE_FILE, content: qml }]
+  if (input.pageScript) {
+    files.push(
+      { path: 'page.setup.mjs', content: input.pageScript.setupModule },
+      { path: 'ComposeRuntime/qmldir', content: qmldir },
+      { path: 'ComposeRuntime/ComposePage.qml', content: composePageQml },
+      { path: 'ComposeRuntime/globals.mjs', content: globalsModule },
+      { path: 'ComposeRuntime/script-runtime.mjs', content: input.pageScript.runtimeModule },
+    )
+  }
   return {
-    qml: root ? writeQmlDocument(root, imports) : '',
+    qml,
+    files,
     diagnostics: context.diagnostics,
     fontFamilies: context.fontFamilies,
   }
