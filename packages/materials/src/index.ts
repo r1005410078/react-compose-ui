@@ -66,6 +66,9 @@ export {
 export {
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_PRESET,
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,
+  prepareComposeComponentInstance,
+  type ComposeComponentInstancePrepareFailure,
+  type ComposePreparedComponentInstance,
 } from './component-instance'
 export type {
   ComposeBasicContainerOptions,

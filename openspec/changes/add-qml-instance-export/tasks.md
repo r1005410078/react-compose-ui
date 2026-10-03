@@ -2,10 +2,15 @@
 
 ## 1. 提取准备管线（先保证预览不回归）
 
-- [ ] 1.1 `materials/component-instance/prepare.ts`：纯函数与可判别结果（先写用例）
-- [ ] 1.2 `renderer.tsx` 改为调用它；祖先链经参数传入
-- [ ] 1.3 回归：materials 组件测试、`instance-animation` / `instance-content-fit` / `component-library` e2e
-- [ ] 1.4 公开入口与 TSDoc
+- [x] 1.1 `materials/component-instance/prepare.ts`：纯函数与可判别结果（先写用例）
+      - Red：首版只取祖先链长度当深度，既有用例「超过八层时拒绝」失败——深度由
+        `ComposeComponentInstanceNestProvider` 单独给出，可以与祖先链长度不同。
+      - Green：加可选 `depth`（缺省为祖先链长度），渲染器传 Context 里的深度；`prepare.test.ts` 5 条通过。
+- [x] 1.2 `renderer.tsx` 改为调用它；祖先链经参数传入
+      - 按准备管线实际读取的各个 prop 记忆结果，无关重渲染不再触发嵌套 Yoga 重解。
+- [x] 1.3 回归：materials 组件测试、`instance-animation` / `instance-content-fit` / `component-library` e2e
+      - `vitest run src/component-instance` 32 passed；三份 e2e 11 passed。
+- [x] 1.4 公开入口与 TSDoc
 
 ## 2. 导出器
 

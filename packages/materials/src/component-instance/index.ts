@@ -4,3 +4,8 @@ export {
   DEFAULT_COMPOSE_COMPONENT_INSTANCE_RENDERER,
 } from './definition'
 export { ComposeComponentInstanceNestProvider } from './nest-context'
+export {
+  prepareComposeComponentInstance,
+  type ComposeComponentInstancePrepareFailure,
+  type ComposePreparedComponentInstance,
+} from './prepare'
