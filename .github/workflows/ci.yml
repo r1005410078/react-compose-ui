@@ -25,12 +25,15 @@ jobs:
         run: bun run lint
       - name: Typecheck
         run: bun run typecheck
-      - name: Unit tests
-        run: bun run test
-      - name: Build
-        run: bun run build
+      # Storybook 的 vitest 浏览器测试在单测这一步里跑，因此浏览器要装在它之前。
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
+      # 并发按 runner 的核数封顶：每个包在 CI 上只开一个 vitest worker（见 vitest.shared.ts），
+      # 包之间的并行只由这里管，进程数因此不会远超核数。
+      - name: Unit tests
+        run: bun run test -- --concurrency=4
+      - name: Build
+        run: bun run build
       - name: End-to-end test
         run: bun run test:e2e
       - name: Upload Playwright report
