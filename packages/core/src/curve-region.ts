@@ -395,26 +395,26 @@ export function composeCurveInnerAnchor(curve: ComposeCurve): ComposePosition | 
    * 种子网格铺满包围盒。只从中心一个格子出发是不够的：凹形（L 形、带大洞的环）的中心可能落在
    * 面外，那一格的上界会把真正的最优区域一起剪掉。
    */
-  const queue: Cell[] = []
+  const queue = createMaxHeap<Cell>((a, b) => a.max - b.max)
   const step = cellSize / 2
   for (let x = minX; x < maxX; x += step) {
     for (let y = minY; y < maxY; y += step) {
-      queue.push(makeCell(x + step / 2, y + step / 2, step / 2))
+      const cell = makeCell(x + step / 2, y + step / 2, step / 2)
+      // 包围盒中心单独试过一次：矩形上它就是答案，省掉整轮细分。
+      if (cell.d > best.d) best = cell
+      queue.push(cell)
     }
-  }
-  // 包围盒中心单独试一次：矩形上它就是答案，省掉整轮细分。
-  for (const cell of queue) {
-    if (cell.d > best.d) best = cell
   }
 
-  // 上界最大的先细分——优先队列的效果，而这里的规模（几百个格子）用线性取最大更简单。
+  /*
+   * 上界最大的先细分，因此必须是真正的堆。曾经用「线性扫一遍取最大 + splice」，理由是规模只有
+   * 几百个格子——**那句话在平台上不成立**：细长条的整条中线离边界一样远，沿线每个格子的上界都比
+   * 当前最优多出半对角线，于是一路细分到精度以下，队列涨到数万、跑满 guard，O(n²) 的取最大
+   * 在一个 400 × 20 的矩形上量到 1 秒，CI 并行负载下 30 秒以上。
+   */
   let guard = 20000
-  while (queue.length > 0 && guard-- > 0) {
-    let index = 0
-    for (let i = 1; i < queue.length; i += 1) {
-      if (queue[i]!.max > queue[index]!.max) index = i
-    }
-    const cell = queue.splice(index, 1)[0]!
+  while (queue.size() > 0 && guard-- > 0) {
+    const cell = queue.pop()!
     // 这一格再怎么细分也超不过已知最优，整格丢掉。
     if (cell.max - best.d <= precision) continue
     const h = cell.h / 2
@@ -428,4 +428,45 @@ export function composeCurveInnerAnchor(curve: ComposeCurve): ComposePosition | 
   // 圆心落在边界上或外面，说明这块面没有真正的内部——不返回一个下次必然掉出去的点。
   if (!(best.d > precision)) return undefined
   return toPosition({ x: best.x, y: best.y })
+}
+
+/**
+ * 一个按 `compare` 取最大的二叉堆，只给 `composeCurveInnerAnchor` 的细分队列用。
+ *
+ * @remarks
+ * 只有 push / pop / size 三个操作：细分只需要「取出上界最大的那一格」，用不到 peek 或按键更新。
+ */
+function createMaxHeap<T>(compare: (a: T, b: T) => number) {
+  const items: T[] = []
+  return {
+    size: () => items.length,
+    push(item: T) {
+      items.push(item)
+      let i = items.length - 1
+      while (i > 0) {
+        const parent = (i - 1) >> 1
+        if (compare(items[i]!, items[parent]!) <= 0) break
+        ;[items[i], items[parent]] = [items[parent]!, items[i]!]
+        i = parent
+      }
+    },
+    pop(): T | undefined {
+      const top = items[0]
+      const last = items.pop()
+      if (items.length === 0 || last === undefined) return top
+      items[0] = last
+      let i = 0
+      for (;;) {
+        const left = i * 2 + 1
+        const right = left + 1
+        let largest = i
+        if (left < items.length && compare(items[left]!, items[largest]!) > 0) largest = left
+        if (right < items.length && compare(items[right]!, items[largest]!) > 0) largest = right
+        if (largest === i) break
+        ;[items[i], items[largest]] = [items[largest]!, items[i]!]
+        i = largest
+      }
+      return top
+    },
+  }
 }

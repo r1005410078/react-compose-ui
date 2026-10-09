@@ -385,11 +385,6 @@ describe('OpenSpec: compose-document / 求出一块面的最大内切圆圆心',
     expect(isPointInsideComposeCurve(withHole, insideHole)).toBe(false)
   })
 
-  /*
-   * 细长条是最大内切圆的最坏情形：种子网格按短边铺，400 × 20 就要铺出四十来个格子，每个
-   * 再细分到短边的千分之一。本机上一次大约四秒，因此显式给一个远高于它的超时——默认的
-   * 五秒余量太薄，套件里多一个并行的测试文件就会把它挤过线，而那与本用例断言的东西无关。
-   */
   it('离每一条边界都最远：细长条取在中线上', () => {
     // 20 高的细长条，圆心的 y 必须落在 10 附近——贴边的点会被上界剪掉。
     const anchor = composeCurveInnerAnchor(closed([
@@ -397,7 +392,7 @@ describe('OpenSpec: compose-document / 求出一块面的最大内切圆圆心',
     ]))
     expect(anchor).toBeDefined()
     expect(anchor!.y).toBeCloseTo(10, 0)
-  }, 30_000)
+  })
 
   it('退化的面返回缺席，而不是一个落在边界上的点', () => {
     expect(composeCurveInnerAnchor({
